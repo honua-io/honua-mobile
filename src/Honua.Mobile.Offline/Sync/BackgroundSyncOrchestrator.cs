@@ -1,0 +1,104 @@
+namespace Honua.Mobile.Offline.Sync;
+
+public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
+{
+    private readonly IOfflineSyncRunner _runner;
+    private readonly IConnectivityStateProvider _connectivity;
+    private readonly BackgroundSyncOrchestratorOptions _options;
+    private readonly SemaphoreSlim _runLock = new(1, 1);
+
+    private CancellationTokenSource? _cts;
+    private Task? _loopTask;
+
+    public BackgroundSyncOrchestrator(
+        IOfflineSyncRunner runner,
+        IConnectivityStateProvider connectivity,
+        BackgroundSyncOrchestratorOptions? options = null)
+    {
+        _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
+        _options = options ?? new BackgroundSyncOrchestratorOptions();
+    }
+
+    public bool IsRunning => _loopTask is { IsCompleted: false };
+
+    public Task StartAsync(CancellationToken ct = default)
+    {
+        if (IsRunning)
+        {
+            return Task.CompletedTask;
+        }
+
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _loopTask = Task.Run(() => RunLoopAsync(_cts.Token), CancellationToken.None);
+        return Task.CompletedTask;
+    }
+
+    public async Task StopAsync(CancellationToken ct = default)
+    {
+        if (_cts is null || _loopTask is null)
+        {
+            return;
+        }
+
+        _cts.Cancel();
+
+        try
+        {
+            await _loopTask.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown.
+        }
+        finally
+        {
+            _cts.Dispose();
+            _cts = null;
+            _loopTask = null;
+        }
+    }
+
+    public async Task<SyncRunResult?> RunOnceIfOnlineAsync(CancellationToken ct = default)
+    {
+        if (!_connectivity.IsOnline)
+        {
+            return null;
+        }
+
+        await _runLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await _runner.SyncAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _runLock.Release();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+        _runLock.Dispose();
+    }
+
+    private async Task RunLoopAsync(CancellationToken ct)
+    {
+        if (_options.RunImmediately)
+        {
+            await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+        }
+
+        using var timer = new PeriodicTimer(_options.SyncInterval);
+        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+        }
+    }
+}
+
+public sealed class AlwaysOnlineConnectivityStateProvider : IConnectivityStateProvider
+{
+    public bool IsOnline => true;
+}

@@ -1,6 +1,7 @@
 using Honua.Mobile.Field.Forms;
 using Honua.Mobile.Field.Records;
 using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,14 @@ public static class HonuaMobileServiceCollectionExtensions
 
         services.AddSingleton(clientOptions);
         services.AddSingleton(_ => new HonuaMobileClient(new HttpClient(), clientOptions));
+        return services;
+    }
+
+    public static IServiceCollection AddHonuaApiOfflineUploader(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<IOfflineOperationUploader, HonuaApiOfflineOperationUploader>();
         return services;
     }
 
@@ -43,6 +52,7 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton(storeOptions);
         services.AddSingleton<IGeoPackageSyncStore, GeoPackageSyncStore>();
         services.AddSingleton(syncOptions ?? new OfflineSyncEngineOptions());
+        services.AddSingleton<IConnectivityStateProvider, AlwaysOnlineConnectivityStateProvider>();
 
         services.AddSingleton<OfflineSyncEngine>(sp =>
         {
@@ -50,6 +60,37 @@ public static class HonuaMobileServiceCollectionExtensions
             var uploader = sp.GetRequiredService<IOfflineOperationUploader>();
             var options = sp.GetRequiredService<OfflineSyncEngineOptions>();
             return new OfflineSyncEngine(store, uploader, options);
+        });
+        services.AddSingleton<IOfflineSyncRunner>(sp => sp.GetRequiredService<OfflineSyncEngine>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddHonuaBackgroundSync(
+        this IServiceCollection services,
+        BackgroundSyncOrchestratorOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(options ?? new BackgroundSyncOrchestratorOptions());
+        services.AddSingleton<BackgroundSyncOrchestrator>(sp =>
+        {
+            var runner = sp.GetRequiredService<IOfflineSyncRunner>();
+            var connectivity = sp.GetRequiredService<IConnectivityStateProvider>();
+            var orchestratorOptions = sp.GetRequiredService<BackgroundSyncOrchestratorOptions>();
+            return new BackgroundSyncOrchestrator(runner, connectivity, orchestratorOptions);
+        });
+        return services;
+    }
+
+    public static IServiceCollection AddHonuaMapAreaDownload(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<IMapAreaDownloader>(sp =>
+        {
+            var store = sp.GetRequiredService<IGeoPackageSyncStore>();
+            return new MapAreaDownloader(new HttpClient(), store);
         });
 
         return services;

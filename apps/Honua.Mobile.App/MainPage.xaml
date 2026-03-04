@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Honua.Mobile.App.MainPage">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="24"
+            Spacing="14">
+
+            <Label
+                Text="Honua Mobile SDK"
+                Style="{StaticResource Headline}"
+                SemanticProperties.HeadingLevel="Level1" />
+
+            <Label
+                Text="MAUI + GeoPackage offline sync foundation"
+                Style="{StaticResource SubHeadline}" />
+
+            <Button
+                Text="Run Sync Once"
+                Clicked="OnRunSyncClicked"
+                HorizontalOptions="Fill" />
+
+            <Button
+                Text="Show Map Area Count"
+                Clicked="OnShowMapAreaCountClicked"
+                HorizontalOptions="Fill" />
+
+            <Label
+                x:Name="StatusLabel"
+                Text="Ready"
+                LineBreakMode="WordWrap" />
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

@@ -15,9 +15,13 @@
   - SQLite `.gpkg` queue persistence,
   - sync cursors,
   - map area package catalog,
+  - map area package downloader (`.gpkg` layer payload packaging),
   - deterministic priority-based replay,
+  - production uploader (`HonuaApiOfflineOperationUploader`) for queued edit replay to Honua APIs,
   - conflict strategies (`ClientWins`, `ServerWins`, `ManualReview`).
+- Background sync orchestration service (`BackgroundSyncOrchestrator`) with connectivity gate.
 - MAUI-oriented DI/composition extensions for app startup wiring.
+- MAUI app scaffold in `apps/Honua.Mobile.App` wired to SDK + offline services.
 
 ## Repository layout
 
@@ -25,7 +29,8 @@
 - `src/Honua.Mobile.Field`: forms, workflow, record lifecycle.
 - `src/Honua.Mobile.Offline`: GeoPackage storage and sync engine.
 - `src/Honua.Mobile.Maui`: MAUI service registration extensions.
-- `tests/`: unit tests for field logic and offline sync behavior.
+- `apps/Honua.Mobile.App`: MAUI app shell.
+- `tests/`: unit tests for field logic, uploader behavior, map-area packaging, and offline sync orchestration.
 
 ## GeoPackage offline schema
 
@@ -59,6 +64,7 @@ builder.Services
         BaseUri = new Uri("https://api.honua.io"),
         ApiKey = "<api-key>",
     })
+    .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
     .AddHonuaGeoPackageOfflineSync(
         new GeoPackageSyncStoreOptions
@@ -69,10 +75,23 @@ builder.Services
         {
             ConflictStrategy = SyncConflictStrategy.ClientWins,
             BatchSize = 50,
-        });
+        })
+    .AddHonuaMapAreaDownload()
+    .AddHonuaBackgroundSync();
 ```
 
-Register your own `IOfflineOperationUploader` implementation so `OfflineSyncEngine` can push queued operations when connectivity is available.
+### Test status
+
+`dotnet test Honua.Mobile.sln` passes with:
+
+- `Honua.Mobile.Field.Tests`: 4 tests
+- `Honua.Mobile.Offline.Tests`: 10 tests
+
+Total: 14 passing tests.
+
+### MAUI app build note
+
+`apps/Honua.Mobile.App` is scaffolded and wired, but building/running Android targets requires a configured Android SDK path on your machine (`XA5300` until configured).
 
 ## Current status
 

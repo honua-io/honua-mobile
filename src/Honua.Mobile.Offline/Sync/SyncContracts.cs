@@ -22,6 +22,16 @@ public interface IOfflineOperationUploader
     Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default);
 }
 
+public interface IOfflineSyncRunner
+{
+    Task<SyncRunResult> SyncAsync(CancellationToken ct = default);
+}
+
+public interface IConnectivityStateProvider
+{
+    bool IsOnline { get; }
+}
+
 public enum SyncConflictStrategy
 {
     ClientWins,
@@ -36,6 +46,13 @@ public sealed class OfflineSyncEngineOptions
     public int MaxAttempts { get; init; } = 8;
 
     public SyncConflictStrategy ConflictStrategy { get; init; } = SyncConflictStrategy.ManualReview;
+}
+
+public sealed class BackgroundSyncOrchestratorOptions
+{
+    public TimeSpan SyncInterval { get; init; } = TimeSpan.FromMinutes(1);
+
+    public bool RunImmediately { get; init; } = true;
 }
 
 public sealed class SyncRunResult

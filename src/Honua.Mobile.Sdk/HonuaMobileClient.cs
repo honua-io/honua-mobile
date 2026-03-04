@@ -48,6 +48,7 @@ public sealed class HonuaMobileClient
             ["updates"] = request.UpdatesJson,
             ["deletes"] = request.DeletesCsv,
             ["rollbackOnFailure"] = request.RollbackOnFailure ? "true" : "false",
+            ["forceWrite"] = request.ForceWrite ? "true" : null,
         }
         .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
         .ToDictionary(pair => pair.Key, pair => pair.Value!);
@@ -82,6 +83,32 @@ public sealed class HonuaMobileClient
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
         var payload = JsonSerializer.Serialize(request.Feature);
         return SendJsonAsync(HttpMethod.Post, path, null, new StringContent(payload, Encoding.UTF8, "application/json"), ct);
+    }
+
+    public Task<JsonDocument> ReplaceOgcItemAsync(OgcReplaceItemRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        var payload = JsonSerializer.Serialize(request.Feature);
+        return SendJsonAsync(HttpMethod.Put, path, null, new StringContent(payload, Encoding.UTF8, "application/json"), ct);
+    }
+
+    public Task<JsonDocument> PatchOgcItemAsync(OgcPatchItemRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        var payload = JsonSerializer.Serialize(request.Patch);
+        return SendJsonAsync(new HttpMethod("PATCH"), path, null, new StringContent(payload, Encoding.UTF8, "application/merge-patch+json"), ct);
+    }
+
+    public Task<JsonDocument> DeleteOgcItemAsync(OgcDeleteItemRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        return SendJsonAsync(HttpMethod.Delete, path, null, null, ct);
     }
 
     private async Task<JsonDocument> SendJsonAsync(

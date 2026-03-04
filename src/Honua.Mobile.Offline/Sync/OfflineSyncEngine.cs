@@ -2,7 +2,7 @@ using Honua.Mobile.Offline.GeoPackage;
 
 namespace Honua.Mobile.Offline.Sync;
 
-public sealed class OfflineSyncEngine
+public sealed class OfflineSyncEngine : IOfflineSyncRunner
 {
     private readonly IGeoPackageSyncStore _store;
     private readonly IOfflineOperationUploader _uploader;

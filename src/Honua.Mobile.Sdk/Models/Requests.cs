@@ -29,6 +29,8 @@ public sealed class ApplyEditsRequest
 
     public bool RollbackOnFailure { get; init; } = false;
 
+    public bool ForceWrite { get; init; } = false;
+
     public string ResponseFormat { get; init; } = "json";
 }
 
@@ -52,4 +54,29 @@ public sealed class OgcCreateItemRequest
     public required string CollectionId { get; init; }
 
     public required object Feature { get; init; }
+}
+
+public sealed class OgcReplaceItemRequest
+{
+    public required string CollectionId { get; init; }
+
+    public required string FeatureId { get; init; }
+
+    public required object Feature { get; init; }
+}
+
+public sealed class OgcPatchItemRequest
+{
+    public required string CollectionId { get; init; }
+
+    public required string FeatureId { get; init; }
+
+    public required object Patch { get; init; }
+}
+
+public sealed class OgcDeleteItemRequest
+{
+    public required string CollectionId { get; init; }
+
+    public required string FeatureId { get; init; }
 }
