@@ -8,9 +8,25 @@ public sealed class QueryFeaturesRequest
 
     public string Where { get; init; } = "1=1";
 
+    public IReadOnlyList<long>? ObjectIds { get; init; }
+
     public IReadOnlyList<string>? OutFields { get; init; }
 
+    public bool ReturnGeometry { get; init; } = true;
+
+    public int? ResultOffset { get; init; }
+
     public int? ResultRecordCount { get; init; }
+
+    public string? OrderBy { get; init; }
+
+    public bool ReturnDistinct { get; init; }
+
+    public bool ReturnCountOnly { get; init; }
+
+    public bool ReturnIdsOnly { get; init; }
+
+    public bool ReturnExtentOnly { get; init; }
 
     public string ResponseFormat { get; init; } = "json";
 }

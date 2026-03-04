@@ -1,14 +1,21 @@
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Grpc.Core;
+using Grpc.Net.Client;
+using Honua.Mobile.Sdk.Grpc;
 using Honua.Mobile.Sdk.Models;
+using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk;
 
-public sealed class HonuaMobileClient
+public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 {
     private readonly HttpClient _http;
     private readonly HonuaMobileClientOptions _options;
+    private readonly GrpcChannel? _grpcChannel;
+    private readonly Proto.FeatureService.FeatureServiceClient? _grpcClient;
 
     public HonuaMobileClient(HttpClient httpClient, HonuaMobileClientOptions options)
     {
@@ -18,42 +25,84 @@ public sealed class HonuaMobileClient
         _http.Timeout = options.Timeout;
         _http.DefaultRequestHeaders.UserAgent.Clear();
         _http.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
-    }
 
-    public Task<JsonDocument> QueryFeaturesAsync(QueryFeaturesRequest request, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var query = new Dictionary<string, string?>
+        var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
+        if (grpcAddress.Scheme is "http" or "https")
         {
-            ["f"] = request.ResponseFormat,
-            ["where"] = request.Where,
-            ["outFields"] = request.OutFields is { Count: > 0 } ? string.Join(',', request.OutFields) : "*",
-            ["resultRecordCount"] = request.ResultRecordCount?.ToString(),
-        };
-
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
-        return SendJsonAsync(HttpMethod.Get, path, query, content: null, ct);
-    }
-
-    public Task<JsonDocument> ApplyEditsAsync(ApplyEditsRequest request, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
-        var body = new Dictionary<string, string?>
-        {
-            ["f"] = request.ResponseFormat,
-            ["adds"] = request.AddsJson,
-            ["updates"] = request.UpdatesJson,
-            ["deletes"] = request.DeletesCsv,
-            ["rollbackOnFailure"] = request.RollbackOnFailure ? "true" : "false",
-            ["forceWrite"] = request.ForceWrite ? "true" : null,
+            _grpcChannel = GrpcChannel.ForAddress(grpcAddress);
+            _grpcClient = new Proto.FeatureService.FeatureServiceClient(_grpcChannel);
         }
-        .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
-        .ToDictionary(pair => pair.Key, pair => pair.Value!);
+    }
 
-        return SendJsonAsync(HttpMethod.Post, path, query: null, new FormUrlEncodedContent(body), ct);
+    public async Task<JsonDocument> QueryFeaturesAsync(QueryFeaturesRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (CanUseGrpcForQueries)
+        {
+            try
+            {
+                return await QueryFeaturesGrpcAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            {
+                // Fall through to REST transport.
+            }
+        }
+
+        return await QueryFeaturesRestAsync(request, ct).ConfigureAwait(false);
+    }
+
+    public async IAsyncEnumerable<JsonDocument> QueryFeaturesStreamAsync(
+        QueryFeaturesRequest request,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        IReadOnlyList<JsonDocument>? grpcPages = null;
+
+        if (CanUseGrpcForQueries)
+        {
+            try
+            {
+                grpcPages = await QueryFeaturesGrpcPagesAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            {
+                // Fall through to REST unary query.
+            }
+        }
+
+        if (grpcPages is { Count: > 0 })
+        {
+            foreach (var page in grpcPages)
+            {
+                yield return page;
+            }
+
+            yield break;
+        }
+
+        yield return await QueryFeaturesRestAsync(request, ct).ConfigureAwait(false);
+    }
+
+    public async Task<JsonDocument> ApplyEditsAsync(ApplyEditsRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (CanUseGrpcForEdits)
+        {
+            try
+            {
+                return await ApplyEditsGrpcAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            {
+                // Fall through to REST transport.
+            }
+        }
+
+        return await ApplyEditsRestAsync(request, ct).ConfigureAwait(false);
     }
 
     public Task<JsonDocument> GetOgcCollectionsAsync(CancellationToken ct = default)
@@ -111,6 +160,92 @@ public sealed class HonuaMobileClient
         return SendJsonAsync(HttpMethod.Delete, path, null, null, ct);
     }
 
+    public void Dispose()
+    {
+        _grpcChannel?.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private bool CanUseGrpcForQueries => _options.PreferGrpcForFeatureQueries && _grpcClient is not null;
+
+    private bool CanUseGrpcForEdits => _options.PreferGrpcForFeatureEdits && _grpcClient is not null;
+
+    private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
+    {
+        var protoRequest = GrpcFeatureTranslator.ToProtoQueryRequest(request);
+        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
+        var response = await _grpcClient!.QueryFeaturesAsync(protoRequest, metadata, cancellationToken: ct).ConfigureAwait(false);
+        return GrpcFeatureTranslator.ToJsonDocument(response);
+    }
+
+    private async Task<IReadOnlyList<JsonDocument>> QueryFeaturesGrpcPagesAsync(QueryFeaturesRequest request, CancellationToken ct)
+    {
+        var protoRequest = GrpcFeatureTranslator.ToProtoQueryRequest(request);
+        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
+        var call = _grpcClient!.QueryFeaturesStream(protoRequest, metadata, cancellationToken: ct);
+
+        var pages = new List<JsonDocument>();
+        await foreach (var page in call.ResponseStream.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            pages.Add(GrpcFeatureTranslator.ToJsonDocument(page));
+        }
+
+        return pages;
+    }
+
+    private async Task<JsonDocument> ApplyEditsGrpcAsync(ApplyEditsRequest request, CancellationToken ct)
+    {
+        var protoRequest = GrpcFeatureTranslator.ToProtoApplyEditsRequest(request);
+        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
+        var response = await _grpcClient!.ApplyEditsAsync(protoRequest, metadata, cancellationToken: ct).ConfigureAwait(false);
+        return GrpcFeatureTranslator.ToJsonDocument(response);
+    }
+
+    private Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
+    {
+        var query = new Dictionary<string, string?>
+        {
+            ["f"] = request.ResponseFormat,
+            ["where"] = request.Where,
+            ["objectIds"] = request.ObjectIds is { Count: > 0 } ? string.Join(',', request.ObjectIds) : null,
+            ["outFields"] = request.OutFields is { Count: > 0 } ? string.Join(',', request.OutFields) : "*",
+            ["returnGeometry"] = request.ReturnGeometry ? "true" : "false",
+            ["resultOffset"] = request.ResultOffset?.ToString(),
+            ["resultRecordCount"] = request.ResultRecordCount?.ToString(),
+            ["orderByFields"] = request.OrderBy,
+            ["returnDistinctValues"] = request.ReturnDistinct ? "true" : null,
+            ["returnCountOnly"] = request.ReturnCountOnly ? "true" : null,
+            ["returnIdsOnly"] = request.ReturnIdsOnly ? "true" : null,
+            ["returnExtentOnly"] = request.ReturnExtentOnly ? "true" : null,
+        };
+
+        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
+        return SendJsonAsync(HttpMethod.Get, path, query, content: null, ct);
+    }
+
+    private Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
+    {
+        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
+        var body = new Dictionary<string, string?>
+        {
+            ["f"] = request.ResponseFormat,
+            ["adds"] = request.AddsJson,
+            ["updates"] = request.UpdatesJson,
+            ["deletes"] = request.DeletesCsv,
+            ["rollbackOnFailure"] = request.RollbackOnFailure ? "true" : "false",
+            ["forceWrite"] = request.ForceWrite ? "true" : null,
+        }
+        .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
+        .ToDictionary(pair => pair.Key, pair => pair.Value!);
+
+        return SendJsonAsync(HttpMethod.Post, path, query: null, new FormUrlEncodedContent(body), ct);
+    }
+
     private async Task<JsonDocument> SendJsonAsync(
         HttpMethod method,
         string relativePath,
@@ -120,7 +255,7 @@ public sealed class HonuaMobileClient
     {
         using var request = new HttpRequestMessage(method, BuildUri(relativePath, query));
         request.Content = content;
-        await ApplyAuthenticationAsync(request, ct).ConfigureAwait(false);
+        await ApplyHttpAuthenticationAsync(request, ct).ConfigureAwait(false);
 
         using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
         var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -136,26 +271,50 @@ public sealed class HonuaMobileClient
         return JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
     }
 
-    private async ValueTask ApplyAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
+    private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             request.Headers.TryAddWithoutValidation("X-API-Key", _options.ApiKey);
         }
 
-        var token = _options.BearerToken;
-        if (_options.AccessTokenProvider is not null)
-        {
-            token = await _options.AccessTokenProvider(ct).ConfigureAwait(false) ?? token;
-        }
-
+        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(token))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
     }
 
-    private Uri BuildUri(string relativePath, IReadOnlyDictionary<string, string?>? query)
+    private async Task<Metadata> BuildGrpcMetadataAsync(CancellationToken ct)
+    {
+        var metadata = new Metadata();
+
+        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            metadata.Add("x-api-key", _options.ApiKey);
+        }
+
+        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            metadata.Add("authorization", $"Bearer {token}");
+        }
+
+        return metadata;
+    }
+
+    private async ValueTask<string?> ResolveBearerTokenAsync(CancellationToken ct)
+    {
+        var token = _options.BearerToken;
+        if (_options.AccessTokenProvider is not null)
+        {
+            token = await _options.AccessTokenProvider(ct).ConfigureAwait(false) ?? token;
+        }
+
+        return token;
+    }
+
+    private static Uri BuildUri(string relativePath, IReadOnlyDictionary<string, string?>? query)
     {
         if (query is null || query.Count == 0)
         {

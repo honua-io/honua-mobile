@@ -4,7 +4,7 @@
 
 ## Scope delivered in this repo
 
-- Mobile SDK client for Honua FeatureServer and OGC Features APIs.
+- Mobile SDK client for Honua **gRPC FeatureService** (primary transport), plus REST/OGC fallback paths.
 - Field data collection domain model:
   - form schema and field types,
   - required/type/regex/range validation,
@@ -44,6 +44,16 @@
 
 This allows queued edits, map-area package metadata, and sync checkpoints to live in a standards-friendly `.gpkg` file.
 
+## gRPC Contract
+
+`proto/honua/v1/feature_service.proto` now includes:
+
+- `QueryFeatures`
+- `QueryFeaturesStream`
+- `ApplyEdits`
+
+`HonuaMobileClient` uses gRPC first for feature query/edit operations and can optionally fall back to REST if configured.
+
 ## Quick start
 
 ```bash
@@ -62,7 +72,10 @@ builder.Services
     .AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
         BaseUri = new Uri("https://api.honua.io"),
+        GrpcEndpoint = new Uri("https://api.honua.io"),
         ApiKey = "<api-key>",
+        PreferGrpcForFeatureQueries = true,
+        PreferGrpcForFeatureEdits = true,
     })
     .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
@@ -86,8 +99,9 @@ builder.Services
 
 - `Honua.Mobile.Field.Tests`: 4 tests
 - `Honua.Mobile.Offline.Tests`: 10 tests
+- `Honua.Mobile.Sdk.Tests`: 4 tests
 
-Total: 14 passing tests.
+Total: 18 passing tests.
 
 ### MAUI app build note
 

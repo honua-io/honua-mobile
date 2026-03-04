@@ -6,6 +6,14 @@ public sealed class HonuaMobileClientOptions
 {
     public Uri BaseUri { get; init; } = new("https://api.honua.io");
 
+    public Uri? GrpcEndpoint { get; init; }
+
+    public bool PreferGrpcForFeatureQueries { get; init; } = true;
+
+    public bool PreferGrpcForFeatureEdits { get; init; } = true;
+
+    public bool AllowRestFallbackOnGrpcFailure { get; init; } = true;
+
     public string? ApiKey { get; init; }
 
     public string? BearerToken { get; init; }
