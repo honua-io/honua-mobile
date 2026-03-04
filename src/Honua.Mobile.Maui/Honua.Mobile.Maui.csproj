@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
+    <ProjectReference Include="..\Honua.Mobile.Field\Honua.Mobile.Field.csproj" />
+    <ProjectReference Include="..\Honua.Mobile.Offline\Honua.Mobile.Offline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
