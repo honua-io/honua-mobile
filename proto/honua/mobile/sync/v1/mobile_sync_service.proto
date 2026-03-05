@@ -1,0 +1,456 @@
+syntax = "proto3";
+
+package honua.mobile.sync.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+option csharp_namespace = "Honua.Mobile.Sync.V1";
+
+// Mobile Sync Service for deterministic sync, replay, and conflict resolution
+service MobileSyncService {
+  // Session lifecycle management
+  rpc CreateSyncSession(CreateSyncSessionRequest) returns (SyncSession);
+  rpc GetSyncSession(GetSyncSessionRequest) returns (SyncSession);
+  rpc CloseSyncSession(CloseSyncSessionRequest) returns (CloseSyncSessionResponse);
+
+  // Delta sync operations
+  rpc PullChanges(PullChangesRequest) returns (stream PullChangesResponse);
+  rpc PushChanges(PushChangesRequest) returns (PushChangesResponse);
+
+  // Attachment operations
+  rpc GetAttachmentMetadata(GetAttachmentMetadataRequest) returns (GetAttachmentMetadataResponse);
+  rpc UploadAttachment(stream UploadAttachmentRequest) returns (UploadAttachmentResponse);
+  rpc DownloadAttachment(DownloadAttachmentRequest) returns (stream DownloadAttachmentResponse);
+
+  // Replay and testing operations
+  rpc StartReplayTrace(StartReplayTraceRequest) returns (ReplayTraceSession);
+  rpc ApplyReplayEvent(ApplyReplayEventRequest) returns (ApplyReplayEventResponse);
+  rpc EndReplayTrace(EndReplayTraceRequest) returns (EndReplayTraceResponse);
+
+  // Conflict simulation and resolution
+  rpc SimulateConflict(SimulateConflictRequest) returns (SimulateConflictResponse);
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+}
+
+// Sync Session Management
+message SyncSession {
+  string session_id = 1;
+  string device_id = 2;
+  string user_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp last_activity = 5;
+  SyncSessionState state = 6;
+  SyncConfiguration configuration = 7;
+  SyncStatistics statistics = 8;
+}
+
+message CreateSyncSessionRequest {
+  string device_id = 1;
+  string user_id = 2;
+  SyncConfiguration configuration = 3;
+  // Client-provided session metadata
+  map<string, string> metadata = 4;
+}
+
+message GetSyncSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSyncSessionRequest {
+  string session_id = 1;
+  SyncSessionCloseReason reason = 2;
+}
+
+message CloseSyncSessionResponse {
+  SyncStatistics final_statistics = 1;
+}
+
+enum SyncSessionState {
+  SYNC_SESSION_STATE_UNSPECIFIED = 0;
+  SYNC_SESSION_STATE_ACTIVE = 1;
+  SYNC_SESSION_STATE_SUSPENDED = 2;
+  SYNC_SESSION_STATE_CLOSED = 3;
+  SYNC_SESSION_STATE_ERROR = 4;
+}
+
+enum SyncSessionCloseReason {
+  SYNC_SESSION_CLOSE_REASON_UNSPECIFIED = 0;
+  SYNC_SESSION_CLOSE_REASON_COMPLETED = 1;
+  SYNC_SESSION_CLOSE_REASON_CLIENT_REQUEST = 2;
+  SYNC_SESSION_CLOSE_REASON_TIMEOUT = 3;
+  SYNC_SESSION_CLOSE_REASON_ERROR = 4;
+}
+
+message SyncConfiguration {
+  // Layer filtering
+  repeated int32 layer_ids = 1;
+  SpatialExtent spatial_filter = 2;
+  TemporalFilter temporal_filter = 3;
+
+  // Sync behavior
+  int32 batch_size = 4;
+  bool include_attachments = 5;
+  ConflictResolutionStrategy conflict_resolution = 6;
+
+  // Network optimization
+  bool compress_payloads = 7;
+  int32 max_retry_attempts = 8;
+  int32 retry_backoff_seconds = 9;
+}
+
+message SpatialExtent {
+  double min_x = 1;
+  double min_y = 2;
+  double max_x = 3;
+  double max_y = 4;
+  int32 srid = 5;
+}
+
+message TemporalFilter {
+  google.protobuf.Timestamp since = 1;
+  google.protobuf.Timestamp until = 2;
+}
+
+enum ConflictResolutionStrategy {
+  CONFLICT_RESOLUTION_STRATEGY_UNSPECIFIED = 0;
+  CONFLICT_RESOLUTION_STRATEGY_CLIENT_WINS = 1;
+  CONFLICT_RESOLUTION_STRATEGY_SERVER_WINS = 2;
+  CONFLICT_RESOLUTION_STRATEGY_LAST_WRITER_WINS = 3;
+  CONFLICT_RESOLUTION_STRATEGY_MANUAL = 4;
+}
+
+message SyncStatistics {
+  int64 features_pulled = 1;
+  int64 features_pushed = 2;
+  int64 attachments_downloaded = 3;
+  int64 attachments_uploaded = 4;
+  int64 conflicts_detected = 5;
+  int64 conflicts_resolved = 6;
+  int64 bytes_transferred = 7;
+  google.protobuf.Timestamp sync_started = 8;
+  google.protobuf.Timestamp last_update = 9;
+}
+
+// Change Pull Operations
+message PullChangesRequest {
+  string session_id = 1;
+  int64 since_generation = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  repeated int32 layer_ids = 5;
+}
+
+message PullChangesResponse {
+  repeated FeatureChange changes = 1;
+  string next_page_token = 2;
+  int64 server_generation = 3;
+  bool has_more_changes = 4;
+  SyncCheckpoint checkpoint = 5;
+}
+
+message FeatureChange {
+  string change_id = 1;
+  int64 generation = 2;
+  int32 layer_id = 3;
+  int64 feature_id = 4;
+  FeatureChangeOperation operation = 5;
+  google.protobuf.Any feature_data = 6;
+  google.protobuf.Timestamp timestamp = 7;
+  string user_id = 8;
+  string device_id = 9;
+
+  // Conflict detection
+  string previous_version_hash = 10;
+  string current_version_hash = 11;
+
+  // Attachment references
+  repeated AttachmentReference attachments = 12;
+}
+
+enum FeatureChangeOperation {
+  FEATURE_CHANGE_OPERATION_UNSPECIFIED = 0;
+  FEATURE_CHANGE_OPERATION_INSERT = 1;
+  FEATURE_CHANGE_OPERATION_UPDATE = 2;
+  FEATURE_CHANGE_OPERATION_DELETE = 3;
+}
+
+message SyncCheckpoint {
+  int64 generation = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string checkpoint_hash = 3;
+}
+
+// Change Push Operations
+message PushChangesRequest {
+  string session_id = 1;
+  repeated FeatureEdit edits = 2;
+  string client_generation_id = 3;
+  bool dry_run = 4; // For validation without committing
+}
+
+message PushChangesResponse {
+  repeated EditResult results = 1;
+  repeated ConflictDetails conflicts = 2;
+  int64 server_generation = 3;
+  SyncCheckpoint new_checkpoint = 4;
+  EditOperationSummary summary = 5;
+}
+
+message FeatureEdit {
+  string edit_id = 1; // Client-generated idempotency key
+  int32 layer_id = 2;
+  int64 feature_id = 3; // 0 for new features
+  FeatureChangeOperation operation = 4;
+  google.protobuf.Any feature_data = 5;
+
+  // Optimistic concurrency
+  string expected_version_hash = 6;
+
+  // Client metadata
+  google.protobuf.Timestamp client_timestamp = 7;
+  string device_id = 8;
+  map<string, string> metadata = 9;
+}
+
+message EditResult {
+  string edit_id = 1;
+  EditStatus status = 2;
+  int64 assigned_feature_id = 3; // For new features
+  string new_version_hash = 4;
+  string error_message = 5;
+  EditErrorCode error_code = 6;
+}
+
+enum EditStatus {
+  EDIT_STATUS_UNSPECIFIED = 0;
+  EDIT_STATUS_SUCCESS = 1;
+  EDIT_STATUS_CONFLICT = 2;
+  EDIT_STATUS_VALIDATION_ERROR = 3;
+  EDIT_STATUS_PERMISSION_DENIED = 4;
+  EDIT_STATUS_NOT_FOUND = 5;
+  EDIT_STATUS_SYSTEM_ERROR = 6;
+}
+
+enum EditErrorCode {
+  EDIT_ERROR_CODE_UNSPECIFIED = 0;
+  EDIT_ERROR_CODE_VERSION_MISMATCH = 1;
+  EDIT_ERROR_CODE_INVALID_GEOMETRY = 2;
+  EDIT_ERROR_CODE_REQUIRED_FIELD_MISSING = 3;
+  EDIT_ERROR_CODE_DUPLICATE_KEY = 4;
+  EDIT_ERROR_CODE_REFERENCE_VIOLATION = 5;
+}
+
+message EditOperationSummary {
+  int32 attempted = 1;
+  int32 successful = 2;
+  int32 failed = 3;
+  int32 conflicts = 4;
+}
+
+message ConflictDetails {
+  string edit_id = 1;
+  FeatureEdit client_edit = 2;
+  FeatureChange server_change = 3;
+  ConflictType type = 4;
+  repeated ConflictResolution suggested_resolutions = 5;
+}
+
+enum ConflictType {
+  CONFLICT_TYPE_UNSPECIFIED = 0;
+  CONFLICT_TYPE_UPDATE_UPDATE = 1; // Both client and server updated
+  CONFLICT_TYPE_UPDATE_DELETE = 2; // Client updated, server deleted
+  CONFLICT_TYPE_DELETE_UPDATE = 3; // Client deleted, server updated
+  CONFLICT_TYPE_GEOMETRY_OVERLAP = 4; // Geometric conflicts
+}
+
+message ConflictResolution {
+  ConflictResolutionAction action = 1;
+  google.protobuf.Any resolved_data = 2;
+  string description = 3;
+}
+
+enum ConflictResolutionAction {
+  CONFLICT_RESOLUTION_ACTION_UNSPECIFIED = 0;
+  CONFLICT_RESOLUTION_ACTION_ACCEPT_CLIENT = 1;
+  CONFLICT_RESOLUTION_ACTION_ACCEPT_SERVER = 2;
+  CONFLICT_RESOLUTION_ACTION_MERGE = 3;
+  CONFLICT_RESOLUTION_ACTION_MANUAL = 4;
+}
+
+// Attachment Operations
+message AttachmentReference {
+  string attachment_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  string hash = 5;
+  google.protobuf.Timestamp uploaded_at = 6;
+  AttachmentSyncStatus sync_status = 7;
+}
+
+enum AttachmentSyncStatus {
+  ATTACHMENT_SYNC_STATUS_UNSPECIFIED = 0;
+  ATTACHMENT_SYNC_STATUS_PENDING_UPLOAD = 1;
+  ATTACHMENT_SYNC_STATUS_UPLOADING = 2;
+  ATTACHMENT_SYNC_STATUS_SYNCED = 3;
+  ATTACHMENT_SYNC_STATUS_DOWNLOAD_REQUIRED = 4;
+  ATTACHMENT_SYNC_STATUS_DOWNLOADING = 5;
+  ATTACHMENT_SYNC_STATUS_ERROR = 6;
+}
+
+message GetAttachmentMetadataRequest {
+  repeated string attachment_ids = 1;
+}
+
+message GetAttachmentMetadataResponse {
+  repeated AttachmentReference attachments = 1;
+}
+
+message UploadAttachmentRequest {
+  oneof content {
+    AttachmentMetadata metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+message AttachmentMetadata {
+  string attachment_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 total_size = 4;
+  int32 chunk_size = 5;
+  string hash = 6;
+}
+
+message UploadAttachmentResponse {
+  string attachment_id = 1;
+  int64 bytes_written = 2;
+  bool complete = 3;
+}
+
+message DownloadAttachmentRequest {
+  string attachment_id = 1;
+  int64 byte_offset = 2;
+  int32 chunk_size = 3;
+}
+
+message DownloadAttachmentResponse {
+  bytes chunk = 1;
+  int64 total_size = 2;
+  bool complete = 3;
+}
+
+// Replay and Testing Operations
+message ReplayTraceSession {
+  string trace_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  ReplayConfiguration configuration = 3;
+}
+
+message StartReplayTraceRequest {
+  string trace_name = 1;
+  ReplayConfiguration configuration = 2;
+}
+
+message ReplayConfiguration {
+  bool deterministic_mode = 1;
+  int32 replay_speed_multiplier = 2;
+  bool simulate_network_conditions = 3;
+  NetworkConditions network_conditions = 4;
+}
+
+message NetworkConditions {
+  int32 latency_ms = 1;
+  int32 bandwidth_kbps = 2;
+  double packet_loss_rate = 3;
+  bool intermittent_connectivity = 4;
+}
+
+message ApplyReplayEventRequest {
+  string trace_id = 1;
+  ReplayEvent event = 2;
+}
+
+message ReplayEvent {
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  ReplayEventType type = 3;
+  google.protobuf.Any event_data = 4;
+}
+
+enum ReplayEventType {
+  REPLAY_EVENT_TYPE_UNSPECIFIED = 0;
+  REPLAY_EVENT_TYPE_FEATURE_EDIT = 1;
+  REPLAY_EVENT_TYPE_SYNC_START = 2;
+  REPLAY_EVENT_TYPE_SYNC_COMPLETE = 3;
+  REPLAY_EVENT_TYPE_NETWORK_DISCONNECT = 4;
+  REPLAY_EVENT_TYPE_NETWORK_RECONNECT = 5;
+  REPLAY_EVENT_TYPE_CONFLICT_DETECTED = 6;
+}
+
+message ApplyReplayEventResponse {
+  string event_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  repeated StateChange state_changes = 4;
+}
+
+message StateChange {
+  string component = 1;
+  string previous_state = 2;
+  string new_state = 3;
+  google.protobuf.Any state_data = 4;
+}
+
+message EndReplayTraceRequest {
+  string trace_id = 1;
+}
+
+message EndReplayTraceResponse {
+  ReplayTraceSummary summary = 1;
+}
+
+message ReplayTraceSummary {
+  int32 events_applied = 1;
+  int32 conflicts_simulated = 2;
+  google.protobuf.Timestamp duration = 3;
+  repeated string validation_errors = 4;
+}
+
+// Conflict Simulation
+message SimulateConflictRequest {
+  string session_id = 1;
+  ConflictScenario scenario = 2;
+}
+
+message ConflictScenario {
+  ConflictType type = 1;
+  FeatureEdit client_edit = 2;
+  FeatureChange simulated_server_change = 3;
+  ConflictSimulationOptions options = 4;
+}
+
+message ConflictSimulationOptions {
+  bool auto_resolve = 1;
+  ConflictResolutionStrategy strategy = 2;
+  bool generate_test_data = 3;
+}
+
+message SimulateConflictResponse {
+  ConflictDetails conflict = 1;
+  ConflictResolution auto_resolution = 2;
+  bool resolution_successful = 3;
+}
+
+message ResolveConflictRequest {
+  string session_id = 1;
+  string conflict_id = 2;
+  ConflictResolution resolution = 3;
+}
+
+message ResolveConflictResponse {
+  bool success = 1;
+  string error_message = 2;
+  EditResult final_result = 3;
+}
