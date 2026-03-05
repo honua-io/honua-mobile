@@ -47,6 +47,32 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPendingAsync_ClaimsRowsToPreventDuplicateProcessing()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "op-1",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 5,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var firstClaim = store.GetPendingAsync(1);
+        var secondClaim = store.GetPendingAsync(1);
+        await Task.WhenAll(firstClaim, secondClaim);
+        var firstClaimResult = await firstClaim;
+        var secondClaimResult = await secondClaim;
+
+        Assert.Equal(1, firstClaimResult.Count + secondClaimResult.Count);
+    }
+
+    [Fact]
     public async Task MapAreas_CanBeUpsertedAndListed()
     {
         var store = CreateStore();

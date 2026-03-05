@@ -23,39 +23,55 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         var failures = new List<SyncFailure>();
         var success = 0;
 
-        foreach (var operation in pending)
+        for (var index = 0; index < pending.Count; index++)
         {
-            ct.ThrowIfCancellationRequested();
+            var operation = pending[index];
 
-            if (operation.AttemptCount >= _options.MaxAttempts)
+            try
             {
-                await _store.MarkFailedAsync(operation.OperationId, "max attempts reached", retryable: false, ct).ConfigureAwait(false);
-                failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
-                continue;
-            }
+                ct.ThrowIfCancellationRequested();
 
-            var uploadResult = await _uploader.UploadAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
-            if (uploadResult.Outcome == UploadOutcome.Success)
-            {
-                await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
-                success++;
-                continue;
-            }
-
-            if (uploadResult.Outcome == UploadOutcome.Conflict)
-            {
-                var conflictResolved = await HandleConflictAsync(operation, ct).ConfigureAwait(false);
-                if (conflictResolved)
+                if (operation.AttemptCount >= _options.MaxAttempts)
                 {
+                    await _store.MarkFailedAsync(operation.OperationId, "max attempts reached", retryable: false, ct).ConfigureAwait(false);
+                    failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
+                    continue;
+                }
+
+                var uploadResult = await _uploader.UploadAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
+                if (uploadResult.Outcome == UploadOutcome.Success)
+                {
+                    await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
                     success++;
                     continue;
                 }
-            }
 
-            var retryable = uploadResult.Outcome == UploadOutcome.RetryableFailure;
-            var reason = uploadResult.Message ?? uploadResult.Outcome.ToString();
-            await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
-            failures.Add(new SyncFailure(operation.OperationId, reason));
+                if (uploadResult.Outcome == UploadOutcome.Conflict)
+                {
+                    var conflictResolved = await HandleConflictAsync(operation, ct).ConfigureAwait(false);
+                    if (conflictResolved.Resolved)
+                    {
+                        success++;
+                        continue;
+                    }
+
+                    if (conflictResolved.FailureHandled)
+                    {
+                        failures.Add(new SyncFailure(operation.OperationId, conflictResolved.FailureReason ?? "Conflict resolution failed."));
+                        continue;
+                    }
+                }
+
+                var retryable = uploadResult.Outcome == UploadOutcome.RetryableFailure;
+                var reason = uploadResult.Message ?? uploadResult.Outcome.ToString();
+                await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
+                failures.Add(new SyncFailure(operation.OperationId, reason));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                await ReleaseClaimedOperationsAsync(pending, index).ConfigureAwait(false);
+                throw;
+            }
         }
 
         return new SyncRunResult
@@ -67,13 +83,13 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         };
     }
 
-    private async Task<bool> HandleConflictAsync(OfflineEditOperation operation, CancellationToken ct)
+    private async Task<ConflictResolutionState> HandleConflictAsync(OfflineEditOperation operation, CancellationToken ct)
     {
         switch (_options.ConflictStrategy)
         {
             case SyncConflictStrategy.ServerWins:
                 await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
-                return true;
+                return ConflictResolutionState.ResolvedState;
 
             case SyncConflictStrategy.ClientWins:
             {
@@ -81,18 +97,32 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                 if (forced.Outcome == UploadOutcome.Success)
                 {
                     await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
-                    return true;
+                    return ConflictResolutionState.ResolvedState;
                 }
 
                 var reason = forced.Message ?? "conflict retry failed";
                 await _store.MarkFailedAsync(operation.OperationId, reason, retryable: forced.Outcome == UploadOutcome.RetryableFailure, ct).ConfigureAwait(false);
-                return false;
+                return new ConflictResolutionState(false, true, reason);
             }
 
             case SyncConflictStrategy.ManualReview:
             default:
-                await _store.MarkFailedAsync(operation.OperationId, "conflict requires manual review", retryable: false, ct).ConfigureAwait(false);
-                return false;
+                const string manualReviewReason = "conflict requires manual review";
+                await _store.MarkFailedAsync(operation.OperationId, manualReviewReason, retryable: false, ct).ConfigureAwait(false);
+                return new ConflictResolutionState(false, true, manualReviewReason);
+        }
+    }
+
+    private readonly record struct ConflictResolutionState(bool Resolved, bool FailureHandled, string? FailureReason)
+    {
+        public static readonly ConflictResolutionState ResolvedState = new(true, false, null);
+    }
+
+    private async Task ReleaseClaimedOperationsAsync(IReadOnlyList<OfflineEditOperation> pending, int startIndex)
+    {
+        for (var i = startIndex; i < pending.Count; i++)
+        {
+            await _store.MarkPendingAsync(pending[i].OperationId, CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Collections;
 using System.Text.RegularExpressions;
 using Honua.Mobile.Field.Records;
 
@@ -129,6 +130,7 @@ public sealed class FormValidator
         {
             null => true,
             string text => string.IsNullOrWhiteSpace(text),
+            IEnumerable collection => !collection.Cast<object?>().Any(),
             _ => false,
         };
     }

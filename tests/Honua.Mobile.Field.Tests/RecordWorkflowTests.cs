@@ -67,4 +67,30 @@ public sealed class RecordWorkflowTests
         Assert.Single(duplicates);
         Assert.Equal("r-1", duplicates[0].RecordId);
     }
+
+    [Fact]
+    public void Transition_Resubmission_ClearsCompletedTimestamp()
+    {
+        var createdAt = DateTimeOffset.UtcNow.AddMinutes(-40);
+        var completedAt = createdAt.AddMinutes(20);
+        var resubmittedAt = createdAt.AddMinutes(35);
+
+        var record = new FieldRecord
+        {
+            RecordId = "record-2",
+            FormId = "inspection",
+            CreatedAtUtc = createdAt,
+            Status = RecordStatus.Rejected,
+            SubmittedAtUtc = createdAt.AddMinutes(10),
+            CompletedAtUtc = completedAt,
+        };
+
+        var workflow = new RecordWorkflow();
+        workflow.Transition(record, RecordStatus.Submitted, resubmittedAt);
+
+        Assert.Equal(RecordStatus.Submitted, record.Status);
+        Assert.Equal(resubmittedAt, record.SubmittedAtUtc);
+        Assert.Null(record.CompletedAtUtc);
+        Assert.Null(record.Duration);
+    }
 }

@@ -12,6 +12,8 @@ public interface IGeoPackageSyncStore
 
     Task MarkSucceededAsync(string operationId, CancellationToken ct = default);
 
+    Task MarkPendingAsync(string operationId, CancellationToken ct = default);
+
     Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default);
 
     Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default);

@@ -70,6 +70,62 @@ public sealed class MapAreaDownloaderTests : IDisposable
         Assert.Equal(1, count);
     }
 
+    [Fact]
+    public async Task DownloadAsync_SanitizesAreaId_AndKeepsPackageUnderOutputDirectory()
+    {
+        var storePath = Path.Combine(_rootDirectory, "sync-store.gpkg");
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = storePath });
+
+        var httpClient = new HttpClient(new StubHttpMessageHandler((request, _) =>
+        {
+            var payload = Encoding.UTF8.GetBytes($"payload:{request.RequestUri}");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            });
+        }));
+
+        var outputDirectory = Path.Combine(_rootDirectory, "packages");
+        var downloader = new MapAreaDownloader(httpClient, store);
+        var result = await downloader.DownloadAsync(new MapAreaDownloadRequest
+        {
+            AreaId = "../..//../very/../../unsafe",
+            Name = "Unsafe Name",
+            BoundingBox = new BoundingBox(-158.30, 21.20, -157.60, 21.60),
+            OutputDirectory = outputDirectory,
+            MinZoom = 10,
+            MaxZoom = 15,
+            Layers =
+            [
+                new MapLayerDownloadSource
+                {
+                    LayerKey = "assets",
+                    SourceUrl = "https://tiles.honua.test/data?bbox={minLon},{minLat},{maxLon},{maxLat}&z={minZoom}-{maxZoom}",
+                    Priority = 1,
+                    Required = true,
+                },
+            ],
+        });
+
+        var packagePath = Path.GetFullPath(result.GeoPackagePath);
+        var outputPath = Path.GetFullPath(outputDirectory);
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var expectedPrefix = Path.EndsInDirectorySeparator(outputPath)
+            ? outputPath
+            : outputPath + Path.DirectorySeparatorChar;
+
+        if (pathComparison == StringComparison.OrdinalIgnoreCase)
+        {
+            Assert.StartsWith(expectedPrefix.ToUpperInvariant(), packagePath.ToUpperInvariant());
+        }
+        else
+        {
+            Assert.StartsWith(expectedPrefix, packagePath);
+        }
+        Assert.DoesNotContain("..", Path.GetFileNameWithoutExtension(packagePath), StringComparison.Ordinal);
+        Assert.True(File.Exists(packagePath));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_rootDirectory))

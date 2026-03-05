@@ -105,4 +105,48 @@ public sealed class FormValidatorTests
         Assert.Equal("alpha-beta", record.Values["display"]);
         Assert.Equal(8d, record.Values["total"]);
     }
+
+    [Fact]
+    public void Validate_RequiredMultipleChoiceRejectsEmptyCollection()
+    {
+        var form = new FormDefinition
+        {
+            FormId = "inspection",
+            Name = "Inspection",
+            Sections =
+            [
+                new FormSection
+                {
+                    SectionId = "main",
+                    Label = "Main",
+                    Fields =
+                    [
+                        new FormField
+                        {
+                            FieldId = "tags",
+                            Label = "Tags",
+                            Type = FormFieldType.MultipleChoice,
+                            Required = true,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var record = new FieldRecord
+        {
+            RecordId = "r-empty-tags",
+            FormId = "inspection",
+            Values =
+            {
+                ["tags"] = Array.Empty<string>(),
+            },
+        };
+
+        var validator = new FormValidator();
+        var result = validator.Validate(form, record);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.FieldId == "tags");
+    }
 }

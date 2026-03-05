@@ -30,6 +30,7 @@ public sealed class RecordWorkflow
         if (targetStatus == RecordStatus.Submitted)
         {
             record.SubmittedAtUtc = now;
+            record.CompletedAtUtc = null;
         }
 
         if (targetStatus is RecordStatus.Approved or RecordStatus.Rejected)

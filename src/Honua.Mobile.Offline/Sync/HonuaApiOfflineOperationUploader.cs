@@ -44,6 +44,18 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
                 _ => new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Unsupported protocol '{payload.Protocol}'." },
             };
         }
+        catch (JsonException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
+        catch (ArgumentException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
         catch (HonuaMobileApiException ex)
         {
             return FromStatusCode(ex.StatusCode, ex.Message);
@@ -51,6 +63,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         catch (HttpRequestException ex)
         {
             return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = ex.Message };
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (TaskCanceledException ex)
         {

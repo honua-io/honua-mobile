@@ -87,13 +87,29 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
     {
         if (_options.RunImmediately)
         {
-            await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+            await ExecuteCycleAsync(ct).ConfigureAwait(false);
         }
 
         using var timer = new PeriodicTimer(_options.SyncInterval);
         while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
         {
+            await ExecuteCycleAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ExecuteCycleAsync(CancellationToken ct)
+    {
+        try
+        {
             await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Keep the background loop alive and retry on the next interval.
         }
     }
 }
