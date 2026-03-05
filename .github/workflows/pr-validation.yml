@@ -1,0 +1,271 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  validate-pr:
+    name: Validate Mobile SDK PR
+    if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Check PR Requirements
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const body = pr.body || '';
+            const title = pr.title || '';
+
+            console.log('Validating Mobile SDK PR:', title);
+
+            const issues = [];
+            const warnings = [];
+
+            // Check 1: Issue link or detailed description
+            const hasIssueLink = /(?:Fixes|Closes|Resolves|Related to)\s+(?:honua-io\/\w+#\d+|#\d+)/i.test(body);
+            const hasDescription = body.length > 100; // Mobile PRs need more context
+            if (!hasIssueLink && !hasDescription) {
+              issues.push('❌ **Missing context** - Mobile SDK changes require either issue link or detailed description');
+            }
+
+            // Check 2: Mobile-specific title format
+            const titleFormat = /^(feat|fix|docs|style|refactor|test|chore|ci|perf|mobile|sdk)(\([^)]+\))?: .+/i;
+            if (!titleFormat.test(title)) {
+              issues.push('❌ **PR title format** - Should be "type: description" (use "mobile:" or "sdk:" for mobile-specific changes)');
+            }
+
+            // Check 3: Platform considerations
+            const platformKeywords = ['android', 'ios', 'windows', 'maui', 'platform', 'native'];
+            const affectsPlatform = platformKeywords.some(keyword =>
+              title.toLowerCase().includes(keyword) || body.toLowerCase().includes(keyword)
+            );
+
+            if (affectsPlatform) {
+              const hasPlatformSection = body.includes('## Platform Impact') ||
+                                       body.includes('## Platform Testing') ||
+                                       body.includes('## Cross-Platform');
+              if (!hasPlatformSection) {
+                warnings.push('⚠️ **Platform-specific changes** - Consider adding platform impact section');
+              }
+            }
+
+            // Check 4: Breaking changes for SDK
+            const hasBreakingSection = body.includes('## Breaking Changes') || body.includes('BREAKING CHANGE');
+            const likelyBreaking = title.toLowerCase().includes('breaking') ||
+                                  body.toLowerCase().includes('breaking change') ||
+                                  body.toLowerCase().includes('api change') ||
+                                  body.toLowerCase().includes('public api');
+
+            if (likelyBreaking && !hasBreakingSection) {
+              issues.push('❌ **Breaking change detection** - SDK breaking changes MUST include Breaking Changes section');
+            }
+
+            // Check 5: gRPC protocol changes
+            const affectsGrpc = body.toLowerCase().includes('grpc') ||
+                               body.toLowerCase().includes('proto') ||
+                               title.toLowerCase().includes('grpc') ||
+                               title.toLowerCase().includes('proto');
+
+            if (affectsGrpc) {
+              const hasProtocolSection = body.includes('## Protocol Changes') ||
+                                        body.includes('## gRPC Changes') ||
+                                        body.includes('## API Changes');
+              if (!hasProtocolSection) {
+                warnings.push('⚠️ **gRPC/Protocol changes** - Consider documenting protocol compatibility impact');
+              }
+            }
+
+            // Check 6: Test coverage for mobile
+            const hasTestingSection = body.includes('## Testing') ||
+                                     body.includes('## Test Plan') ||
+                                     body.includes('- [x]') ||
+                                     body.includes('Tested on');
+
+            if (!hasTestingSection && affectsPlatform) {
+              warnings.push('⚠️ **Platform testing** - Mobile changes should document testing across platforms');
+            }
+
+            // Check 7: Offline/sync considerations
+            const affectsOffline = body.toLowerCase().includes('offline') ||
+                                  body.toLowerCase().includes('sync') ||
+                                  body.toLowerCase().includes('storage') ||
+                                  body.toLowerCase().includes('geopackage');
+
+            if (affectsOffline) {
+              const hasOfflineSection = body.includes('## Offline Impact') ||
+                                       body.includes('## Sync Impact');
+              if (!hasOfflineSection) {
+                warnings.push('⚠️ **Offline/sync changes** - Consider documenting offline behavior impact');
+              }
+            }
+
+            // Generate comment
+            let comment = '## 📱 Mobile SDK PR Validation\n\n';
+
+            if (issues.length === 0 && warnings.length === 0) {
+              comment += '✅ **All checks passed!** Your mobile SDK PR looks good.\n\n';
+              comment += '**Next steps for Mobile SDK PRs:**\n';
+              comment += '- Verify core library builds pass\n';
+              comment += '- Check MAUI platform builds (Android/iOS/Windows)\n';
+              comment += '- Validate gRPC protocol compatibility\n';
+              comment += '- Test on target platforms if applicable\n';
+              comment += '- Request review from SDK maintainers\n';
+            } else {
+              if (issues.length > 0) {
+                comment += '### ❌ Critical Issues (must fix)\n\n';
+                issues.forEach(issue => comment += `${issue}\n\n`);
+              }
+
+              if (warnings.length > 0) {
+                comment += '### ⚠️ Recommendations for Mobile SDK\n\n';
+                warnings.forEach(warning => comment += `${warning}\n\n`);
+              }
+
+              comment += '### 📚 Mobile SDK PR Guidelines\n';
+              comment += '- Use semantic commits: `mobile:`, `sdk:`, `feat:`, `fix:` etc.\n';
+              comment += '- Document platform-specific impacts and testing\n';
+              comment += '- Include breaking changes section for API changes\n';
+              comment += '- Consider offline/sync implications for field use\n';
+              comment += '- Test cross-platform compatibility when possible\n\n';
+            }
+
+            comment += '\n---\n*Automated validation for Honua Mobile SDK*';
+
+            // Update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes('📱 Mobile SDK PR Validation')
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+            // Fail if critical issues found
+            if (issues.length > 0) {
+              core.setFailed(`Mobile SDK PR validation failed: ${issues.length} critical issues found`);
+            }
+
+  # Require CI to pass before merge
+  require-ci:
+    name: Require CI Success
+    runs-on: ubuntu-latest
+    needs: validate-pr
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Wait for CI Gate
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const checkName = 'CI Gate';
+            const maxWaitMinutes = 30;
+            const pollIntervalMs = 30000; // 30 seconds
+            const maxIterations = (maxWaitMinutes * 60 * 1000) / pollIntervalMs;
+
+            console.log(`Waiting for CI Gate check on commit ${context.payload.pull_request.head.sha}`);
+
+            for (let i = 0; i < maxIterations; i++) {
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.payload.pull_request.head.sha
+              });
+
+              const ciGate = checks.check_runs.find(check => check.name === checkName);
+
+              if (ciGate) {
+                console.log(`CI Gate status: ${ciGate.status}, conclusion: ${ciGate.conclusion}`);
+
+                if (ciGate.conclusion === 'success') {
+                  console.log('✅ CI Gate passed!');
+                  return;
+                } else if (ciGate.conclusion === 'failure') {
+                  core.setFailed('CI Gate failed - all tests must pass before merge');
+                  return;
+                } else if (ciGate.status === 'completed' && ciGate.conclusion !== 'success') {
+                  core.setFailed(`CI Gate completed with status: ${ciGate.conclusion}`);
+                  return;
+                }
+              } else {
+                console.log('CI Gate check not found yet, waiting...');
+              }
+
+              if (i < maxIterations - 1) {
+                await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+              }
+            }
+
+            core.setFailed('Timeout waiting for CI Gate check to complete');
+
+  # Additional mobile-specific validations
+  mobile-specific-checks:
+    name: Mobile SDK Specific Checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Mobile-Specific File Changes
+        run: |
+          echo "📱 Analyzing mobile-specific file changes..."
+
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Check for platform-specific files
+          ANDROID_FILES=$(echo "$CHANGED_FILES" | grep -i android || true)
+          IOS_FILES=$(echo "$CHANGED_FILES" | grep -i ios || true)
+          MAUI_FILES=$(echo "$CHANGED_FILES" | grep -i maui || true)
+          PROTO_FILES=$(echo "$CHANGED_FILES" | grep -E '\.proto$' || true)
+
+          if [ -n "$ANDROID_FILES" ]; then
+            echo "⚠️ Android-specific files changed: $ANDROID_FILES"
+            echo "::warning::Android-specific changes detected - ensure Android testing"
+          fi
+
+          if [ -n "$IOS_FILES" ]; then
+            echo "⚠️ iOS-specific files changed: $IOS_FILES"
+            echo "::warning::iOS-specific changes detected - ensure iOS testing"
+          fi
+
+          if [ -n "$MAUI_FILES" ]; then
+            echo "📱 MAUI files changed: $MAUI_FILES"
+          fi
+
+          if [ -n "$PROTO_FILES" ]; then
+            echo "📡 Protocol files changed: $PROTO_FILES"
+            echo "::warning::gRPC protocol changes - ensure backward compatibility"
+          fi
+
+          echo "✅ Mobile file analysis complete"
