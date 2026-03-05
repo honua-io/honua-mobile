@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="HonuaFieldCollector.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:HonuaFieldCollector.Features"
+    Shell.FlyoutBehavior="Flyout"
+    Title="Honua Field Collector">
+
+    <Shell.Resources>
+        <ResourceDictionary>
+            <Style x:Key="BaseStyle" TargetType="Element">
+                <Setter Property="Shell.BackgroundColor" Value="{StaticResource HonuaPrimary}" />
+                <Setter Property="Shell.ForegroundColor" Value="White" />
+                <Setter Property="Shell.TitleColor" Value="White" />
+                <Setter Property="Shell.DisabledColor" Value="#B4FFFFFF" />
+                <Setter Property="Shell.UnselectedColor" Value="#95FFFFFF" />
+                <Setter Property="Shell.TabBarBackgroundColor" Value="{StaticResource HonuaPrimary}" />
+                <Setter Property="Shell.TabBarForegroundColor" Value="White"/>
+                <Setter Property="Shell.TabBarUnselectedColor" Value="#95FFFFFF"/>
+                <Setter Property="Shell.TabBarTitleColor" Value="White"/>
+            </Style>
+            <Style TargetType="TabBar" BasedOn="{StaticResource BaseStyle}" />
+            <Style TargetType="FlyoutItem" BasedOn="{StaticResource BaseStyle}" />
+        </ResourceDictionary>
+    </Shell.Resources>
+
+    <!-- Flyout Header -->
+    <Shell.FlyoutHeaderTemplate>
+        <DataTemplate>
+            <Grid BackgroundColor="{StaticResource HonuaPrimary}" HeightRequest="200">
+                <StackLayout Orientation="Vertical" HorizontalOptions="Center" VerticalOptions="Center">
+                    <Image Source="honua_logo.png"
+                           HeightRequest="80"
+                           WidthRequest="80"
+                           HorizontalOptions="Center" />
+                    <Label Text="Honua Field Collector"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center" />
+                    <Label Text="Revolutionary Data Collection"
+                           FontSize="14"
+                           TextColor="#E3F2FD"
+                           HorizontalOptions="Center" />
+                    <Label x:Name="UserLabel"
+                           Text="{Binding UserDisplayName}"
+                           FontSize="12"
+                           TextColor="#BBDEFB"
+                           HorizontalOptions="Center"
+                           Margin="0,10,0,0" />
+                </StackLayout>
+            </Grid>
+        </DataTemplate>
+    </Shell.FlyoutHeaderTemplate>
+
+    <!-- Main Application Tabs -->
+    <TabBar>
+        <!-- Dashboard Tab -->
+        <Tab Title="Dashboard" Icon="dashboard.png">
+            <ShellContent Route="dashboard"
+                         ContentTemplate="{DataTemplate local:DashboardPage}" />
+        </Tab>
+
+        <!-- Data Collection Tab -->
+        <Tab Title="Collect" Icon="collect_data.png">
+            <ShellContent Route="collect"
+                         ContentTemplate="{DataTemplate local:DataCollectionPage}" />
+        </Tab>
+
+        <!-- Map Tab -->
+        <Tab Title="Map" Icon="map.png">
+            <ShellContent Route="map"
+                         ContentTemplate="{DataTemplate local:MapPage}" />
+        </Tab>
+
+        <!-- AR View Tab -->
+        <Tab Title="AR View" Icon="ar_view.png">
+            <ShellContent Route="arview"
+                         ContentTemplate="{DataTemplate local:ARViewPage}" />
+        </Tab>
+
+        <!-- IoT Sensors Tab -->
+        <Tab Title="Sensors" Icon="sensors.png">
+            <ShellContent Route="sensors"
+                         ContentTemplate="{DataTemplate local:SensorPage}" />
+        </Tab>
+    </TabBar>
+
+    <!-- Flyout Menu Items -->
+    <FlyoutItem Title="Projects" Icon="projects.png">
+        <ShellContent Route="projects"
+                     ContentTemplate="{DataTemplate local:ProjectsPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Forms" Icon="forms.png">
+        <ShellContent Route="forms"
+                     ContentTemplate="{DataTemplate local:FormsPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Sync Status" Icon="sync.png">
+        <ShellContent Route="sync"
+                     ContentTemplate="{DataTemplate local:SyncStatusPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Photos" Icon="photos.png">
+        <ShellContent Route="photos"
+                     ContentTemplate="{DataTemplate local:PhotoGalleryPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Reports" Icon="reports.png">
+        <ShellContent Route="reports"
+                     ContentTemplate="{DataTemplate local:ReportsPage}" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Settings" Icon="settings.png">
+        <ShellContent Route="settings"
+                     ContentTemplate="{DataTemplate local:SettingsPage}" />
+    </FlyoutItem>
+
+    <!-- Authentication Pages (not in main navigation) -->
+    <ShellContent Route="login"
+                 Shell.FlyoutBehavior="Disabled"
+                 ContentTemplate="{DataTemplate local:LoginPage}" />
+
+    <ShellContent Route="onboarding"
+                 Shell.FlyoutBehavior="Disabled"
+                 ContentTemplate="{DataTemplate local:OnboardingPage}" />
+
+    <!-- Modal Pages -->
+    <ShellContent Route="camera"
+                 Shell.PresentationMode="Modal"
+                 ContentTemplate="{DataTemplate local:CameraPage}" />
+
+    <ShellContent Route="formbuilder"
+                 Shell.PresentationMode="Modal"
+                 ContentTemplate="{DataTemplate local:FormBuilderPage}" />
+
+    <ShellContent Route="sensorconfig"
+                 Shell.PresentationMode="Modal"
+                 ContentTemplate="{DataTemplate local:SensorConfigPage}" />
+
+</Shell>

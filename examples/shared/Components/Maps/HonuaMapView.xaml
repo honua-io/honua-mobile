@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView x:Class="Honua.Mobile.SharedComponents.Components.Maps.HonuaMapView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:maps="clr-namespace:Honua.Mobile.SharedComponents.Components.Maps"
+             x:Name="MapComponent"
+             x:DataType="maps:HonuaMapViewModel">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Map Toolbar -->
+        <Frame Grid.Row="0"
+               BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+               CornerRadius="0"
+               Padding="10,5"
+               HasShadow="False"
+               IsVisible="{Binding ShowToolbar}">
+            <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                <StackLayout Orientation="Horizontal" Spacing="10">
+
+                    <!-- Layer Toggle -->
+                    <Button Text="🗂️ Layers"
+                            Command="{Binding ToggleLayersPanelCommand}"
+                            FontSize="14"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                    <!-- Location Button -->
+                    <Button Text="📍 My Location"
+                            Command="{Binding GoToMyLocationCommand}"
+                            FontSize="14"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                    <!-- Spatial Query Tool -->
+                    <Button Text="🎯 Query"
+                            Command="{Binding ToggleSpatialQueryCommand}"
+                            FontSize="14"
+                            BackgroundColor="{Binding IsSpatialQueryActive, Converter={StaticResource BoolToColorConverter}, ConverterParameter=Primary|Transparent}"
+                            TextColor="White"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                    <!-- Measurement Tool -->
+                    <Button Text="📏 Measure"
+                            Command="{Binding ToggleMeasurementCommand}"
+                            FontSize="14"
+                            BackgroundColor="{Binding IsMeasuring, Converter={StaticResource BoolToColorConverter}, ConverterParameter=Secondary|Transparent}"
+                            TextColor="White"
+                            BorderColor="{StaticResource Secondary}"
+                            BorderWidth="1"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                    <!-- Basemap Switcher -->
+                    <Button Text="🗺️ Basemap"
+                            Command="{Binding ShowBasemapSelectorCommand}"
+                            FontSize="14"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}"
+                            BorderColor="{StaticResource Primary}"
+                            BorderWidth="1"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                    <!-- Sync Status -->
+                    <Button Text="{Binding SyncStatusText}"
+                            Command="{Binding TriggerSyncCommand}"
+                            FontSize="14"
+                            BackgroundColor="{Binding SyncStatusColor}"
+                            TextColor="White"
+                            CornerRadius="15"
+                            Padding="15,5" />
+
+                </StackLayout>
+            </ScrollView>
+        </Frame>
+
+        <!-- Main Map Container -->
+        <Grid Grid.Row="1">
+
+            <!-- Platform-Specific Map View -->
+            <!-- This will be handled by custom handlers for each platform -->
+            <ContentView x:Name="MapContainer"
+                        Content="{Binding PlatformMapView}"
+                        HorizontalOptions="FillAndExpand"
+                        VerticalOptions="FillAndExpand" />
+
+            <!-- Map Overlays -->
+            <Grid IsVisible="{Binding ShowOverlays}">
+
+                <!-- GPS Accuracy Indicator -->
+                <Frame BackgroundColor="{Binding LocationAccuracyColor}"
+                       CornerRadius="20"
+                       Padding="10,5"
+                       HorizontalOptions="Start"
+                       VerticalOptions="Start"
+                       Margin="15"
+                       HasShadow="True"
+                       IsVisible="{Binding ShowLocationAccuracy}">
+                    <Label Text="{Binding LocationAccuracyText}"
+                           FontSize="12"
+                           TextColor="White"
+                           FontAttributes="Bold" />
+                </Frame>
+
+                <!-- Scale Bar -->
+                <StackLayout HorizontalOptions="Start"
+                           VerticalOptions="End"
+                           Margin="15"
+                           IsVisible="{Binding ShowScaleBar}">
+                    <Frame BackgroundColor="White"
+                           Padding="5"
+                           CornerRadius="5"
+                           HasShadow="True">
+                        <StackLayout Spacing="2">
+                            <BoxView BackgroundColor="Black"
+                                    HeightRequest="3"
+                                    WidthRequest="{Binding ScaleBarWidth}" />
+                            <Label Text="{Binding ScaleBarText}"
+                                   FontSize="10"
+                                   HorizontalOptions="Center" />
+                        </StackLayout>
+                    </Frame>
+                </StackLayout>
+
+                <!-- Coordinate Display -->
+                <Frame BackgroundColor="Black"
+                       Opacity="0.8"
+                       CornerRadius="10"
+                       Padding="10"
+                       HorizontalOptions="End"
+                       VerticalOptions="End"
+                       Margin="15"
+                       IsVisible="{Binding ShowCoordinates}">
+                    <StackLayout>
+                        <Label Text="{Binding CurrentCoordinatesText}"
+                               FontSize="10"
+                               TextColor="White"
+                               FontFamily="Monospace" />
+                    </StackLayout>
+                </Frame>
+
+                <!-- Spatial Query Tools -->
+                <Frame BackgroundColor="White"
+                       CornerRadius="10"
+                       Padding="15"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Start"
+                       Margin="15"
+                       HasShadow="True"
+                       IsVisible="{Binding IsSpatialQueryActive}">
+                    <StackLayout Spacing="10">
+                        <Label Text="Spatial Query Tools"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center" />
+
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="📍 Point"
+                                    Command="{Binding SetQueryModeCommand}"
+                                    CommandParameter="Point"
+                                    FontSize="12" />
+                            <Button Grid.Column="1"
+                                    Text="⬜ Rectangle"
+                                    Command="{Binding SetQueryModeCommand}"
+                                    CommandParameter="Rectangle"
+                                    FontSize="12" />
+                            <Button Grid.Column="2"
+                                    Text="⭕ Circle"
+                                    Command="{Binding SetQueryModeCommand}"
+                                    CommandParameter="Circle"
+                                    FontSize="12" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <Entry Grid.Column="0"
+                                   Text="{Binding BufferDistance, Mode=TwoWay}"
+                                   Placeholder="Buffer distance (m)"
+                                   Keyboard="Numeric" />
+                            <Button Grid.Column="1"
+                                    Text="Execute"
+                                    Command="{Binding ExecuteSpatialQueryCommand}"
+                                    BackgroundColor="{StaticResource Primary}" />
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Measurement Results -->
+                <Frame BackgroundColor="Orange"
+                       CornerRadius="10"
+                       Padding="15"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Start"
+                       Margin="15"
+                       HasShadow="True"
+                       IsVisible="{Binding IsMeasuring}">
+                    <StackLayout Spacing="5">
+                        <Label Text="Measurement"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Label Text="{Binding MeasurementResult}"
+                               FontSize="14"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Button Text="Clear"
+                                Command="{Binding ClearMeasurementCommand}"
+                                BackgroundColor="Red"
+                                TextColor="White"
+                                FontSize="12" />
+                    </StackLayout>
+                </Frame>
+
+            </Grid>
+
+            <!-- Loading Overlay -->
+            <Grid BackgroundColor="Black"
+                  Opacity="0.5"
+                  IsVisible="{Binding IsLoading}">
+                <ActivityIndicator IsRunning="{Binding IsLoading}"
+                                 Color="{StaticResource Primary}"
+                                 Scale="2"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center" />
+                <Label Text="{Binding LoadingMessage}"
+                       FontSize="16"
+                       TextColor="White"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center"
+                       Margin="0,80,0,0" />
+            </Grid>
+
+        </Grid>
+
+        <!-- Layer Panel -->
+        <Frame Grid.Row="2"
+               BackgroundColor="White"
+               CornerRadius="15,15,0,0"
+               Padding="20"
+               HasShadow="True"
+               IsVisible="{Binding ShowLayersPanel}"
+               HeightRequest="300">
+            <ScrollView>
+                <StackLayout Spacing="15">
+
+                    <Label Text="Map Layers"
+                           FontSize="20"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center" />
+
+                    <!-- Layer List -->
+                    <CollectionView ItemsSource="{Binding MapLayers}"
+                                   HeightRequest="200">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="maps:MapLayerViewModel">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                     ColumnSpacing="10"
+                                     Padding="10"
+                                     RowSpacing="5">
+
+                                    <!-- Layer Icon -->
+                                    <Label Grid.Column="0"
+                                          Text="{Binding LayerIcon}"
+                                          FontSize="20"
+                                          VerticalOptions="Center" />
+
+                                    <!-- Layer Info -->
+                                    <StackLayout Grid.Column="1"
+                                               VerticalOptions="Center">
+                                        <Label Text="{Binding Name}"
+                                               FontSize="16"
+                                               FontAttributes="Bold" />
+                                        <Label Text="{Binding Description}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray600}" />
+                                        <Label Text="{Binding FeatureCount, StringFormat='{0} features'}"
+                                               FontSize="10"
+                                               TextColor="{StaticResource Gray500}" />
+                                    </StackLayout>
+
+                                    <!-- Visibility Toggle -->
+                                    <Switch Grid.Column="2"
+                                           IsToggled="{Binding IsVisible, Mode=TwoWay}"
+                                           VerticalOptions="Center" />
+
+                                    <!-- Layer Options -->
+                                    <Button Grid.Column="3"
+                                           Text="⚙️"
+                                           Command="{Binding Source={x:Reference MapComponent}, Path=BindingContext.ShowLayerOptionsCommand}"
+                                           CommandParameter="{Binding}"
+                                           BackgroundColor="Transparent"
+                                           FontSize="16"
+                                           VerticalOptions="Center" />
+
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                    <!-- Layer Actions -->
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <Button Grid.Column="0"
+                                Text="➕ Add Layer"
+                                Command="{Binding AddLayerCommand}"
+                                BackgroundColor="{StaticResource Primary}" />
+                        <Button Grid.Column="1"
+                                Text="🔄 Refresh"
+                                Command="{Binding RefreshLayersCommand}"
+                                BackgroundColor="{StaticResource Secondary}" />
+                    </Grid>
+
+                </StackLayout>
+            </ScrollView>
+        </Frame>
+
+    </Grid>
+
+</ContentView>

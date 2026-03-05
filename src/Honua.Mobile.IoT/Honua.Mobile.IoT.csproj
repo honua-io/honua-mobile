@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+    <!-- Package Information -->
+    <PackageId>Honua.Mobile.IoT</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Honua Project</Authors>
+    <Description>
+      Revolutionary IoT sensor integration for mobile field data collection.
+
+      The first open-source mobile SDK with built-in IoT sensor support.
+      Connect to environmental sensors via Bluetooth LE, LoRa, and WiFi protocols.
+
+      Features:
+      • Bluetooth LE environmental sensors (temperature, humidity, air quality)
+      • LoRa long-range sensor connectivity
+      • WiFi-enabled smart sensors
+      • Automatic sensor discovery and pairing
+      • Real-time data streaming and integration
+      • Form field integration for automated data collection
+
+      No competitor offers this level of IoT integration in their mobile SDKs.
+      Save thousands per year vs proprietary platforms like Fulcrum ($99/mo/user).
+    </Description>
+    <PackageProjectUrl>https://github.com/honua/honua-mobile</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageTags>
+      IoT sensors bluetooth-le lora wifi mobile maui geospatial
+      field-collection environmental-monitoring data-collection
+      fulcrum-alternative survey123-alternative open-source
+    </PackageTags>
+    <RepositoryUrl>https://github.com/honua/honua-mobile</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Copyright>Copyright © 2026 Honua Project. Licensed under Apache 2.0.</Copyright>
+
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+
+    <!-- Source Link -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core Dependencies -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.0" />
+
+    <!-- Bluetooth LE Support -->
+    <PackageReference Include="Plugin.BLE" Version="3.1.0" />
+
+    <!-- WiFi Network Discovery -->
+    <PackageReference Include="System.Net.NetworkInformation" Version="8.0.0" />
+
+    <!-- JSON Serialization -->
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+
+    <!-- Reactive Extensions for Streaming -->
+    <PackageReference Include="System.Reactive" Version="6.0.0" />
+
+    <!-- Source Link for Debugging -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project References -->
+    <ProjectReference Include="../Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="HonuaFieldCollector.Features.Dashboard.DashboardPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:dashboard="clr-namespace:HonuaFieldCollector.Features.Dashboard"
+             Title="Dashboard"
+             x:DataType="dashboard:DashboardViewModel">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Sync"
+                     Command="{Binding SyncCommand}"
+                     IconImageSource="sync.png"
+                     Priority="0" />
+        <ToolbarItem Text="Settings"
+                     Command="{Binding SettingsCommand}"
+                     IconImageSource="settings.png"
+                     Priority="1" />
+    </ContentPage.ToolbarItems>
+
+    <ScrollView BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+        <StackLayout Padding="20" Spacing="20">
+
+            <!-- Welcome Header -->
+            <Frame BackgroundColor="{StaticResource HonuaPrimary}"
+                   CornerRadius="12"
+                   HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="{Binding WelcomeMessage}"
+                           FontSize="24"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center" />
+                    <Label Text="{Binding CurrentProjectName, StringFormat='Project: {0}'}"
+                           FontSize="16"
+                           TextColor="#E3F2FD"
+                           HorizontalOptions="Center" />
+                    <Label Text="{Binding LastSyncTime, StringFormat='Last sync: {0:MMM dd, HH:mm}'}"
+                           FontSize="14"
+                           TextColor="#BBDEFB"
+                           HorizontalOptions="Center" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Quick Stats -->
+            <Label Text="Today's Progress"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   Margin="0,10,0,0" />
+
+            <Grid RowDefinitions="Auto,Auto"
+                  ColumnDefinitions="*,*">
+
+                <!-- Records Collected -->
+                <Frame Grid.Row="0" Grid.Column="0"
+                       BackgroundColor="{StaticResource FieldDataColor}"
+                       CornerRadius="8"
+                       Margin="5">
+                    <StackLayout HorizontalOptions="Center">
+                        <Label Text="{Binding TodayRecordsCount}"
+                               FontSize="32"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Label Text="Records"
+                               FontSize="14"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                    </StackLayout>
+                </Frame>
+
+                <!-- Photos Captured -->
+                <Frame Grid.Row="0" Grid.Column="1"
+                       BackgroundColor="{StaticResource PhotoColor}"
+                       CornerRadius="8"
+                       Margin="5">
+                    <StackLayout HorizontalOptions="Center">
+                        <Label Text="{Binding TodayPhotosCount}"
+                               FontSize="32"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Label Text="Photos"
+                               FontSize="14"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                    </StackLayout>
+                </Frame>
+
+                <!-- Sync Status -->
+                <Frame Grid.Row="1" Grid.Column="0"
+                       BackgroundColor="{StaticResource SyncStatusColor}"
+                       CornerRadius="8"
+                       Margin="5">
+                    <StackLayout HorizontalOptions="Center">
+                        <Label Text="{Binding PendingSyncCount}"
+                               FontSize="32"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Label Text="Pending"
+                               FontSize="14"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                    </StackLayout>
+                </Frame>
+
+                <!-- Location Status -->
+                <Frame Grid.Row="1" Grid.Column="1"
+                       BackgroundColor="{StaticResource LocationColor}"
+                       CornerRadius="8"
+                       Margin="5">
+                    <StackLayout HorizontalOptions="Center">
+                        <Label Text="{Binding LocationAccuracy, StringFormat='{0:F1}m'}"
+                               FontSize="24"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                        <Label Text="GPS Accuracy"
+                               FontSize="14"
+                               TextColor="White"
+                               HorizontalOptions="Center" />
+                    </StackLayout>
+                </Frame>
+            </Grid>
+
+            <!-- Quick Actions -->
+            <Label Text="Quick Actions"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   Margin="0,20,0,0" />
+
+            <Grid RowDefinitions="Auto,Auto"
+                  ColumnDefinitions="*,*"
+                  RowSpacing="10"
+                  ColumnSpacing="10">
+
+                <!-- Start Data Collection -->
+                <Button Grid.Row="0" Grid.Column="0"
+                        Text="📝 Collect Data"
+                        Command="{Binding StartDataCollectionCommand}"
+                        BackgroundColor="{StaticResource HonuaPrimary}"
+                        TextColor="White"
+                        CornerRadius="8"
+                        FontSize="16"
+                        HeightRequest="80" />
+
+                <!-- Open Map -->
+                <Button Grid.Row="0" Grid.Column="1"
+                        Text="🗺️ View Map"
+                        Command="{Binding OpenMapCommand}"
+                        BackgroundColor="{StaticResource HonuaSecondary}"
+                        TextColor="White"
+                        CornerRadius="8"
+                        FontSize="16"
+                        HeightRequest="80" />
+
+                <!-- AR View -->
+                <Button Grid.Row="1" Grid.Column="0"
+                        Text="🥽 AR View"
+                        Command="{Binding OpenARViewCommand}"
+                        BackgroundColor="{StaticResource HonuaAccent}"
+                        TextColor="White"
+                        CornerRadius="8"
+                        FontSize="16"
+                        HeightRequest="80" />
+
+                <!-- IoT Sensors -->
+                <Button Grid.Row="1" Grid.Column="1"
+                        Text="📡 Sensors"
+                        Command="{Binding OpenSensorsCommand}"
+                        BackgroundColor="{StaticResource FieldDataColor}"
+                        TextColor="White"
+                        CornerRadius="8"
+                        FontSize="16"
+                        HeightRequest="80" />
+            </Grid>
+
+            <!-- Recent Activity -->
+            <Label Text="Recent Activity"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   Margin="0,20,0,0" />
+
+            <CollectionView ItemsSource="{Binding RecentActivities}"
+                           HeightRequest="300">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="dashboard:ActivityItem">
+                        <SwipeView>
+                            <SwipeView.RightItems>
+                                <SwipeItems>
+                                    <SwipeItem Text="View"
+                                              BackgroundColor="{StaticResource HonuaPrimary}"
+                                              Command="{Binding Source={x:Reference Name=page}, Path=BindingContext.ViewActivityCommand}"
+                                              CommandParameter="{Binding}" />
+                                    <SwipeItem Text="Sync"
+                                              BackgroundColor="{StaticResource HonuaSuccess}"
+                                              Command="{Binding Source={x:Reference Name=page}, Path=BindingContext.SyncActivityCommand}"
+                                              CommandParameter="{Binding}" />
+                                </SwipeItems>
+                            </SwipeView.RightItems>
+
+                            <Frame CornerRadius="8"
+                                  HasShadow="True"
+                                  Margin="0,5"
+                                  Padding="15">
+                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                     RowDefinitions="Auto,Auto"
+                                     ColumnSpacing="10">
+
+                                    <Ellipse Grid.RowSpan="2"
+                                            Fill="{Binding StatusColor}"
+                                            WidthRequest="12"
+                                            HeightRequest="12"
+                                            VerticalOptions="Start"
+                                            Margin="0,5,0,0" />
+
+                                    <Label Grid.Column="1"
+                                          Text="{Binding Title}"
+                                          FontSize="16"
+                                          FontAttributes="Bold" />
+
+                                    <Label Grid.Column="2"
+                                          Text="{Binding Timestamp, StringFormat='{0:HH:mm}'}"
+                                          FontSize="12"
+                                          TextColor="{StaticResource Gray600}"
+                                          VerticalOptions="Start" />
+
+                                    <Label Grid.Column="1" Grid.Row="1"
+                                          Text="{Binding Description}"
+                                          FontSize="14"
+                                          TextColor="{StaticResource Gray600}" />
+                                </Grid>
+                            </Frame>
+                        </SwipeView>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <!-- Connectivity Status -->
+            <Frame BackgroundColor="{Binding ConnectivityColor}"
+                   CornerRadius="8"
+                   Margin="0,10,0,0">
+                <StackLayout Orientation="Horizontal"
+                            HorizontalOptions="Center">
+                    <Label Text="{Binding ConnectivityIcon}"
+                           FontSize="20"
+                           TextColor="White"
+                           VerticalOptions="Center" />
+                    <Label Text="{Binding ConnectivityStatus}"
+                           FontSize="16"
+                           TextColor="White"
+                           VerticalOptions="Center"
+                           Margin="10,0,0,0" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Version Info -->
+            <Label Text="{Binding VersionInfo}"
+                   FontSize="12"
+                   TextColor="{StaticResource Gray600}"
+                   HorizontalOptions="Center"
+                   Margin="0,20,0,10" />
+
+        </StackLayout>
+    </ScrollView>
+
+</ContentPage>

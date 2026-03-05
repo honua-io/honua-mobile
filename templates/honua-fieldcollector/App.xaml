@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application x:Class="namespace.App"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Honua Mobile Theme Colors -->
+            <Color x:Key="Primary">#007ACC</Color>
+            <Color x:Key="PrimaryDark">#005A9A</Color>
+            <Color x:Key="Secondary">#FF6B35</Color>
+            <Color x:Key="Tertiary">#2ECC71</Color>
+            <Color x:Key="Success">#27AE60</Color>
+            <Color x:Key="Warning">#F39C12</Color>
+            <Color x:Key="Error">#E74C3C</Color>
+            <Color x:Key="Info">#3498DB</Color>
+
+            <!-- Neutral Colors -->
+            <Color x:Key="White">White</Color>
+            <Color x:Key="Black">Black</Color>
+            <Color x:Key="Gray100">#F8F9FA</Color>
+            <Color x:Key="Gray200">#E9ECEF</Color>
+            <Color x:Key="Gray300">#DEE2E6</Color>
+            <Color x:Key="Gray400">#CED4DA</Color>
+            <Color x:Key="Gray500">#ADB5BD</Color>
+            <Color x:Key="Gray600">#6C757D</Color>
+            <Color x:Key="Gray900">#212529</Color>
+
+            <!-- Field Collection Specific Colors -->
+            <Color x:Key="LocationAccuracyGood">#27AE60</Color>
+            <Color x:Key="LocationAccuracyFair">#F39C12</Color>
+            <Color x:Key="LocationAccuracyPoor">#E74C3C</Color>
+            <Color x:Key="SyncStatusSynced">#27AE60</Color>
+            <Color x:Key="SyncStatusPending">#F39C12</Color>
+            <Color x:Key="SyncStatusError">#E74C3C</Color>
+
+            <!-- Global Styles -->
+            <Style TargetType="Button">
+                <Setter Property="TextColor" Value="White" />
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="15,10" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontAttributes" Value="Bold" />
+            </Style>
+
+            <Style TargetType="Entry">
+                <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Black}, Dark={StaticResource White}}" />
+                <Setter Property="BackgroundColor" Value="Transparent" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="PlaceholderColor" Value="{StaticResource Gray500}" />
+            </Style>
+
+            <Style TargetType="Label">
+                <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}" />
+                <Setter Property="FontSize" Value="14" />
+            </Style>
+
+            <!-- Custom Styles for Field Collection -->
+            <Style x:Key="HeaderLabelStyle" TargetType="Label">
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontAttributes" Value="Bold" />
+                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+            </Style>
+
+            <Style x:Key="SubHeaderLabelStyle" TargetType="Label">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontAttributes" Value="Bold" />
+                <Setter Property="TextColor" Value="{StaticResource Gray600}" />
+            </Style>
+
+            <Style x:Key="StatusCardStyle" TargetType="Frame">
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="15" />
+                <Setter Property="HasShadow" Value="True" />
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}" />
+            </Style>
+
+            <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                <Setter Property="TextColor" Value="White" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontAttributes" Value="Bold" />
+                <Setter Property="HeightRequest" Value="50" />
+            </Style>
+
+            <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+                <Setter Property="BackgroundColor" Value="Transparent" />
+                <Setter Property="BorderColor" Value="{StaticResource Primary}" />
+                <Setter Property="BorderWidth" Value="2" />
+                <Setter Property="TextColor" Value="{StaticResource Primary}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="HeightRequest" Value="50" />
+            </Style>
+
+            <!-- Data Templates for Collections -->
+            <DataTemplate x:Key="ActivityItemTemplate">
+                <Grid ColumnDefinitions="Auto,*,Auto" Padding="15,10" RowSpacing="2">
+                    <Label Grid.Column="0"
+                          Text="{Binding Icon}"
+                          FontSize="24"
+                          VerticalOptions="Center" />
+                    <StackLayout Grid.Column="1"
+                               Margin="15,0,0,0"
+                               VerticalOptions="Center">
+                        <Label Text="{Binding Title}"
+                              FontSize="16"
+                              FontAttributes="Bold" />
+                        <Label Text="{Binding Description}"
+                              FontSize="14"
+                              TextColor="{StaticResource Gray600}" />
+                    </StackLayout>
+                    <Label Grid.Column="2"
+                          Text="{Binding Time}"
+                          FontSize="12"
+                          TextColor="{StaticResource Gray500}"
+                          VerticalOptions="Center" />
+                </Grid>
+            </DataTemplate>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

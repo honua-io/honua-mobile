@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Honua Project",
+  "classifications": [
+    "MAUI",
+    "Mobile",
+    "Geospatial",
+    "Field Collection",
+    "Open Source"
+  ],
+  "identity": "Honua.Mobile.FieldCollector",
+  "name": "Honua Field Data Collection App",
+  "shortName": "honua-fieldcollector",
+  "description": "Complete field data collection app with forms, GPS, photos, and offline sync. Competes with Fulcrum and Survey123.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "preferNameDirectory": true,
+  "sourceName": "HonuaFieldCollector",
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "replaces": "HonuaFieldCollector",
+      "defaultValue": "HonuaFieldCollector",
+      "description": "The namespace for the generated code"
+    },
+    "serverEndpoint": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "https://demo.honua.com",
+      "replaces": "HONUA_SERVER_ENDPOINT",
+      "description": "Your Honua server endpoint URL"
+    },
+    "apiKey": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "demo_key_field_collection_2026",
+      "replaces": "YOUR_API_KEY_HERE",
+      "description": "Your Honua API key"
+    },
+    "enableIoT": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Enable IoT sensor integration"
+    },
+    "enableAR": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "Enable Augmented Reality features"
+    },
+    "companyName": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "Your Company",
+      "replaces": "YOUR_COMPANY_NAME",
+      "description": "Your company name for app branding"
+    }
+  },
+  "sources": [
+    {
+      "source": "./",
+      "target": "./",
+      "exclude": [
+        ".template.config/**",
+        ".vs/**",
+        "bin/**",
+        "obj/**",
+        "*.user"
+      ]
+    }
+  ],
+  "postActions": [
+    {
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [
+        {
+          "text": "Run 'dotnet restore'"
+        }
+      ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
+}

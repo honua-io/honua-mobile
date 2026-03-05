@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>Honua.Mobile.Templates</id>
+    <version>1.0.0</version>
+    <title>Honua Mobile SDK Project Templates</title>
+    <authors>Honua Project</authors>
+    <owners>Honua Project</owners>
+    <description>
+      Visual Studio project templates for Honua Mobile SDK.
+
+      Create professional field data collection apps that compete with Fulcrum and Survey123 - completely free and open source.
+
+      Included Templates:
+      • honua-fieldcollector - Complete field data collection app with forms, GPS, photos, offline sync
+      • honua-photosurvey - Simple photo survey application
+      • honua-iotmonitor - IoT sensor monitoring app
+      • honua-assetinspection - Asset inspection with AR capabilities
+      • honua-minimal - Minimal SDK integration for custom apps
+
+      Features:
+      ✅ Dynamic form generation from server schemas
+      ✅ GPS location tracking with accuracy display
+      ✅ Professional photo capture with metadata
+      ✅ True offline-first architecture with intelligent sync
+      ✅ Cross-platform (iOS, Android, Windows)
+      ✅ IoT sensor integration (Bluetooth LE, LoRa, WiFi)
+      ✅ Augmented reality visualization
+      ✅ Professional UI that competes with $100+/month platforms
+
+      Zero licensing costs - save thousands per year compared to Fulcrum, Survey123, ArcGIS Mobile.
+    </description>
+    <releaseNotes>
+      1.0.0:
+      • Initial release with 5 project templates
+      • Complete field data collection template
+      • IoT sensor integration templates
+      • AR visualization templates
+      • Professional UI components
+      • Comprehensive documentation and examples
+    </releaseNotes>
+    <summary>Visual Studio templates for creating professional geospatial mobile apps with the Honua SDK</summary>
+    <language>en-US</language>
+    <projectUrl>https://github.com/honua/honua-mobile-sdk</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/honua/honua-mobile-sdk/main/assets/icon-128.png</iconUrl>
+    <icon>icon-128.png</icon>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>https://github.com/honua/honua-mobile-sdk/blob/main/LICENSE</licenseUrl>
+    <copyright>© 2026 Honua Project. Licensed under Apache 2.0.</copyright>
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="Microsoft.TemplateEngine.Abstractions" version="8.0.0" />
+      </group>
+    </dependencies>
+    <tags>
+      dotnet-new template templates maui mobile geospatial gis
+      field-collection data-collection offline-first cross-platform
+      fulcrum survey123 arcgis-mobile alternative open-source
+      forms gps photos sync mapping iot sensors ar augmented-reality
+      csharp xaml visual-studio
+    </tags>
+    <packageTypes>
+      <packageType name="Template" />
+    </packageTypes>
+  </metadata>
+  <files>
+    <!-- Field Collector Template -->
+    <file src="honua-fieldcollector\**\*" target="content\honua-fieldcollector\" exclude="**\bin\**;**\obj\**;**\.vs\**;**\*.user" />
+
+    <!-- Photo Survey Template -->
+    <file src="honua-photosurvey\**\*" target="content\honua-photosurvey\" exclude="**\bin\**;**\obj\**;**\.vs\**;**\*.user" />
+
+    <!-- IoT Monitor Template -->
+    <file src="honua-iotmonitor\**\*" target="content\honua-iotmonitor\" exclude="**\bin\**;**\obj\**;**\.vs\**;**\*.user" />
+
+    <!-- Asset Inspection Template -->
+    <file src="honua-assetinspection\**\*" target="content\honua-assetinspection\" exclude="**\bin\**;**\obj\**;**\.vs\**;**\*.user" />
+
+    <!-- Minimal Template -->
+    <file src="honua-minimal\**\*" target="content\honua-minimal\" exclude="**\bin\**;**\obj\**;**\.vs\**;**\*.user" />
+
+    <!-- Template Engine Files -->
+    <file src="**\.template.config\**\*" target="content\" />
+
+    <!-- Documentation -->
+    <file src="README.md" target="content\README.md" />
+    <file src="LICENSE" target="content\LICENSE" />
+
+    <!-- Icon -->
+    <file src="icon-128.png" target="icon-128.png" />
+  </files>
+</package>

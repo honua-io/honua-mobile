@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.Offline", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.Maui", "src\Honua.Mobile.Maui\Honua.Mobile.Maui.csproj", "{5981B473-4AC4-4871-A129-FA1DF42AE095}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.IoT", "src\Honua.Mobile.IoT\Honua.Mobile.IoT.csproj", "{A1234567-1234-1234-1234-123456789012}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.Field.Tests", "tests\Honua.Mobile.Field.Tests\Honua.Mobile.Field.Tests.csproj", "{EC35CDDC-7AA4-4169-A7BC-C25C05D12FB5}"

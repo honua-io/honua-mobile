@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application x:Class="HonuaFieldCollector.App"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:HonuaFieldCollector">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Honua Brand Colors -->
+            <Color x:Key="HonuaPrimary">#1976D2</Color>
+            <Color x:Key="HonuaSecondary">#424242</Color>
+            <Color x:Key="HonuaAccent">#FF5722</Color>
+            <Color x:Key="HonuaSuccess">#4CAF50</Color>
+            <Color x:Key="HonuaWarning">#FF9800</Color>
+            <Color x:Key="HonuaError">#F44336</Color>
+
+            <!-- Field Work Specific Colors -->
+            <Color x:Key="FieldDataColor">#2E7D32</Color>
+            <Color x:Key="SyncStatusColor">#1565C0</Color>
+            <Color x:Key="LocationColor">#E65100</Color>
+            <Color x:Key="PhotoColor">#6A1B9A</Color>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
