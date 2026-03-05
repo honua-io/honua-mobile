@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
+             x:Class="Honua.Mobile.FieldCollection.Views.SettingsPage"
+             Title="{Binding Title}"
+             x:DataType="vm:SettingsViewModel">
+
+    <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                 Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Spacing="20" Padding="20">
+
+                <!-- User Account Section -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="Account" Style="{StaticResource SectionHeaderStyle}" />
+
+                        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto"
+                              RowSpacing="10" ColumnSpacing="10">
+
+                            <!-- User Info -->
+                            <Label Grid.Row="0" Grid.Column="0" Text="👤" FontSize="16" />
+                            <Label Grid.Row="0" Grid.Column="1" Text="{Binding UserName}"
+                                   FontSize="16" VerticalOptions="Center" />
+                            <Button Grid.Row="0" Grid.Column="2" Text="Profile"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ViewUserProfileCommand}"
+                                    IsVisible="{Binding IsAuthenticated}" />
+
+                            <!-- Server URL -->
+                            <Label Grid.Row="1" Grid.Column="0" Text="🌐" FontSize="16" />
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding ServerUrl}"
+                                   FontSize="14" TextColor="{StaticResource Gray600}"
+                                   VerticalOptions="Center" />
+                            <Button Grid.Row="1" Grid.Column="2" Text="Configure"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ConfigureServerCommand}" />
+
+                            <!-- Authentication Status -->
+                            <Label Grid.Row="2" Grid.Column="0" Text="🔐" FontSize="16" />
+                            <Label Grid.Row="2" Grid.Column="1"
+                                   Text="{Binding IsAuthenticated, Converter={StaticResource BoolToStringConverter}, ConverterParameter='Authenticated|Not signed in'}"
+                                   FontSize="14"
+                                   TextColor="{Binding IsAuthenticated, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Green|Red'}"
+                                   VerticalOptions="Center" />
+                            <Button Grid.Row="2" Grid.Column="2" Text="Sign Out"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding SignOutCommand}"
+                                    IsVisible="{Binding IsAuthenticated}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- App Preferences -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="Preferences" Style="{StaticResource SectionHeaderStyle}" />
+
+                        <!-- Location Tracking -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <StackLayout Grid.Column="0">
+                                <Label Text="📍 Location Tracking" FontSize="16" />
+                                <Label Text="Enable GPS tracking for field data collection"
+                                       FontSize="12" TextColor="{StaticResource Gray600}" />
+                            </StackLayout>
+                            <Switch Grid.Column="1" IsToggled="{Binding EnableLocationTracking}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+
+                        <!-- Background Sync -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <StackLayout Grid.Column="0">
+                                <Label Text="🔄 Background Sync" FontSize="16" />
+                                <Label Text="Automatically sync when app is in background"
+                                       FontSize="12" TextColor="{StaticResource Gray600}" />
+                            </StackLayout>
+                            <Switch Grid.Column="1" IsToggled="{Binding EnableBackgroundSync}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+
+                        <!-- Push Notifications -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <StackLayout Grid.Column="0">
+                                <Label Text="🔔 Push Notifications" FontSize="16" />
+                                <Label Text="Receive notifications for sync status and updates"
+                                       FontSize="12" TextColor="{StaticResource Gray600}" />
+                            </StackLayout>
+                            <Switch Grid.Column="1" IsToggled="{Binding EnablePushNotifications}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+
+                        <!-- Sync Interval -->
+                        <StackLayout>
+                            <Label Text="⏱️ Sync Interval" FontSize="16" />
+                            <Label Text="{Binding SyncIntervalMinutes, StringFormat='Every {0} minutes'}"
+                                   FontSize="12" TextColor="{StaticResource Gray600}" />
+                            <Slider Minimum="5" Maximum="60" Value="{Binding SyncIntervalMinutes}"
+                                   ThumbColor="{StaticResource Primary}" />
+                            <Grid ColumnDefinitions="*,*,*">
+                                <Label Grid.Column="0" Text="5 min" FontSize="10" HorizontalOptions="Start" />
+                                <Label Grid.Column="1" Text="30 min" FontSize="10" HorizontalOptions="Center" />
+                                <Label Grid.Column="2" Text="60 min" FontSize="10" HorizontalOptions="End" />
+                            </Grid>
+                        </StackLayout>
+
+                        <!-- Storage Limit -->
+                        <StackLayout>
+                            <Label Text="💾 Offline Storage Limit" FontSize="16" />
+                            <Label Text="{Binding MaxOfflineStorageMb, StringFormat='{0} MB maximum'}"
+                                   FontSize="12" TextColor="{StaticResource Gray600}" />
+                            <Slider Minimum="100" Maximum="2000" Value="{Binding MaxOfflineStorageMb}"
+                                   ThumbColor="{StaticResource Primary}" />
+                            <Grid ColumnDefinitions="*,*,*">
+                                <Label Grid.Column="0" Text="100 MB" FontSize="10" HorizontalOptions="Start" />
+                                <Label Grid.Column="1" Text="1 GB" FontSize="10" HorizontalOptions="Center" />
+                                <Label Grid.Column="2" Text="2 GB" FontSize="10" HorizontalOptions="End" />
+                            </Grid>
+                        </StackLayout>
+
+                        <!-- Save Settings Button -->
+                        <Button Text="💾 Save Settings"
+                                Style="{StaticResource BaseButtonStyle}"
+                                Command="{Binding SaveSettingsCommand}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Device Information -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="Device Information" Style="{StaticResource SectionHeaderStyle}" />
+
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*"
+                              RowSpacing="8" ColumnSpacing="10">
+
+                            <Label Grid.Row="0" Grid.Column="0" Text="📱" FontSize="14" />
+                            <Label Grid.Row="0" Grid.Column="1" Text="{Binding DeviceInfo.DeviceName}"
+                                   FontSize="14" />
+
+                            <Label Grid.Row="1" Grid.Column="0" Text="💻" FontSize="14" />
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding DeviceInfo.Platform}"
+                                   FontSize="14" />
+
+                            <Label Grid.Row="2" Grid.Column="0" Text="🔢" FontSize="14" />
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding DeviceInfo.OSVersion}"
+                                   FontSize="14" />
+
+                            <Label Grid.Row="3" Grid.Column="0" Text="📦" FontSize="14" />
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding AppVersion}"
+                                   FontSize="14" />
+
+                            <Label Grid.Row="4" Grid.Column="0" Text="🆔" FontSize="14" />
+                            <Label Grid.Row="4" Grid.Column="1" Text="{Binding DeviceInfo.DeviceId}"
+                                   FontSize="10" TextColor="{StaticResource Gray600}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Developer Options -->
+                <Frame Style="{StaticResource CardFrameStyle}"
+                       IsVisible="{Binding EnableDeveloperMode}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="🛠️ Developer Options" Style="{StaticResource SectionHeaderStyle}"
+                               TextColor="{StaticResource Warning}" />
+
+                        <Button Text="🔍 View Diagnostics"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding ViewDiagnosticsCommand}" />
+
+                        <Button Text="🌐 Test Connection"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding TestConnectionCommand}" />
+
+                        <Button Text="🗑️ Clear Cache"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding ClearCacheCommand}" />
+
+                        <Button Text="📤 Export Data"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding ExportDataCommand}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Advanced Developer Toggle -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <StackLayout Grid.Column="0">
+                            <Label Text="🛠️ Developer Mode" FontSize="16" />
+                            <Label Text="Enable advanced developer options and diagnostics"
+                                   FontSize="12" TextColor="{StaticResource Gray600}" />
+                        </StackLayout>
+                        <Switch Grid.Column="1" IsToggled="{Binding EnableDeveloperMode}"
+                                VerticalOptions="Center" />
+                    </Grid>
+                </Frame>
+
+                <!-- App Information -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="About" Style="{StaticResource SectionHeaderStyle}" />
+
+                        <Button Text="ℹ️ About Honua"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding ViewAboutCommand}" />
+
+                        <Label Text="{Binding AppVersion, StringFormat='Version {0}'}"
+                               FontSize="12" TextColor="{StaticResource Gray600}"
+                               HorizontalOptions="Center" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Danger Zone -->
+                <Frame Style="{StaticResource CardFrameStyle}"
+                       BackgroundColor="{StaticResource DangerLight}">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="⚠️ Danger Zone" Style="{StaticResource SectionHeaderStyle}"
+                               TextColor="{StaticResource Danger}" />
+
+                        <Button Text="🔄 Reset App"
+                                Style="{StaticResource DangerButtonStyle}"
+                                Command="{Binding ResetAppCommand}" />
+
+                        <Label Text="This will permanently delete all app data and settings"
+                               FontSize="12" TextColor="{StaticResource Danger}"
+                               HorizontalOptions="Center" />
+                    </VerticalStackLayout>
+                </Frame>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+
+    <!-- Loading Indicator -->
+    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                      IsVisible="{Binding IsBusy}"
+                      Color="{StaticResource Primary}"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center" />
+
+</ContentPage>

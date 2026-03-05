@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
+             xmlns:maps="http://schemas.microsoft.com/dotnet/2021/maui/maps"
+             x:Class="Honua.Mobile.FieldCollection.Views.MapPage"
+             Title="{Binding Title}"
+             x:DataType="vm:MapViewModel">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Map Control -->
+        <Border Grid.Row="0" StrokeThickness="0">
+            <maps:Map x:Name="MapView"
+                      IsShowingUser="True"
+                      MapType="Hybrid">
+                <!-- Map pins will be bound to MapFeatures collection -->
+            </maps:Map>
+        </Border>
+
+        <!-- Map Controls Overlay -->
+        <Grid Grid.Row="0" Margin="10" VerticalOptions="Start" HorizontalOptions="End">
+            <VerticalStackLayout Spacing="10">
+                <Button Text="📍"
+                        WidthRequest="50" HeightRequest="50"
+                        Style="{StaticResource BaseButtonStyle}"
+                        Command="{Binding ZoomToCurrentLocationCommand}"
+                        ToolTipProperties.Text="Zoom to current location" />
+
+                <Button Text="🎯"
+                        WidthRequest="50" HeightRequest="50"
+                        Style="{StaticResource BaseButtonStyle}"
+                        Command="{Binding ZoomToFeaturesCommand}"
+                        ToolTipProperties.Text="Zoom to features" />
+
+                <Button Text="📐"
+                        WidthRequest="50" HeightRequest="50"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding StartAddingFeatureCommand}"
+                        IsVisible="{Binding SelectedLayer.IsEditable, FallbackValue=False}"
+                        ToolTipProperties.Text="Add new feature" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <!-- Adding Feature Overlay -->
+        <Frame Grid.Row="0"
+               IsVisible="{Binding IsAddingFeature}"
+               BackgroundColor="{StaticResource Primary}"
+               HorizontalOptions="Center"
+               VerticalOptions="Start"
+               Margin="20">
+            <StackLayout Orientation="Horizontal" Spacing="10">
+                <Label Text="📍 Tap on the map to add a feature"
+                       TextColor="{StaticResource White}"
+                       FontAttributes="Bold" />
+                <Button Text="Cancel"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding CancelAddingFeatureCommand}" />
+            </StackLayout>
+        </Frame>
+
+        <!-- Bottom Panel -->
+        <Frame Grid.Row="1" Style="{StaticResource CardFrameStyle}" Margin="10,0,10,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Layer Selection -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                    <Label Grid.Column="0" Text="Layer:" FontAttributes="Bold" VerticalOptions="Center" />
+
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding AvailableLayers}"
+                            SelectedItem="{Binding SelectedLayer}"
+                            ItemDisplayBinding="{Binding Name}"
+                            Title="Select Layer" />
+
+                    <Button Grid.Column="2"
+                            Text="⚙️"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding OpenLayerSettingsCommand}"
+                            IsVisible="{Binding SelectedLayer, Converter={StaticResource IsNotNullConverter}}" />
+                </Grid>
+
+                <!-- Layer Info -->
+                <StackLayout Grid.Row="1"
+                             Orientation="Horizontal"
+                             Spacing="20"
+                             Margin="0,10,0,0"
+                             IsVisible="{Binding SelectedLayer, Converter={StaticResource IsNotNullConverter}}">
+
+                    <StackLayout Orientation="Horizontal" Spacing="5">
+                        <Label Text="📊" FontSize="14" />
+                        <Label Text="{Binding MapFeatures.Count, StringFormat='{0} features'}"
+                               FontSize="12" />
+                    </StackLayout>
+
+                    <StackLayout Orientation="Horizontal" Spacing="5">
+                        <Label Text="🎨" FontSize="14" />
+                        <Label Text="{Binding SelectedLayer.GeometryType}"
+                               FontSize="12" />
+                    </StackLayout>
+
+                    <CheckBox IsChecked="{Binding SelectedLayer.IsVisible}" />
+                    <Label Text="Visible" FontSize="12" VerticalOptions="Center" />
+                </StackLayout>
+            </Grid>
+        </Frame>
+
+        <!-- Loading Indicator -->
+        <ActivityIndicator Grid.RowSpan="2"
+                          IsRunning="{Binding IsBusy}"
+                          IsVisible="{Binding IsBusy}"
+                          Color="{StaticResource Primary}"
+                          HorizontalOptions="Center"
+                          VerticalOptions="Center" />
+    </Grid>
+
+</ContentPage>
