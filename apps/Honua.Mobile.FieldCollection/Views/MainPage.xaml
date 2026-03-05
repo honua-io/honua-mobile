@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
+             x:Class="Honua.Mobile.FieldCollection.Views.MainPage"
+             Title="{Binding Title}"
+             x:DataType="vm:MainViewModel">
+
+    <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                 Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Spacing="25" Padding="30,0">
+
+                <!-- Welcome Section -->
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="{Binding WelcomeMessage}"
+                               Style="{StaticResource PageTitleStyle}" />
+
+                        <Label Text="Your mobile field data collection companion"
+                               FontSize="16"
+                               TextColor="{StaticResource Gray600}" />
+
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,10,0,0">
+                            <Frame Grid.Column="0" BorderColor="{StaticResource Primary}" BackgroundColor="Transparent">
+                                <VerticalStackLayout Spacing="5">
+                                    <Label Text="🌐" FontSize="24" HorizontalOptions="Center" />
+                                    <Label Text="{Binding IsOnline, Converter={StaticResource BoolToStringConverter}, ConverterParameter='Online|Offline'}"
+                                           FontSize="12" HorizontalOptions="Center" FontAttributes="Bold"
+                                           TextColor="{Binding IsOnline, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Green|Red'}" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Column="1" BorderColor="{StaticResource Primary}" BackgroundColor="Transparent">
+                                <VerticalStackLayout Spacing="5">
+                                    <Label Text="📝" FontSize="24" HorizontalOptions="Center" />
+                                    <Label Text="{Binding PendingChangesCount}" FontSize="16" HorizontalOptions="Center" FontAttributes="Bold" />
+                                    <Label Text="Pending" FontSize="10" HorizontalOptions="Center" />
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Column="2" BorderColor="{StaticResource Primary}" BackgroundColor="Transparent">
+                                <VerticalStackLayout Spacing="5">
+                                    <Label Text="🔄" FontSize="24" HorizontalOptions="Center" />
+                                    <Label Text="{Binding LastSyncTime, StringFormat='{0:HH:mm}', TargetNullValue='Never'}"
+                                           FontSize="12" HorizontalOptions="Center" FontAttributes="Bold" />
+                                    <Label Text="Last Sync" FontSize="10" HorizontalOptions="Center" />
+                                </VerticalStackLayout>
+                            </Frame>
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Quick Actions -->
+                <Label Text="Quick Actions" Style="{StaticResource SectionHeaderStyle}" />
+
+                <Grid ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="15" RowSpacing="15">
+                    <Button Grid.Row="0" Grid.Column="0"
+                            Text="📍 Map"
+                            Style="{StaticResource BaseButtonStyle}"
+                            Command="{Binding NavigateToMapCommand}" />
+
+                    <Button Grid.Row="0" Grid.Column="1"
+                            Text="📋 Records"
+                            Style="{StaticResource BaseButtonStyle}"
+                            Command="{Binding NavigateToRecordsCommand}" />
+
+                    <Button Grid.Row="1" Grid.Column="0"
+                            Text="🔄 Sync"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding QuickSyncCommand}"
+                            IsEnabled="{Binding IsOnline}" />
+
+                    <Button Grid.Row="1" Grid.Column="1"
+                            Text="⚙️ Settings"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding NavigateToSettingsCommand}" />
+                </Grid>
+
+                <!-- Sync Status -->
+                <Frame Style="{StaticResource CardFrameStyle}" IsVisible="{Binding PendingChangesCount, Converter={StaticResource IntToBoolConverter}}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="⚠️ Sync Required"
+                               FontSize="16" FontAttributes="Bold"
+                               TextColor="{StaticResource Warning}" />
+
+                        <Label Text="{Binding PendingChangesCount, StringFormat='You have {0} unsynced changes.'}"
+                               FontSize="14" TextColor="{StaticResource Gray600}" />
+
+                        <Button Text="Sync Now"
+                                Style="{StaticResource BaseButtonStyle}"
+                                Command="{Binding QuickSyncCommand}"
+                                IsEnabled="{Binding IsOnline}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Offline Notice -->
+                <Frame Style="{StaticResource CardFrameStyle}"
+                       IsVisible="{Binding IsOnline, Converter={StaticResource InvertedBoolConverter}}"
+                       BackgroundColor="{StaticResource Warning}">
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="📶 Offline Mode"
+                               FontSize="16" FontAttributes="Bold"
+                               TextColor="{StaticResource White}" />
+                        <Label Text="You're working offline. Data will sync when connection is restored."
+                               FontSize="14" TextColor="{StaticResource White}" />
+                    </VerticalStackLayout>
+                </Frame>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+
+    <!-- Loading Indicator -->
+    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                       IsVisible="{Binding IsBusy}"
+                       Color="{StaticResource Primary}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+
+</ContentPage>
