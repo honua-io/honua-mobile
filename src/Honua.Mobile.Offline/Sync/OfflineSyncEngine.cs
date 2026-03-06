@@ -97,18 +97,18 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                 return ConflictResolutionState.ResolvedState;
 
             case SyncConflictStrategy.ClientWins:
-            {
-                var forced = await _uploader.UploadAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
-                if (forced.Outcome == UploadOutcome.Success)
                 {
-                    await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
-                    return ConflictResolutionState.ResolvedState;
-                }
+                    var forced = await _uploader.UploadAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
+                    if (forced.Outcome == UploadOutcome.Success)
+                    {
+                        await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
+                        return ConflictResolutionState.ResolvedState;
+                    }
 
-                var reason = forced.Message ?? "conflict retry failed";
-                await _store.MarkFailedAsync(operation.OperationId, reason, retryable: forced.Outcome == UploadOutcome.RetryableFailure, ct).ConfigureAwait(false);
-                return new ConflictResolutionState(false, true, reason);
-            }
+                    var reason = forced.Message ?? "conflict retry failed";
+                    await _store.MarkFailedAsync(operation.OperationId, reason, retryable: forced.Outcome == UploadOutcome.RetryableFailure, ct).ConfigureAwait(false);
+                    return new ConflictResolutionState(false, true, reason);
+                }
 
             case SyncConflictStrategy.ManualReview:
             default:
