@@ -83,7 +83,6 @@ jobs:
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
           dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
-          dotnet restore src/Honua.Mobile.IoT/Honua.Mobile.IoT.csproj
 
       - name: Build Core Libraries (warnings as errors)
         id: build
@@ -98,9 +97,6 @@ jobs:
           dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
-          dotnet build src/Honua.Mobile.IoT/Honua.Mobile.IoT.csproj \
-            --no-restore --configuration Release /p:TreatWarningsAsErrors=true
-
       - name: Format Check
         run: |
           dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
@@ -108,8 +104,6 @@ jobs:
           dotnet format src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
           dotnet format src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
-            --no-restore --verify-no-changes --verbosity diagnostic
-          dotnet format src/Honua.Mobile.IoT/Honua.Mobile.IoT.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
 
   test:
@@ -318,12 +312,10 @@ jobs:
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
           dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
-          dotnet restore src/Honua.Mobile.IoT/Honua.Mobile.IoT.csproj
           # Build cross-platform libraries for security analysis
           dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --configuration Release
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
           dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --no-restore --configuration Release
-          dotnet build src/Honua.Mobile.IoT/Honua.Mobile.IoT.csproj --no-restore --configuration Release
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
