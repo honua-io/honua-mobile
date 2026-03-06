@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text;
+using System.Buffers;
 using Microsoft.Data.Sqlite;
 using Honua.Mobile.Offline.GeoPackage;
 
@@ -24,9 +26,12 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
             throw new InvalidOperationException("At least one map layer source is required.");
         }
 
-        Directory.CreateDirectory(request.OutputDirectory);
+        if (request.MaxLayerPayloadBytes <= 0)
+        {
+            throw new InvalidOperationException("Max layer payload bytes must be greater than zero.");
+        }
 
-        var packagePath = Path.Combine(request.OutputDirectory, $"{request.AreaId}.gpkg");
+        var packagePath = BuildPackagePath(request.OutputDirectory, request.AreaId);
         await using var packageConnection = new SqliteConnection($"Data Source={packagePath}");
         await packageConnection.OpenAsync(ct).ConfigureAwait(false);
 
@@ -38,7 +43,7 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
         foreach (var layer in request.Layers.OrderBy(layer => layer.Priority))
         {
             var url = ApplyTemplate(layer.SourceUrl, request);
-            using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
+            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 if (layer.Required)
@@ -49,7 +54,7 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
                 continue;
             }
 
-            var payload = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            var payload = await ReadBoundedPayloadAsync(response.Content, request.MaxLayerPayloadBytes, layer.LayerKey, ct).ConfigureAwait(false);
             var contentType = layer.ContentType ?? response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
 
             await UpsertLayerPayloadAsync(packageConnection, layer, url, payload, contentType, ct).ConfigureAwait(false);
@@ -163,5 +168,116 @@ ON CONFLICT(layer_key) DO UPDATE SET
             .Replace("{maxLat}", request.BoundingBox.MaxLatitude.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{minZoom}", request.MinZoom.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{maxZoom}", request.MaxZoom.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    private static string BuildPackagePath(string outputDirectory, string areaId)
+    {
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            throw new InvalidOperationException("Output directory is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(areaId))
+        {
+            throw new InvalidOperationException("Area ID is required.");
+        }
+
+        var normalizedOutputDirectory = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(normalizedOutputDirectory);
+
+        var safeAreaId = SanitizeAreaId(areaId);
+        if (string.IsNullOrWhiteSpace(safeAreaId))
+        {
+            throw new InvalidOperationException("Area ID must include at least one valid file-name character.");
+        }
+
+        var packagePath = Path.GetFullPath(Path.Combine(normalizedOutputDirectory, $"{safeAreaId}.gpkg"));
+        if (!IsPathUnderDirectory(packagePath, normalizedOutputDirectory))
+        {
+            throw new InvalidOperationException("Resolved map package path is outside the requested output directory.");
+        }
+
+        return packagePath;
+    }
+
+    private static string SanitizeAreaId(string areaId)
+    {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var builder = new StringBuilder(areaId.Length);
+
+        foreach (var character in areaId.Trim())
+        {
+            if (character == Path.DirectorySeparatorChar ||
+                character == Path.AltDirectorySeparatorChar ||
+                character == ':' ||
+                character == '.' ||
+                Array.IndexOf(invalidCharacters, character) >= 0)
+            {
+                builder.Append('_');
+                continue;
+            }
+
+            builder.Append(character);
+        }
+
+        return builder.ToString().Trim('.');
+    }
+
+    private static bool IsPathUnderDirectory(string candidatePath, string parentDirectoryPath)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        var normalizedParent = Path.EndsInDirectorySeparator(parentDirectoryPath)
+            ? parentDirectoryPath
+            : parentDirectoryPath + Path.DirectorySeparatorChar;
+
+        return candidatePath.StartsWith(normalizedParent, comparison);
+    }
+
+    private static async Task<byte[]> ReadBoundedPayloadAsync(
+        HttpContent content,
+        long maxBytes,
+        string layerKey,
+        CancellationToken ct)
+    {
+        if (content.Headers.ContentLength is long contentLength && contentLength > maxBytes)
+        {
+            throw new InvalidOperationException(
+                $"Layer '{layerKey}' payload size ({contentLength} bytes) exceeds configured max ({maxBytes} bytes).");
+        }
+
+        await using var sourceStream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var memoryStream = new MemoryStream();
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+
+        try
+        {
+            long totalRead = 0;
+            while (true)
+            {
+                var read = await sourceStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+                if (totalRead > maxBytes)
+                {
+                    throw new InvalidOperationException(
+                        $"Layer '{layerKey}' payload size exceeds configured max ({maxBytes} bytes).");
+                }
+
+                memoryStream.Write(buffer, 0, read);
+            }
+
+            return memoryStream.ToArray();
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 }

@@ -9,7 +9,7 @@ on:
 permissions: {}
 
 env:
-  DOTNET_VERSION: '8.0.x'  # MAUI requires .NET 8+
+  DOTNET_VERSION: '10.0.x'  # Current repo targets net10
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
 
@@ -70,36 +70,41 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-maui-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-maui-
             ${{ runner.os }}-nuget-
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
+          dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
+          dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
 
       - name: Build Core Libraries (warnings as errors)
         id: build
         run: |
-          # Build core libraries first (they should build on any platform)
-          dotnet build src/Honua.Mobile.Core/Honua.Mobile.Core.csproj \
+          # Build cross-platform libraries first (these should build on any platform)
+          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
-          dotnet build src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj \
+          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
           dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
       - name: Format Check
-        run: dotnet format Honua.Mobile.sln --verify-no-changes --verbosity diagnostic
+        run: |
+          dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
 
   test:
     name: Test Suite
@@ -116,46 +121,46 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-maui-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-maui-
+            ${{ runner.os }}-nuget-
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj
+          dotnet restore tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj
+          dotnet restore tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj
 
       - name: Create Test Results Directory
         run: mkdir -p ./TestResults
 
       - name: Build Test Projects
         run: |
-          dotnet build tests/Honua.Mobile.Core.Tests/Honua.Mobile.Core.Tests.csproj \
+          dotnet build tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj \
             --no-restore --configuration Release
-          dotnet build tests/Honua.Mobile.Storage.Tests/Honua.Mobile.Storage.Tests.csproj \
+          dotnet build tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj \
             --no-restore --configuration Release
 
-      - name: Run Core SDK Tests
+      - name: Run SDK Tests
         run: |
-          dotnet test tests/Honua.Mobile.Core.Tests/Honua.Mobile.Core.Tests.csproj \
+          dotnet test tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj \
             --no-build --no-restore --configuration Release \
-            --logger "trx;LogFileName=core-tests.trx" \
+            --logger "trx;LogFileName=sdk-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
 
-      - name: Run Storage Tests
+      - name: Run Offline Tests
         run: |
-          dotnet test tests/Honua.Mobile.Storage.Tests/Honua.Mobile.Storage.Tests.csproj \
+          dotnet test tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
             --no-build --no-restore --configuration Release \
-            --logger "trx;LogFileName=storage-tests.trx" \
+            --logger "trx;LogFileName=offline-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
@@ -202,18 +207,19 @@ jobs:
         run: dotnet workload install maui-android
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-android
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            --configuration Release --framework net8.0-android
+            --configuration Release
 
       - name: Build Reference App (Android)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net8.0-android \
+            --framework net10.0-android \
             || echo "::warning::Android build failed - may require Android SDK setup"
 
   maui-windows:
@@ -235,18 +241,18 @@ jobs:
         run: dotnet workload install maui
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
 
       - name: Build MAUI Components (Windows)
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
-            --configuration Release --framework net8.0-windows10.0.19041.0
+            --configuration Release
 
       - name: Build Reference App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
-            --framework net8.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0
 
   grpc-validation:
     name: gRPC Protocol Validation
@@ -277,7 +283,7 @@ jobs:
         run: |
           # Build a simple integration test to verify SDK can connect
           echo "🔌 Testing SDK integration points..."
-          dotnet build src/Honua.Mobile.Core/Honua.Mobile.Core.csproj --configuration Release
+          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release
           echo "✅ SDK integration test passed"
 
   security:
@@ -300,15 +306,15 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Restore and Build for Analysis
         run: |
-          dotnet restore Honua.Mobile.sln
-          # Build core libraries for security analysis
-          dotnet build src/Honua.Mobile.Core/Honua.Mobile.Core.csproj --no-restore --configuration Release
-          dotnet build src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj --no-restore --configuration Release
+          dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
+          dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
+          dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
+          # Build cross-platform libraries for security analysis
+          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --configuration Release
+          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
+          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --no-restore --configuration Release
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

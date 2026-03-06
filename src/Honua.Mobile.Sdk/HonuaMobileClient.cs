@@ -59,28 +59,36 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        IReadOnlyList<JsonDocument>? grpcPages = null;
-
         if (CanUseGrpcForQueries)
         {
-            try
-            {
-                grpcPages = await QueryFeaturesGrpcPagesAsync(request, ct).ConfigureAwait(false);
-            }
-            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
-            {
-                // Fall through to REST unary query.
-            }
-        }
+            var yieldedGrpcPage = false;
+            await using var grpcEnumerator = QueryFeaturesGrpcPagesAsync(request, ct).GetAsyncEnumerator(ct);
 
-        if (grpcPages is { Count: > 0 })
-        {
-            foreach (var page in grpcPages)
+            while (true)
             {
-                yield return page;
-            }
+                JsonDocument? nextPage = null;
+                try
+                {
+                    if (!await grpcEnumerator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        if (yieldedGrpcPage)
+                        {
+                            yield break;
+                        }
 
-            yield break;
+                        break;
+                    }
+
+                    nextPage = grpcEnumerator.Current;
+                }
+                catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure && !yieldedGrpcPage)
+                {
+                    break;
+                }
+
+                yieldedGrpcPage = true;
+                yield return nextPage!;
+            }
         }
 
         yield return await QueryFeaturesRestAsync(request, ct).ConfigureAwait(false);
@@ -183,19 +191,17 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return GrpcFeatureTranslator.ToJsonDocument(response);
     }
 
-    private async Task<IReadOnlyList<JsonDocument>> QueryFeaturesGrpcPagesAsync(QueryFeaturesRequest request, CancellationToken ct)
+    private async IAsyncEnumerable<JsonDocument> QueryFeaturesGrpcPagesAsync(
+        QueryFeaturesRequest request,
+        [EnumeratorCancellation] CancellationToken ct)
     {
         var protoRequest = GrpcFeatureTranslator.ToProtoQueryRequest(request);
         var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
-        var call = _grpcClient!.QueryFeaturesStream(protoRequest, metadata, cancellationToken: ct);
-
-        var pages = new List<JsonDocument>();
+        using var call = _grpcClient!.QueryFeaturesStream(protoRequest, metadata, cancellationToken: ct);
         await foreach (var page in call.ResponseStream.ReadAllAsync(ct).ConfigureAwait(false))
         {
-            pages.Add(GrpcFeatureTranslator.ToJsonDocument(page));
+            yield return GrpcFeatureTranslator.ToJsonDocument(page);
         }
-
-        return pages;
     }
 
     private async Task<JsonDocument> ApplyEditsGrpcAsync(ApplyEditsRequest request, CancellationToken ct)
@@ -273,12 +279,20 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+        var hasApiKey = !string.IsNullOrWhiteSpace(_options.ApiKey);
+        var hasBearerToken = !string.IsNullOrWhiteSpace(token);
+
+        if (hasApiKey || hasBearerToken)
+        {
+            EnsureSecureTransport(ResolveAbsoluteRequestUri(request));
+        }
+
+        if (hasApiKey)
         {
             request.Headers.TryAddWithoutValidation("X-API-Key", _options.ApiKey);
         }
 
-        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(token))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -288,16 +302,23 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private async Task<Metadata> BuildGrpcMetadataAsync(CancellationToken ct)
     {
         var metadata = new Metadata();
+        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+        var hasApiKey = !string.IsNullOrWhiteSpace(_options.ApiKey);
+        var hasBearerToken = !string.IsNullOrWhiteSpace(token);
 
-        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (hasApiKey || hasBearerToken)
         {
-            metadata.Add("x-api-key", _options.ApiKey);
+            EnsureSecureTransport(_options.GrpcEndpoint ?? _options.BaseUri);
         }
 
-        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(token))
+        if (hasApiKey)
         {
-            metadata.Add("authorization", $"Bearer {token}");
+            metadata.Add("x-api-key", _options.ApiKey!);
+        }
+
+        if (hasBearerToken)
+        {
+            metadata.Add("authorization", $"Bearer {token!}");
         }
 
         return metadata;
@@ -312,6 +333,41 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
 
         return token;
+    }
+
+    private Uri ResolveAbsoluteRequestUri(HttpRequestMessage request)
+    {
+        if (request.RequestUri is null)
+        {
+            throw new InvalidOperationException("Request URI cannot be null.");
+        }
+
+        if (request.RequestUri.IsAbsoluteUri)
+        {
+            return request.RequestUri;
+        }
+
+        if (_http.BaseAddress is null)
+        {
+            throw new InvalidOperationException("HonuaMobileClient requires an absolute BaseUri.");
+        }
+
+        return new Uri(_http.BaseAddress, request.RequestUri);
+    }
+
+    private void EnsureSecureTransport(Uri targetUri)
+    {
+        if (_options.AllowInsecureTransportForDevelopment)
+        {
+            return;
+        }
+
+        if (!string.Equals(targetUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Refusing to send authentication over non-HTTPS transport. " +
+                "Set AllowInsecureTransportForDevelopment=true only for local development.");
+        }
     }
 
     private static Uri BuildUri(string relativePath, IReadOnlyDictionary<string, string?>? query)

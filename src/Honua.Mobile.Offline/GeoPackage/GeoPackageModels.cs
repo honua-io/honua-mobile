@@ -5,6 +5,8 @@ public sealed class GeoPackageSyncStoreOptions
     public required string DatabasePath { get; init; }
 
     public bool AutoCreateDirectory { get; init; } = true;
+
+    public TimeSpan InProgressLeaseTimeout { get; init; } = TimeSpan.FromMinutes(5);
 }
 
 public enum OfflineOperationType

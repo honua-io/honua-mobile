@@ -16,6 +16,8 @@ public sealed class MapAreaDownloadRequest
 
     public int MaxZoom { get; init; }
 
+    public long MaxLayerPayloadBytes { get; init; } = 32L * 1024L * 1024L;
+
     public IReadOnlyList<MapLayerDownloadSource> Layers { get; init; } = [];
 }
 

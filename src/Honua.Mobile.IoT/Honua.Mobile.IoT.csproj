@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -52,15 +52,12 @@
 
   <ItemGroup>
     <!-- Core Dependencies -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
 
     <!-- Bluetooth LE Support -->
     <PackageReference Include="Plugin.BLE" Version="3.1.0" />
-
-    <!-- WiFi Network Discovery -->
-    <PackageReference Include="System.Net.NetworkInformation" Version="8.0.0" />
 
     <!-- JSON Serialization -->
     <PackageReference Include="System.Text.Json" Version="9.0.0" />

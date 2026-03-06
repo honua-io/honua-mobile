@@ -72,6 +72,60 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
+    public async Task UploadAsync_FeatureServerEmptyApplyEditsEnvelope_ReturnsFatalFailure()
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("missing", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UploadAsync_FeatureServerMalformedApplyEditsEnvelope_ReturnsFatalFailure()
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"addResults":[{}]}""", Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("malformed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UploadAsync_Http503_ReturnsRetryableFailure()
     {
         var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
@@ -95,6 +149,61 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         }, forceWrite: false);
 
         Assert.Equal(UploadOutcome.RetryableFailure, result.Outcome);
+    }
+
+    [Fact]
+    public async Task UploadAsync_MalformedDeletePayload_ReturnsFatalFailure()
+    {
+        var requestCount = 0;
+        var uploader = CreateUploader((_, _) =>
+        {
+            requestCount++;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Delete,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("Delete operation requires", result.Message, StringComparison.Ordinal);
+        Assert.Equal(0, requestCount);
+    }
+
+    [Fact]
+    public async Task UploadAsync_WhenCanceled_ThrowsOperationCanceledException()
+    {
+        var uploader = CreateUploader((_, _) => throw new TaskCanceledException("request canceled"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false, cts.Token));
     }
 
     private static HonuaApiOfflineOperationUploader CreateUploader(Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)

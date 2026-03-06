@@ -20,6 +20,8 @@ public sealed class HonuaMobileClientOptions
 
     public Func<CancellationToken, ValueTask<string?>>? AccessTokenProvider { get; init; }
 
+    public bool AllowInsecureTransportForDevelopment { get; init; }
+
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
 
     public ProductInfoHeaderValue UserAgent { get; init; } = new("honua-mobile-sdk", "0.1.0");

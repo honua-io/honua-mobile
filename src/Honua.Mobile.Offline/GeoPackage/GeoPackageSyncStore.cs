@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS honua_sync_queue (
     payload_json TEXT NOT NULL,
     priority INTEGER NOT NULL,
     created_at_utc TEXT NOT NULL,
+    claimed_at_utc TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     status TEXT NOT NULL DEFAULT 'pending'
@@ -101,6 +102,8 @@ VALUES ('honua_map_areas', 'attributes', 'honua_map_areas', 'Downloaded map area
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+        await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
     }
 
     public async Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default)
@@ -112,8 +115,8 @@ VALUES ('honua_map_areas', 'attributes', 'honua_map_areas', 'Downloaded map area
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
-INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, attempt_count, status)
-VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $priority, $created_at_utc, $attempt_count, 'pending')
+INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, claimed_at_utc, attempt_count, status)
+VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $priority, $created_at_utc, NULL, $attempt_count, 'pending')
 ON CONFLICT(operation_id) DO UPDATE SET
   layer_key = excluded.layer_key,
   target_collection = excluded.target_collection,
@@ -121,6 +124,7 @@ ON CONFLICT(operation_id) DO UPDATE SET
   payload_json = excluded.payload_json,
   priority = excluded.priority,
   created_at_utc = excluded.created_at_utc,
+  claimed_at_utc = NULL,
   attempt_count = excluded.attempt_count,
   status = 'pending',
   last_error = NULL;
@@ -148,37 +152,69 @@ ON CONFLICT(operation_id) DO UPDATE SET
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = @"
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            var leaseTimeout = _options.InProgressLeaseTimeout < TimeSpan.Zero
+                ? TimeSpan.Zero
+                : _options.InProgressLeaseTimeout;
+            var staleClaimCutoffUtc = DateTimeOffset.UtcNow - leaseTimeout;
+            var claimedOperationIds = await ReadPendingOperationIdsAsync(connection, maxCount, staleClaimCutoffUtc, ct).ConfigureAwait(false);
+            if (claimedOperationIds.Count == 0)
+            {
+                await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+                return [];
+            }
+
+            await using (var claimCommand = connection.CreateCommand())
+            {
+                var idParameters = AddOperationIdParameters(claimCommand, claimedOperationIds);
+                claimCommand.CommandText = $@"
+UPDATE honua_sync_queue
+SET status = 'in_progress',
+    claimed_at_utc = $claimed_at_utc
+WHERE status IN ('pending', 'retry', 'in_progress')
+  AND operation_id IN ({idParameters});
+";
+                claimCommand.Parameters.AddWithValue("$claimed_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+
+                await claimCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            var items = new List<OfflineEditOperation>(capacity: claimedOperationIds.Count);
+            await using (var command = connection.CreateCommand())
+            {
+                var idParameters = AddOperationIdParameters(command, claimedOperationIds);
+                command.CommandText = $@"
 SELECT operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, attempt_count
 FROM honua_sync_queue
-WHERE status IN ('pending', 'retry')
-ORDER BY priority ASC, created_at_utc ASC
-LIMIT $limit;
+WHERE operation_id IN ({idParameters})
+ORDER BY priority ASC, created_at_utc ASC;
 ";
-        command.Parameters.AddWithValue("$limit", maxCount);
 
-        var items = new List<OfflineEditOperation>(capacity: maxCount);
-        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-        {
-            var operationType = Enum.Parse<OfflineOperationType>(reader.GetString(3), ignoreCase: true);
-            var createdAt = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    items.Add(ReadOfflineEditOperation(reader));
+                }
+            }
 
-            items.Add(new OfflineEditOperation
-            {
-                OperationId = reader.GetString(0),
-                LayerKey = reader.GetString(1),
-                TargetCollection = reader.GetString(2),
-                OperationType = operationType,
-                PayloadJson = reader.GetString(4),
-                Priority = reader.GetInt32(5),
-                CreatedAtUtc = createdAt,
-                AttemptCount = reader.GetInt32(7),
-            });
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+            return items;
         }
+        catch
+        {
+            try
+            {
+                await ExecuteTransactionCommandAsync(connection, "ROLLBACK;", CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Preserve original exception when rollback also fails.
+            }
 
-        return items;
+            throw;
+        }
     }
 
     public async Task<int> CountPendingAsync(CancellationToken ct = default)
@@ -203,6 +239,23 @@ LIMIT $limit;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task MarkPendingAsync(string operationId, CancellationToken ct = default)
+    {
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+UPDATE honua_sync_queue
+SET status = 'pending',
+    claimed_at_utc = NULL,
+    last_error = NULL
+WHERE operation_id = $operation_id;
+";
+        command.Parameters.AddWithValue("$operation_id", operationId);
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -213,6 +266,7 @@ LIMIT $limit;
 UPDATE honua_sync_queue
 SET status = $status,
     attempt_count = attempt_count + 1,
+    claimed_at_utc = NULL,
     last_error = $last_error
 WHERE operation_id = $operation_id;
 ";
@@ -319,6 +373,102 @@ ON CONFLICT(area_id) DO UPDATE SET
         }
 
         return items;
+    }
+
+    private static async Task ExecuteTransactionCommandAsync(SqliteConnection connection, string sql, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadPendingOperationIdsAsync(
+        SqliteConnection connection,
+        int maxCount,
+        DateTimeOffset staleClaimCutoffUtc,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT operation_id
+FROM honua_sync_queue
+WHERE status IN ('pending', 'retry')
+   OR (
+      status = 'in_progress'
+      AND (
+        claimed_at_utc IS NULL
+        OR claimed_at_utc <= $stale_claim_cutoff_utc
+      )
+   )
+ORDER BY priority ASC, created_at_utc ASC
+LIMIT $limit;
+";
+        command.Parameters.AddWithValue("$limit", maxCount);
+        command.Parameters.AddWithValue("$stale_claim_cutoff_utc", staleClaimCutoffUtc.ToString("O", CultureInfo.InvariantCulture));
+
+        var operationIds = new List<string>(capacity: maxCount);
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            operationIds.Add(reader.GetString(0));
+        }
+
+        return operationIds;
+    }
+
+    private static OfflineEditOperation ReadOfflineEditOperation(SqliteDataReader reader)
+    {
+        var operationType = Enum.Parse<OfflineOperationType>(reader.GetString(3), ignoreCase: true);
+        var createdAt = DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+        return new OfflineEditOperation
+        {
+            OperationId = reader.GetString(0),
+            LayerKey = reader.GetString(1),
+            TargetCollection = reader.GetString(2),
+            OperationType = operationType,
+            PayloadJson = reader.GetString(4),
+            Priority = reader.GetInt32(5),
+            CreatedAtUtc = createdAt,
+            AttemptCount = reader.GetInt32(7),
+        };
+    }
+
+    private static string AddOperationIdParameters(SqliteCommand command, IReadOnlyList<string> operationIds)
+    {
+        var parameterNames = new string[operationIds.Count];
+        for (var i = 0; i < operationIds.Count; i++)
+        {
+            var parameterName = $"$id_{i}";
+            command.Parameters.AddWithValue(parameterName, operationIds[i]);
+            parameterNames[i] = parameterName;
+        }
+
+        return string.Join(", ", parameterNames);
+    }
+
+    private static async Task EnsureColumnExistsAsync(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        string columnDefinition,
+        CancellationToken ct)
+    {
+        await using var infoCommand = connection.CreateCommand();
+        infoCommand.CommandText = $"PRAGMA table_info({tableName});";
+
+        await using var reader = await infoCommand.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        await using var alterCommand = connection.CreateCommand();
+        alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition};";
+        await alterCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     private SqliteConnection OpenConnection() => new($"Data Source={_options.DatabasePath}");
