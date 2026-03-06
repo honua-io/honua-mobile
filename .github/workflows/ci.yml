@@ -9,7 +9,7 @@ on:
 permissions: {}
 
 env:
-  DOTNET_VERSION: '8.0.x'  # MAUI requires .NET 8+
+  DOTNET_VERSION: '10.0.x'  # Current repo targets net10
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
 
@@ -208,19 +208,18 @@ jobs:
 
       - name: Restore
         run: |
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj -p:TargetFramework=net8.0-android
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net8.0-android
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-android
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            --configuration Release --framework net8.0-android
+            --configuration Release
 
       - name: Build Reference App (Android)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net8.0-android \
+            --framework net10.0-android \
             || echo "::warning::Android build failed - may require Android SDK setup"
 
   maui-windows:
@@ -242,18 +241,18 @@ jobs:
         run: dotnet workload install maui
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
 
       - name: Build MAUI Components (Windows)
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
-            --configuration Release --framework net8.0-windows10.0.19041.0
+            --configuration Release
 
       - name: Build Reference App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
-            --framework net8.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0
 
   grpc-validation:
     name: gRPC Protocol Validation
