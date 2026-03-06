@@ -70,20 +70,19 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-maui-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-maui-
             ${{ runner.os }}-nuget-
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore src/Honua.Mobile.Core/Honua.Mobile.Core.csproj
+          dotnet restore src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj
+          dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
 
       - name: Build Core Libraries (warnings as errors)
         id: build
@@ -99,7 +98,13 @@ jobs:
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
       - name: Format Check
-        run: dotnet format Honua.Mobile.sln --verify-no-changes --verbosity diagnostic
+        run: |
+          dotnet format src/Honua.Mobile.Core/Honua.Mobile.Core.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
 
   test:
     name: Test Suite
@@ -116,19 +121,19 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-maui-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-maui-
+            ${{ runner.os }}-nuget-
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore tests/Honua.Mobile.Core.Tests/Honua.Mobile.Core.Tests.csproj
+          dotnet restore tests/Honua.Mobile.Storage.Tests/Honua.Mobile.Storage.Tests.csproj
+          dotnet restore tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj
 
       - name: Create Test Results Directory
         run: mkdir -p ./TestResults
@@ -202,7 +207,9 @@ jobs:
         run: dotnet workload install maui-android
 
       - name: Restore
-        run: dotnet restore Honua.Mobile.sln
+        run: |
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj -p:TargetFramework=net8.0-android
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net8.0-android
 
       - name: Build MAUI Components
         run: |
@@ -300,12 +307,10 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui
-
       - name: Restore and Build for Analysis
         run: |
-          dotnet restore Honua.Mobile.sln
+          dotnet restore src/Honua.Mobile.Core/Honua.Mobile.Core.csproj
+          dotnet restore src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj
           # Build core libraries for security analysis
           dotnet build src/Honua.Mobile.Core/Honua.Mobile.Core.csproj --no-restore --configuration Release
           dotnet build src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj --no-restore --configuration Release
