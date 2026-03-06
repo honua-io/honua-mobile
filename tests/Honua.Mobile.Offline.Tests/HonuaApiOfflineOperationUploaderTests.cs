@@ -72,6 +72,60 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
+    public async Task UploadAsync_FeatureServerEmptyApplyEditsEnvelope_ReturnsFatalFailure()
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("missing", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UploadAsync_FeatureServerMalformedApplyEditsEnvelope_ReturnsFatalFailure()
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"addResults":[{}]}""", Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("malformed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UploadAsync_Http503_ReturnsRetryableFailure()
     {
         var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)

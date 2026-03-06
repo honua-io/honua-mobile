@@ -144,4 +144,39 @@ public sealed class GrpcFeatureTranslatorTests
         Assert.True(feature.GetProperty("attributes").GetProperty("active").GetBoolean());
         Assert.Equal(-157.8583, feature.GetProperty("geometry").GetProperty("x").GetDouble(), 4);
     }
+
+    [Fact]
+    public void ToProtoApplyEditsRequest_MapsMOnlyCoordinatesWhenHasMTrue()
+    {
+        var request = new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            AddsJson = """
+            [
+              {
+                "attributes": { "asset_id": "A-1" },
+                "geometry":
+                {
+                  "hasM": true,
+                  "paths": [
+                    [
+                      [1.0, 2.0, 9.5],
+                      [3.0, 4.0, 8.5]
+                    ]
+                  ]
+                }
+              }
+            ]
+            """,
+        };
+
+        var proto = GrpcFeatureTranslator.ToProtoApplyEditsRequest(request);
+        var firstCoord = proto.Adds[0].Geometry.Polyline.Paths[0].Coords[0];
+
+        Assert.Equal(1.0, firstCoord.X);
+        Assert.Equal(2.0, firstCoord.Y);
+        Assert.Equal(9.5, firstCoord.M);
+        Assert.Equal(0.0, firstCoord.Z);
+    }
 }

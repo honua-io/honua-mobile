@@ -110,6 +110,42 @@ public sealed class OfflineSyncEngineTests : IDisposable
         Assert.Equal(0, pending[0].AttemptCount);
     }
 
+    [Fact]
+    public async Task SyncAsync_WhenUploaderThrows_RequeuesClaimedOperations()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "throw-op-1",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+        });
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "throw-op-2",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 2,
+        });
+
+        var engine = new OfflineSyncEngine(store, new ThrowingUploader());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => engine.SyncAsync());
+
+        var pending = await store.GetPendingAsync(10);
+        Assert.Equal(2, pending.Count);
+        Assert.Contains(pending, operation => operation.OperationId == "throw-op-1");
+        Assert.Contains(pending, operation => operation.OperationId == "throw-op-2");
+    }
+
     public void Dispose()
     {
         if (File.Exists(_databasePath))
@@ -151,6 +187,12 @@ public sealed class OfflineSyncEngineTests : IDisposable
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             return new UploadResult { Outcome = UploadOutcome.Success };
         }
+    }
+
+    private sealed class ThrowingUploader : IOfflineOperationUploader
+    {
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => throw new InvalidOperationException("unexpected uploader fault");
     }
 
     private async Task<(int AttemptCount, string Status)?> ReadOperationStateAsync(string operationId)

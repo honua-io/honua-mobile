@@ -72,6 +72,11 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                 await ReleaseClaimedOperationsAsync(pending, index).ConfigureAwait(false);
                 throw;
             }
+            catch
+            {
+                await ReleaseClaimedOperationsAsync(pending, index).ConfigureAwait(false);
+                throw;
+            }
         }
 
         return new SyncRunResult

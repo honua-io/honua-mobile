@@ -126,6 +126,46 @@ public sealed class MapAreaDownloaderTests : IDisposable
         Assert.True(File.Exists(packagePath));
     }
 
+    [Fact]
+    public async Task DownloadAsync_WhenLayerPayloadExceedsLimit_ThrowsInvalidOperationException()
+    {
+        var storePath = Path.Combine(_rootDirectory, "sync-store.gpkg");
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = storePath });
+
+        var oversizedPayload = new byte[4096];
+        var httpClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(oversizedPayload),
+            });
+        }));
+
+        var downloader = new MapAreaDownloader(httpClient, store);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => downloader.DownloadAsync(new MapAreaDownloadRequest
+        {
+            AreaId = "oversized",
+            Name = "Oversized",
+            BoundingBox = new BoundingBox(-158.30, 21.20, -157.60, 21.60),
+            OutputDirectory = Path.Combine(_rootDirectory, "packages"),
+            MinZoom = 10,
+            MaxZoom = 15,
+            MaxLayerPayloadBytes = 1024,
+            Layers =
+            [
+                new MapLayerDownloadSource
+                {
+                    LayerKey = "assets",
+                    SourceUrl = "https://tiles.honua.test/data",
+                    Priority = 1,
+                    Required = true,
+                },
+            ],
+        }));
+
+        Assert.Contains("exceeds configured max", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_rootDirectory))

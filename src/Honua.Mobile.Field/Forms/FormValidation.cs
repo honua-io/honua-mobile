@@ -7,6 +7,8 @@ namespace Honua.Mobile.Field.Forms;
 
 public sealed class FormValidator
 {
+    private static readonly TimeSpan RegexEvaluationTimeout = TimeSpan.FromMilliseconds(250);
+
     public FormValidationResult Validate(FormDefinition form, FieldRecord record)
     {
         ArgumentNullException.ThrowIfNull(form);
@@ -98,9 +100,9 @@ public sealed class FormValidator
     private static void ValidateRules(ICollection<FormValidationError> errors, FormField field, object rawValue)
     {
         if (!string.IsNullOrWhiteSpace(field.Validation.RegexPattern) &&
-            !Regex.IsMatch(rawValue.ToString() ?? string.Empty, field.Validation.RegexPattern))
+            !IsRegexMatch(rawValue.ToString() ?? string.Empty, field.Validation.RegexPattern!, out var regexErrorMessage))
         {
-            errors.Add(new FormValidationError(field.FieldId, $"{field.Label} does not match the required format."));
+            errors.Add(new FormValidationError(field.FieldId, regexErrorMessage ?? $"{field.Label} does not match the required format."));
         }
 
         if (TryAsDouble(rawValue, out var numericValue))
@@ -140,8 +142,8 @@ public sealed class FormValidator
         switch (value)
         {
             case null:
-                parsed = 0;
-                return true;
+                parsed = default;
+                return false;
             case double d:
                 parsed = d;
                 return true;
@@ -175,6 +177,26 @@ public sealed class FormValidator
         }
 
         return string.Equals(left?.ToString(), right?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRegexMatch(string input, string pattern, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        try
+        {
+            return Regex.IsMatch(input, pattern, RegexOptions.None, RegexEvaluationTimeout);
+        }
+        catch (ArgumentException)
+        {
+            errorMessage = "Validation pattern is invalid.";
+            return false;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            errorMessage = "Validation pattern timed out.";
+            return false;
+        }
     }
 }
 
