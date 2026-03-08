@@ -1,0 +1,24 @@
+{
+  "budgets": {
+    "sdk_package_size_kb": {
+      "warning": 512,
+      "error": 1024,
+      "description": "Honua.Mobile.Offline package size"
+    },
+    "geopackage_init_ms": {
+      "warning": 200,
+      "error": 500,
+      "description": "GeoPackage store initialization time"
+    },
+    "sync_batch_50_ms": {
+      "warning": 5000,
+      "error": 15000,
+      "description": "Sync engine batch of 50 operations"
+    },
+    "feature_query_100_ms": {
+      "warning": 500,
+      "error": 2000,
+      "description": "Feature query returning 100 results"
+    }
+  }
+}

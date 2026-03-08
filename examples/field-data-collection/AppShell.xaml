@@ -4,6 +4,11 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:HonuaFieldCollector.Features"
+    xmlns:dashboard="clr-namespace:HonuaFieldCollector.Features.Dashboard"
+    xmlns:mapping="clr-namespace:HonuaFieldCollector.Features.Mapping"
+    xmlns:dc="clr-namespace:HonuaFieldCollector.Features.DataCollection"
+    xmlns:sync="clr-namespace:HonuaFieldCollector.Features.Sync"
+    xmlns:settings="clr-namespace:HonuaFieldCollector.Features.Settings"
     Shell.FlyoutBehavior="Flyout"
     Title="Honua Field Collector">
 
@@ -59,19 +64,19 @@
         <!-- Dashboard Tab -->
         <Tab Title="Dashboard" Icon="dashboard.png">
             <ShellContent Route="dashboard"
-                         ContentTemplate="{DataTemplate local:DashboardPage}" />
+                         ContentTemplate="{DataTemplate dashboard:DashboardPage}" />
         </Tab>
 
         <!-- Data Collection Tab -->
         <Tab Title="Collect" Icon="collect_data.png">
             <ShellContent Route="collect"
-                         ContentTemplate="{DataTemplate local:DataCollectionPage}" />
+                         ContentTemplate="{DataTemplate dc:DataCollectionPage}" />
         </Tab>
 
         <!-- Map Tab -->
         <Tab Title="Map" Icon="map.png">
             <ShellContent Route="map"
-                         ContentTemplate="{DataTemplate local:MapPage}" />
+                         ContentTemplate="{DataTemplate mapping:MapPage}" />
         </Tab>
 
         <!-- AR View Tab -->
@@ -100,7 +105,7 @@
 
     <FlyoutItem Title="Sync Status" Icon="sync.png">
         <ShellContent Route="sync"
-                     ContentTemplate="{DataTemplate local:SyncStatusPage}" />
+                     ContentTemplate="{DataTemplate sync:SyncStatusPage}" />
     </FlyoutItem>
 
     <FlyoutItem Title="Photos" Icon="photos.png">
@@ -115,7 +120,7 @@
 
     <FlyoutItem Title="Settings" Icon="settings.png">
         <ShellContent Route="settings"
-                     ContentTemplate="{DataTemplate local:SettingsPage}" />
+                     ContentTemplate="{DataTemplate settings:SettingsPage}" />
     </FlyoutItem>
 
     <!-- Authentication Pages (not in main navigation) -->

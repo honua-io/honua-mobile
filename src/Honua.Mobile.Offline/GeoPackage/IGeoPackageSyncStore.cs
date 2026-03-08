@@ -12,6 +12,8 @@ public interface IGeoPackageSyncStore
 
     Task MarkSucceededAsync(string operationId, CancellationToken ct = default);
 
+    Task MarkPendingAsync(string operationId, CancellationToken ct = default);
+
     Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default);
 
     Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default);
@@ -21,4 +23,10 @@ public interface IGeoPackageSyncStore
     Task UpsertMapAreaAsync(MapAreaPackage mapArea, CancellationToken ct = default);
 
     Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default);
+
+    Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default);
+
+    Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default);
 }

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="HonuaFieldCollector.Features.Mapping.MapPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:mapping="clr-namespace:HonuaFieldCollector.Features.Mapping"
+             x:DataType="mapping:MapViewModel"
+             Title="Map"
+             Shell.NavBarIsVisible="True">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Map Container -->
+        <Grid Grid.Row="0">
+
+            <!-- Platform map view (wired via handler) -->
+            <ContentView x:Name="MapContainer"
+                         HorizontalOptions="FillAndExpand"
+                         VerticalOptions="FillAndExpand" />
+
+            <!-- GPS Accuracy Badge -->
+            <Frame BackgroundColor="{Binding LocationAccuracyColor}"
+                   CornerRadius="20"
+                   Padding="10,5"
+                   HorizontalOptions="Start"
+                   VerticalOptions="Start"
+                   Margin="15"
+                   HasShadow="True"
+                   IsVisible="{Binding HasLocation}">
+                <Label Text="{Binding LocationAccuracyText}"
+                       FontSize="12"
+                       TextColor="White"
+                       FontAttributes="Bold" />
+            </Frame>
+
+            <!-- Feature Info Card (shown on selection) -->
+            <Frame BackgroundColor="White"
+                   CornerRadius="12"
+                   Padding="15"
+                   HorizontalOptions="Fill"
+                   VerticalOptions="End"
+                   Margin="15"
+                   HasShadow="True"
+                   IsVisible="{Binding HasSelectedFeature}">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                    <Label Grid.Row="0" Grid.Column="0"
+                           Text="{Binding SelectedFeatureTitle}"
+                           FontSize="16"
+                           FontAttributes="Bold" />
+                    <Label Grid.Row="1" Grid.Column="0"
+                           Text="{Binding SelectedFeatureSubtitle}"
+                           FontSize="13"
+                           TextColor="{StaticResource Gray600}" />
+                    <Label Grid.Row="2" Grid.Column="0"
+                           Text="{Binding SelectedFeatureCoordinates}"
+                           FontSize="11"
+                           TextColor="{StaticResource Gray500}"
+                           FontFamily="Monospace" />
+                    <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="1"
+                            Text="Edit"
+                            Command="{Binding EditSelectedFeatureCommand}"
+                            VerticalOptions="Center"
+                            BackgroundColor="{StaticResource Primary}" />
+                </Grid>
+            </Frame>
+
+            <!-- Loading -->
+            <ActivityIndicator IsRunning="{Binding IsLoading}"
+                               IsVisible="{Binding IsLoading}"
+                               Color="{StaticResource Primary}"
+                               Scale="2"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center" />
+        </Grid>
+
+        <!-- Bottom Toolbar -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*,*,*"
+              Padding="10"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+            <Button Grid.Column="0"
+                    Text="Layers"
+                    Command="{Binding ToggleLayersCommand}"
+                    FontSize="12"
+                    BackgroundColor="Transparent" />
+            <Button Grid.Column="1"
+                    Text="My Location"
+                    Command="{Binding GoToMyLocationCommand}"
+                    FontSize="12"
+                    BackgroundColor="Transparent" />
+            <Button Grid.Column="2"
+                    Text="Query"
+                    Command="{Binding StartSpatialQueryCommand}"
+                    FontSize="12"
+                    BackgroundColor="Transparent" />
+            <Button Grid.Column="3"
+                    Text="Add Feature"
+                    Command="{Binding AddFeatureAtLocationCommand}"
+                    FontSize="12"
+                    BackgroundColor="Transparent" />
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

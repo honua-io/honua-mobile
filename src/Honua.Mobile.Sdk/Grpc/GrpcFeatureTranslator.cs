@@ -276,6 +276,9 @@ public static class GrpcFeatureTranslator
 
     private static Proto.Geometry? ToGeometry(JsonElement source)
     {
+        var hasZ = TryReadBoolean(source, "hasZ");
+        var hasM = TryReadBoolean(source, "hasM");
+
         if (source.TryGetProperty("x", out var xNode) &&
             source.TryGetProperty("y", out var yNode) &&
             xNode.TryGetDouble(out var x) &&
@@ -308,7 +311,7 @@ public static class GrpcFeatureTranslator
             var multipoint = new Proto.MultiPointGeometry();
             foreach (var pointNode in pointsNode.EnumerateArray())
             {
-                if (TryReadPointFromArray(pointNode, out var point))
+                if (TryReadPointFromArray(pointNode, hasZ, hasM, out var point))
                 {
                     multipoint.Points.Add(point);
                 }
@@ -322,7 +325,7 @@ public static class GrpcFeatureTranslator
             var polyline = new Proto.PolylineGeometry();
             foreach (var pathNode in pathsNode.EnumerateArray())
             {
-                var sequence = ToCoordinateSequence(pathNode);
+                var sequence = ToCoordinateSequence(pathNode, hasZ, hasM);
                 if (sequence is not null)
                 {
                     polyline.Paths.Add(sequence);
@@ -337,7 +340,7 @@ public static class GrpcFeatureTranslator
             var polygon = new Proto.PolygonGeometry();
             foreach (var ringNode in ringsNode.EnumerateArray())
             {
-                var sequence = ToCoordinateSequence(ringNode);
+                var sequence = ToCoordinateSequence(ringNode, hasZ, hasM);
                 if (sequence is not null)
                 {
                     polygon.Rings.Add(sequence);
@@ -388,7 +391,7 @@ public static class GrpcFeatureTranslator
         return sequence.Coords.Select(coord => new object?[] { coord.X, coord.Y, coord.Z, coord.M }).Cast<object?>().ToArray();
     }
 
-    private static Proto.CoordinateSequence? ToCoordinateSequence(JsonElement source)
+    private static Proto.CoordinateSequence? ToCoordinateSequence(JsonElement source, bool hasZ, bool hasM)
     {
         if (source.ValueKind != JsonValueKind.Array)
         {
@@ -398,7 +401,7 @@ public static class GrpcFeatureTranslator
         var sequence = new Proto.CoordinateSequence();
         foreach (var node in source.EnumerateArray())
         {
-            if (!TryReadCoordinate(node, out var coord))
+            if (!TryReadCoordinate(node, hasZ, hasM, out var coord))
             {
                 continue;
             }
@@ -409,7 +412,7 @@ public static class GrpcFeatureTranslator
         return sequence;
     }
 
-    private static bool TryReadPointFromArray(JsonElement source, out Proto.PointGeometry point)
+    private static bool TryReadPointFromArray(JsonElement source, bool hasZ, bool hasM, out Proto.PointGeometry point)
     {
         point = new Proto.PointGeometry();
 
@@ -432,20 +435,27 @@ public static class GrpcFeatureTranslator
         point.X = x;
         point.Y = y;
 
-        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var z))
+        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var third))
         {
-            point.Z = z;
-        }
+            if (hasM && !hasZ)
+            {
+                point.M = third;
+            }
+            else
+            {
+                point.Z = third;
+            }
 
-        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var m))
-        {
-            point.M = m;
+            if (hasM && hasZ && enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var m))
+            {
+                point.M = m;
+            }
         }
 
         return true;
     }
 
-    private static bool TryReadCoordinate(JsonElement source, out Proto.Coordinate coordinate)
+    private static bool TryReadCoordinate(JsonElement source, bool hasZ, bool hasM, out Proto.Coordinate coordinate)
     {
         coordinate = new Proto.Coordinate();
 
@@ -468,17 +478,39 @@ public static class GrpcFeatureTranslator
         coordinate.X = x;
         coordinate.Y = y;
 
-        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var z))
+        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var third))
         {
-            coordinate.Z = z;
-        }
+            if (hasM && !hasZ)
+            {
+                coordinate.M = third;
+            }
+            else
+            {
+                coordinate.Z = third;
+            }
 
-        if (enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var m))
-        {
-            coordinate.M = m;
+            if (hasM && hasZ && enumerator.MoveNext() && enumerator.Current.TryGetDouble(out var m))
+            {
+                coordinate.M = m;
+            }
         }
 
         return true;
+    }
+
+    private static bool TryReadBoolean(JsonElement source, string propertyName)
+    {
+        if (!source.TryGetProperty(propertyName, out var node))
+        {
+            return false;
+        }
+
+        return node.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => false,
+        };
     }
 
     private static Dictionary<string, object?>? ToSpatialReference(Proto.SpatialReference? source)

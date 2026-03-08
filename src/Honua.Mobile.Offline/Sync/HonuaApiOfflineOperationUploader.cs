@@ -44,6 +44,18 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
                 _ => new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Unsupported protocol '{payload.Protocol}'." },
             };
         }
+        catch (JsonException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
+        catch (ArgumentException ex)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
+        }
         catch (HonuaMobileApiException ex)
         {
             return FromStatusCode(ex.StatusCode, ex.Message);
@@ -51,6 +63,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         catch (HttpRequestException ex)
         {
             return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = ex.Message };
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (TaskCanceledException ex)
         {
@@ -178,21 +194,42 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 
     private static UploadResult ParseApplyEditsResponse(JsonElement root)
     {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
+        }
+
         if (TryReadError(root, out var topLevelCode, out var topLevelMessage))
         {
             return FromErrorCode(topLevelCode, topLevelMessage);
         }
 
         var resultArrays = new[] { "addResults", "updateResults", "deleteResults" };
+        var foundResultArray = false;
+        var foundResultEntry = false;
+
         foreach (var propertyName in resultArrays)
         {
-            if (!root.TryGetProperty(propertyName, out var results) || results.ValueKind != JsonValueKind.Array)
+            if (!root.TryGetProperty(propertyName, out var results))
             {
                 continue;
             }
 
+            foundResultArray = true;
+            if (results.ValueKind != JsonValueKind.Array)
+            {
+                return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
+            }
+
             foreach (var result in results.EnumerateArray())
             {
+                foundResultEntry = true;
+
+                if (result.ValueKind != JsonValueKind.Object)
+                {
+                    return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result payload is malformed." };
+                }
+
                 if (result.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True)
                 {
                     continue;
@@ -203,8 +240,23 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
                     return FromErrorCode(code, message);
                 }
 
-                return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result reported failure." };
+                if (result.TryGetProperty("success", out success) && success.ValueKind == JsonValueKind.False)
+                {
+                    return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result reported failure." };
+                }
+
+                return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result payload is malformed." };
             }
+        }
+
+        if (!foundResultArray)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response is missing edit result arrays." };
+        }
+
+        if (!foundResultEntry)
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response contains no edit results." };
         }
 
         return new UploadResult { Outcome = UploadOutcome.Success };

@@ -47,6 +47,67 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPendingAsync_ClaimsRowsToPreventDuplicateProcessing()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "op-1",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 5,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var firstClaim = store.GetPendingAsync(1);
+        var secondClaim = store.GetPendingAsync(1);
+        await Task.WhenAll(firstClaim, secondClaim);
+        var firstClaimResult = await firstClaim;
+        var secondClaimResult = await secondClaim;
+
+        Assert.Equal(1, firstClaimResult.Count + secondClaimResult.Count);
+    }
+
+    [Fact]
+    public async Task GetPendingAsync_ReclaimsStaleInProgressOperations()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = _databasePath,
+            InProgressLeaseTimeout = TimeSpan.FromMilliseconds(150),
+        });
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "stale-op",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var firstClaim = await store.GetPendingAsync(1);
+        Assert.Single(firstClaim);
+        Assert.Equal("stale-op", firstClaim[0].OperationId);
+
+        var immediateClaim = await store.GetPendingAsync(1);
+        Assert.Empty(immediateClaim);
+
+        await Task.Delay(250);
+
+        var reclaimed = await store.GetPendingAsync(1);
+        Assert.Single(reclaimed);
+        Assert.Equal("stale-op", reclaimed[0].OperationId);
+    }
+
+    [Fact]
     public async Task MapAreas_CanBeUpsertedAndListed()
     {
         var store = CreateStore();

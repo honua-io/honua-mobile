@@ -5,6 +5,8 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
     private readonly IOfflineSyncRunner _runner;
     private readonly IConnectivityStateProvider _connectivity;
     private readonly BackgroundSyncOrchestratorOptions _options;
+    private readonly DeltaDownloadEngine? _downloadEngine;
+    private readonly string? _downloadServiceId;
     private readonly SemaphoreSlim _runLock = new(1, 1);
 
     private CancellationTokenSource? _cts;
@@ -13,11 +15,15 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
     public BackgroundSyncOrchestrator(
         IOfflineSyncRunner runner,
         IConnectivityStateProvider connectivity,
-        BackgroundSyncOrchestratorOptions? options = null)
+        BackgroundSyncOrchestratorOptions? options = null,
+        DeltaDownloadEngine? downloadEngine = null,
+        string? downloadServiceId = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _connectivity = connectivity ?? throw new ArgumentNullException(nameof(connectivity));
         _options = options ?? new BackgroundSyncOrchestratorOptions();
+        _downloadEngine = downloadEngine;
+        _downloadServiceId = downloadServiceId;
     }
 
     public bool IsRunning => _loopTask is { IsCompleted: false };
@@ -59,6 +65,8 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
         }
     }
 
+    public DeltaDownloadResult? LastDownloadResult { get; private set; }
+
     public async Task<SyncRunResult?> RunOnceIfOnlineAsync(CancellationToken ct = default)
     {
         if (!_connectivity.IsOnline)
@@ -69,7 +77,14 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
         await _runLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return await _runner.SyncAsync(ct).ConfigureAwait(false);
+            var uploadResult = await _runner.SyncAsync(ct).ConfigureAwait(false);
+
+            if (_downloadEngine is not null && !string.IsNullOrWhiteSpace(_downloadServiceId))
+            {
+                LastDownloadResult = await _downloadEngine.DownloadAsync(_downloadServiceId, ct).ConfigureAwait(false);
+            }
+
+            return uploadResult;
         }
         finally
         {
@@ -87,13 +102,29 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
     {
         if (_options.RunImmediately)
         {
-            await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+            await ExecuteCycleAsync(ct).ConfigureAwait(false);
         }
 
         using var timer = new PeriodicTimer(_options.SyncInterval);
         while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
         {
+            await ExecuteCycleAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ExecuteCycleAsync(CancellationToken ct)
+    {
+        try
+        {
             await RunOnceIfOnlineAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Keep the background loop alive and retry on the next interval.
         }
     }
 }

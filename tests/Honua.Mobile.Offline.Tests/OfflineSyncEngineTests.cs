@@ -1,5 +1,6 @@
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
+using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -67,10 +68,82 @@ public sealed class OfflineSyncEngineTests : IDisposable
 
         var result = await engine.SyncAsync();
         var pending = await store.GetPendingAsync(10);
+        var operationState = await ReadOperationStateAsync("manual-op");
 
         Assert.Equal(0, result.Succeeded);
         Assert.Equal(1, result.Failed);
         Assert.Empty(pending);
+        Assert.NotNull(operationState);
+        Assert.Equal("failed", operationState!.Value.Status);
+        Assert.Equal(1, operationState.Value.AttemptCount);
+    }
+
+    [Fact]
+    public async Task SyncAsync_WhenCanceled_RequeuesClaimedOperationsWithoutIncrementingAttempts()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "cancel-op",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+        });
+
+        var uploader = new BlockingUploader();
+        var engine = new OfflineSyncEngine(store, uploader);
+        using var cts = new CancellationTokenSource();
+
+        var syncTask = engine.SyncAsync(cts.Token);
+        await uploader.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await syncTask);
+
+        var pending = await store.GetPendingAsync(10);
+        Assert.Single(pending);
+        Assert.Equal("cancel-op", pending[0].OperationId);
+        Assert.Equal(0, pending[0].AttemptCount);
+    }
+
+    [Fact]
+    public async Task SyncAsync_WhenUploaderThrows_RequeuesClaimedOperations()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "throw-op-1",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+        });
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "throw-op-2",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 2,
+        });
+
+        var engine = new OfflineSyncEngine(store, new ThrowingUploader());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => engine.SyncAsync());
+
+        var pending = await store.GetPendingAsync(10);
+        Assert.Equal(2, pending.Count);
+        Assert.Contains(pending, operation => operation.OperationId == "throw-op-1");
+        Assert.Contains(pending, operation => operation.OperationId == "throw-op-2");
     }
 
     public void Dispose()
@@ -102,5 +175,46 @@ public sealed class OfflineSyncEngineTests : IDisposable
     {
         public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
             => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Conflict, Message = "conflict" });
+    }
+
+    private sealed class BlockingUploader : IOfflineOperationUploader
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        {
+            Started.TrySetResult(true);
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return new UploadResult { Outcome = UploadOutcome.Success };
+        }
+    }
+
+    private sealed class ThrowingUploader : IOfflineOperationUploader
+    {
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => throw new InvalidOperationException("unexpected uploader fault");
+    }
+
+    private async Task<(int AttemptCount, string Status)?> ReadOperationStateAsync(string operationId)
+    {
+        await using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT attempt_count, status
+FROM honua_sync_queue
+WHERE operation_id = $operation_id
+LIMIT 1;
+";
+        command.Parameters.AddWithValue("$operation_id", operationId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        return (reader.GetInt32(0), reader.GetString(1));
     }
 }
