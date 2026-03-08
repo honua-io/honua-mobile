@@ -220,7 +220,7 @@ This document defines Honua's competitive parity requirements against leading ge
 | Issue | Description | Status | Target |
 |-------|-------------|--------|---------|
 | **#404** | gRPC sync/replay baseline | ✅ Complete | Phase 0 |
-| **#405** | Adaptive form schema v2 | ✅ Complete | Phase 0 |
+| **#405** | Adaptive form schema | ✅ Complete | Phase 0 |
 
 ### Phase 1 Requirements (Q2 2026)
 

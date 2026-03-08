@@ -19,7 +19,7 @@ Phase 0 of Honua's mobile initiative has successfully established the **technica
 |-------------|-------|---------|--------------|
 | **#403** | Capability matrix for Fulcrum + Esri + Mapbox parity | ✅ **Complete** | [PARITY_SPEC.md](./PARITY_SPEC.md) |
 | **#404** | gRPC sync/replay contract baseline | ✅ **Complete** | [form_service.proto](../proto/honua/v1/form_service.proto) |
-| **#405** | Adaptive Form Schema v2 compiler contracts | ✅ **Complete** | [form_service.proto](../proto/honua/v1/form_service.proto) |
+| **#405** | Adaptive Form Schema compiler contracts | ✅ **Complete** | [form_service.proto](../proto/honua/v1/form_service.proto) |
 | **#406** | OSS reference app shell baseline | ✅ **Complete** | [FieldDataCollection/](../examples/FieldDataCollection/) |
 | **#407** | Test strategy baseline | ✅ **Complete** | [TEST_STRATEGY.md](./TEST_STRATEGY.md) |
 
