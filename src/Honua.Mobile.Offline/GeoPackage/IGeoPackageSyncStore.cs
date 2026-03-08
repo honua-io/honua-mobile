@@ -23,4 +23,10 @@ public interface IGeoPackageSyncStore
     Task UpsertMapAreaAsync(MapAreaPackage mapArea, CancellationToken ct = default);
 
     Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default);
+
+    Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default);
+
+    Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default);
 }

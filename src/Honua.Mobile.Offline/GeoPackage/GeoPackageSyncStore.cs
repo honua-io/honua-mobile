@@ -97,6 +97,17 @@ VALUES ('honua_sync_queue', 'attributes', 'honua_sync_queue', 'Offline edit queu
 
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_map_areas', 'attributes', 'honua_map_areas', 'Downloaded map area package catalog', 4326);
+
+CREATE TABLE IF NOT EXISTS honua_features (
+    layer_key TEXT NOT NULL,
+    object_id INTEGER NOT NULL,
+    feature_json TEXT NOT NULL,
+    updated_at_utc TEXT NOT NULL,
+    PRIMARY KEY (layer_key, object_id)
+);
+
+INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
+VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature cache for delta sync', 4326);
 ";
 
         await using var command = connection.CreateCommand();
@@ -373,6 +384,120 @@ ON CONFLICT(area_id) DO UPDATE SET
         }
 
         return items;
+    }
+
+    public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(featureJson);
+
+        var objectId = ExtractObjectId(featureJson);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+INSERT INTO honua_features (layer_key, object_id, feature_json, updated_at_utc)
+VALUES ($layer_key, $object_id, $feature_json, $updated_at_utc)
+ON CONFLICT(layer_key, object_id) DO UPDATE SET
+  feature_json = excluded.feature_json,
+  updated_at_utc = excluded.updated_at_utc;
+";
+
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$object_id", objectId);
+        command.Parameters.AddWithValue("$feature_json", featureJson);
+        command.Parameters.AddWithValue("$updated_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM honua_features WHERE layer_key = $layer_key AND object_id = $object_id;";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$object_id", objectId);
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT feature_json FROM honua_features WHERE layer_key = $layer_key ORDER BY object_id ASC;";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+
+        var items = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            items.Add(reader.GetString(0));
+        }
+
+        return items;
+    }
+
+    private static long ExtractObjectId(string featureJson)
+    {
+        using var doc = JsonDocument.Parse(featureJson);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("attributes", out var attributes))
+        {
+            if (attributes.TryGetProperty("OBJECTID", out var oid) && oid.TryGetInt64(out var id))
+            {
+                return id;
+            }
+
+            if (attributes.TryGetProperty("objectid", out oid) && oid.TryGetInt64(out id))
+            {
+                return id;
+            }
+
+            if (attributes.TryGetProperty("ObjectID", out oid) && oid.TryGetInt64(out id))
+            {
+                return id;
+            }
+
+            if (attributes.TryGetProperty("FID", out oid) && oid.TryGetInt64(out id))
+            {
+                return id;
+            }
+        }
+
+        if (root.TryGetProperty("OBJECTID", out var topOid) && topOid.TryGetInt64(out var topId))
+        {
+            return topId;
+        }
+
+        if (root.TryGetProperty("objectid", out topOid) && topOid.TryGetInt64(out topId))
+        {
+            return topId;
+        }
+
+        if (root.TryGetProperty("ObjectID", out topOid) && topOid.TryGetInt64(out topId))
+        {
+            return topId;
+        }
+
+        if (root.TryGetProperty("FID", out topOid) && topOid.TryGetInt64(out topId))
+        {
+            return topId;
+        }
+
+        throw new InvalidOperationException("Feature JSON does not contain a recognizable object ID field (OBJECTID, objectid, ObjectID, or FID).");
     }
 
     private static async Task ExecuteTransactionCommandAsync(SqliteConnection connection, string sql, CancellationToken ct)

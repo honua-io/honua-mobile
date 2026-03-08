@@ -67,3 +67,21 @@ public sealed class SyncRunResult
 }
 
 public sealed record SyncFailure(string OperationId, string Reason);
+
+public sealed class DeltaDownloadOptions
+{
+    public string? ReplicaName { get; init; }
+
+    public int[]? LayerIds { get; init; }
+}
+
+public sealed class DeltaDownloadResult
+{
+    public int Adds { get; init; }
+
+    public int Updates { get; init; }
+
+    public int Deletes { get; init; }
+
+    public long ServerGen { get; init; }
+}
