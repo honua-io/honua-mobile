@@ -36,7 +36,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }}..${{ github.sha }})
           fi
 
-          SRC_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|proto/)' || true)
+          SRC_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|proto/|quality/)' || true)
           TEST_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^tests/' || true)
 
           if [ -n "$SRC_CHANGED" ]; then
@@ -319,11 +319,115 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Smoke Tests
+        run: |
+          dotnet restore tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj
+
+      - name: Build Smoke Tests
+        run: |
+          dotnet build tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj \
+            --no-restore --configuration Release
+
+      - name: Run Smoke Tests
+        run: |
+          dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --logger "trx;LogFileName=smoke-tests.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults
+
+      - name: Validate Performance Budgets
+        run: |
+          echo "Validating performance budgets against assembly sizes..."
+          BUDGET_FILE="quality/performance-budget.json"
+          if [ ! -f "$BUDGET_FILE" ]; then
+            echo "::error::Performance budget file not found at $BUDGET_FILE"
+            exit 1
+          fi
+
+          SDK_DLL="src/Honua.Mobile.Sdk/bin/Release/net10.0/Honua.Mobile.Sdk.dll"
+          OFFLINE_DLL="src/Honua.Mobile.Offline/bin/Release/net10.0/Honua.Mobile.Offline.dll"
+          FIELD_DLL="src/Honua.Mobile.Field/bin/Release/net10.0/Honua.Mobile.Field.dll"
+
+          # Build the source projects so we can measure assembly sizes
+          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release --no-restore 2>/dev/null || \
+            dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release
+          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --configuration Release --no-restore 2>/dev/null || \
+            dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --configuration Release
+          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --configuration Release --no-restore 2>/dev/null || \
+            dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --configuration Release
+
+          WARNING_KB=$(python3 -c "import json; print(json.load(open('$BUDGET_FILE'))['budgets']['sdk_package_size_kb']['warning'])")
+          ERROR_KB=$(python3 -c "import json; print(json.load(open('$BUDGET_FILE'))['budgets']['sdk_package_size_kb']['error'])")
+
+          TOTAL_SIZE_KB=0
+          BUDGET_EXCEEDED=false
+
+          for DLL in $SDK_DLL $OFFLINE_DLL $FIELD_DLL; do
+            if [ -f "$DLL" ]; then
+              SIZE_BYTES=$(stat -c%s "$DLL")
+              SIZE_KB=$((SIZE_BYTES / 1024))
+              TOTAL_SIZE_KB=$((TOTAL_SIZE_KB + SIZE_KB))
+              echo "  $(basename $DLL): ${SIZE_KB} KB"
+            else
+              echo "::warning::Assembly not found: $DLL"
+            fi
+          done
+
+          echo ""
+          echo "Total assembly size: ${TOTAL_SIZE_KB} KB"
+          echo "  Warning threshold: ${WARNING_KB} KB"
+          echo "  Error threshold:   ${ERROR_KB} KB"
+
+          if [ "$TOTAL_SIZE_KB" -gt "$ERROR_KB" ]; then
+            echo "::error::Performance budget EXCEEDED - total assembly size ${TOTAL_SIZE_KB} KB > ${ERROR_KB} KB"
+            BUDGET_EXCEEDED=true
+          elif [ "$TOTAL_SIZE_KB" -gt "$WARNING_KB" ]; then
+            echo "::warning::Performance budget WARNING - total assembly size ${TOTAL_SIZE_KB} KB > ${WARNING_KB} KB"
+          else
+            echo "Performance budget OK"
+          fi
+
+          if [ "$BUDGET_EXCEEDED" = true ]; then
+            exit 1
+          fi
+
+      - name: Upload Smoke Test Results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: smoke-test-results
+          path: TestResults/
+          retention-days: 7
+
   # Gate job that requires all checks to pass
   ci-gate:
     name: CI Gate
     runs-on: ubuntu-latest
-    needs: [build, test, maui-android, maui-windows, grpc-validation, security]
+    needs: [build, test, maui-android, maui-windows, grpc-validation, security, quality-gates]
     if: always()
     steps:
       - name: Check all required jobs succeeded
@@ -348,6 +452,11 @@ jobs:
 
           if [[ "${{ needs.security.result }}" != "success" ]]; then
             echo "❌ Security scan failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.quality-gates.result }}" != "success" ]]; then
+            echo "❌ Quality gates failed"
             exit 1
           fi
 
