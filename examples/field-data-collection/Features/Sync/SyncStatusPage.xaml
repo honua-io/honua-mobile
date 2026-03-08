@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="HonuaFieldCollector.Features.Sync.SyncStatusPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:sync="clr-namespace:HonuaFieldCollector.Features.Sync"
+             x:DataType="sync:SyncStatusViewModel"
+             Title="Sync Center"
+             Shell.NavBarIsVisible="True">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Overall Status Card -->
+        <Frame Grid.Row="0"
+               BackgroundColor="{Binding SyncStatusColor}"
+               CornerRadius="12"
+               Padding="16"
+               Margin="16,16,16,8"
+               HasShadow="True">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+                <Label Grid.Row="0" Grid.Column="0"
+                       Text="{Binding SyncStatusTitle}"
+                       FontSize="18"
+                       FontAttributes="Bold"
+                       TextColor="White" />
+                <Label Grid.Row="1" Grid.Column="0"
+                       Text="{Binding LastSyncText}"
+                       FontSize="13"
+                       TextColor="#E0E0E0" />
+                <ActivityIndicator Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                                   IsRunning="{Binding IsSyncing}"
+                                   IsVisible="{Binding IsSyncing}"
+                                   Color="White" />
+            </Grid>
+        </Frame>
+
+        <!-- Stats Row -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*,*"
+              Padding="16,0"
+              ColumnSpacing="8">
+            <Frame Grid.Column="0" CornerRadius="10" Padding="10" HasShadow="True">
+                <StackLayout HorizontalOptions="Center">
+                    <Label Text="{Binding PendingCount}" FontSize="24" FontAttributes="Bold" HorizontalOptions="Center" />
+                    <Label Text="Pending" FontSize="11" TextColor="{StaticResource Gray600}" HorizontalOptions="Center" />
+                </StackLayout>
+            </Frame>
+            <Frame Grid.Column="1" CornerRadius="10" Padding="10" HasShadow="True">
+                <StackLayout HorizontalOptions="Center">
+                    <Label Text="{Binding ConflictCount}" FontSize="24" FontAttributes="Bold"
+                           TextColor="{Binding ConflictCountColor}" HorizontalOptions="Center" />
+                    <Label Text="Conflicts" FontSize="11" TextColor="{StaticResource Gray600}" HorizontalOptions="Center" />
+                </StackLayout>
+            </Frame>
+            <Frame Grid.Column="2" CornerRadius="10" Padding="10" HasShadow="True">
+                <StackLayout HorizontalOptions="Center">
+                    <Label Text="{Binding UploadedCount}" FontSize="24" FontAttributes="Bold" HorizontalOptions="Center" />
+                    <Label Text="Uploaded" FontSize="11" TextColor="{StaticResource Gray600}" HorizontalOptions="Center" />
+                </StackLayout>
+            </Frame>
+        </Grid>
+
+        <!-- Sync History / Queue -->
+        <CollectionView Grid.Row="2"
+                        ItemsSource="{Binding SyncItems}"
+                        Margin="16,12"
+                        SelectionMode="None">
+            <CollectionView.Header>
+                <Label Text="Sync Queue" FontSize="16" FontAttributes="Bold" Margin="0,0,0,8" />
+            </CollectionView.Header>
+            <CollectionView.EmptyView>
+                <StackLayout VerticalOptions="Center" HorizontalOptions="Center" Padding="20">
+                    <Label Text="All records synced"
+                           FontSize="16"
+                           TextColor="{StaticResource Gray600}"
+                           HorizontalOptions="Center" />
+                </StackLayout>
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="sync:SyncItemViewModel">
+                    <Frame Margin="0,4" Padding="12" CornerRadius="8" HasShadow="True">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <!-- Status Icon -->
+                            <Label Grid.Column="0"
+                                   Text="{Binding StatusIcon}"
+                                   FontSize="20"
+                                   VerticalOptions="Center" />
+                            <!-- Details -->
+                            <StackLayout Grid.Column="1" VerticalOptions="Center">
+                                <Label Text="{Binding Title}" FontSize="14" FontAttributes="Bold" />
+                                <Label Text="{Binding Subtitle}" FontSize="12" TextColor="{StaticResource Gray600}" />
+                                <Label Text="{Binding TimestampText}" FontSize="10" TextColor="{StaticResource Gray500}" />
+                            </StackLayout>
+                            <!-- Action -->
+                            <Button Grid.Column="2"
+                                    Text="{Binding ActionText}"
+                                    Command="{Binding ActionCommand}"
+                                    IsVisible="{Binding HasAction}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    VerticalOptions="Center"
+                                    BackgroundColor="{StaticResource Primary}" />
+                        </Grid>
+                    </Frame>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Bottom Actions -->
+        <Grid Grid.Row="3"
+              ColumnDefinitions="*,*"
+              Padding="16,10"
+              ColumnSpacing="12"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+            <Button Grid.Column="0"
+                    Text="Sync Now"
+                    Command="{Binding SyncNowCommand}"
+                    IsEnabled="{Binding CanSync}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White" />
+            <Button Grid.Column="1"
+                    Text="Resolve Conflicts"
+                    Command="{Binding ResolveConflictsCommand}"
+                    IsVisible="{Binding HasConflicts}"
+                    BackgroundColor="Orange"
+                    TextColor="White" />
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

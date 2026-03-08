@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="HonuaFieldCollector.Features.DataCollection.DataCollectionPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:dc="clr-namespace:HonuaFieldCollector.Features.DataCollection"
+             x:DataType="dc:DataCollectionViewModel"
+             Title="Record"
+             Shell.NavBarIsVisible="True">
+
+    <Shell.TitleView>
+        <Grid ColumnDefinitions="*,Auto" Padding="0,0,10,0">
+            <Label Grid.Column="0"
+                   Text="{Binding FormTitle}"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   TextColor="White"
+                   VerticalOptions="Center" />
+            <Label Grid.Column="1"
+                   Text="{Binding FormStatusText}"
+                   FontSize="12"
+                   TextColor="{Binding FormStatusColor}"
+                   VerticalOptions="Center" />
+        </Grid>
+    </Shell.TitleView>
+
+    <Grid RowDefinitions="*,Auto">
+
+        <ScrollView Grid.Row="0">
+            <StackLayout Padding="16" Spacing="16">
+
+                <!-- Location Header -->
+                <Frame BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}"
+                       CornerRadius="10"
+                       Padding="12"
+                       HasShadow="False">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <Label Grid.Column="0" Text="GPS" FontSize="12" FontAttributes="Bold" VerticalOptions="Center" />
+                        <Label Grid.Column="1"
+                               Text="{Binding LocationText}"
+                               FontSize="12"
+                               TextColor="{StaticResource Gray600}"
+                               VerticalOptions="Center" />
+                        <Button Grid.Column="2"
+                                Text="Refresh"
+                                Command="{Binding RefreshLocationCommand}"
+                                FontSize="11"
+                                Padding="8,4"
+                                BackgroundColor="Transparent"
+                                BorderColor="{StaticResource Primary}"
+                                BorderWidth="1"
+                                CornerRadius="12" />
+                    </Grid>
+                </Frame>
+
+                <!-- Dynamic Form Fields -->
+                <CollectionView ItemsSource="{Binding FormFields}"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="dc:FormFieldViewModel">
+                            <StackLayout Padding="0,4" Spacing="4"
+                                         IsVisible="{Binding IsVisible}">
+                                <!-- Label -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Grid.Column="0"
+                                           Text="{Binding Label}"
+                                           FontSize="14"
+                                           FontAttributes="Bold" />
+                                    <Label Grid.Column="1"
+                                           Text="Required"
+                                           FontSize="11"
+                                           TextColor="Red"
+                                           IsVisible="{Binding IsRequired}" />
+                                </Grid>
+
+                                <!-- Text Input -->
+                                <Entry Text="{Binding TextValue, Mode=TwoWay}"
+                                       Placeholder="{Binding Placeholder}"
+                                       IsReadOnly="{Binding IsReadOnly}"
+                                       IsVisible="{Binding IsTextInput}" />
+
+                                <!-- Numeric Input -->
+                                <Entry Text="{Binding NumericValue, Mode=TwoWay}"
+                                       Keyboard="Numeric"
+                                       Placeholder="{Binding Placeholder}"
+                                       IsReadOnly="{Binding IsReadOnly}"
+                                       IsVisible="{Binding IsNumericInput}" />
+
+                                <!-- Date Input -->
+                                <DatePicker Date="{Binding DateValue, Mode=TwoWay}"
+                                            IsEnabled="{Binding IsEditable}"
+                                            IsVisible="{Binding IsDateInput}" />
+
+                                <!-- Picker / Select -->
+                                <Picker ItemsSource="{Binding PickerOptions}"
+                                        SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
+                                        IsEnabled="{Binding IsEditable}"
+                                        IsVisible="{Binding IsSelectInput}" />
+
+                                <!-- Photo Capture -->
+                                <Grid ColumnDefinitions="*,Auto"
+                                      IsVisible="{Binding IsPhotoInput}">
+                                    <Label Grid.Column="0"
+                                           Text="{Binding PhotoStatusText}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray600}"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="1"
+                                            Text="Capture"
+                                            Command="{Binding CapturePhotoCommand}"
+                                            FontSize="12"
+                                            BackgroundColor="{StaticResource Primary}" />
+                                </Grid>
+
+                                <!-- Location Capture -->
+                                <Grid ColumnDefinitions="*,Auto"
+                                      IsVisible="{Binding IsLocationInput}">
+                                    <Label Grid.Column="0"
+                                           Text="{Binding LocationValueText}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray600}"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="1"
+                                            Text="Capture"
+                                            Command="{Binding CaptureLocationCommand}"
+                                            FontSize="12"
+                                            BackgroundColor="{StaticResource Primary}" />
+                                </Grid>
+
+                                <!-- Validation Error -->
+                                <Label Text="{Binding ValidationError}"
+                                       FontSize="11"
+                                       TextColor="Red"
+                                       IsVisible="{Binding HasValidationError}" />
+
+                                <!-- Separator -->
+                                <BoxView HeightRequest="1"
+                                         Color="{StaticResource Gray200}"
+                                         Margin="0,4,0,0" />
+                            </StackLayout>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <!-- Attachments Section -->
+                <Label Text="Attachments"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       IsVisible="{Binding HasAttachments}" />
+                <CollectionView ItemsSource="{Binding Attachments}"
+                                HeightRequest="100"
+                                IsVisible="{Binding HasAttachments}">
+                    <CollectionView.ItemsLayout>
+                        <LinearItemsLayout Orientation="Horizontal" ItemSpacing="10" />
+                    </CollectionView.ItemsLayout>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="dc:AttachmentViewModel">
+                            <Frame WidthRequest="80" HeightRequest="80"
+                                   CornerRadius="8" Padding="0" HasShadow="True">
+                                <Image Source="{Binding ThumbnailSource}"
+                                       Aspect="AspectFill" />
+                            </Frame>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+            </StackLayout>
+        </ScrollView>
+
+        <!-- Action Bar -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*"
+              Padding="16,10"
+              ColumnSpacing="12"
+              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+            <Button Grid.Column="0"
+                    Text="Save Draft"
+                    Command="{Binding SaveDraftCommand}"
+                    BackgroundColor="{StaticResource Gray500}"
+                    TextColor="White" />
+            <Button Grid.Column="1"
+                    Text="Submit"
+                    Command="{Binding SubmitCommand}"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White" />
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

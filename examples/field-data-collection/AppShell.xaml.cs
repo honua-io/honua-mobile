@@ -1,13 +1,9 @@
 // Copyright (c) Honua. All rights reserved.
 // Licensed under the Apache License 2.0. See LICENSE in the project root.
 
-using HonuaFieldCollector.Features.Authentication;
-using HonuaFieldCollector.Features.Camera;
+using HonuaFieldCollector.Features.Dashboard;
 using HonuaFieldCollector.Features.DataCollection;
-using HonuaFieldCollector.Features.Forms;
 using HonuaFieldCollector.Features.Mapping;
-using HonuaFieldCollector.Features.Reports;
-using HonuaFieldCollector.Features.Sensors;
 using HonuaFieldCollector.Features.Settings;
 using HonuaFieldCollector.Features.Sync;
 
@@ -36,36 +32,30 @@ public partial class AppShell : Shell
     /// </summary>
     private static void RegisterRoutes()
     {
-        // Main feature routes
+        // Core screen routes (scaffolded)
         Routing.RegisterRoute("dashboard", typeof(DashboardPage));
         Routing.RegisterRoute("collect", typeof(DataCollectionPage));
         Routing.RegisterRoute("map", typeof(MapPage));
-        Routing.RegisterRoute("arview", typeof(ARViewPage));
-        Routing.RegisterRoute("sensors", typeof(SensorPage));
-
-        // Secondary feature routes
-        Routing.RegisterRoute("projects", typeof(ProjectsPage));
-        Routing.RegisterRoute("forms", typeof(FormsPage));
         Routing.RegisterRoute("sync", typeof(SyncStatusPage));
-        Routing.RegisterRoute("photos", typeof(PhotoGalleryPage));
-        Routing.RegisterRoute("reports", typeof(ReportsPage));
         Routing.RegisterRoute("settings", typeof(SettingsPage));
 
-        // Authentication routes
-        Routing.RegisterRoute("login", typeof(LoginPage));
-        Routing.RegisterRoute("onboarding", typeof(OnboardingPage));
-
-        // Modal routes
-        Routing.RegisterRoute("camera", typeof(CameraPage));
-        Routing.RegisterRoute("formbuilder", typeof(FormBuilderPage));
-        Routing.RegisterRoute("sensorconfig", typeof(SensorConfigPage));
-
-        // Detail routes with parameters
-        Routing.RegisterRoute("project/detail", typeof(ProjectDetailPage));
-        Routing.RegisterRoute("form/detail", typeof(FormDetailPage));
-        Routing.RegisterRoute("feature/edit", typeof(FeatureEditPage));
-        Routing.RegisterRoute("photo/detail", typeof(PhotoDetailPage));
-        Routing.RegisterRoute("sensor/detail", typeof(SensorDetailPage));
+        // TODO: Phase 1 — scaffold remaining feature screens
+        // Routing.RegisterRoute("arview", typeof(ARViewPage));
+        // Routing.RegisterRoute("sensors", typeof(SensorPage));
+        // Routing.RegisterRoute("projects", typeof(ProjectsPage));
+        // Routing.RegisterRoute("forms", typeof(FormsPage));
+        // Routing.RegisterRoute("photos", typeof(PhotoGalleryPage));
+        // Routing.RegisterRoute("reports", typeof(ReportsPage));
+        // Routing.RegisterRoute("login", typeof(LoginPage));
+        // Routing.RegisterRoute("onboarding", typeof(OnboardingPage));
+        // Routing.RegisterRoute("camera", typeof(CameraPage));
+        // Routing.RegisterRoute("formbuilder", typeof(FormBuilderPage));
+        // Routing.RegisterRoute("sensorconfig", typeof(SensorConfigPage));
+        // Routing.RegisterRoute("project/detail", typeof(ProjectDetailPage));
+        // Routing.RegisterRoute("form/detail", typeof(FormDetailPage));
+        // Routing.RegisterRoute("feature/edit", typeof(FeatureEditPage));
+        // Routing.RegisterRoute("photo/detail", typeof(PhotoDetailPage));
+        // Routing.RegisterRoute("sensor/detail", typeof(SensorDetailPage));
     }
 
     /// <summary>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="HonuaFieldCollector.Features.Settings.SettingsPage"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:settings="clr-namespace:HonuaFieldCollector.Features.Settings"
+             x:DataType="settings:SettingsViewModel"
+             Title="Settings"
+             Shell.NavBarIsVisible="True">
+
+    <ScrollView>
+        <StackLayout Padding="16" Spacing="16">
+
+            <!-- Auth / Session Section -->
+            <Frame CornerRadius="12" Padding="16" HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="Account" FontSize="18" FontAttributes="Bold" />
+
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="12">
+                        <Label Grid.Row="0" Grid.Column="0" Text="User" FontAttributes="Bold" FontSize="13" />
+                        <Label Grid.Row="0" Grid.Column="1" Text="{Binding UserDisplayName}" FontSize="13" />
+
+                        <Label Grid.Row="1" Grid.Column="0" Text="Server" FontAttributes="Bold" FontSize="13" />
+                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding ServerUrl}" FontSize="13" TextColor="{StaticResource Gray600}" />
+
+                        <Label Grid.Row="2" Grid.Column="0" Text="Session" FontAttributes="Bold" FontSize="13" />
+                        <Label Grid.Row="2" Grid.Column="1" Text="{Binding SessionStatusText}"
+                               FontSize="13" TextColor="{Binding SessionStatusColor}" />
+                    </Grid>
+
+                    <Button Text="Sign Out"
+                            Command="{Binding SignOutCommand}"
+                            BackgroundColor="Red"
+                            TextColor="White"
+                            Margin="0,8,0,0" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Server Configuration -->
+            <Frame CornerRadius="12" Padding="16" HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="Server" FontSize="18" FontAttributes="Bold" />
+
+                    <Label Text="Server URL" FontSize="12" TextColor="{StaticResource Gray600}" />
+                    <Entry Text="{Binding ServerUrlEntry, Mode=TwoWay}"
+                           Placeholder="https://api.honua.io"
+                           Keyboard="Url" />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <Button Grid.Column="0"
+                                Text="Save"
+                                Command="{Binding SaveServerUrlCommand}"
+                                BackgroundColor="{StaticResource Primary}" />
+                        <Button Grid.Column="1"
+                                Text="Test"
+                                Command="{Binding TestConnectionCommand}"
+                                BackgroundColor="{StaticResource Gray500}" />
+                    </Grid>
+
+                    <Label Text="{Binding ConnectionTestResult}"
+                           FontSize="12"
+                           TextColor="{Binding ConnectionTestColor}"
+                           IsVisible="{Binding HasConnectionTestResult}" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Offline / Sync Settings -->
+            <Frame CornerRadius="12" Padding="16" HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="Offline &amp; Sync" FontSize="18" FontAttributes="Bold" />
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0" Text="Auto-sync interval" VerticalOptions="Center" />
+                        <Picker Grid.Column="1"
+                                ItemsSource="{Binding SyncIntervalOptions}"
+                                SelectedItem="{Binding SelectedSyncInterval, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0" Text="Sync on WiFi only" VerticalOptions="Center" />
+                        <Switch Grid.Column="1" IsToggled="{Binding SyncWifiOnly, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0" Text="Offline database size" VerticalOptions="Center" />
+                        <Label Grid.Column="1" Text="{Binding OfflineDbSize}" TextColor="{StaticResource Gray600}" VerticalOptions="Center" />
+                    </Grid>
+
+                    <Button Text="Clear Offline Cache"
+                            Command="{Binding ClearCacheCommand}"
+                            BackgroundColor="Orange"
+                            TextColor="White" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Diagnostics Section -->
+            <Frame CornerRadius="12" Padding="16" HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="Diagnostics" FontSize="18" FontAttributes="Bold" />
+
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="12">
+                        <Label Grid.Row="0" Grid.Column="0" Text="App Version" FontAttributes="Bold" FontSize="12" />
+                        <Label Grid.Row="0" Grid.Column="1" Text="{Binding AppVersion}" FontSize="12" />
+
+                        <Label Grid.Row="1" Grid.Column="0" Text="Platform" FontAttributes="Bold" FontSize="12" />
+                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding PlatformInfo}" FontSize="12" />
+
+                        <Label Grid.Row="2" Grid.Column="0" Text="Network" FontAttributes="Bold" FontSize="12" />
+                        <Label Grid.Row="2" Grid.Column="1" Text="{Binding NetworkStatus}" FontSize="12" />
+
+                        <Label Grid.Row="3" Grid.Column="0" Text="GPS" FontAttributes="Bold" FontSize="12" />
+                        <Label Grid.Row="3" Grid.Column="1" Text="{Binding GpsStatus}" FontSize="12" />
+
+                        <Label Grid.Row="4" Grid.Column="0" Text="gRPC" FontAttributes="Bold" FontSize="12" />
+                        <Label Grid.Row="4" Grid.Column="1" Text="{Binding GrpcStatus}" FontSize="12" />
+                    </Grid>
+
+                    <Button Text="Export Diagnostics"
+                            Command="{Binding ExportDiagnosticsCommand}"
+                            BackgroundColor="{StaticResource Gray500}"
+                            TextColor="White" />
+
+                    <Button Text="View Logs"
+                            Command="{Binding ViewLogsCommand}"
+                            BackgroundColor="Transparent"
+                            BorderColor="{StaticResource Gray500}"
+                            BorderWidth="1"
+                            TextColor="{StaticResource Gray700}" />
+                </StackLayout>
+            </Frame>
+
+            <!-- Permissions -->
+            <Frame CornerRadius="12" Padding="16" HasShadow="True">
+                <StackLayout Spacing="10">
+                    <Label Text="Permissions" FontSize="18" FontAttributes="Bold" />
+
+                    <CollectionView ItemsSource="{Binding Permissions}" SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="settings:PermissionItemViewModel">
+                                <Grid ColumnDefinitions="*,Auto" Padding="0,4">
+                                    <Label Grid.Column="0" Text="{Binding Name}" FontSize="14" VerticalOptions="Center" />
+                                    <Label Grid.Column="1" Text="{Binding StatusText}"
+                                           FontSize="13" TextColor="{Binding StatusColor}" VerticalOptions="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                    <Button Text="Request All Permissions"
+                            Command="{Binding RequestPermissionsCommand}"
+                            BackgroundColor="{StaticResource Primary}" />
+                </StackLayout>
+            </Frame>
+
+        </StackLayout>
+    </ScrollView>
+
+</ContentPage>
