@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
+             x:Class="Honua.Mobile.FieldCollection.Views.RecordsPage"
+             Title="{Binding Title}"
+             x:DataType="vm:RecordsViewModel">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Create" IconImageSource="plus.png"
+                     Command="{Binding CreateNewRecordCommand}" />
+        <ToolbarItem Text="Export" IconImageSource="export.png"
+                     Command="{Binding ExportRecordsCommand}" />
+    </ContentPage.ToolbarItems>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Layer Selection and Statistics -->
+        <Frame Grid.Row="0" Style="{StaticResource CardFrameStyle}" Margin="10,10,10,5">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <!-- Layer Picker -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Label Grid.Column="0" Text="Layer:" FontAttributes="Bold" VerticalOptions="Center" />
+
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding AvailableLayers}"
+                            SelectedItem="{Binding SelectedLayer}"
+                            ItemDisplayBinding="{Binding Name}"
+                            Title="Select Layer" />
+
+                    <Button Grid.Column="2"
+                            Text="📊"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            WidthRequest="50" />
+                </Grid>
+
+                <!-- Record Statistics -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="15">
+                    <StackLayout Grid.Column="0">
+                        <Label Text="{Binding TotalRecordCount}"
+                               FontSize="18" FontAttributes="Bold"
+                               HorizontalOptions="Center" />
+                        <Label Text="Total Records"
+                               FontSize="12" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray600}" />
+                    </StackLayout>
+
+                    <StackLayout Grid.Column="1">
+                        <Label Text="{Binding PendingRecordCount}"
+                               FontSize="18" FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{StaticResource Warning}" />
+                        <Label Text="Pending Sync"
+                               FontSize="12" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray600}" />
+                    </StackLayout>
+
+                    <StackLayout Grid.Column="2">
+                        <Label Text="{Binding Records.Count}"
+                               FontSize="18" FontAttributes="Bold"
+                               HorizontalOptions="Center" />
+                        <Label Text="Filtered"
+                               FontSize="12" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray600}" />
+                    </StackLayout>
+                </Grid>
+            </Grid>
+        </Frame>
+
+        <!-- Search and Filter Controls -->
+        <Frame Grid.Row="1" Style="{StaticResource CardFrameStyle}" Margin="10,5,10,5">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <!-- Search Bar -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <SearchBar Grid.Column="0"
+                               Text="{Binding SearchText}"
+                               Placeholder="Search records..."
+                               SearchCommand="{Binding SearchRecordsCommand}"
+                               CancelButtonColor="{StaticResource Gray600}" />
+
+                    <Button Grid.Column="1"
+                            Text="Clear"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding ClearSearchCommand}"
+                            IsVisible="{Binding SearchText, Converter={StaticResource IsNotNullOrEmptyConverter}}" />
+                </Grid>
+
+                <!-- Filter Options -->
+                <StackLayout Grid.Row="1" Orientation="Horizontal" Spacing="15">
+                    <StackLayout Orientation="Horizontal" Spacing="5">
+                        <CheckBox IsChecked="{Binding ShowPendingOnly}" />
+                        <Label Text="Pending only" VerticalOptions="Center" />
+                    </StackLayout>
+
+                    <Button Text="📅 Date Filter"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            FontSize="12" />
+
+                    <Button Text="🗺️ Location Filter"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            FontSize="12" />
+                </StackLayout>
+            </Grid>
+        </Frame>
+
+        <!-- Records List -->
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+
+            <CollectionView ItemsSource="{Binding Records}"
+                           Margin="10,0,10,10">
+
+                <CollectionView.EmptyView>
+                    <StackLayout Padding="50" VerticalOptions="Center">
+                        <Label Text="📝" FontSize="48" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray400}" />
+                        <Label Text="No records found"
+                               FontSize="18" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray600}" />
+                        <Label Text="Create your first record or adjust your filters"
+                               FontSize="14" HorizontalOptions="Center"
+                               TextColor="{StaticResource Gray500}" />
+                    </StackLayout>
+                </CollectionView.EmptyView>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Frame Style="{StaticResource CardFrameStyle}" Margin="0,5">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+
+                                <!-- Status Indicator -->
+                                <Border Grid.Column="0"
+                                       WidthRequest="8" HeightRequest="40"
+                                       BackgroundColor="{Binding IsPendingSync, Converter={StaticResource BoolToColorConverter}, ConverterParameter='Orange|Green'}"
+                                       StrokeThickness="0" />
+
+                                <!-- Record Content -->
+                                <StackLayout Grid.Column="1" Spacing="5">
+                                    <!-- Primary identifier or title -->
+                                    <Label Text="{Binding DisplayTitle}"
+                                           FontSize="16" FontAttributes="Bold" />
+
+                                    <!-- Secondary information -->
+                                    <Label Text="{Binding CreatedAt, StringFormat='Created: {0:MM/dd/yyyy HH:mm}'}"
+                                           FontSize="12" TextColor="{StaticResource Gray600}" />
+
+                                    <!-- Attributes preview -->
+                                    <Label Text="{Binding AttributeSummary}"
+                                           FontSize="12" TextColor="{StaticResource Gray600}"
+                                           MaxLines="2" LineBreakMode="TailTruncation" />
+
+                                    <!-- Status badges -->
+                                    <StackLayout Orientation="Horizontal" Spacing="5">
+                                        <Frame BackgroundColor="{StaticResource Warning}"
+                                               Padding="5,2" IsVisible="{Binding IsPendingSync}">
+                                            <Label Text="Pending Sync" FontSize="10"
+                                                   TextColor="{StaticResource White}" />
+                                        </Frame>
+
+                                        <Frame BackgroundColor="{StaticResource Info}"
+                                               Padding="5,2" IsVisible="{Binding HasAttachments}">
+                                            <Label Text="{Binding AttachmentsCount, StringFormat='{0} attachments'}"
+                                                   FontSize="10" TextColor="{StaticResource White}" />
+                                        </Frame>
+                                    </StackLayout>
+                                </StackLayout>
+
+                                <!-- Action Buttons -->
+                                <StackLayout Grid.Column="2" Spacing="5">
+                                    <Button Text="👁️"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RecordsViewModel}}, Path=ViewRecordCommand}"
+                                            CommandParameter="{Binding .}"
+                                            WidthRequest="40" />
+
+                                    <Button Text="✏️"
+                                            Style="{StaticResource BaseButtonStyle}"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RecordsViewModel}}, Path=EditRecordCommand}"
+                                            CommandParameter="{Binding .}"
+                                            WidthRequest="40" />
+
+                                    <Button Text="🗑️"
+                                            Style="{StaticResource DangerButtonStyle}"
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RecordsViewModel}}, Path=DeleteRecordCommand}"
+                                            CommandParameter="{Binding .}"
+                                            WidthRequest="40" />
+                                </StackLayout>
+
+                            </Grid>
+
+                            <Frame.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:RecordsViewModel}}, Path=ViewRecordCommand}"
+                                    CommandParameter="{Binding .}" />
+                            </Frame.GestureRecognizers>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Floating Action Button -->
+        <Button Grid.Row="2"
+                Text="+"
+                FontSize="24"
+                WidthRequest="60" HeightRequest="60"
+                CornerRadius="30"
+                Style="{StaticResource BaseButtonStyle}"
+                HorizontalOptions="End" VerticalOptions="End"
+                Margin="20"
+                Command="{Binding CreateNewRecordCommand}"
+                Shadow="{StaticResource CommonShadow}" />
+
+        <!-- Loading Indicator -->
+        <ActivityIndicator Grid.RowSpan="3"
+                          IsRunning="{Binding IsBusy}"
+                          IsVisible="{Binding IsBusy}"
+                          Color="{StaticResource Primary}"
+                          HorizontalOptions="Center"
+                          VerticalOptions="Center" />
+    </Grid>
+
+</ContentPage>
