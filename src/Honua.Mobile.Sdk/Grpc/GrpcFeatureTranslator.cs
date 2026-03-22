@@ -5,8 +5,17 @@ using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk.Grpc;
 
+/// <summary>
+/// Translates between SDK request/response models and gRPC protobuf types.
+/// </summary>
 public static class GrpcFeatureTranslator
 {
+    /// <summary>
+    /// Converts a <see cref="QueryFeaturesRequest"/> to its protobuf equivalent.
+    /// </summary>
+    /// <param name="request">The SDK query request.</param>
+    /// <returns>A protobuf <see cref="Proto.QueryFeaturesRequest"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     public static Proto.QueryFeaturesRequest ToProtoQueryRequest(QueryFeaturesRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -39,6 +48,13 @@ public static class GrpcFeatureTranslator
         return proto;
     }
 
+    /// <summary>
+    /// Converts an <see cref="ApplyEditsRequest"/> to its protobuf equivalent,
+    /// parsing JSON feature payloads and delete ID lists into protobuf messages.
+    /// </summary>
+    /// <param name="request">The SDK edit request.</param>
+    /// <returns>A protobuf <see cref="Proto.ApplyEditsRequest"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     public static Proto.ApplyEditsRequest ToProtoApplyEditsRequest(ApplyEditsRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -69,6 +85,13 @@ public static class GrpcFeatureTranslator
         return proto;
     }
 
+    /// <summary>
+    /// Converts a protobuf <see cref="Proto.QueryFeaturesResponse"/> to a <see cref="JsonDocument"/>
+    /// matching the REST API JSON structure.
+    /// </summary>
+    /// <param name="response">The protobuf query response.</param>
+    /// <returns>A <see cref="JsonDocument"/> with fields, features, spatial reference, and metadata.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="response"/> is <see langword="null"/>.</exception>
     public static JsonDocument ToJsonDocument(Proto.QueryFeaturesResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -92,9 +115,15 @@ public static class GrpcFeatureTranslator
             ["extent"] = response.Extent is null ? null : ToExtent(response.Extent),
         };
 
-        return JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        return JsonSerializer.SerializeToDocument(payload);
     }
 
+    /// <summary>
+    /// Converts a protobuf <see cref="Proto.FeaturePage"/> (from a streaming response) to a <see cref="JsonDocument"/>.
+    /// </summary>
+    /// <param name="page">A single page from the gRPC streaming response.</param>
+    /// <returns>A <see cref="JsonDocument"/> with features and pagination metadata.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="page"/> is <see langword="null"/>.</exception>
     public static JsonDocument ToJsonDocument(Proto.FeaturePage page)
     {
         ArgumentNullException.ThrowIfNull(page);
@@ -115,9 +144,16 @@ public static class GrpcFeatureTranslator
             ["isLastPage"] = page.IsLastPage,
         };
 
-        return JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        return JsonSerializer.SerializeToDocument(payload);
     }
 
+    /// <summary>
+    /// Converts a protobuf <see cref="Proto.ApplyEditsResponse"/> to a <see cref="JsonDocument"/>
+    /// containing add/update/delete result arrays.
+    /// </summary>
+    /// <param name="response">The protobuf edit response.</param>
+    /// <returns>A <see cref="JsonDocument"/> with per-operation results and any top-level error.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="response"/> is <see langword="null"/>.</exception>
     public static JsonDocument ToJsonDocument(Proto.ApplyEditsResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -130,7 +166,7 @@ public static class GrpcFeatureTranslator
             ["error"] = response.Error is null ? null : ToEditError(response.Error),
         };
 
-        return JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        return JsonSerializer.SerializeToDocument(payload);
     }
 
     private static IEnumerable<Proto.Feature> ParseFeaturePayload(string? json)
@@ -357,13 +393,7 @@ public static class GrpcFeatureTranslator
     {
         return source.ShapeCase switch
         {
-            Proto.Geometry.ShapeOneofCase.Point => new Dictionary<string, object?>
-            {
-                ["x"] = source.Point.X,
-                ["y"] = source.Point.Y,
-                ["z"] = source.Point.Z,
-                ["m"] = source.Point.M,
-            },
+            Proto.Geometry.ShapeOneofCase.Point => ToPointDictionary(source.Point),
             Proto.Geometry.ShapeOneofCase.MultiPoint => new Dictionary<string, object?>
             {
                 ["points"] = source.MultiPoint.Points.Select(point => new object?[] { point.X, point.Y, point.Z, point.M }).ToArray(),
@@ -384,6 +414,30 @@ public static class GrpcFeatureTranslator
             },
             _ => null,
         };
+    }
+
+    private static Dictionary<string, object?> ToPointDictionary(Proto.PointGeometry point)
+    {
+        var dict = new Dictionary<string, object?>
+        {
+            ["x"] = point.X,
+            ["y"] = point.Y,
+        };
+
+        bool hasZ = point.Z != 0;
+        bool hasM = point.M != 0;
+
+        if (hasZ)
+        {
+            dict["z"] = point.Z;
+        }
+
+        if (hasM)
+        {
+            dict["m"] = point.M;
+        }
+
+        return dict;
     }
 
     private static object?[] ToCoordinateArray(Proto.CoordinateSequence sequence)

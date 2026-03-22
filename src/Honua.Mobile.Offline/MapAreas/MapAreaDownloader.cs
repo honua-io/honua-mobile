@@ -6,17 +6,29 @@ using Honua.Mobile.Offline.GeoPackage;
 
 namespace Honua.Mobile.Offline.MapAreas;
 
+/// <summary>
+/// Downloads map layer data for offline use, storing each layer as a blob in a
+/// per-area GeoPackage file and registering the area in the central sync store.
+/// </summary>
 public sealed class MapAreaDownloader : IMapAreaDownloader
 {
     private readonly HttpClient _httpClient;
     private readonly IGeoPackageSyncStore _syncStore;
 
+    /// <summary>
+    /// Initializes a new <see cref="MapAreaDownloader"/>.
+    /// </summary>
+    /// <param name="httpClient">HTTP client used to fetch layer data from source URLs.</param>
+    /// <param name="syncStore">The sync store where map area metadata is registered.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/> or <paramref name="syncStore"/> is <see langword="null"/>.</exception>
     public MapAreaDownloader(HttpClient httpClient, IGeoPackageSyncStore syncStore)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _syncStore = syncStore ?? throw new ArgumentNullException(nameof(syncStore));
     }
 
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">Thrown when the request has no layers or the payload exceeds the configured maximum.</exception>
     public async Task<MapAreaDownloadResult> DownloadAsync(MapAreaDownloadRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);

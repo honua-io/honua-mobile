@@ -6,6 +6,10 @@ using Honua.Mobile.Sdk.Models;
 
 namespace Honua.Mobile.Offline.Sync;
 
+/// <summary>
+/// Uploads offline edit operations to the Honua API, supporting both FeatureServer (Esri-style)
+/// and OGC Features API protocols.
+/// </summary>
 public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -15,11 +19,17 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 
     private readonly HonuaMobileClient _client;
 
+    /// <summary>
+    /// Initializes a new <see cref="HonuaApiOfflineOperationUploader"/>.
+    /// </summary>
+    /// <param name="client">The Honua mobile client used to make API calls.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="client"/> is <see langword="null"/>.</exception>
     public HonuaApiOfflineOperationUploader(HonuaMobileClient client)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
+    /// <inheritdoc />
     public async Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -333,27 +343,64 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
     }
 }
 
+/// <summary>
+/// Deserialized payload from an <see cref="OfflineEditOperation.PayloadJson"/>,
+/// describing the target service and feature data for upload.
+/// </summary>
 public sealed class OfflineOperationPayload
 {
+    /// <summary>
+    /// API protocol to use: <c>"FeatureServer"</c>/<c>"esri"</c> or <c>"ogcfeatures"</c>/<c>"ogc"</c>. Defaults to <c>"FeatureServer"</c>.
+    /// </summary>
     public string Protocol { get; init; } = "FeatureServer";
 
+    /// <summary>
+    /// Feature service ID (required for FeatureServer protocol).
+    /// </summary>
     public string? ServiceId { get; init; }
 
+    /// <summary>
+    /// Layer ID within the feature service (required for FeatureServer protocol).
+    /// </summary>
     public int? LayerId { get; init; }
 
+    /// <summary>
+    /// OGC collection ID (required for OGC protocol).
+    /// </summary>
     public string? CollectionId { get; init; }
 
+    /// <summary>
+    /// Feature ID for update/delete OGC operations.
+    /// </summary>
     public string? FeatureId { get; init; }
 
+    /// <summary>
+    /// Full GeoJSON feature for add or replace operations.
+    /// </summary>
     public JsonElement? Feature { get; init; }
 
+    /// <summary>
+    /// JSON Merge Patch document for OGC PATCH operations.
+    /// </summary>
     public JsonElement? Patch { get; init; }
 
+    /// <summary>
+    /// Pre-serialized adds JSON array for FeatureServer applyEdits.
+    /// </summary>
     public string? AddsJson { get; init; }
 
+    /// <summary>
+    /// Pre-serialized updates JSON array for FeatureServer applyEdits.
+    /// </summary>
     public string? UpdatesJson { get; init; }
 
+    /// <summary>
+    /// Comma-separated object IDs for FeatureServer deletes.
+    /// </summary>
     public string? DeletesCsv { get; init; }
 
+    /// <summary>
+    /// Typed list of object IDs for delete operations (alternative to <see cref="DeletesCsv"/>).
+    /// </summary>
     public IReadOnlyList<long>? DeleteObjectIds { get; init; }
 }
