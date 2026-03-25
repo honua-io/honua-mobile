@@ -335,8 +335,7 @@ dotnet build
 
 **Documentation:**
 - [ ] [API Reference](../api/core.md)
-- [ ] [Troubleshooting Guide](../troubleshooting.md)
-- [ ] [FAQ](../faq.md)
+- [ ] [Troubleshooting Guide](../guides/troubleshooting.md)
 
 **Community Support:**
 - [ ] [Discord Community](https://discord.gg/honua) - Real-time help
@@ -359,16 +358,13 @@ dotnet build
 - [ ] Follow [YouTube tutorials](https://youtube.com/honuaproject)
 
 ### For Advanced Developers:
-- [ ] Contribute to [open source development](../contributing.md)
-- [ ] Build [custom UI components](../guides/custom-components.md)
-- [ ] Implement [advanced sync strategies](../guides/sync-patterns.md)
-- [ ] Create [enterprise integrations](../guides/enterprise-integration.md)
+- [ ] Review [advanced features](../guides/advanced-features.md)
+- [ ] Explore [offline sync strategies](../guides/offline-sync.md)
+- [ ] Optimize with the [performance guide](../guides/performance.md)
 
 ### For Teams:
-- [ ] Set up [team development workflow](../guides/team-workflow.md)
-- [ ] Implement [code review process](../guides/code-review.md)
-- [ ] Configure [automated testing](../guides/automated-testing.md)
-- [ ] Plan [deployment strategy](../guides/deployment.md)
+- [ ] Review [security best practices](../guides/security.md)
+- [ ] Plan migrations with the [migration guide](../guides/migration-guide.md)
 
 ---
 

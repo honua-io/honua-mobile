@@ -120,6 +120,12 @@ Production-ready foundation for offline sync, forms, and gRPC transport.
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
 no implementation yet.
 
+## Documentation
+
+- **[Getting Started](docs/getting-started/)** -- installation, tutorial, and developer checklist
+- **[Guides](docs/guides/)** -- in-depth guides for offline sync, security, camera, performance, and more
+- **[API Reference](docs/api/)** -- core SDK API documentation
+
 ## License
 
 [Apache 2.0](LICENSE)

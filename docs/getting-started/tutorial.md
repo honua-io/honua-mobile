@@ -288,24 +288,20 @@ curl -H "X-API-Key: your-api-key" \
 ## Next Steps (Choose Your Adventure)
 
 ### 🎯 **Perfect for Beginners**: Explore Components
-- [📝 Form Components Guide](../guides/form-components.md)
-- [🗺️ Map Integration Tutorial](../guides/map-integration.md)
-- [📷 Camera Best Practices](../guides/camera-workflow.md)
+- [📷 Camera Integration Guide](../guides/camera-integration.md)
+- [🔄 Offline Sync Guide](../guides/offline-sync.md)
 
 ### 🚀 **Ready for More**: Advanced Features
-- [🤖 IoT Sensor Integration](../guides/iot-workflows.md)
-- [🥽 Augmented Reality Setup](../guides/ar-integration.md)
-- [🔄 Advanced Sync Strategies](../guides/sync-patterns.md)
+- [🚀 Advanced Features](../guides/advanced-features.md)
+- [🔐 Security & Authentication](../guides/security.md)
 
 ### 🏗️ **Going Production**: Enterprise Features
-- [🔐 Security & Authentication](../guides/security.md)
-- [📊 Analytics Integration](../guides/analytics.md)
-- [🎨 Custom Themes & Branding](../guides/theming.md)
+- [⚡ Performance Optimization](../guides/performance.md)
+- [🔀 Migration Guide](../guides/migration-guide.md)
 
 ### 👨‍💻 **Developer Deep Dive**: Technical Details
 - [📚 Core API Reference](../api/core.md)
-- [🔧 Custom Field Types](../guides/custom-fields.md)
-- [⚡ Performance Optimization](../guides/performance.md)
+- [🔧 Troubleshooting](../guides/troubleshooting.md)
 
 ## Troubleshooting
 
