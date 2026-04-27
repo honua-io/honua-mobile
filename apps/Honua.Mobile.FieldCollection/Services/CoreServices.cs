@@ -1,4 +1,8 @@
 using System.ComponentModel;
+using Honua.Mobile.FieldCollection.Models;
+using Microsoft.Maui.Devices.Sensors;
+using Microsoft.Maui.Networking;
+using Microsoft.Maui.Storage;
 
 namespace Honua.Mobile.FieldCollection.Services;
 
@@ -24,10 +28,10 @@ public interface IStorageService
 public interface IFeatureService
 {
     Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null);
-    Task<Feature?> GetFeatureAsync(int layerId, long featureId);
+    Task<Feature?> GetFeatureAsync(int layerId, string featureId);
     Task<Feature> CreateFeatureAsync(int layerId, Feature feature);
     Task<Feature> UpdateFeatureAsync(int layerId, Feature feature);
-    Task DeleteFeatureAsync(int layerId, long featureId);
+    Task DeleteFeatureAsync(int layerId, string featureId);
 }
 
 public interface IFormService
@@ -42,7 +46,7 @@ public interface IAttachmentService
     Task<string> SaveAttachmentAsync(Stream fileStream, string fileName, string contentType);
     Task<Stream> GetAttachmentAsync(string attachmentId);
     Task DeleteAttachmentAsync(string attachmentId);
-    Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(long featureId);
+    Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(string featureId);
 }
 
 public interface ISettingsService
@@ -146,9 +150,11 @@ public class FeatureService : IFeatureService
         {
             new Feature
             {
-                Id = 1,
+                Id = "1",
                 LayerId = layerId,
                 Geometry = new Point(37.7749, -122.4194),
+                CreatedAt = DateTime.UtcNow.AddDays(-1),
+                ModifiedAt = DateTime.UtcNow.AddDays(-1),
                 Attributes = new Dictionary<string, object>
                 {
                     { "name", "Sample Point 1" },
@@ -158,9 +164,11 @@ public class FeatureService : IFeatureService
             },
             new Feature
             {
-                Id = 2,
+                Id = "2",
                 LayerId = layerId,
                 Geometry = new Point(37.7849, -122.4094),
+                CreatedAt = DateTime.UtcNow.AddHours(-2),
+                ModifiedAt = DateTime.UtcNow.AddHours(-2),
                 Attributes = new Dictionary<string, object>
                 {
                     { "name", "Sample Point 2" },
@@ -171,7 +179,7 @@ public class FeatureService : IFeatureService
         };
     }
 
-    public async Task<Feature?> GetFeatureAsync(int layerId, long featureId)
+    public async Task<Feature?> GetFeatureAsync(int layerId, string featureId)
     {
         await Task.Delay(200);
         var features = await GetFeaturesAsync(layerId);
@@ -181,18 +189,24 @@ public class FeatureService : IFeatureService
     public async Task<Feature> CreateFeatureAsync(int layerId, Feature feature)
     {
         await Task.Delay(300);
-        feature.Id = Random.Shared.NextInt64(1000, 9999);
+        feature.Id = Guid.NewGuid().ToString();
         feature.LayerId = layerId;
+        feature.CreatedAt = DateTime.UtcNow;
+        feature.ModifiedAt = DateTime.UtcNow;
         return feature;
     }
 
     public async Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
     {
         await Task.Delay(300);
+        feature.LayerId = layerId;
+        feature.ModifiedAt = DateTime.UtcNow;
+        feature.UpdatedAt = feature.ModifiedAt;
+        feature.Version++;
         return feature;
     }
 
-    public async Task DeleteFeatureAsync(int layerId, long featureId)
+    public async Task DeleteFeatureAsync(int layerId, string featureId)
     {
         await Task.Delay(200);
     }
@@ -266,7 +280,7 @@ public class AttachmentService : IAttachmentService
         await Task.Delay(100);
     }
 
-    public async Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(long featureId)
+    public async Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(string featureId)
     {
         await Task.Delay(100);
         return Array.Empty<AttachmentInfo>();
@@ -311,7 +325,9 @@ public class ConnectivityService : IConnectivityService
 
     public bool IsConnected => Connectivity.NetworkAccess == NetworkAccess.Internet;
     public NetworkAccess NetworkAccess => Connectivity.NetworkAccess;
-    public ConnectionProfile ConnectionProfile => Connectivity.ConnectionProfiles.FirstOrDefault() ?? ConnectionProfile.Unknown;
+    public ConnectionProfile ConnectionProfile => Connectivity.ConnectionProfiles
+        .DefaultIfEmpty(ConnectionProfile.Unknown)
+        .First();
 
     public ConnectivityService()
     {

@@ -1,15 +1,19 @@
+using Microsoft.Maui.Devices.Sensors;
+
 namespace Honua.Mobile.FieldCollection.Models;
 
 // Core domain models for the field collection app
 
 public class Feature
 {
-    public long Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public int LayerId { get; set; }
     public Geometry? Geometry { get; set; }
     public Dictionary<string, object> Attributes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
+    public DateTime? ModifiedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public long Version { get; set; } = 1;
     public string? CreatedBy { get; set; }
     public string? UpdatedBy { get; set; }
     public bool IsPendingSync { get; set; }
@@ -81,7 +85,7 @@ public class FieldDefinition
 public class FormData
 {
     public int LayerId { get; set; }
-    public long? FeatureId { get; set; }
+    public string? FeatureId { get; set; }
     public Dictionary<string, object> Values { get; set; } = new();
     public Dictionary<string, string> ValidationErrors { get; set; } = new();
     public bool IsValid => ValidationErrors.Count == 0;
@@ -121,7 +125,38 @@ public class LayerInfo
     public bool IsVisible { get; set; } = true;
     public bool IsEditable { get; set; } = true;
     public FormDefinition? Form { get; set; }
+    public List<FieldDefinition> Schema { get; set; } = new();
     public LayerStyle Style { get; set; } = new();
+}
+
+public class FeatureQuery
+{
+    public SpatialFilter? SpatialFilter { get; set; }
+    public string? WhereClause { get; set; }
+    public List<OrderByClause>? OrderBy { get; set; }
+    public int? MaxResults { get; set; }
+}
+
+public class SpatialFilter
+{
+    public Geometry? Geometry { get; set; }
+    public SpatialRelationship Relationship { get; set; } = SpatialRelationship.Intersects;
+}
+
+public enum SpatialRelationship
+{
+    Intersects,
+    Contains,
+    Within,
+    Overlaps,
+    Touches,
+    Crosses
+}
+
+public class OrderByClause
+{
+    public string FieldName { get; set; } = string.Empty;
+    public bool Ascending { get; set; } = true;
 }
 
 public enum GeometryType

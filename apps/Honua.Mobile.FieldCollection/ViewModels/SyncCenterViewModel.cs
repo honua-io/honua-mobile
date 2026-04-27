@@ -283,7 +283,7 @@ public partial class SyncCenterViewModel : BaseViewModel
         var resolution = await NavigationService.DisplayActionSheet(
             $"Resolve Conflict - {conflict.LayerName}",
             "Cancel",
-            null,
+            string.Empty,
             "Accept Local Changes",
             "Accept Server Changes",
             "Manual Resolution");

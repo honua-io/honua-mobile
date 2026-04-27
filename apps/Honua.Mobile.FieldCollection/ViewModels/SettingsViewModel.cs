@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
+using FieldDeviceInfo = Honua.Mobile.FieldCollection.Models.DeviceInfo;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 
@@ -27,7 +29,7 @@ public partial class SettingsViewModel : BaseViewModel
     private string appVersion = string.Empty;
 
     [ObservableProperty]
-    private DeviceInfo deviceInfo = new();
+    private FieldDeviceInfo deviceInfo = new();
 
     [ObservableProperty]
     private bool enableLocationTracking = true;
@@ -111,7 +113,7 @@ public partial class SettingsViewModel : BaseViewModel
         {
             var currentDevice = Microsoft.Maui.Devices.DeviceInfo.Current;
 
-            DeviceInfo = new DeviceInfo
+            DeviceInfo = new FieldDeviceInfo
             {
                 DeviceId = Preferences.Get("device_id", Guid.NewGuid().ToString()),
                 DeviceName = currentDevice.Name,
@@ -128,10 +130,10 @@ public partial class SettingsViewModel : BaseViewModel
                 Preferences.Set("device_id", DeviceInfo.DeviceId);
             }
         }
-        catch (Exception ex)
+        catch
         {
             // Fallback device info
-            DeviceInfo = new DeviceInfo
+            DeviceInfo = new FieldDeviceInfo
             {
                 DeviceId = "unknown",
                 DeviceName = "Unknown Device",

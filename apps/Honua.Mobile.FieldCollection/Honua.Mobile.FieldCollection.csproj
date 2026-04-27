@@ -68,6 +68,13 @@
         <PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
         <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
+
+        <!-- SQLite and GeoPackage support -->
+        <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+        <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.8" />
+        <PackageReference Include="System.Text.Json" Version="10.0.0" />
+        <PackageReference Include="NetTopologySuite" Version="2.5.0" />
+        <PackageReference Include="NetTopologySuite.IO.SqlServerBytes" Version="2.1.0" />
     </ItemGroup>
 
     <!-- Development Dependency: Include Mobile SDK projects when building locally -->

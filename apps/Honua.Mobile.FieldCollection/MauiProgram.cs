@@ -1,5 +1,9 @@
 using CommunityToolkit.Maui;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.FieldCollection.Services.Features;
+using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.ViewModels;
 using Honua.Mobile.FieldCollection.Views;
 using Microsoft.Extensions.Logging;
@@ -42,21 +46,44 @@ public static class MauiProgram
 
     private static void RegisterServices(IServiceCollection services)
     {
-        // Core services
+        // Database and Storage Services
+        services.AddSingleton<DatabaseService>();
+
+        services.AddSingleton<IStorageService, StorageService>();
+
+        // Register sync service factory
+        services.AddSingleton<ISyncService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            var authService = provider.GetRequiredService<IAuthenticationService>();
+            var connectivityService = provider.GetRequiredService<IConnectivityService>();
+            return databaseService.GetSyncServiceAsync(authService, connectivityService).Result;
+        });
+
+        // Core services (keeping mock implementations for navigation, location, auth)
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ILocationService, LocationService>();
-        services.AddSingleton<IStorageService, StorageService>();
-        services.AddSingleton<ISyncService, SyncService>();
         services.AddSingleton<IAuthenticationService, AuthenticationService>();
 
-        // Feature services
-        services.AddSingleton<IFeatureService, FeatureService>();
+        // Feature services - real GeoPackage implementation
+        services.AddSingleton<IFeatureService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            var syncService = provider.GetRequiredService<ISyncService>();
+            var storageService = databaseService.GetStorageServiceAsync().Result;
+            return new GeoPackageFeatureService(storageService, syncService);
+        });
+
+        // Other feature services (keeping mock implementations for now)
         services.AddSingleton<IFormService, FormService>();
         services.AddSingleton<IAttachmentService, AttachmentService>();
 
-        // Configuration services
+        // Configuration services (keeping mock implementations)
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConnectivityService, ConnectivityService>();
+
+        // Diagnostic service for database management and system monitoring
+        services.AddSingleton<DiagnosticService>();
 
         // Platform-specific services will be registered by platform startup
     }
