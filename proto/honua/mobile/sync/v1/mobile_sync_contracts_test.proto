@@ -1,0 +1,188 @@
+syntax = "proto3";
+
+package honua.mobile.sync.test.v1;
+
+import "google/protobuf/timestamp.proto";
+import "honua/mobile/sync/v1/mobile_sync_service.proto";
+
+option csharp_namespace = "Honua.Mobile.Sync.Test.V1";
+
+// Contract testing service for mobile sync
+service MobileSyncContractTest {
+  // Test idempotency guarantees
+  rpc TestIdempotentPush(TestIdempotentPushRequest) returns (TestIdempotentPushResponse);
+
+  // Test ordering guarantees
+  rpc TestOrderingGuarantees(TestOrderingRequest) returns (TestOrderingResponse);
+
+  // Test conflict resolution determinism
+  rpc TestConflictDeterminism(TestConflictDeterminismRequest) returns (TestConflictDeterminismResponse);
+
+  // Test replay consistency
+  rpc TestReplayConsistency(TestReplayConsistencyRequest) returns (TestReplayConsistencyResponse);
+
+  // Test versioning compatibility
+  rpc TestVersionCompatibility(TestVersionCompatibilityRequest) returns (TestVersionCompatibilityResponse);
+}
+
+// Idempotency Test Contract
+message TestIdempotentPushRequest {
+  honua.mobile.sync.v1.FeatureEdit edit = 1;
+  int32 retry_count = 2;
+  bool simulate_network_failure = 3;
+}
+
+message TestIdempotentPushResponse {
+  repeated honua.mobile.sync.v1.EditResult results = 1;
+  bool all_results_identical = 2;
+  string idempotency_validation = 3;
+  TestResult test_result = 4;
+}
+
+// Ordering Test Contract
+message TestOrderingRequest {
+  repeated honua.mobile.sync.v1.FeatureEdit edits = 1;
+  bool shuffle_order = 2;
+  OrderingTestType test_type = 3;
+}
+
+enum OrderingTestType {
+  ORDERING_TEST_TYPE_UNSPECIFIED = 0;
+  ORDERING_TEST_TYPE_CAUSAL_CONSISTENCY = 1;
+  ORDERING_TEST_TYPE_TEMPORAL_ORDERING = 2;
+  ORDERING_TEST_TYPE_DEPENDENCY_RESOLUTION = 3;
+}
+
+message TestOrderingResponse {
+  repeated honua.mobile.sync.v1.EditResult results = 1;
+  bool ordering_preserved = 2;
+  repeated string ordering_violations = 3;
+  TestResult test_result = 4;
+}
+
+// Conflict Determinism Test
+message TestConflictDeterminismRequest {
+  honua.mobile.sync.v1.ConflictScenario scenario = 1;
+  int32 test_iterations = 2;
+  bool randomize_timing = 3;
+}
+
+message TestConflictDeterminismResponse {
+  repeated honua.mobile.sync.v1.ConflictResolution resolutions = 1;
+  bool all_resolutions_identical = 2;
+  double determinism_score = 3;
+  TestResult test_result = 4;
+}
+
+// Replay Consistency Test
+message TestReplayConsistencyRequest {
+  string trace_name = 1;
+  repeated honua.mobile.sync.v1.ReplayEvent events = 2;
+  int32 replay_iterations = 3;
+}
+
+message TestReplayConsistencyResponse {
+  repeated ReplayResult replay_results = 1;
+  bool all_replays_consistent = 2;
+  string state_hash = 3;
+  TestResult test_result = 4;
+}
+
+message ReplayResult {
+  int32 iteration = 1;
+  honua.mobile.sync.v1.ReplayTraceSummary summary = 2;
+  string final_state_hash = 3;
+  repeated string state_differences = 4;
+}
+
+// Version Compatibility Test
+message TestVersionCompatibilityRequest {
+  string client_version = 1;
+  string server_version = 2;
+  CompatibilityTestType test_type = 3;
+}
+
+enum CompatibilityTestType {
+  COMPATIBILITY_TEST_TYPE_UNSPECIFIED = 0;
+  COMPATIBILITY_TEST_TYPE_FORWARD_COMPATIBILITY = 1;
+  COMPATIBILITY_TEST_TYPE_BACKWARD_COMPATIBILITY = 2;
+  COMPATIBILITY_TEST_TYPE_FIELD_EVOLUTION = 3;
+  COMPATIBILITY_TEST_TYPE_ENUM_EVOLUTION = 4;
+}
+
+message TestVersionCompatibilityResponse {
+  bool compatible = 1;
+  repeated string compatibility_issues = 2;
+  repeated string warnings = 3;
+  TestResult test_result = 4;
+}
+
+// Common test result structure
+message TestResult {
+  TestStatus status = 1;
+  string message = 2;
+  google.protobuf.Timestamp executed_at = 3;
+  int64 execution_time_ms = 4;
+  map<string, string> metrics = 5;
+}
+
+enum TestStatus {
+  TEST_STATUS_UNSPECIFIED = 0;
+  TEST_STATUS_PASSED = 1;
+  TEST_STATUS_FAILED = 2;
+  TEST_STATUS_SKIPPED = 3;
+  TEST_STATUS_ERROR = 4;
+}
+
+// Golden Dataset Test Messages
+message GoldenDatasetTest {
+  string dataset_name = 1;
+  string dataset_version = 2;
+  repeated TestCase test_cases = 3;
+  ExpectedOutcome expected_outcome = 4;
+}
+
+message TestCase {
+  string name = 1;
+  string description = 2;
+  TestInput input = 3;
+  ExpectedOutput expected_output = 4;
+  TestMetadata metadata = 5;
+}
+
+message TestInput {
+  honua.mobile.sync.v1.SyncConfiguration sync_config = 1;
+  repeated honua.mobile.sync.v1.FeatureEdit initial_edits = 2;
+  repeated honua.mobile.sync.v1.ReplayEvent events = 3;
+  map<string, string> parameters = 4;
+}
+
+message ExpectedOutput {
+  repeated honua.mobile.sync.v1.FeatureChange expected_changes = 1;
+  repeated honua.mobile.sync.v1.ConflictDetails expected_conflicts = 2;
+  honua.mobile.sync.v1.SyncStatistics expected_statistics = 3;
+  map<string, string> expected_metrics = 4;
+}
+
+message ExpectedOutcome {
+  bool should_succeed = 1;
+  repeated string expected_error_codes = 2;
+  double tolerance_percentage = 3;
+  TestValidationRules validation_rules = 4;
+}
+
+message TestValidationRules {
+  bool strict_ordering = 1;
+  bool exact_match_required = 2;
+  bool allow_timestamp_drift = 3;
+  int32 timestamp_tolerance_ms = 4;
+  repeated string ignored_fields = 5;
+}
+
+message TestMetadata {
+  repeated string tags = 1;
+  string author = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string purpose = 4;
+  map<string, string> annotations = 5;
+}
