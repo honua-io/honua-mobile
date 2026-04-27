@@ -70,11 +70,22 @@ GeoPackage-backed offline storage with queue-based sync:
 gRPC-first with automatic REST fallback:
 
 ```csharp
-var features = await client.QueryFeaturesAsync(serviceId, layerId, query);
-
-await foreach (var feature in client.QueryFeaturesStreamAsync(serviceId, layerId, query))
+var request = new QueryFeaturesRequest
 {
-    ProcessFeature(feature);
+    ServiceId = serviceId,
+    LayerId = layerId,
+    Where = "1=1",
+    OutFields = new[] { "*" },
+};
+
+using var features = await client.QueryFeaturesAsync(request);
+
+await foreach (var page in client.QueryFeaturesStreamAsync(request))
+{
+    using (page)
+    {
+        ProcessFeaturePage(page.RootElement);
+    }
 }
 ```
 
@@ -93,9 +104,9 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     Transport security, gRPC translation (6 tests)
-  Honua.Mobile.Field.Tests/   Validation, calculated fields, visibility (6 tests)
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download (10 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation (19 tests)
+  Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
+  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (40 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
 proto/
   honua/v1/                   gRPC protocol definitions
@@ -106,6 +117,7 @@ proto/
 ```bash
 dotnet build Honua.Mobile.sln
 dotnet test Honua.Mobile.sln
+dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj
 ```
 
 Building Android targets requires a configured Android SDK. The library projects
@@ -115,7 +127,8 @@ without the MAUI workload.
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
-28 tests across 4 test projects.
+74 tests across 4 test projects. `dotnet test Honua.Mobile.sln` runs the
+SDK, Field, and Offline suites; run the Smoke test project separately.
 
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
 no implementation yet.
