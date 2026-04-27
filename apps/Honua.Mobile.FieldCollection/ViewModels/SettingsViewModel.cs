@@ -109,13 +109,15 @@ public partial class SettingsViewModel : BaseViewModel
     {
         try
         {
+            var currentDevice = Microsoft.Maui.Devices.DeviceInfo.Current;
+
             DeviceInfo = new DeviceInfo
             {
                 DeviceId = Preferences.Get("device_id", Guid.NewGuid().ToString()),
-                DeviceName = DeviceInfo.Name,
-                Platform = DeviceInfo.Platform.ToString(),
+                DeviceName = currentDevice.Name,
+                Platform = currentDevice.Platform.ToString(),
                 AppVersion = AppVersion,
-                OSVersion = DeviceInfo.VersionString,
+                OSVersion = currentDevice.VersionString,
                 IsOnline = IsOnline,
                 LastActiveAt = DateTime.UtcNow
             };
@@ -184,7 +186,7 @@ public partial class SettingsViewModel : BaseViewModel
             await ExecuteAsync(async () =>
             {
                 await _authService.LogoutAsync();
-                await NavigationService.NavigateToAsync("//authentication");
+                await NavigationService.NavigateToAsync("authentication");
             });
         }
     }

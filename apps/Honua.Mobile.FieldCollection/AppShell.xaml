@@ -36,7 +36,7 @@
             <ShellContent
                 Title="Records List"
                 Route="records"
-                ContentTemplate="{DataTemplate views:RecordsListPage}" />
+                ContentTemplate="{DataTemplate views:RecordsPage}" />
         </Tab>
 
         <!-- Sync Tab -->

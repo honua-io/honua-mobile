@@ -1,25 +1,11 @@
-using Honua.Mobile.FieldCollection.Services;
-using Honua.Mobile.FieldCollection.Views;
-
 namespace Honua.Mobile.FieldCollection;
 
 public partial class App : Application
 {
-    public App(IServiceProvider serviceProvider)
+    public App()
     {
         InitializeComponent();
-
-        var authService = serviceProvider.GetRequiredService<IAuthenticationService>();
-
-        // Check authentication status and navigate accordingly
-        if (authService.IsAuthenticated)
-        {
-            MainPage = new AppShell();
-        }
-        else
-        {
-            MainPage = new NavigationPage(serviceProvider.GetRequiredService<AuthenticationPage>());
-        }
+        MainPage = new AppShell();
     }
 
     protected override Window CreateWindow(IActivationState? activationState)

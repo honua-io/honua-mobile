@@ -1,4 +1,5 @@
 using System.Globalization;
+using Honua.Mobile.FieldCollection.ViewModels;
 
 namespace Honua.Mobile.FieldCollection.Converters;
 
@@ -113,10 +114,10 @@ public class SyncStatusToEmojiConverter : IValueConverter
     {
         return value switch
         {
-            Models.SyncHistoryStatus.Completed => "✅",
-            Models.SyncHistoryStatus.Failed => "❌",
-            Models.SyncHistoryStatus.InProgress => "🔄",
-            Models.SyncHistoryStatus.Cancelled => "⏹️",
+            SyncHistoryStatus.Completed => "✅",
+            SyncHistoryStatus.Failed => "❌",
+            SyncHistoryStatus.InProgress => "🔄",
+            SyncHistoryStatus.Cancelled => "⏹️",
             _ => "❓"
         };
     }

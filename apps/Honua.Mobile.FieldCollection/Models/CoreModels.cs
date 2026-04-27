@@ -12,6 +12,7 @@ public class Feature
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedBy { get; set; }
     public string? UpdatedBy { get; set; }
+    public bool IsPendingSync { get; set; }
     public List<AttachmentInfo> Attachments { get; set; } = new();
 }
 

@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0-android;net8.0-ios;net8.0-maccatalyst;net8.0-windows10.0.19041.0</TargetFrameworks>
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
+        <TargetFrameworks>net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
         <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
         <!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
 
@@ -29,16 +30,13 @@
         <ApplicationId>io.honua.mobile.fieldcollection</ApplicationId>
         <ApplicationIdGuid>1F57F04D-47F3-4F8B-A5E5-9C89F34E4B3E</ApplicationIdGuid>
 
-        <!-- App Icon and Splash -->
-        <ApplicationIcon>Platforms/appicon.png</ApplicationIcon>
-        <MauiSplashScreen Include="Resources/splash.svg" Color="#2A7FDB" BaseSize="128,128" />
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0-android|AnyCPU'">
+    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-android|AnyCPU'">
         <EmbedAssembliesIntoApk>false</EmbedAssembliesIntoApk>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0-android|AnyCPU'">
+    <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
         <AndroidPackageFormat>apk</AndroidPackageFormat>
         <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
         <AndroidLinkTool>r8</AndroidLinkTool>
@@ -65,27 +63,26 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.91" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
         <PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
-        <PackageReference Include="CommunityToolkit.Maui.Maps" Version="2.1.0" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
-        <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="8.0.91" />
+        <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
     </ItemGroup>
 
     <!-- Development Dependency: Include Mobile SDK projects when building locally -->
     <ItemGroup Condition="Exists('../../src/')">
-        <ProjectReference Include="../../src/Honua.Mobile.Core/Honua.Mobile.Core.csproj" />
+        <ProjectReference Include="../../src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj" />
         <ProjectReference Include="../../src/Honua.Mobile.Field/Honua.Mobile.Field.csproj" />
-        <ProjectReference Include="../../src/Honua.Mobile.Storage/Honua.Mobile.Storage.csproj" />
+        <ProjectReference Include="../../src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj" />
         <ProjectReference Include="../../src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj" />
     </ItemGroup>
 
     <!-- Production Dependency: Use NuGet packages when SDK projects don't exist -->
     <ItemGroup Condition="!Exists('../../src/')">
-        <PackageReference Include="Honua.Mobile.Core" Version="1.0.0-preview.1" />
+        <PackageReference Include="Honua.Mobile.Sdk" Version="1.0.0-preview.1" />
         <PackageReference Include="Honua.Mobile.Field" Version="1.0.0-preview.1" />
-        <PackageReference Include="Honua.Mobile.Storage" Version="1.0.0-preview.1" />
+        <PackageReference Include="Honua.Mobile.Offline" Version="1.0.0-preview.1" />
         <PackageReference Include="Honua.Mobile.Maui" Version="1.0.0-preview.1" />
     </ItemGroup>
 

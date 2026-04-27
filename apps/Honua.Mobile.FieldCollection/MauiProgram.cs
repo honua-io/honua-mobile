@@ -66,11 +66,8 @@ public static class MauiProgram
         services.AddTransient<MainViewModel>();
         services.AddTransient<MapViewModel>();
         services.AddTransient<RecordsViewModel>();
-        services.AddTransient<RecordDetailViewModel>();
-        services.AddTransient<RecordEditViewModel>();
         services.AddTransient<SyncCenterViewModel>();
         services.AddTransient<SettingsViewModel>();
-        services.AddTransient<AuthenticationViewModel>();
     }
 
     private static void RegisterViews(IServiceCollection services)
@@ -78,10 +75,7 @@ public static class MauiProgram
         services.AddTransient<MainPage>();
         services.AddTransient<MapPage>();
         services.AddTransient<RecordsPage>();
-        services.AddTransient<RecordDetailPage>();
-        services.AddTransient<RecordEditPage>();
         services.AddTransient<SyncCenterPage>();
         services.AddTransient<SettingsPage>();
-        services.AddTransient<AuthenticationPage>();
     }
 }
