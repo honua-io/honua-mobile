@@ -3,6 +3,7 @@ syntax = "proto3";
 package honua.mobile.sync.v1;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/any.proto";
 
 option csharp_namespace = "Honua.Mobile.Sync.V1";
@@ -414,7 +415,7 @@ message EndReplayTraceResponse {
 message ReplayTraceSummary {
   int32 events_applied = 1;
   int32 conflicts_simulated = 2;
-  google.protobuf.Timestamp duration = 3;
+  google.protobuf.Duration duration = 3;
   repeated string validation_errors = 4;
 }
 

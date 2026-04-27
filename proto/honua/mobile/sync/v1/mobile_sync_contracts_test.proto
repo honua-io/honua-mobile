@@ -3,7 +3,7 @@ syntax = "proto3";
 package honua.mobile.sync.test.v1;
 
 import "google/protobuf/timestamp.proto";
-import "mobile_sync_service.proto";
+import "honua/mobile/sync/v1/mobile_sync_service.proto";
 
 option csharp_namespace = "Honua.Mobile.Sync.Test.V1";
 
