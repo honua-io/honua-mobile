@@ -1,18 +1,30 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.GeoPackage;
 
+/// <summary>
+/// SQLite-backed implementation of <see cref="IGeoPackageSyncStore"/> that persists
+/// offline edit operations, sync cursors, map area metadata, and replicated features
+/// in a GeoPackage-compliant database.
+/// </summary>
 public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
 {
     private readonly GeoPackageSyncStoreOptions _options;
 
+    /// <summary>
+    /// Initializes a new <see cref="GeoPackageSyncStore"/> with the specified options.
+    /// </summary>
+    /// <param name="options">Store configuration including the database path.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     public GeoPackageSyncStore(GeoPackageSyncStoreOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
+    /// <inheritdoc />
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         if (_options.AutoCreateDirectory)
@@ -117,6 +129,7 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -153,6 +166,7 @@ ON CONFLICT(operation_id) DO UPDATE SET
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default)
     {
         if (maxCount <= 0)
@@ -228,6 +242,7 @@ ORDER BY priority ASC, created_at_utc ASC;
         }
     }
 
+    /// <inheritdoc />
     public async Task<int> CountPendingAsync(CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -239,6 +254,7 @@ ORDER BY priority ASC, created_at_utc ASC;
         return (int)count;
     }
 
+    /// <inheritdoc />
     public async Task MarkSucceededAsync(string operationId, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -250,6 +266,7 @@ ORDER BY priority ASC, created_at_utc ASC;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task MarkPendingAsync(string operationId, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -267,6 +284,7 @@ WHERE operation_id = $operation_id;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -289,6 +307,7 @@ WHERE operation_id = $operation_id;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -310,6 +329,7 @@ ON CONFLICT(cursor_key) DO UPDATE SET
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<string?> GetSyncCursorAsync(string cursorKey, CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -323,6 +343,7 @@ ON CONFLICT(cursor_key) DO UPDATE SET
         return value as string;
     }
 
+    /// <inheritdoc />
     public async Task UpsertMapAreaAsync(MapAreaPackage mapArea, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(mapArea);
@@ -356,6 +377,7 @@ ON CONFLICT(area_id) DO UPDATE SET
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default)
     {
         await using var connection = OpenConnection();
@@ -386,6 +408,7 @@ ON CONFLICT(area_id) DO UPDATE SET
         return items;
     }
 
+    /// <inheritdoc />
     public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
@@ -413,6 +436,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
@@ -428,6 +452,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
@@ -572,6 +597,14 @@ LIMIT $limit;
         return string.Join(", ", parameterNames);
     }
 
+    private static void ValidateSqlIdentifier(string identifier, string parameterName)
+    {
+        if (!Regex.IsMatch(identifier, @"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+        {
+            throw new ArgumentException($"Invalid SQL identifier: '{identifier}'", parameterName);
+        }
+    }
+
     private static async Task EnsureColumnExistsAsync(
         SqliteConnection connection,
         string tableName,
@@ -579,8 +612,11 @@ LIMIT $limit;
         string columnDefinition,
         CancellationToken ct)
     {
+        ValidateSqlIdentifier(tableName, nameof(tableName));
+        ValidateSqlIdentifier(columnName, nameof(columnName));
+
         await using var infoCommand = connection.CreateCommand();
-        infoCommand.CommandText = $"PRAGMA table_info({tableName});";
+        infoCommand.CommandText = $"PRAGMA table_info(\"{tableName}\");";
 
         await using var reader = await infoCommand.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -592,7 +628,7 @@ LIMIT $limit;
         }
 
         await using var alterCommand = connection.CreateCommand();
-        alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition};";
+        alterCommand.CommandText = $"ALTER TABLE \"{tableName}\" ADD COLUMN \"{columnName}\" {columnDefinition};";
         await alterCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 

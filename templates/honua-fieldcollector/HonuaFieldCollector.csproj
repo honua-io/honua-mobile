@@ -45,9 +45,6 @@
 		<PackageReference Include="Honua.Mobile.Core" Version="1.0.0" />
 		<PackageReference Include="Honua.Mobile.Storage" Version="1.0.0" />
 		<PackageReference Include="Honua.Mobile.Maui" Version="1.0.0" />
-<!--#if (enableIoT)-->
-		<PackageReference Include="Honua.Mobile.IoT" Version="1.0.0" />
-<!--#endif-->
 
 		<!-- Community Toolkit -->
 		<PackageReference Include="CommunityToolkit.Maui" Version="7.0.1" />

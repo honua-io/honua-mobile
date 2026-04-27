@@ -5,10 +5,21 @@ using Honua.Mobile.Field.Records;
 
 namespace Honua.Mobile.Field.Forms;
 
+/// <summary>
+/// Validates a <see cref="FieldRecord"/> against its <see cref="FormDefinition"/>,
+/// checking required fields, type constraints, regex patterns, and numeric ranges.
+/// </summary>
 public sealed class FormValidator
 {
     private static readonly TimeSpan RegexEvaluationTimeout = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// Validates every visible field in <paramref name="form"/> against the values in <paramref name="record"/>.
+    /// </summary>
+    /// <param name="form">The form definition describing expected fields and validation rules.</param>
+    /// <param name="record">The field record containing user-entered values.</param>
+    /// <returns>A <see cref="FormValidationResult"/> containing any validation errors found.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="form"/> or <paramref name="record"/> is <see langword="null"/>.</exception>
     public FormValidationResult Validate(FormDefinition form, FieldRecord record)
     {
         ArgumentNullException.ThrowIfNull(form);
@@ -79,7 +90,7 @@ public sealed class FormValidator
             case FormFieldType.YesNo when rawValue is not bool:
                 errors.Add(new FormValidationError(field.FieldId, $"{field.Label} must be true/false."));
                 break;
-            case FormFieldType.SingleChoice when field.Choices.Count > 0 && !field.Choices.Contains(rawValue.ToString() ?? string.Empty):
+            case FormFieldType.SingleChoice when field.Choices.Count > 0 && !field.Choices.Contains(rawValue.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase):
                 errors.Add(new FormValidationError(field.FieldId, $"{field.Label} must match an allowed choice."));
                 break;
             case FormFieldType.MultipleChoice when rawValue is not IEnumerable<string>:
@@ -200,16 +211,34 @@ public sealed class FormValidator
     }
 }
 
+/// <summary>
+/// Result of validating a <see cref="FieldRecord"/> against a <see cref="FormDefinition"/>.
+/// </summary>
 public sealed class FormValidationResult
 {
+    /// <summary>
+    /// Initializes a new <see cref="FormValidationResult"/> with the given validation errors.
+    /// </summary>
+    /// <param name="errors">The list of validation errors. An empty list indicates a valid record.</param>
     public FormValidationResult(IReadOnlyList<FormValidationError> errors)
     {
         Errors = errors;
     }
 
+    /// <summary>
+    /// Validation errors found during validation. Empty when the record is valid.
+    /// </summary>
     public IReadOnlyList<FormValidationError> Errors { get; }
 
+    /// <summary>
+    /// <see langword="true"/> when no validation errors were found.
+    /// </summary>
     public bool IsValid => Errors.Count == 0;
 }
 
+/// <summary>
+/// A single validation error identifying the field and describing the problem.
+/// </summary>
+/// <param name="FieldId">The <see cref="FormField.FieldId"/> that failed validation.</param>
+/// <param name="Message">A human-readable description of the validation failure.</param>
 public sealed record FormValidationError(string FieldId, string Message);

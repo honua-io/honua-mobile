@@ -5,11 +5,22 @@ using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.Maui;
 
+/// <summary>
+/// Extension methods for registering Honua Mobile SDK services with the .NET MAUI dependency injection container.
+/// </summary>
 public static class HonuaMobileServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers <see cref="HonuaMobileClient"/> and its options as singletons.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="clientOptions">Client configuration including endpoints and authentication.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="clientOptions"/> is <see langword="null"/>.</exception>
     public static IServiceCollection AddHonuaMobileSdk(
         this IServiceCollection services,
         HonuaMobileClientOptions clientOptions)
@@ -18,10 +29,22 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(clientOptions);
 
         services.AddSingleton(clientOptions);
-        services.AddSingleton(_ => new HonuaMobileClient(new HttpClient(), clientOptions));
+        services.AddHttpClient("HonuaMobile");
+        services.AddSingleton(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = factory.CreateClient("HonuaMobile");
+            return new HonuaMobileClient(httpClient, clientOptions);
+        });
         return services;
     }
 
+    /// <summary>
+    /// Registers the default <see cref="IOfflineOperationUploader"/> implementation that uploads
+    /// offline edits via the Honua API.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddHonuaApiOfflineUploader(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -30,6 +53,12 @@ public static class HonuaMobileServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers field data-collection services: <see cref="FormValidator"/>,
+    /// <see cref="CalculatedFieldEvaluator"/>, <see cref="RecordWorkflow"/>, and <see cref="DuplicateDetector"/>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddHonuaMobileFieldCollection(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -41,6 +70,15 @@ public static class HonuaMobileServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers the GeoPackage-based offline sync stack: <see cref="IGeoPackageSyncStore"/>,
+    /// <see cref="OfflineSyncEngine"/>, and <see cref="IOfflineSyncRunner"/>.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="storeOptions">GeoPackage store configuration (database path, etc.).</param>
+    /// <param name="syncOptions">Sync engine options; defaults are used when <see langword="null"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="storeOptions"/> is <see langword="null"/>.</exception>
     public static IServiceCollection AddHonuaGeoPackageOfflineSync(
         this IServiceCollection services,
         GeoPackageSyncStoreOptions storeOptions,
@@ -66,6 +104,13 @@ public static class HonuaMobileServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers <see cref="BackgroundSyncOrchestrator"/> for periodic background sync.
+    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Orchestrator options; defaults are used when <see langword="null"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddHonuaBackgroundSync(
         this IServiceCollection services,
         BackgroundSyncOrchestratorOptions? options = null)
@@ -78,19 +123,29 @@ public static class HonuaMobileServiceCollectionExtensions
             var runner = sp.GetRequiredService<IOfflineSyncRunner>();
             var connectivity = sp.GetRequiredService<IConnectivityStateProvider>();
             var orchestratorOptions = sp.GetRequiredService<BackgroundSyncOrchestratorOptions>();
-            return new BackgroundSyncOrchestrator(runner, connectivity, orchestratorOptions);
+            var logger = sp.GetRequiredService<ILogger<BackgroundSyncOrchestrator>>();
+            return new BackgroundSyncOrchestrator(runner, connectivity, orchestratorOptions, logger: logger);
         });
         return services;
     }
 
+    /// <summary>
+    /// Registers <see cref="IMapAreaDownloader"/> for downloading offline map area packages.
+    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddHonuaMapAreaDownload(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddHttpClient("HonuaMapArea");
         services.AddSingleton<IMapAreaDownloader>(sp =>
         {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = factory.CreateClient("HonuaMapArea");
             var store = sp.GetRequiredService<IGeoPackageSyncStore>();
-            return new MapAreaDownloader(new HttpClient(), store);
+            return new MapAreaDownloader(httpClient, store);
         });
 
         return services;

@@ -3,6 +3,10 @@ using System.Text.Json;
 
 namespace Honua.Mobile.Offline.Sync;
 
+/// <summary>
+/// HTTP-based client for the server-side replica sync API (createReplica, extractChanges,
+/// synchronizeReplica, unRegisterReplica).
+/// </summary>
 public sealed class ReplicaSyncClient : IReplicaSyncClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -12,11 +16,17 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
 
     private readonly HttpClient _httpClient;
 
+    /// <summary>
+    /// Initializes a new <see cref="ReplicaSyncClient"/>.
+    /// </summary>
+    /// <param name="httpClient">The HTTP client configured with the base address of the feature server.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/> is <see langword="null"/>.</exception>
     public ReplicaSyncClient(HttpClient httpClient)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
+    /// <inheritdoc />
     public async Task<CreateReplicaResult> CreateReplicaAsync(string serviceId, string replicaName, int[]? layerIds = null, CancellationToken ct = default)
     {
         var url = $"rest/services/{serviceId}/FeatureServer/createReplica";
@@ -49,6 +59,7 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         return new CreateReplicaResult(replicaId, serverGen);
     }
 
+    /// <inheritdoc />
     public async Task<ExtractChangesResult> ExtractChangesAsync(string serviceId, string replicaId, CancellationToken ct = default)
     {
         var url = $"rest/services/{serviceId}/FeatureServer/extractChanges";
@@ -86,6 +97,7 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         };
     }
 
+    /// <inheritdoc />
     public async Task<SynchronizeResult> SynchronizeReplicaAsync(string serviceId, string replicaId, string syncDirection = "download", CancellationToken ct = default)
     {
         var url = $"rest/services/{serviceId}/FeatureServer/synchronizeReplica";
@@ -111,6 +123,7 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         return new SynchronizeResult(replicaId, serverGen);
     }
 
+    /// <inheritdoc />
     public async Task UnRegisterReplicaAsync(string serviceId, string replicaId, CancellationToken ct = default)
     {
         var url = $"rest/services/{serviceId}/FeatureServer/unRegisterReplica";

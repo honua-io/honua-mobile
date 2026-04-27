@@ -2,12 +2,23 @@ using Honua.Mobile.Offline.GeoPackage;
 
 namespace Honua.Mobile.Offline.Sync;
 
+/// <summary>
+/// Processes pending offline edit operations by uploading them to the server,
+/// handling conflicts according to the configured <see cref="SyncConflictStrategy"/>.
+/// </summary>
 public sealed class OfflineSyncEngine : IOfflineSyncRunner
 {
     private readonly IGeoPackageSyncStore _store;
     private readonly IOfflineOperationUploader _uploader;
     private readonly OfflineSyncEngineOptions _options;
 
+    /// <summary>
+    /// Initializes a new <see cref="OfflineSyncEngine"/>.
+    /// </summary>
+    /// <param name="store">The local sync store for reading and updating operation status.</param>
+    /// <param name="uploader">The uploader responsible for sending operations to the server.</param>
+    /// <param name="options">Engine options; defaults are used when <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="store"/> or <paramref name="uploader"/> is <see langword="null"/>.</exception>
     public OfflineSyncEngine(IGeoPackageSyncStore store, IOfflineOperationUploader uploader, OfflineSyncEngineOptions? options = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -15,6 +26,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         _options = options ?? new OfflineSyncEngineOptions();
     }
 
+    /// <inheritdoc />
     public async Task<SyncRunResult> SyncAsync(CancellationToken ct = default)
     {
         await _store.InitializeAsync(ct).ConfigureAwait(false);

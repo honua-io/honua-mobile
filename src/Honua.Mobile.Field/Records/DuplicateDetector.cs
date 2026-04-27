@@ -1,7 +1,19 @@
 namespace Honua.Mobile.Field.Records;
 
+/// <summary>
+/// Detects potential duplicate records by comparing geographic proximity and field value matches.
+/// </summary>
 public sealed class DuplicateDetector
 {
+    /// <summary>
+    /// Finds existing records that may be duplicates of <paramref name="candidate"/> based on
+    /// distance (Haversine formula) and optional field value matches.
+    /// </summary>
+    /// <param name="existing">The set of previously collected records to compare against.</param>
+    /// <param name="candidate">The new record to check for duplicates.</param>
+    /// <param name="options">Detection thresholds; defaults to 15-meter radius with no field matching.</param>
+    /// <returns>A list of potential duplicates with distance and matched field information.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="existing"/> or <paramref name="candidate"/> is <see langword="null"/>.</exception>
     public IReadOnlyList<PotentialDuplicate> FindPotentialDuplicates(
         IEnumerable<FieldRecord> existing,
         FieldRecord candidate,
@@ -67,11 +79,27 @@ public sealed class DuplicateDetector
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
 }
 
+/// <summary>
+/// Options controlling duplicate detection thresholds and field matching.
+/// </summary>
 public sealed class DuplicateDetectionOptions
 {
+    /// <summary>
+    /// Maximum distance in meters between two records to consider them potential duplicates. Defaults to 15.
+    /// </summary>
     public double MaxDistanceMeters { get; init; } = 15;
 
+    /// <summary>
+    /// Field IDs whose values must match (case-insensitive) for a duplicate to be reported.
+    /// When empty, only distance is considered.
+    /// </summary>
     public IReadOnlyList<string> MatchFieldIds { get; init; } = [];
 }
 
+/// <summary>
+/// Represents a record identified as a potential duplicate.
+/// </summary>
+/// <param name="RecordId">The ID of the existing record flagged as a potential duplicate.</param>
+/// <param name="DistanceMeters">Distance in meters between the candidate and the existing record.</param>
+/// <param name="MatchedFieldIds">Field IDs whose values matched between the two records.</param>
 public sealed record PotentialDuplicate(string RecordId, double DistanceMeters, IReadOnlyList<string> MatchedFieldIds);

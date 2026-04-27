@@ -425,7 +425,7 @@ Solution: Add runtime permission request
 
 If you encounter issues:
 
-1. **Check the documentation**: Browse our [troubleshooting guide](../troubleshooting.md)
+1. **Check the documentation**: Browse our [troubleshooting guide](../guides/troubleshooting.md)
 2. **Search existing issues**: [GitHub Issues](https://github.com/honua/honua-mobile-sdk/issues)
 3. **Community support**: [Discord Channel](https://discord.gg/honua)
 4. **Professional support**: [Enterprise Support](https://enterprise.honua.com)

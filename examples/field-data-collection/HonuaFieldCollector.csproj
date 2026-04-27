@@ -73,7 +73,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\sdk\react-native\packages\@honua\react-native-sdk\native\HonuaReactNative.csproj" Condition="Exists('..\..\..\sdk\react-native\packages\@honua\react-native-sdk\native\HonuaReactNative.csproj')" />
     <ProjectReference Include="..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj" Condition="Exists('..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj')" />
-    <ProjectReference Include="..\..\..\sdk\dotnet\Honua.Mobile.IoT\Honua.Mobile.IoT.csproj" Condition="Exists('..\..\..\sdk\dotnet\Honua.Mobile.IoT\Honua.Mobile.IoT.csproj')" />
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">

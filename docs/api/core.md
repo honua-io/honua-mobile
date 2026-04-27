@@ -665,8 +665,5 @@ public class CachedHonuaClient : IHonuaClient
 
 ## Next Steps
 
-- **[Storage API](storage.md)** - Offline storage and sync
-- **[MAUI Controls](maui.md)** - Platform-specific UI components
-- **[IoT Integration](iot.md)** - Sensor connectivity
 - **[Getting Started Tutorial](../getting-started/tutorial.md)** - Build your first app
-- **[Examples](../../examples/)** - Real-world implementations
+- **[Guides](../guides/)** - In-depth guides for sync, security, performance, and more

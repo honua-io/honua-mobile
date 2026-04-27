@@ -45,7 +45,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj" Condition="Exists('..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj')" />
-    <ProjectReference Include="..\..\..\sdk\dotnet\Honua.Mobile.IoT\Honua.Mobile.IoT.csproj" Condition="Exists('..\..\..\sdk\dotnet\Honua.Mobile.IoT\Honua.Mobile.IoT.csproj')" />
   </ItemGroup>
 
   <ItemGroup>
