@@ -2,8 +2,11 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
-using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using System.Text.Json;
+using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
+using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
+using StorageSyncSession = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSession;
+using StorageSyncSessionStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSessionStatus;
 
 namespace Honua.Mobile.FieldCollection.Services.Sync;
 
@@ -52,7 +55,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
 
     private async Task UpdatePendingChangesAsync()
     {
-        while (!_syncCancellation?.IsCancellationRequested == true)
+        while (true)
         {
             try
             {
@@ -119,7 +122,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
                 }
 
                 SyncProgress = 1.0;
-                await CompleteSyncSessionAsync(session, SyncSessionStatus.Completed);
+                await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
                 LastSyncTime = DateTime.UtcNow;
                 var duration = DateTime.UtcNow - startTime;
@@ -137,7 +140,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             catch (OperationCanceledException)
             {
                 Status = SyncStatus.Cancelled;
-                await CompleteSyncSessionAsync(session, SyncSessionStatus.Cancelled);
+                await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Cancelled);
                 return new SyncResult
                 {
                     IsSuccess = false,
@@ -149,7 +152,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             catch (Exception ex)
             {
                 Status = SyncStatus.Error;
-                await CompleteSyncSessionAsync(session, SyncSessionStatus.Failed, ex.Message);
+                await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Failed, ex.Message);
                 return new SyncResult
                 {
                     IsSuccess = false,
@@ -195,7 +198,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             Status = SyncStatus.PullingChanges;
 
             var result = await PullChangesInternalAsync(session, _syncCancellation.Token);
-            await CompleteSyncSessionAsync(session, SyncSessionStatus.Completed);
+            await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
             LastSyncTime = DateTime.UtcNow;
 
@@ -222,7 +225,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task<bool> PullChangesInternalAsync(SyncSession session, CancellationToken cancellationToken)
+    private async Task<bool> PullChangesInternalAsync(StorageSyncSession session, CancellationToken cancellationToken)
     {
         try
         {
@@ -293,7 +296,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             Status = SyncStatus.PushingChanges;
 
             await PushChangesInternalAsync(session, _syncCancellation.Token);
-            await CompleteSyncSessionAsync(session, SyncSessionStatus.Completed);
+            await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
             return new SyncResult
             {
@@ -318,7 +321,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task<bool> PushChangesInternalAsync(SyncSession session, CancellationToken cancellationToken)
+    private async Task<bool> PushChangesInternalAsync(StorageSyncSession session, CancellationToken cancellationToken)
     {
         try
         {
@@ -361,7 +364,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
 
     #region Conflict Resolution
 
-    public async Task<List<ConflictInfo>> GetConflictsAsync()
+    public async Task<IEnumerable<ConflictInfo>> GetConflictsAsync()
     {
         // In a real implementation, query ConflictRecord table
         // For now, return empty list
@@ -388,7 +391,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task AutoResolveConflictsAsync(SyncSession session)
+    private async Task AutoResolveConflictsAsync(StorageSyncSession session)
     {
         var conflicts = await GetConflictsAsync();
 
@@ -399,7 +402,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task ApplyServerChangeAsync(ServerChange serverChange, SyncSession session)
+    private async Task ApplyServerChangeAsync(ServerChange serverChange, StorageSyncSession session)
     {
         try
         {
@@ -417,12 +420,12 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             // Apply server change
             switch (serverChange.Operation)
             {
-                case ChangeOperation.Insert:
-                case ChangeOperation.Update:
-                    await _storage.StoreFeatureAsync(serverChange.Feature);
+                case StorageChangeOperation.Insert:
+                case StorageChangeOperation.Update:
+                    await _storage.ApplyRemoteFeatureAsync(serverChange.Feature);
                     break;
-                case ChangeOperation.Delete:
-                    await _storage.DeleteFeatureAsync(serverChange.FeatureId, serverChange.LayerId);
+                case StorageChangeOperation.Delete:
+                    await _storage.ApplyRemoteDeleteAsync(serverChange.FeatureId, serverChange.LayerId);
                     break;
             }
         }
@@ -433,7 +436,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task CreateConflictRecordAsync(ServerChange serverChange, Feature localFeature, SyncSession session)
+    private async Task CreateConflictRecordAsync(ServerChange serverChange, Feature localFeature, StorageSyncSession session)
     {
         // Implementation would create a ConflictRecord in storage
         await Task.CompletedTask;
@@ -443,13 +446,13 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
 
     #region Sync Session Management
 
-    private async Task<SyncSession> CreateSyncSessionAsync(string sessionId)
+    private async Task<StorageSyncSession> CreateSyncSessionAsync(string sessionId)
     {
-        var session = new SyncSession
+        var session = new StorageSyncSession
         {
             Id = sessionId,
             StartTime = DateTime.UtcNow,
-            Status = SyncSessionStatus.Active,
+            Status = StorageSyncSessionStatus.Active,
             ServerGeneration = await GetLatestServerGenerationAsync(),
             LocalGeneration = await GetLastSyncGenerationAsync()
         };
@@ -460,7 +463,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         return session;
     }
 
-    private async Task CompleteSyncSessionAsync(SyncSession session, SyncSessionStatus status, string? errorMessage = null)
+    private async Task CompleteSyncSessionAsync(StorageSyncSession session, StorageSyncSessionStatus status, string? errorMessage = null)
     {
         session.EndTime = DateTime.UtcNow;
         session.Status = status;
@@ -492,7 +495,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         return new List<ServerChange>();
     }
 
-    private async Task<bool> SendChangeToServerAsync(ChangeRecord change)
+    private async Task<bool> SendChangeToServerAsync(StorageChangeRecord change)
     {
         // Mock implementation - would call actual gRPC service
         await Task.Delay(50);
@@ -523,23 +526,8 @@ public class ServerChange
 {
     public string FeatureId { get; set; } = string.Empty;
     public int LayerId { get; set; }
-    public ChangeOperation Operation { get; set; }
+    public StorageChangeOperation Operation { get; set; }
     public long Version { get; set; }
     public Feature Feature { get; set; } = new();
     public DateTime Timestamp { get; set; }
-}
-
-/// <summary>
-/// Enhanced sync result with detailed statistics
-/// </summary>
-public class SyncResult
-{
-    public bool IsSuccess { get; set; }
-    public string? ErrorMessage { get; set; }
-    public DateTime CompletedAt { get; set; }
-    public TimeSpan Duration { get; set; }
-    public int ChangesPulled { get; set; }
-    public int ChangesPushed { get; set; }
-    public int ConflictsDetected { get; set; }
-    public List<string> FailedChanges { get; set; } = new();
 }

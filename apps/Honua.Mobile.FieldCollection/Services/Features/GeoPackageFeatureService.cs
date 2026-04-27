@@ -1,6 +1,9 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
-using Honua.Mobile.FieldCollection.Services.Storage.Models;
+using CoreModels = Honua.Mobile.FieldCollection.Models;
+using StorageBoundingBox = Honua.Mobile.FieldCollection.Services.Storage.Models.BoundingBox;
+using StorageSpatialQuery = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialQuery;
+using StorageSpatialRelationship = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialRelationship;
 
 namespace Honua.Mobile.FieldCollection.Services.Features;
 
@@ -23,10 +26,18 @@ public class GeoPackageFeatureService : IFeatureService
 
     #region Feature Retrieval
 
-    public async Task<List<Feature>> GetFeaturesAsync(int layerId)
+    public async Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, CoreModels.Polygon? spatialFilter = null)
     {
         try
         {
+            if (spatialFilter != null)
+            {
+                return await QueryFeaturesAsync(layerId, new FeatureQuery
+                {
+                    SpatialFilter = new SpatialFilter { Geometry = spatialFilter }
+                });
+            }
+
             return await _storage.QueryFeaturesAsync(layerId);
         }
         catch (Exception)
@@ -36,7 +47,7 @@ public class GeoPackageFeatureService : IFeatureService
         }
     }
 
-    public async Task<Feature?> GetFeatureAsync(string featureId, int layerId)
+    public async Task<Feature?> GetFeatureAsync(int layerId, string featureId)
     {
         try
         {
@@ -53,11 +64,11 @@ public class GeoPackageFeatureService : IFeatureService
         try
         {
             // Convert FeatureQuery to SpatialQuery for storage layer
-            SpatialQuery? spatialQuery = null;
+            StorageSpatialQuery? spatialQuery = null;
 
             if (query.SpatialFilter != null)
             {
-                spatialQuery = new SpatialQuery
+                spatialQuery = new StorageSpatialQuery
                 {
                     Bounds = ConvertToBoundingBox(query.SpatialFilter),
                     Relationship = ConvertToSpatialRelationship(query.SpatialFilter.Relationship),
@@ -95,10 +106,12 @@ public class GeoPackageFeatureService : IFeatureService
 
     #region Feature Modification
 
-    public async Task<string> CreateFeatureAsync(Feature feature)
+    public async Task<Feature> CreateFeatureAsync(int layerId, Feature feature)
     {
         try
         {
+            feature.LayerId = layerId;
+
             // Ensure feature has an ID
             if (string.IsNullOrEmpty(feature.Id))
             {
@@ -108,10 +121,11 @@ public class GeoPackageFeatureService : IFeatureService
             // Set creation metadata
             feature.CreatedAt = DateTime.UtcNow;
             feature.ModifiedAt = DateTime.UtcNow;
+            feature.UpdatedAt = feature.ModifiedAt;
             feature.Version = 1;
 
             await _storage.StoreFeatureAsync(feature);
-            return feature.Id;
+            return feature;
         }
         catch (Exception)
         {
@@ -119,31 +133,40 @@ public class GeoPackageFeatureService : IFeatureService
         }
     }
 
-    public async Task<bool> UpdateFeatureAsync(Feature feature)
+    public async Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
     {
         try
         {
+            feature.LayerId = layerId;
+
             // Update modification metadata
             feature.ModifiedAt = DateTime.UtcNow;
+            feature.UpdatedAt = feature.ModifiedAt;
             feature.Version++; // Increment version for optimistic locking
 
-            return await _storage.UpdateFeatureAsync(feature);
+            var updated = await _storage.UpdateFeatureAsync(feature);
+            if (!updated)
+            {
+                throw new InvalidOperationException($"Feature not found: {feature.Id}");
+            }
+
+            return feature;
         }
         catch (Exception)
         {
-            return false;
+            throw;
         }
     }
 
-    public async Task<bool> DeleteFeatureAsync(int layerId, string featureId)
+    public async Task DeleteFeatureAsync(int layerId, string featureId)
     {
         try
         {
-            return await _storage.DeleteFeatureAsync(featureId, layerId);
+            await _storage.DeleteFeatureAsync(featureId, layerId);
         }
         catch (Exception)
         {
-            return false;
+            throw;
         }
     }
 
@@ -161,8 +184,8 @@ public class GeoPackageFeatureService : IFeatureService
         {
             try
             {
-                var id = await CreateFeatureAsync(feature);
-                successful.Add(id);
+                var created = await CreateFeatureAsync(feature.LayerId, feature);
+                successful.Add(created.Id);
                 result.SuccessCount++;
             }
             catch (Exception ex)
@@ -192,17 +215,9 @@ public class GeoPackageFeatureService : IFeatureService
         {
             try
             {
-                var success = await UpdateFeatureAsync(feature);
-                if (success)
-                {
-                    successful.Add(feature.Id);
-                    result.SuccessCount++;
-                }
-                else
-                {
-                    failed.Add((feature.Id, "Update failed"));
-                    result.ErrorCount++;
-                }
+                var updated = await UpdateFeatureAsync(feature.LayerId, feature);
+                successful.Add(updated.Id);
+                result.SuccessCount++;
             }
             catch (Exception ex)
             {
@@ -231,17 +246,9 @@ public class GeoPackageFeatureService : IFeatureService
         {
             try
             {
-                var success = await DeleteFeatureAsync(layerId, featureId);
-                if (success)
-                {
-                    successful.Add(featureId);
-                    result.SuccessCount++;
-                }
-                else
-                {
-                    failed.Add((featureId, "Delete failed"));
-                    result.ErrorCount++;
-                }
+                await DeleteFeatureAsync(layerId, featureId);
+                successful.Add(featureId);
+                result.SuccessCount++;
             }
             catch (Exception ex)
             {
@@ -276,7 +283,9 @@ public class GeoPackageFeatureService : IFeatureService
                 LayerId = layerId,
                 TotalFeatures = features.Count,
                 PendingSync = pendingChanges.Count,
-                LastModified = features.Max(f => f.ModifiedAt) ?? DateTime.MinValue,
+                LastModified = features.Count > 0
+                    ? features.Max(f => f.ModifiedAt ?? f.UpdatedAt ?? f.CreatedAt)
+                    : DateTime.MinValue,
                 SizeEstimateMB = EstimateLayerSize(features)
             };
         }
@@ -302,32 +311,32 @@ public class GeoPackageFeatureService : IFeatureService
 
     #region Helper Methods
 
-    private static BoundingBox ConvertToBoundingBox(SpatialFilter spatialFilter)
+    private static StorageBoundingBox ConvertToBoundingBox(SpatialFilter spatialFilter)
     {
-        if (spatialFilter.Geometry is Models.Point point)
+        if (spatialFilter.Geometry is CoreModels.Point point)
         {
             var buffer = 0.001; // ~100m buffer for point queries
-            return BoundingBox.FromCoordinates(
+            return StorageBoundingBox.FromCoordinates(
                 point.Longitude - buffer, point.Latitude - buffer,
                 point.Longitude + buffer, point.Latitude + buffer);
         }
 
         // For other geometry types, would extract actual bounds
         // For now, return a default large bounds
-        return BoundingBox.FromCoordinates(-180, -90, 180, 90);
+        return StorageBoundingBox.FromCoordinates(-180, -90, 180, 90);
     }
 
-    private static SpatialRelationship ConvertToSpatialRelationship(Models.SpatialRelationship relationship)
+    private static StorageSpatialRelationship ConvertToSpatialRelationship(CoreModels.SpatialRelationship relationship)
     {
         return relationship switch
         {
-            Models.SpatialRelationship.Intersects => SpatialRelationship.Intersects,
-            Models.SpatialRelationship.Contains => SpatialRelationship.Contains,
-            Models.SpatialRelationship.Within => SpatialRelationship.Within,
-            Models.SpatialRelationship.Overlaps => SpatialRelationship.Overlaps,
-            Models.SpatialRelationship.Touches => SpatialRelationship.Touches,
-            Models.SpatialRelationship.Crosses => SpatialRelationship.Crosses,
-            _ => SpatialRelationship.Intersects
+            CoreModels.SpatialRelationship.Intersects => StorageSpatialRelationship.Intersects,
+            CoreModels.SpatialRelationship.Contains => StorageSpatialRelationship.Contains,
+            CoreModels.SpatialRelationship.Within => StorageSpatialRelationship.Within,
+            CoreModels.SpatialRelationship.Overlaps => StorageSpatialRelationship.Overlaps,
+            CoreModels.SpatialRelationship.Touches => StorageSpatialRelationship.Touches,
+            CoreModels.SpatialRelationship.Crosses => StorageSpatialRelationship.Crosses,
+            _ => StorageSpatialRelationship.Intersects
         };
     }
 

@@ -49,12 +49,7 @@ public static class MauiProgram
         // Database and Storage Services
         services.AddSingleton<DatabaseService>();
 
-        // Register storage service factory
-        services.AddSingleton<IStorageService>(provider =>
-        {
-            var databaseService = provider.GetRequiredService<DatabaseService>();
-            return databaseService.GetStorageServiceAsync().Result;
-        });
+        services.AddSingleton<IStorageService, StorageService>();
 
         // Register sync service factory
         services.AddSingleton<ISyncService>(provider =>

@@ -1,9 +1,12 @@
 using SQLite;
 using System.Text.Json;
-using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
+using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
+using CoreModels = Honua.Mobile.FieldCollection.Models;
+using StorageSyncStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncStatus;
+using NtsGeometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Honua.Mobile.FieldCollection.Services.Storage;
 
@@ -11,7 +14,7 @@ namespace Honua.Mobile.FieldCollection.Services.Storage;
 /// OGC GeoPackage-compliant storage service for offline field data collection
 /// Implements SQLite-based spatial database with change tracking for delta sync
 /// </summary>
-public class GeoPackageStorageService : IStorageService, IDisposable
+public class GeoPackageStorageService : IDisposable
 {
     private readonly SQLiteAsyncConnection _connection;
     private readonly WKBWriter _wkbWriter;
@@ -122,37 +125,9 @@ public class GeoPackageStorageService : IStorageService, IDisposable
 
     private async Task CreateSpatialIndexes()
     {
-        // Create spatial index using SQLite R*Tree
-        await _connection.ExecuteAsync(@"
-            CREATE VIRTUAL TABLE IF NOT EXISTS idx_local_features_geom USING rtree(
-                id INTEGER PRIMARY KEY,
-                minx REAL, maxx REAL,
-                miny REAL, maxy REAL
-            )");
-
-        // Trigger to maintain spatial index
-        await _connection.ExecuteAsync(@"
-            CREATE TRIGGER IF NOT EXISTS local_features_geom_insert
-            AFTER INSERT ON local_features
-            WHEN NEW.geometry IS NOT NULL
-            BEGIN
-                INSERT INTO idx_local_features_geom VALUES (
-                    NEW.id,
-                    ST_MinX(NEW.geometry), ST_MaxX(NEW.geometry),
-                    ST_MinY(NEW.geometry), ST_MaxY(NEW.geometry)
-                );
-            END");
-
-        await _connection.ExecuteAsync(@"
-            CREATE TRIGGER IF NOT EXISTS local_features_geom_update
-            AFTER UPDATE OF geometry ON local_features
-            WHEN NEW.geometry IS NOT NULL
-            BEGIN
-                UPDATE idx_local_features_geom SET
-                    minx = ST_MinX(NEW.geometry), maxx = ST_MaxX(NEW.geometry),
-                    miny = ST_MinY(NEW.geometry), maxy = ST_MaxY(NEW.geometry)
-                WHERE id = NEW.id;
-            END");
+        await _connection.ExecuteAsync("DROP TRIGGER IF EXISTS local_features_geom_insert");
+        await _connection.ExecuteAsync("DROP TRIGGER IF EXISTS local_features_geom_update");
+        await _connection.ExecuteAsync("DROP TABLE IF EXISTS idx_local_features_geom");
     }
 
     #region Feature Storage
@@ -162,24 +137,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
         await _dbLock.WaitAsync();
         try
         {
-            var localFeature = new LocalFeature
-            {
-                Id = feature.Id,
-                LayerId = feature.LayerId,
-                Geometry = _wkbWriter.Write(ConvertToNtsGeometry(feature.Geometry)),
-                Attributes = JsonSerializer.Serialize(feature.Attributes),
-                CreatedAt = feature.CreatedAt,
-                ModifiedAt = feature.ModifiedAt ?? DateTime.UtcNow,
-                Version = feature.Version,
-                SyncStatus = SyncStatus.PendingUpload
-            };
-
-            await _connection.InsertOrReplaceAsync(localFeature);
-
-            // Track change for delta sync
-            await RecordChange(feature.Id, feature.LayerId, ChangeOperation.Insert);
-
-            return feature.Id;
+            return await SaveFeatureAsync(feature, StorageSyncStatus.PendingUpload, trackChange: true, ChangeOperation.Insert);
         }
         finally
         {
@@ -208,16 +166,22 @@ public class GeoPackageStorageService : IStorageService, IDisposable
         await _dbLock.WaitAsync();
         try
         {
-            var query = _connection.Table<LocalFeature>().Where(f => f.LayerId == layerId);
+            var localFeatures = await _connection.Table<LocalFeature>()
+                .Where(f => f.LayerId == layerId)
+                .ToListAsync();
 
             if (spatialQuery != null)
             {
-                // Use spatial index for efficient querying
-                var spatialIds = await GetFeaturesInBounds(spatialQuery.Bounds);
-                query = query.Where(f => spatialIds.Contains(f.Id));
+                localFeatures = localFeatures
+                    .Where(feature => IntersectsBounds(feature, spatialQuery.Bounds))
+                    .ToList();
+
+                if (spatialQuery.MaxResults.HasValue)
+                {
+                    localFeatures = localFeatures.Take(spatialQuery.MaxResults.Value).ToList();
+                }
             }
 
-            var localFeatures = await query.ToListAsync();
             return localFeatures.Select(ConvertToFeature).ToList();
         }
         finally
@@ -236,14 +200,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
 
             if (existing == null) return false;
 
-            existing.Geometry = feature.Geometry != null ? _wkbWriter.Write(ConvertToNtsGeometry(feature.Geometry)) : null;
-            existing.Attributes = JsonSerializer.Serialize(feature.Attributes);
-            existing.ModifiedAt = DateTime.UtcNow;
-            existing.Version = feature.Version;
-            existing.SyncStatus = SyncStatus.PendingUpload;
-
-            await _connection.UpdateAsync(existing);
-            await RecordChange(feature.Id, feature.LayerId, ChangeOperation.Update);
+            await SaveFeatureAsync(feature, StorageSyncStatus.PendingUpload, trackChange: true, ChangeOperation.Update);
 
             return true;
         }
@@ -275,6 +232,83 @@ public class GeoPackageStorageService : IStorageService, IDisposable
         }
     }
 
+    public async Task<string> ApplyRemoteFeatureAsync(Feature feature)
+    {
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await SaveFeatureAsync(feature, StorageSyncStatus.Synced, trackChange: false, ChangeOperation.Update);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<bool> ApplyRemoteDeleteAsync(string featureId, int layerId)
+    {
+        await _dbLock.WaitAsync();
+        try
+        {
+            var deleted = await _connection.Table<LocalFeature>()
+                .DeleteAsync(f => f.Id == featureId && f.LayerId == layerId);
+
+            return deleted > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private async Task<string> SaveFeatureAsync(
+        Feature feature,
+        StorageSyncStatus syncStatus,
+        bool trackChange,
+        ChangeOperation operation)
+    {
+        if (string.IsNullOrWhiteSpace(feature.Id))
+        {
+            feature.Id = Guid.NewGuid().ToString();
+        }
+
+        var now = DateTime.UtcNow;
+        if (feature.CreatedAt == default)
+        {
+            feature.CreatedAt = now;
+        }
+
+        feature.ModifiedAt ??= feature.UpdatedAt ?? now;
+        feature.UpdatedAt ??= feature.ModifiedAt;
+
+        if (feature.Version <= 0)
+        {
+            feature.Version = 1;
+        }
+
+        var geometry = ConvertToNtsGeometry(feature.Geometry);
+        var localFeature = new LocalFeature
+        {
+            Id = feature.Id,
+            LayerId = feature.LayerId,
+            Geometry = geometry != null ? _wkbWriter.Write(geometry) : null,
+            Attributes = JsonSerializer.Serialize(feature.Attributes),
+            CreatedAt = feature.CreatedAt,
+            ModifiedAt = feature.ModifiedAt.Value,
+            Version = feature.Version,
+            SyncStatus = syncStatus
+        };
+
+        await _connection.InsertOrReplaceAsync(localFeature);
+
+        if (trackChange)
+        {
+            await RecordChange(feature.Id, feature.LayerId, operation);
+        }
+
+        return feature.Id;
+    }
+
     #endregion
 
     #region Change Tracking
@@ -288,7 +322,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
             LayerId = layerId,
             Operation = operation,
             Timestamp = DateTime.UtcNow,
-            SyncStatus = SyncStatus.PendingUpload
+            SyncStatus = StorageSyncStatus.PendingUpload
         };
 
         await _connection.InsertAsync(changeRecord);
@@ -300,7 +334,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
         try
         {
             var query = _connection.Table<ChangeRecord>()
-                .Where(c => c.SyncStatus == SyncStatus.PendingUpload);
+                .Where(c => c.SyncStatus == StorageSyncStatus.PendingUpload);
 
             if (layerId.HasValue)
             {
@@ -324,7 +358,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
             {
                 await _connection.ExecuteAsync(
                     "UPDATE change_records SET sync_status = ? WHERE id = ?",
-                    SyncStatus.Synced, changeId);
+                    StorageSyncStatus.Synced, changeId);
             }
         }
         finally
@@ -337,17 +371,20 @@ public class GeoPackageStorageService : IStorageService, IDisposable
 
     #region Spatial Queries
 
-    private async Task<List<string>> GetFeaturesInBounds(BoundingBox bounds)
+    private bool IntersectsBounds(LocalFeature feature, BoundingBox bounds)
     {
-        var sql = @"
-            SELECT f.id FROM local_features f
-            INNER JOIN idx_local_features_geom idx ON f.id = idx.id
-            WHERE idx.minx <= ? AND idx.maxx >= ? AND idx.miny <= ? AND idx.maxy >= ?";
+        if (feature.Geometry == null)
+        {
+            return false;
+        }
 
-        var results = await _connection.QueryAsync<dynamic>(sql,
-            bounds.MaxX, bounds.MinX, bounds.MaxY, bounds.MinY);
+        var geometry = _wkbReader.Read(feature.Geometry);
+        var envelope = geometry.EnvelopeInternal;
 
-        return results.Select(r => (string)r.id).ToList();
+        return envelope.MinX <= bounds.MaxX
+            && envelope.MaxX >= bounds.MinX
+            && envelope.MinY <= bounds.MaxY
+            && envelope.MaxY >= bounds.MinY;
     }
 
     #endregion
@@ -422,8 +459,9 @@ public class GeoPackageStorageService : IStorageService, IDisposable
             Attributes = JsonSerializer.Deserialize<Dictionary<string, object>>(localFeature.Attributes ?? "{}") ?? new(),
             CreatedAt = localFeature.CreatedAt,
             ModifiedAt = localFeature.ModifiedAt,
+            UpdatedAt = localFeature.ModifiedAt,
             Version = localFeature.Version,
-            IsPendingSync = localFeature.SyncStatus == SyncStatus.PendingUpload
+            IsPendingSync = localFeature.SyncStatus == StorageSyncStatus.PendingUpload
         };
     }
 
@@ -434,26 +472,79 @@ public class GeoPackageStorageService : IStorageService, IDisposable
             Id = metadata.Id,
             Name = metadata.Name,
             Description = metadata.Description,
-            GeometryType = Enum.Parse<GeometryType>(metadata.GeometryType),
+            GeometryType = Enum.Parse<CoreModels.GeometryType>(metadata.GeometryType),
             IsEditable = metadata.IsEditable,
             IsVisible = true,
             Schema = JsonSerializer.Deserialize<List<FieldDefinition>>(metadata.Schema ?? "[]") ?? new()
         };
     }
 
-    private Geometry ConvertToNtsGeometry(Models.Point point)
+    private static NtsGeometry? ConvertToNtsGeometry(CoreModels.Geometry? geometry)
     {
-        return new NetTopologySuite.Geometries.Point(point.Longitude, point.Latitude);
+        return geometry switch
+        {
+            CoreModels.Point point => new NetTopologySuite.Geometries.Point(point.Longitude, point.Latitude),
+            CoreModels.LineString line => new NetTopologySuite.Geometries.GeometryFactory(
+                    new NetTopologySuite.Geometries.PrecisionModel(),
+                    line.SRID)
+                .CreateLineString(line.Coordinates
+                    .Select(point => new NetTopologySuite.Geometries.Coordinate(point.Longitude, point.Latitude))
+                    .ToArray()),
+            CoreModels.Polygon polygon => CreateNtsPolygon(polygon),
+            null => null,
+            _ => throw new NotSupportedException($"Geometry type {geometry.Type} not supported")
+        };
     }
 
-    private Models.Point ConvertFromNtsGeometry(Geometry ntsGeometry)
+    private static NetTopologySuite.Geometries.Polygon CreateNtsPolygon(CoreModels.Polygon polygon)
+    {
+        var factory = new NetTopologySuite.Geometries.GeometryFactory(
+            new NetTopologySuite.Geometries.PrecisionModel(),
+            polygon.SRID);
+        var shellCoordinates = polygon.Coordinates.FirstOrDefault() ?? [];
+        var coordinates = shellCoordinates
+            .Select(point => new NetTopologySuite.Geometries.Coordinate(point.Longitude, point.Latitude))
+            .ToList();
+
+        if (coordinates.Count > 0 && !coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(coordinates[0]);
+        }
+
+        return factory.CreatePolygon(coordinates.ToArray());
+    }
+
+    private static CoreModels.Geometry? ConvertFromNtsGeometry(NtsGeometry ntsGeometry)
     {
         if (ntsGeometry is NetTopologySuite.Geometries.Point point)
         {
-            return new Models.Point
+            return new CoreModels.Point
             {
                 Latitude = point.Y,
                 Longitude = point.X
+            };
+        }
+
+        if (ntsGeometry is NetTopologySuite.Geometries.LineString line)
+        {
+            return new CoreModels.LineString
+            {
+                Coordinates = line.Coordinates
+                    .Select(point => new CoreModels.Point(point.Y, point.X))
+                    .ToList()
+            };
+        }
+
+        if (ntsGeometry is NetTopologySuite.Geometries.Polygon polygon)
+        {
+            return new CoreModels.Polygon
+            {
+                Coordinates =
+                [
+                    polygon.ExteriorRing.Coordinates
+                        .Select(point => new CoreModels.Point(point.Y, point.X))
+                        .ToList()
+                ]
             };
         }
 
@@ -471,7 +562,7 @@ public class GeoPackageStorageService : IStorageService, IDisposable
         {
             var featureCount = await _connection.Table<LocalFeature>().CountAsync();
             var pendingChanges = await _connection.Table<ChangeRecord>()
-                .CountAsync(c => c.SyncStatus == SyncStatus.PendingUpload);
+                .CountAsync(c => c.SyncStatus == StorageSyncStatus.PendingUpload);
 
             var fileInfo = new FileInfo(_databasePath);
             var databaseSizeMb = fileInfo.Exists ? fileInfo.Length / (1024.0 * 1024.0) : 0;

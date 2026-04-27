@@ -25,14 +25,7 @@ public class DatabaseService : IDisposable
         await _initLock.WaitAsync();
         try
         {
-            if (_storageService == null)
-            {
-                _storageService = new GeoPackageStorageService(_databasePath);
-                await _storageService.InitializeAsync();
-                _initialized = true;
-            }
-
-            return _storageService;
+            return await GetOrCreateStorageServiceAsync();
         }
         finally
         {
@@ -49,7 +42,7 @@ public class DatabaseService : IDisposable
         {
             if (_syncService == null)
             {
-                var storageService = await GetStorageServiceAsync();
+                var storageService = await GetOrCreateStorageServiceAsync();
                 _syncService = new GeoPackageSyncService(storageService, authService, connectivityService);
             }
 
@@ -59,6 +52,18 @@ public class DatabaseService : IDisposable
         {
             _initLock.Release();
         }
+    }
+
+    private async Task<GeoPackageStorageService> GetOrCreateStorageServiceAsync()
+    {
+        if (_storageService == null)
+        {
+            _storageService = new GeoPackageStorageService(_databasePath);
+            await _storageService.InitializeAsync();
+            _initialized = true;
+        }
+
+        return _storageService;
     }
 
     public async Task<bool> IsInitializedAsync()

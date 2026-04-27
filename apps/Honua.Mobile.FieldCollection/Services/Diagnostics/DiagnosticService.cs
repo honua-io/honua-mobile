@@ -1,5 +1,8 @@
 using Honua.Mobile.FieldCollection.Services.Storage;
 using System.Text.Json;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Devices;
+using Microsoft.Maui.Networking;
 
 namespace Honua.Mobile.FieldCollection.Services.Diagnostics;
 
@@ -102,13 +105,13 @@ public class DiagnosticService
         // Get sync conflicts
         try
         {
-            var conflicts = await _syncService.GetConflictsAsync();
+            var conflicts = (await _syncService.GetConflictsAsync()).ToList();
             diagnostics.ConflictCount = conflicts.Count;
             diagnostics.ConflictDetails = conflicts.Take(5).Select(c => new ConflictSummary
             {
                 ConflictId = c.Id,
                 LayerName = c.LayerName,
-                ConflictType = c.ConflictType.ToString()
+                ConflictType = c.Type.ToString()
             }).ToList();
         }
         catch
