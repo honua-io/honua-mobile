@@ -107,6 +107,84 @@ public sealed class HonuaScenePackageManifestTests
     }
 
     [Fact]
+    public void Validate_ByteSumOverflow_ReturnsInvalid()
+    {
+        var manifest = CreateManifest(
+            byteBudget: new HonuaScenePackageByteBudget
+            {
+                MaxPackageBytes = long.MaxValue,
+                DeclaredBytes = 1_000_000,
+            },
+            assets: new[]
+            {
+                new HonuaScenePackageAsset
+                {
+                    Key = "scene-metadata",
+                    Type = HonuaScenePackageAssetTypes.SceneMetadata,
+                    Role = "metadata",
+                    Path = "metadata/scene.json",
+                    Bytes = long.MaxValue,
+                    Sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    Required = true,
+                },
+                new HonuaScenePackageAsset
+                {
+                    Key = "buildings-tileset",
+                    Type = HonuaScenePackageAssetTypes.ThreeDimensionalTileset,
+                    Role = "primary-tileset",
+                    Path = "tilesets/buildings/tileset.json",
+                    Bytes = 1,
+                    Sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+                    Required = true,
+                },
+            });
+
+        var result = manifest.Validate(FreshNow);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(HonuaScenePackageState.Invalid, result.State);
+        AssertHasCode(result, HonuaScenePackageValidationCodes.OverByteBudget);
+    }
+
+    [Fact]
+    public void Validate_NullAssetEntry_ReturnsInvalid()
+    {
+        var manifest = HonuaScenePackageManifest.ParseJson("""
+            {
+              "schemaVersion": "honua.scene-package.v1",
+              "packageId": "pkg_null_asset",
+              "sceneId": "downtown-honolulu",
+              "editionGate": "pro",
+              "serverRevision": "scene-rev-42",
+              "createdAtUtc": "2026-04-28T00:00:00Z",
+              "staleAfterUtc": "2026-05-28T00:00:00Z",
+              "offlineUseExpiresAtUtc": "2026-06-27T00:00:00Z",
+              "extent": {
+                "minLongitude": -157.872,
+                "minLatitude": 21.293,
+                "maxLongitude": -157.841,
+                "maxLatitude": 21.319
+              },
+              "lod": {
+                "minZoom": 12,
+                "maxZoom": 17
+              },
+              "byteBudget": {
+                "maxPackageBytes": 1000000,
+                "declaredBytes": 1000
+              },
+              "assets": [null]
+            }
+            """);
+
+        var result = manifest.Validate(FreshNow);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(HonuaScenePackageState.Invalid, result.State);
+        AssertHasCode(result, HonuaScenePackageValidationCodes.NullAsset);
+    }
+
+    [Fact]
     public void Validate_UnsupportedVersion_ReturnsInvalid()
     {
         var manifest = CreateManifest(schemaVersion: "honua.scene-package.v2");

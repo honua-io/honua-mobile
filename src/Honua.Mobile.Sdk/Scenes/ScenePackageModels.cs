@@ -366,6 +366,7 @@ public static class HonuaScenePackageValidationCodes
     public const string InvalidByteBudget = "invalid-byte-budget";
     public const string OverByteBudget = "over-byte-budget";
     public const string MissingAssets = "missing-assets";
+    public const string NullAsset = "null-asset";
     public const string MissingRequiredSceneMetadata = "missing-required-scene-metadata";
     public const string MissingRequiredAsset = "missing-required-asset";
     public const string DuplicateAssetKey = "duplicate-asset-key";
@@ -689,12 +690,31 @@ public static class HonuaScenePackageManifestValidator
             return true;
         }
 
-        var totalAssetBytes = manifest.Assets
-            .Where(asset => asset.Bytes.HasValue && asset.Bytes.Value > 0)
-            .Sum(asset => asset.Bytes!.Value);
+        var maxPackageBytes = manifest.ByteBudget.MaxPackageBytes.GetValueOrDefault();
+        var declaredBytes = manifest.ByteBudget.DeclaredBytes.GetValueOrDefault();
+        var totalAssetBytes = 0L;
+        var assetBytesOverflow = false;
+        foreach (var asset in manifest.Assets)
+        {
+            if (asset?.Bytes is not > 0)
+            {
+                continue;
+            }
+
+            var bytes = asset.Bytes.Value;
+            if (bytes > maxPackageBytes || totalAssetBytes > maxPackageBytes - bytes)
+            {
+                assetBytesOverflow = true;
+                break;
+            }
+
+            totalAssetBytes += bytes;
+        }
+
         var overBudget =
-            manifest.ByteBudget.DeclaredBytes > manifest.ByteBudget.MaxPackageBytes ||
-            totalAssetBytes > manifest.ByteBudget.MaxPackageBytes;
+            declaredBytes > maxPackageBytes ||
+            assetBytesOverflow ||
+            totalAssetBytes > maxPackageBytes;
 
         if (overBudget)
         {
@@ -726,6 +746,16 @@ public static class HonuaScenePackageManifestValidator
 
         foreach (var asset in manifest.Assets)
         {
+            if (asset is null)
+            {
+                AddError(
+                    issues,
+                    HonuaScenePackageValidationCodes.NullAsset,
+                    "Scene package manifest contains a null asset entry.");
+                invalid = true;
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(asset.Key))
             {
                 AddAssetError(issues, HonuaScenePackageValidationCodes.MissingRequiredAsset, asset, "Scene package asset is missing key.");
