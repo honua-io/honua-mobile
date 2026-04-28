@@ -18,6 +18,32 @@
 
 CesiumJS is Apache-2.0 open source. The component does not require Cesium ion for external or Honua-hosted 3D Tiles URLs. Integrators can pass `ion-token` only when they choose to use Cesium ion assets or services.
 
+## SDK Discovery
+
+Mobile and web hosts can resolve scene metadata through `HonuaSceneService` before assigning URLs to the renderer.
+
+```csharp
+using Honua.Mobile.Sdk.Scenes;
+
+var scene = await client.Scenes.ResolveSceneAsync(
+    "downtown-honolulu",
+    new HonuaSceneResolveRequest
+    {
+        RequiredCapabilities = new[] { HonuaSceneCapabilities.ThreeDimensionalTiles },
+    });
+```
+
+```js
+const element = document.querySelector('honua-scene');
+const resolvedScene = await fetch('/scene-config/downtown-honolulu').then((response) => response.json());
+
+element.setAttribute('tileset-url', resolvedScene.tilesetUrl);
+
+if (resolvedScene.terrainUrl) {
+  element.setAttribute('terrain-url', resolvedScene.terrainUrl);
+}
+```
+
 ## Events
 
 ```js
@@ -42,4 +68,4 @@ The package build copies Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets`
 
 ## Current Scope
 
-This first slice proves client-side 3D Tiles loading and scene events. Honua-hosted scene registry, terrain tiles, elevation APIs, 3D Tiles generation, and I3S compatibility are tracked in the linked server backlog.
+This first slice proves client-side 3D Tiles loading, scene events, and typed SDK scene discovery. Honua-hosted scene registry, terrain tiles, elevation APIs, 3D Tiles generation, and I3S compatibility are tracked in the linked server backlog.

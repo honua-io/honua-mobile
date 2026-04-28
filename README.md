@@ -8,7 +8,7 @@ dynamic forms, and background sync.
 
 | Package | Purpose |
 |---------|---------|
-| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing SDK |
+| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing and scene metadata SDK |
 | **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
@@ -32,6 +32,7 @@ builder.Services
         PreferGrpcForFeatureQueries = true,
     })
     .AddHonuaRouting()
+    .AddHonuaScenes()
     .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
     .AddHonuaGeoPackageOfflineSync(
@@ -115,12 +116,31 @@ var optimized = await client.Routing.Route()
 var reachable = await client.Routing.GetServiceAreaAsync(depot, TimeSpan.FromMinutes(30));
 ```
 
+## 3D Scene Metadata
+
+Scene discovery resolves server-managed 3D Tiles and terrain URLs before a
+renderer loads them:
+
+```csharp
+using Honua.Mobile.Sdk.Scenes;
+
+var scene = await client.Scenes.ResolveSceneAsync(
+    "downtown-honolulu",
+    new HonuaSceneResolveRequest
+    {
+        RequiredCapabilities = new[] { HonuaSceneCapabilities.ThreeDimensionalTiles },
+    });
+
+var tilesetUrl = scene.TilesetUrl;
+var terrainUrl = scene.TerrainUrl;
+```
+
 ## Repository Structure
 
 ```
 src/
   Honua.Embed/                Embeddable map web component package
-    tests/                    Web component DOM behavior tests (14 tests)
+    tests/                    Web component DOM behavior tests (17 tests)
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Field/         Field collection components
   Honua.Mobile.Offline/       GeoPackage sync engine
@@ -129,7 +149,7 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing (26 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (35 tests)
   Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (42 tests)
   Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)

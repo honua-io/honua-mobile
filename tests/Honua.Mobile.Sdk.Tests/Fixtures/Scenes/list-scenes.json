@@ -1,0 +1,20 @@
+{
+  "scenes": [
+    {
+      "id": "downtown-honolulu",
+      "name": "Downtown Honolulu",
+      "description": "Photogrammetry and terrain sample for Honolulu urban planning.",
+      "tilesetUrl": "https://api.honua.test/api/scenes/downtown-honolulu/tileset.json",
+      "terrainUrl": "https://api.honua.test/api/scenes/downtown-honolulu/terrain",
+      "bbox": [-157.875, 21.290, -157.835, 21.325],
+      "capabilities": ["3d-tiles", "terrain"],
+      "attribution": ["City and County of Honolulu"],
+      "auth": {
+        "requiresAuthentication": true,
+        "schemes": ["Bearer", "ApiKey"],
+        "policy": "project-members"
+      },
+      "updatedAt": "2026-04-28T00:00:00Z"
+    }
+  ]
+}

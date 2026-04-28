@@ -1,0 +1,29 @@
+{
+  "sceneId": "downtown-honolulu",
+  "tilesetUrl": "https://api.honua.test/api/scenes/downtown-honolulu/tileset.json?sig=test",
+  "terrainUrl": "https://api.honua.test/api/scenes/downtown-honolulu/terrain?sig=test",
+  "capabilities": ["3d-tiles", "terrain"],
+  "auth": {
+    "requiresAuthentication": true,
+    "schemes": ["Bearer", "ApiKey"]
+  },
+  "expiresAt": "2026-04-28T02:00:00Z",
+  "endpoints": [
+    {
+      "kind": "3d-tiles",
+      "url": "https://api.honua.test/api/scenes/downtown-honolulu/tileset.json?sig=test",
+      "format": "3d-tiles",
+      "mediaType": "application/json",
+      "requiresAuthentication": true,
+      "headers": {
+        "X-Honua-Scene": "downtown-honolulu"
+      }
+    },
+    {
+      "kind": "terrain",
+      "url": "https://api.honua.test/api/scenes/downtown-honolulu/terrain?sig=test",
+      "format": "quantized-mesh",
+      "requiresAuthentication": true
+    }
+  ]
+}
