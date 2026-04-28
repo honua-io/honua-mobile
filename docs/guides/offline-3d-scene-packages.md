@@ -30,6 +30,12 @@ Every package has a UTF-8 JSON manifest named `manifest.json` at the package
 root. The manifest is the only stable contract between server packaging and
 client runtime storage.
 
+The .NET SDK contract for #40 is `HonuaScenePackageManifest`, with
+`HonuaScenePackageAsset`, `HonuaScenePackageAssetTypes`, and
+`HonuaScenePackageManifestValidator` covering the policy created in #36. These
+models are deliberately storage-neutral; #41 and #42 own downloader, catalog,
+browser cache, and eviction behavior.
+
 ```json
 {
   "schemaVersion": "honua.scene-package.v1",
