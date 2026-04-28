@@ -107,6 +107,7 @@ tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation (19 tests)
   Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (40 tests)
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
 proto/
   honua/v1/                   gRPC protocol definitions
@@ -127,8 +128,8 @@ without the MAUI workload.
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
-74 tests across 4 test projects. `dotnet test Honua.Mobile.sln` runs the
-SDK, Field, and Offline suites; run the Smoke test project separately.
+86 tests across 5 test projects. `dotnet test Honua.Mobile.sln` runs the
+SDK, Field, Offline, and MAUI suites; run the Smoke test project separately.
 
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
 no implementation yet.
