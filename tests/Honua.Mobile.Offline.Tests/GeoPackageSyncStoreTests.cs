@@ -1,4 +1,6 @@
+using System.Globalization;
 using Honua.Mobile.Offline.GeoPackage;
+using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -78,7 +80,7 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
         {
             DatabasePath = _databasePath,
-            InProgressLeaseTimeout = TimeSpan.FromMilliseconds(150),
+            InProgressLeaseTimeout = TimeSpan.FromMinutes(5),
         });
         await store.InitializeAsync();
 
@@ -100,7 +102,7 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         var immediateClaim = await store.GetPendingAsync(1);
         Assert.Empty(immediateClaim);
 
-        await Task.Delay(250);
+        await SetClaimedAtUtcAsync("stale-op", DateTimeOffset.UtcNow.AddMinutes(-10));
 
         var reclaimed = await store.GetPendingAsync(1);
         Assert.Single(reclaimed);
@@ -130,6 +132,35 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         Assert.Equal(10, mapAreas[0].MinZoom);
     }
 
+    [Fact]
+    public async Task InitializeAsync_HandlesDatabasePathsWithConnectionStringCharacters()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-mobile-{Guid.NewGuid():N};Mode=Memory.gpkg");
+
+        try
+        {
+            var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+            {
+                DatabasePath = databasePath,
+            });
+
+            await store.InitializeAsync();
+            await store.SetSyncCursorAsync("replica", "cursor-1");
+
+            var cursor = await store.GetSyncCursorAsync("replica");
+
+            Assert.Equal("cursor-1", cursor);
+            Assert.True(File.Exists(databasePath));
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (File.Exists(_databasePath))
@@ -144,5 +175,27 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         {
             DatabasePath = _databasePath,
         });
+    }
+
+    private async Task SetClaimedAtUtcAsync(string operationId, DateTimeOffset claimedAtUtc)
+    {
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+        };
+
+        await using var connection = new SqliteConnection(builder.ToString());
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+UPDATE honua_sync_queue
+SET claimed_at_utc = $claimed_at_utc
+WHERE operation_id = $operation_id;
+";
+        command.Parameters.AddWithValue("$claimed_at_utc", claimedAtUtc.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$operation_id", operationId);
+
+        await command.ExecuteNonQueryAsync();
     }
 }
