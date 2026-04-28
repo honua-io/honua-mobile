@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "honua.scene-package.v1",
+  "packageId": "pkg_downtown_honolulu_2026_04",
+  "sceneId": "downtown-honolulu",
+  "displayName": "Downtown Honolulu 3D",
+  "editionGate": "pro",
+  "serverRevision": "scene-rev-42",
+  "createdAtUtc": "2026-04-28T00:00:00Z",
+  "staleAfterUtc": "2026-05-28T00:00:00Z",
+  "offlineUseExpiresAtUtc": "2026-06-27T00:00:00Z",
+  "authExpiresAtUtc": "2026-04-29T00:00:00Z",
+  "extent": {
+    "minLongitude": -157.872,
+    "minLatitude": 21.293,
+    "maxLongitude": -157.841,
+    "maxLatitude": 21.319
+  },
+  "lod": {
+    "minZoom": 12,
+    "maxZoom": 17,
+    "maxGeometricErrorMeters": 4.0
+  },
+  "byteBudget": {
+    "maxPackageBytes": 2147483648,
+    "declaredBytes": 1000000
+  },
+  "attribution": [
+    "Honua",
+    "City and County source data"
+  ],
+  "assets": [
+    {
+      "key": "scene-metadata",
+      "type": "scene-metadata",
+      "role": "metadata",
+      "path": "metadata/scene.json",
+      "contentType": "application/json",
+      "bytes": 4832,
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "etag": "\"scene-42\"",
+      "required": true
+    },
+    {
+      "key": "buildings-tileset",
+      "type": "3d-tileset",
+      "role": "primary-tileset",
+      "path": "tilesets/buildings/tileset.json",
+      "contentType": "application/json",
+      "bytes": 10455,
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "required": true
+    },
+    {
+      "key": "terrain-12-742-1619",
+      "type": "terrain-tile",
+      "role": "terrain",
+      "path": "terrain/12/742/1619.terrain",
+      "contentType": "application/vnd.quantized-mesh",
+      "bytes": 32984,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "required": false
+    }
+  ]
+}
