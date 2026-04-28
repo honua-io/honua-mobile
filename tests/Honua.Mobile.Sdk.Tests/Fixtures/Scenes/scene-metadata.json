@@ -1,0 +1,39 @@
+{
+  "id": "downtown-honolulu",
+  "name": "Downtown Honolulu",
+  "description": "Photogrammetry and terrain sample for Honolulu urban planning.",
+  "center": {
+    "latitude": 21.3069,
+    "longitude": -157.8583,
+    "height": 1200
+  },
+  "bounds": {
+    "west": -157.875,
+    "south": 21.290,
+    "east": -157.835,
+    "north": 21.325
+  },
+  "tileset": {
+    "url": "https://api.honua.test/api/scenes/downtown-honolulu/tileset.json",
+    "format": "3d-tiles",
+    "mediaType": "application/json",
+    "requiresAuthentication": true
+  },
+  "terrain": {
+    "url": "https://api.honua.test/api/scenes/downtown-honolulu/terrain",
+    "format": "quantized-mesh",
+    "requiresAuthentication": true
+  },
+  "capabilities": {
+    "3d-tiles": true,
+    "terrain": true
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://api.honua.test/api/scenes/downtown-honolulu",
+      "type": "application/json",
+      "title": "Scene metadata"
+    }
+  ]
+}

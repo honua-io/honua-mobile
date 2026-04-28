@@ -7,6 +7,7 @@ using Grpc.Net.Client;
 using Honua.Mobile.Sdk.Grpc;
 using Honua.Mobile.Sdk.Models;
 using Honua.Mobile.Sdk.Routing;
+using Honua.Mobile.Sdk.Scenes;
 using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk;
@@ -46,12 +47,18 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
 
         Routing = new HonuaRoutingClient(this, options);
+        Scenes = new HonuaSceneService(this, options);
     }
 
     /// <summary>
     /// Routing and network-analysis client for directions, service areas, closest facility, and route optimization.
     /// </summary>
     public HonuaRoutingClient Routing { get; }
+
+    /// <summary>
+    /// Scene metadata discovery client for 3D Tiles, terrain, and related render-ready endpoints.
+    /// </summary>
+    public HonuaSceneService Scenes { get; }
 
     /// <summary>
     /// Queries features from a feature service layer, preferring gRPC when available.
@@ -366,7 +373,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 raw);
         }
 
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+        try
+        {
+            return JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+        }
+        catch (JsonException ex)
+        {
+            throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
+        }
     }
 
     private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)

@@ -82,4 +82,9 @@ public sealed class HonuaMobileClientOptions
     /// NAServer closest-facility layer name used for nearest-facility requests.
     /// </summary>
     public string RoutingClosestFacilityLayerName { get; init; } = "ClosestFacility";
+
+    /// <summary>
+    /// Base REST path for Honua scene metadata discovery endpoints.
+    /// </summary>
+    public string SceneApiPath { get; init; } = "/api/scenes";
 }

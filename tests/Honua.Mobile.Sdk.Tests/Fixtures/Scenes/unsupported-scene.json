@@ -1,0 +1,5 @@
+{
+  "sceneId": "terrain-only",
+  "terrainUrl": "https://api.honua.test/api/scenes/terrain-only/terrain",
+  "capabilities": ["terrain"]
+}

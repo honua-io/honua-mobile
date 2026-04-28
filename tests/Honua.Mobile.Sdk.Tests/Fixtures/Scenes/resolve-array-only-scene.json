@@ -1,0 +1,19 @@
+{
+  "sceneId": "array-only",
+  "auth": {
+    "requiresAuthentication": true,
+    "schemes": ["Bearer"]
+  },
+  "endpoints": [
+    {
+      "kind": "3d-tiles",
+      "url": "https://api.honua.test/api/scenes/array-only/tileset.json",
+      "format": "3d-tiles"
+    },
+    {
+      "kind": "terrain",
+      "url": "https://api.honua.test/api/scenes/array-only/terrain",
+      "format": "quantized-mesh"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Routing;
+using Honua.Mobile.Sdk.Scenes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -66,6 +67,20 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton(sp => sp.GetRequiredService<HonuaMobileClient>().Routing);
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="IHonuaSceneService"/> from the configured <see cref="HonuaMobileClient"/>.
+    /// Requires <see cref="AddHonuaMobileSdk"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaScenes(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<IHonuaSceneService>(sp => sp.GetRequiredService<HonuaMobileClient>().Scenes);
         return services;
     }
 
