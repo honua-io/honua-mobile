@@ -158,6 +158,13 @@ Download behavior:
 Optional assets may fail without invalidating the package, but the local catalog
 must record the missing keys so the renderer can avoid silent cache misses.
 
+The .NET/MAUI runtime service for #41 is `IHonuaScenePackageDownloader`, backed
+by `ScenePackageDownloader` in `Honua.Mobile.Offline.ScenePackages`. MAUI hosts
+register it with `AddHonuaScenePackageDownload()` after
+`AddHonuaGeoPackageOfflineSync(...)`. Downloaded packages are cataloged as
+`ScenePackageRecord` rows, including package footprint bytes and
+`MissingOptionalAssetKeys` for renderer fallback decisions.
+
 ## Invalidation And Expiry
 
 Package state is derived from manifest fields and local validation:

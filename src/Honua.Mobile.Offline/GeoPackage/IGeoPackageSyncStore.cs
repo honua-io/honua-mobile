@@ -89,6 +89,27 @@ public interface IGeoPackageSyncStore
     Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Inserts or updates a downloaded immutable scene package record.
+    /// </summary>
+    /// <param name="scenePackage">The scene package metadata to persist.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task UpsertScenePackageAsync(ScenePackageRecord scenePackage, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists all downloaded scene packages ordered by scene and package ID.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>All stored scene package records.</returns>
+    Task<IReadOnlyList<ScenePackageRecord>> ListScenePackagesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes scene package metadata from the catalog.
+    /// </summary>
+    /// <param name="packageId">The package ID to remove.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task DeleteScenePackageAsync(string packageId, CancellationToken ct = default);
+
+    /// <summary>
     /// Inserts or updates a replicated feature in the local cache.
     /// The object ID is extracted from the JSON payload.
     /// </summary>

@@ -1,3 +1,5 @@
+using Honua.Mobile.Sdk.Scenes;
+
 namespace Honua.Mobile.Offline.GeoPackage;
 
 /// <summary>
@@ -126,6 +128,102 @@ public sealed class MapAreaPackage
 
     /// <summary>
     /// UTC timestamp of the last update to this map area package.
+    /// </summary>
+    public DateTimeOffset UpdatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// Metadata for a downloaded immutable offline 3D scene package.
+/// </summary>
+public sealed class ScenePackageRecord
+{
+    /// <summary>
+    /// Stable package identifier from the scene package manifest.
+    /// </summary>
+    public required string PackageId { get; init; }
+
+    /// <summary>
+    /// Scene identifier rendered by this offline package.
+    /// </summary>
+    public required string SceneId { get; init; }
+
+    /// <summary>
+    /// Human-readable package name.
+    /// </summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>
+    /// Required product edition for package use.
+    /// </summary>
+    public required string EditionGate { get; init; }
+
+    /// <summary>
+    /// Server scene revision represented by this package.
+    /// </summary>
+    public required string ServerRevision { get; init; }
+
+    /// <summary>
+    /// WGS84 package extent.
+    /// </summary>
+    public HonuaSceneBounds? Extent { get; init; }
+
+    /// <summary>
+    /// Directory containing package-local scene assets.
+    /// </summary>
+    public required string PackageDirectory { get; init; }
+
+    /// <summary>
+    /// File path to the downloaded manifest JSON.
+    /// </summary>
+    public required string ManifestPath { get; init; }
+
+    /// <summary>
+    /// Derived validation state for the local package.
+    /// </summary>
+    public HonuaScenePackageState State { get; init; }
+
+    /// <summary>
+    /// Server-declared expected package size in bytes.
+    /// </summary>
+    public long DeclaredBytes { get; init; }
+
+    /// <summary>
+    /// Bytes stored on disk for downloaded assets.
+    /// </summary>
+    public long DownloadedBytes { get; init; }
+
+    /// <summary>
+    /// Number of required manifest assets.
+    /// </summary>
+    public int RequiredAssetCount { get; init; }
+
+    /// <summary>
+    /// Number of assets downloaded by this client.
+    /// </summary>
+    public int DownloadedAssetCount { get; init; }
+
+    /// <summary>
+    /// Optional manifest asset keys that were not downloaded.
+    /// </summary>
+    public IReadOnlyList<string> MissingOptionalAssetKeys { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Time after which the package should surface stale state.
+    /// </summary>
+    public DateTimeOffset? StaleAfterUtc { get; init; }
+
+    /// <summary>
+    /// Time after which protected offline package content must not render without revalidation.
+    /// </summary>
+    public DateTimeOffset? OfflineUseExpiresAtUtc { get; init; }
+
+    /// <summary>
+    /// Expiry for download or refresh credentials.
+    /// </summary>
+    public DateTimeOffset? AuthExpiresAtUtc { get; init; }
+
+    /// <summary>
+    /// Last catalog update timestamp.
     /// </summary>
     public DateTimeOffset UpdatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
