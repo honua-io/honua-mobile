@@ -12,7 +12,7 @@ dynamic forms, and background sync.
 | **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
-| **@honua/embed** | Framework-agnostic `<honua-map>` web component for ISV embeds |
+| **@honua/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components for ISV embeds |
 
 ## Quick Start
 
@@ -120,7 +120,7 @@ var reachable = await client.Routing.GetServiceAreaAsync(depot, TimeSpan.FromMin
 ```
 src/
   Honua.Embed/                Embeddable map web component package
-    tests/                    Web component DOM behavior tests (9 tests)
+    tests/                    Web component DOM behavior tests (14 tests)
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Field/         Field collection components
   Honua.Mobile.Offline/       GeoPackage sync engine

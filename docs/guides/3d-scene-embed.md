@@ -1,0 +1,45 @@
+# 3D Scene Embed
+
+`@honua/embed` includes a CesiumJS-backed `<honua-scene>` custom element for loading external or Honua-hosted 3D Tiles datasets.
+
+```html
+<script type="module">
+  import '@honua/embed';
+</script>
+
+<honua-scene
+  tileset-url="https://example.com/tileset.json"
+  center="21.3069,-157.8583"
+  height="1800"
+  heading="20"
+  pitch="-35">
+</honua-scene>
+```
+
+CesiumJS is Apache-2.0 open source. The component does not require Cesium ion for external or Honua-hosted 3D Tiles URLs. Integrators can pass `ion-token` only when they choose to use Cesium ion assets or services.
+
+## Events
+
+```js
+const scene = document.querySelector('honua-scene');
+
+scene.addEventListener('honua-scene-ready', (event) => {
+  console.log(event.detail.config);
+});
+
+scene.addEventListener('honua-scene-load-error', (event) => {
+  console.error(event.detail.source, event.detail.message);
+});
+
+scene.addEventListener('honua-scene-identify', (event) => {
+  console.log(event.detail.x, event.detail.y, event.detail.picked);
+});
+```
+
+## Asset Packaging
+
+The package build copies Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets` into `dist/cesium`. By default, `<honua-scene>` resolves Cesium runtime assets relative to the built `dist` module. Use `cesium-base-url` when hosting those assets from a CDN or another static path.
+
+## Current Scope
+
+This first slice proves client-side 3D Tiles loading and scene events. Honua-hosted scene registry, terrain tiles, elevation APIs, 3D Tiles generation, and I3S compatibility are tracked in the linked server backlog.

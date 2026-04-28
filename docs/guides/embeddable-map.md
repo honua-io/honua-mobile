@@ -37,3 +37,5 @@ map.addEventListener('honua-map-identify', (event) => {
 ## First Slice Scope
 
 This initial package establishes the web component API, Shadow DOM encapsulation, declarative attributes, theme hooks, accessible controls, and test coverage. Follow-on work can add a production map renderer, feature loading, generated embed snippets, analytics, and framework-specific wrappers.
+
+For 3D Tiles and CesiumJS-based scenes, use the [`<honua-scene>` guide](3d-scene-embed.md).

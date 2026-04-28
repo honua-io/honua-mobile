@@ -17,13 +17,16 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && node scripts/copy-cesium-assets.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [
     "honua",
     "map",
+    "scene",
+    "cesium",
+    "3d-tiles",
     "web-component",
     "gis"
   ],
@@ -31,6 +34,10 @@
   "devDependencies": {
     "happy-dom": "^20.0.10",
     "typescript": "^5.9.3",
+    "vite": "^8.0.10",
     "vitest": "^4.0.15"
+  },
+  "dependencies": {
+    "cesium": "^1.140.0"
   }
 }
