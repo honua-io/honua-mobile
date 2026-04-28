@@ -1,6 +1,6 @@
 # @honua/embed
 
-Framework-agnostic web component for embedding Honua map views in SaaS and ISV applications.
+Framework-agnostic web components for embedding Honua map and 3D scene views in SaaS and ISV applications.
 
 ## Install
 
@@ -8,7 +8,7 @@ Framework-agnostic web component for embedding Honua map views in SaaS and ISV a
 npm install @honua/embed
 ```
 
-## Use
+## Map Use
 
 ```html
 <script type="module">
@@ -28,7 +28,25 @@ npm install @honua/embed
 </honua-map>
 ```
 
-## Attributes
+## Scene Use
+
+```html
+<script type="module">
+  import '@honua/embed';
+</script>
+
+<honua-scene
+  tileset-url="https://example.com/tileset.json"
+  center="21.3069,-157.8583"
+  height="1800"
+  heading="20"
+  pitch="-35">
+</honua-scene>
+```
+
+`<honua-scene>` uses CesiumJS from npm and the package build copies Cesium runtime assets into `dist/cesium`. CesiumJS is Apache-2.0 open source; Cesium ion is optional and only needed when an integrator chooses ion-hosted assets or services.
+
+## Map Attributes
 
 | Attribute | Purpose |
 | --- | --- |
@@ -45,6 +63,22 @@ npm install @honua/embed
 | `attribution` | Optional attribution text. No Honua branding is shown by default. |
 | `theme` | `light` or `dark`. |
 
+## Scene Attributes
+
+| Attribute | Purpose |
+| --- | --- |
+| `tileset-url` | External or Honua-hosted 3D Tiles `tileset.json` URL. |
+| `terrain-url` | Optional Cesium terrain provider URL. |
+| `ion-token` | Optional Cesium ion token. It is not rendered. |
+| `cesium-base-url` | Optional URL for hosted Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets`. |
+| `center` | Initial latitude/longitude pair, for example `21.3069,-157.8583`. |
+| `height` | Initial camera height in meters. |
+| `heading` | Initial camera heading in degrees. |
+| `pitch` | Initial camera pitch in degrees. |
+| `roll` | Initial camera roll in degrees. |
+| `autoload` | Set to `false`, `0`, or `no` to disable automatic loading. |
+| `theme` | `light` or `dark`. |
+
 ## Events
 
 | Event | Detail |
@@ -53,6 +87,11 @@ npm install @honua/embed
 | `honua-map-config-change` | Current `HonuaMapConfig`. |
 | `honua-map-search` | `{ query, config }`. |
 | `honua-map-identify` | `{ x, y, config }`. |
+| `honua-scene-ready` | `{ config, widget, tileset }`. |
+| `honua-scene-config-change` | Current `HonuaSceneConfig`. |
+| `honua-scene-load-error` | `{ source, message, config, error }`. |
+| `honua-scene-camera-change` | `{ center, height, orientation, config }`. |
+| `honua-scene-identify` | `{ x, y, picked, config }`. |
 
 ## Styling
 
@@ -65,6 +104,12 @@ honua-map {
   --honua-map-border: rgba(19, 33, 44, 0.16);
   --honua-map-font-family: Inter, sans-serif;
 }
+
+honua-scene {
+  --honua-scene-accent: #4fb4c8;
+  --honua-scene-background: #101820;
+  --honua-scene-font-family: Inter, sans-serif;
+}
 ```
 
-This first slice provides the embeddable API, accessibility shell, theming, and integration events. A future slice can connect the visual surface to a full map renderer and Honua feature/query endpoints.
+This package provides embeddable APIs, accessibility shells, theming, and integration events. Follow-on work can connect the 2D map surface to Honua feature/query endpoints and wire `<honua-scene>` to Honua-hosted scene registries, terrain services, and generated 3D Tiles.
