@@ -98,6 +98,40 @@ public sealed class ScenePackageDownloaderTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadAsync_PackageDirectoryUsesCollisionSafePackageId()
+    {
+        var payload = Encoding.UTF8.GetBytes("metadata");
+        var dottedManifest = CreateManifest(
+            CreateAsset("scene-metadata", HonuaScenePackageAssetTypes.SceneMetadata, "metadata/scene.json", payload),
+            packageId: "pkg.v1");
+        var underscoredManifest = CreateManifest(
+            CreateAsset("scene-metadata", HonuaScenePackageAssetTypes.SceneMetadata, "metadata/scene.json", payload),
+            packageId: "pkg_v1");
+        var outputDirectory = Path.Combine(_rootDirectory, "packages");
+        var store = CreateStore();
+        var httpClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            });
+        }));
+        var downloader = new ScenePackageDownloader(httpClient, store);
+
+        var dotted = await downloader.DownloadAsync(CreateRequest(dottedManifest, outputDirectory: outputDirectory));
+        var underscored = await downloader.DownloadAsync(CreateRequest(underscoredManifest, outputDirectory: outputDirectory));
+
+        Assert.NotEqual(dotted.PackageDirectory, underscored.PackageDirectory);
+        Assert.True(File.Exists(Path.Combine(dotted.PackageDirectory, "metadata", "scene.json")));
+        Assert.True(File.Exists(Path.Combine(underscored.PackageDirectory, "metadata", "scene.json")));
+        var packageIds = (await store.ListScenePackagesAsync())
+            .Select(record => record.PackageId)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(["pkg.v1", "pkg_v1"], packageIds);
+    }
+
+    [Fact]
     public async Task DownloadAsync_OptionalAssetFailure_RegistersMissingKey()
     {
         var metadata = Encoding.UTF8.GetBytes("""{"sceneId":"downtown-honolulu"}""");
@@ -184,6 +218,35 @@ public sealed class ScenePackageDownloaderTests : IDisposable
             downloader.DownloadAsync(CreateRequest(manifest, outputDirectory: outputDirectory)));
 
         Assert.Contains("ETag", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(outputDirectory, "pkg_downtown_honolulu_2026_04.partial")));
+    }
+
+    [Fact]
+    public async Task DownloadAsync_CatalogFailure_RestoresPreviousReadyPackage()
+    {
+        var oldPayload = Encoding.UTF8.GetBytes("old-package");
+        var newPayload = Encoding.UTF8.GetBytes("new-package");
+        var outputDirectory = Path.Combine(_rootDirectory, "packages");
+        var readyPath = Path.Combine(outputDirectory, "pkg_downtown_honolulu_2026_04");
+        var readyAssetPath = Path.Combine(readyPath, "metadata", "scene.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(readyAssetPath)!);
+        await File.WriteAllBytesAsync(readyAssetPath, oldPayload);
+        var manifest = CreateManifest(
+            CreateAsset("scene-metadata", HonuaScenePackageAssetTypes.SceneMetadata, "metadata/scene.json", newPayload));
+        var httpClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(newPayload),
+            });
+        }));
+        var downloader = new ScenePackageDownloader(httpClient, new ThrowingScenePackageStore());
+
+        var ex = await Assert.ThrowsAsync<IOException>(() =>
+            downloader.DownloadAsync(CreateRequest(manifest, outputDirectory: outputDirectory)));
+
+        Assert.Contains("catalog unavailable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(oldPayload, await File.ReadAllBytesAsync(readyAssetPath));
         Assert.False(Directory.Exists(Path.Combine(outputDirectory, "pkg_downtown_honolulu_2026_04.partial")));
     }
 
@@ -293,8 +356,9 @@ public sealed class ScenePackageDownloaderTests : IDisposable
         HonuaScenePackageAsset asset,
         DateTimeOffset? authExpiresAtUtc = null,
         long? maxPackageBytes = null,
-        long? declaredBytes = null)
-        => CreateManifest([asset], authExpiresAtUtc, maxPackageBytes, declaredBytes);
+        long? declaredBytes = null,
+        string packageId = "pkg_downtown_honolulu_2026_04")
+        => CreateManifest([asset], authExpiresAtUtc, maxPackageBytes, declaredBytes, packageId);
 
     private static HonuaScenePackageManifest CreateManifest(
         HonuaScenePackageAsset firstAsset,
@@ -305,13 +369,14 @@ public sealed class ScenePackageDownloaderTests : IDisposable
         IReadOnlyList<HonuaScenePackageAsset> assets,
         DateTimeOffset? authExpiresAtUtc = null,
         long? maxPackageBytes = null,
-        long? declaredBytes = null)
+        long? declaredBytes = null,
+        string packageId = "pkg_downtown_honolulu_2026_04")
     {
         var assetBytes = assets.Sum(asset => asset.Bytes ?? 0);
         return new HonuaScenePackageManifest
         {
             SchemaVersion = HonuaScenePackageManifest.CurrentSchemaVersion,
-            PackageId = "pkg_downtown_honolulu_2026_04",
+            PackageId = packageId,
             SceneId = "downtown-honolulu",
             DisplayName = "Downtown Honolulu 3D",
             EditionGate = HonuaScenePackageEditionGates.Pro,
@@ -382,5 +447,59 @@ public sealed class ScenePackageDownloaderTests : IDisposable
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => _handler(request, cancellationToken);
+    }
+
+    private sealed class ThrowingScenePackageStore : IGeoPackageSyncStore
+    {
+        public Task InitializeAsync(CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task UpsertScenePackageAsync(ScenePackageRecord scenePackage, CancellationToken ct = default)
+            => throw new IOException("catalog unavailable");
+
+        public Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<int> CountPendingAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task MarkSucceededAsync(string operationId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task MarkPendingAsync(string operationId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<string?> GetSyncCursorAsync(string cursorKey, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task UpsertMapAreaAsync(MapAreaPackage mapArea, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ScenePackageRecord>> ListScenePackagesAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task DeleteScenePackageAsync(string packageId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 }

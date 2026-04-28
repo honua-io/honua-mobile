@@ -48,7 +48,7 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         ValidateRequest(request, utcNow);
 
         var outputDirectory = NormalizeOutputDirectory(request.OutputDirectory);
-        var safePackageId = SanitizePackageId(request.Manifest.PackageId!);
+        var safePackageId = EncodePackageIdForPath(request.Manifest.PackageId!);
         var stagingDirectory = Path.Combine(outputDirectory, $"{safePackageId}.partial");
         var readyDirectory = Path.Combine(outputDirectory, safePackageId);
         var baseUri = EnsureDirectoryUri(request.AssetBaseUri);
@@ -100,7 +100,6 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
             }
 
             var manifestPath = await WriteManifestAsync(stagingDirectory, request.Manifest, ct).ConfigureAwait(false);
-            ReplaceReadyDirectory(stagingDirectory, readyDirectory);
             manifestPath = Path.Combine(readyDirectory, "manifest.json");
 
             var state = request.Manifest.Validate(utcNow, downloadedAssetKeys).State;
@@ -116,7 +115,7 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
                 utcNow);
 
             await _syncStore.InitializeAsync(ct).ConfigureAwait(false);
-            await _syncStore.UpsertScenePackageAsync(catalogRecord, ct).ConfigureAwait(false);
+            await PromotePackageAsync(stagingDirectory, readyDirectory, catalogRecord, ct).ConfigureAwait(false);
 
             return new ScenePackageDownloadResult
             {
@@ -451,33 +450,58 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         return normalized;
     }
 
-    private static string SanitizePackageId(string packageId)
+    private async Task PromotePackageAsync(
+        string stagingDirectory,
+        string readyDirectory,
+        ScenePackageRecord catalogRecord,
+        CancellationToken ct)
     {
-        var invalidCharacters = Path.GetInvalidFileNameChars();
-        var builder = new StringBuilder(packageId.Length);
+        var backupDirectory = MoveReadyDirectoryAside(readyDirectory);
+        var readyDirectoryPromoted = false;
 
-        foreach (var character in packageId.Trim())
+        try
         {
-            if (character == Path.DirectorySeparatorChar ||
-                character == Path.AltDirectorySeparatorChar ||
-                character == ':' ||
-                character == '.' ||
-                Array.IndexOf(invalidCharacters, character) >= 0)
+            Directory.Move(stagingDirectory, readyDirectory);
+            readyDirectoryPromoted = true;
+            await _syncStore.UpsertScenePackageAsync(catalogRecord, ct).ConfigureAwait(false);
+            DeleteDirectoryIfExists(backupDirectory);
+        }
+        catch
+        {
+            if (readyDirectoryPromoted)
             {
-                builder.Append('_');
-                continue;
+                DeleteDirectoryIfExists(readyDirectory);
             }
 
-            builder.Append(character);
+            RestoreReadyDirectoryBackup(backupDirectory, readyDirectory);
+            throw;
         }
+    }
 
-        var safePackageId = builder.ToString().Trim('.');
-        if (string.IsNullOrWhiteSpace(safePackageId))
+    private static string EncodePackageIdForPath(string packageId)
+    {
+        var trimmed = packageId.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
         {
             throw new InvalidOperationException("Package ID must include at least one valid file-name character.");
         }
 
-        return safePackageId;
+        var bytes = Encoding.UTF8.GetBytes(trimmed);
+        var builder = new StringBuilder(bytes.Length);
+        foreach (var value in bytes)
+        {
+            var character = (char)value;
+            if (char.IsAsciiLetterOrDigit(character) || character is '-' or '_')
+            {
+                builder.Append(character);
+                continue;
+            }
+
+            builder.Append('~');
+            builder.Append(value.ToString("X2", CultureInfo.InvariantCulture));
+        }
+
+        return builder.ToString();
     }
 
     private static Uri EnsureDirectoryUri(Uri uri)
@@ -530,10 +554,27 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         return fullPath;
     }
 
-    private static void ReplaceReadyDirectory(string stagingDirectory, string readyDirectory)
+    private static string? MoveReadyDirectoryAside(string readyDirectory)
     {
+        if (!Directory.Exists(readyDirectory))
+        {
+            return null;
+        }
+
+        var backupDirectory = readyDirectory + $".replacing.{Guid.NewGuid():N}";
+        Directory.Move(readyDirectory, backupDirectory);
+        return backupDirectory;
+    }
+
+    private static void RestoreReadyDirectoryBackup(string? backupDirectory, string readyDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(backupDirectory) || !Directory.Exists(backupDirectory))
+        {
+            return;
+        }
+
         DeleteDirectoryIfExists(readyDirectory);
-        Directory.Move(stagingDirectory, readyDirectory);
+        Directory.Move(backupDirectory, readyDirectory);
     }
 
     private static void DeletePartialAsset(string stagingDirectory, string? assetPath)
@@ -550,9 +591,9 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         }
     }
 
-    private static void DeleteDirectoryIfExists(string path)
+    private static void DeleteDirectoryIfExists(string? path)
     {
-        if (Directory.Exists(path))
+        if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
         {
             Directory.Delete(path, recursive: true);
         }
