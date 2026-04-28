@@ -136,6 +136,40 @@ public sealed class HonuaSceneServiceTests
     }
 
     [Fact]
+    public async Task ResolveSceneAsync_EndpointTypeDoesNotOverrideInheritedAccess()
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse("""
+                {
+                  "sceneId": "endpoint-type-inheritance",
+                  "access": {
+                    "mode": "signed-url",
+                    "expiresAtUtc": "2026-04-28T18:30:00Z"
+                  },
+                  "endpoints": [
+                    {
+                      "type": "3d-tiles",
+                      "url": "https://api.honua.test/api/scenes/endpoint-type-inheritance/tileset.json",
+                      "format": "3d-tiles",
+                      "requiresAuthentication": true
+                    }
+                  ]
+                }
+                """));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync("endpoint-type-inheritance");
+
+        Assert.Equal(HonuaSceneAccessModes.SignedUrl, resolution.Access!.Mode);
+        var endpoint = Assert.Single(resolution.Endpoints);
+        Assert.Equal(HonuaSceneCapabilities.ThreeDimensionalTiles, endpoint.Kind);
+        Assert.Same(resolution.Access, endpoint.Access);
+        Assert.True(endpoint.Access!.IsBrowserSafe);
+    }
+
+    [Fact]
     public async Task ResolveSceneAsync_EndpointAccessOverridesRootForNativeHeaders()
     {
         var handler = new RecordingHandler((_, _) =>

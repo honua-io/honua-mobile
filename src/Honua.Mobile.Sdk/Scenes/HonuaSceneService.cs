@@ -486,7 +486,9 @@ internal static class HonuaSceneJsonParser
             TryGetProperty(root, "access", out var accessElement) &&
             accessElement.ValueKind == JsonValueKind.Object;
         var access = hasAccessObject ? accessElement : root;
-        var rawMode = GetString(access, "mode", "accessMode", "type") ?? GetString(root, "accessMode");
+        var rawMode = hasAccessObject
+            ? GetString(access, "mode", "accessMode", "type")
+            : GetString(access, "mode", "accessMode") ?? GetString(root, "accessMode");
 
         if (string.IsNullOrWhiteSpace(rawMode) && !hasAccessObject)
         {
