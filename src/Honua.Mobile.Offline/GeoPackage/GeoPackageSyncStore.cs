@@ -632,5 +632,13 @@ LIMIT $limit;
         await alterCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    private SqliteConnection OpenConnection() => new($"Data Source={_options.DatabasePath}");
+    private SqliteConnection OpenConnection()
+    {
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = _options.DatabasePath,
+        };
+
+        return new SqliteConnection(builder.ToString());
+    }
 }

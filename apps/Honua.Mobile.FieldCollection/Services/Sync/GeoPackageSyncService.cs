@@ -11,16 +11,28 @@ using StorageSyncSessionStatus = Honua.Mobile.FieldCollection.Services.Storage.M
 namespace Honua.Mobile.FieldCollection.Services.Sync;
 
 /// <summary>
+/// Uploads local field collection changes to the remote sync service.
+/// </summary>
+public interface IFieldCollectionChangeUploader
+{
+    Task<bool> UploadChangeAsync(StorageChangeRecord change, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Real implementation of sync service with GeoPackage-based delta sync
 /// Implements last-write-wins conflict resolution with manual merge support
 /// </summary>
-public partial class GeoPackageSyncService : ObservableObject, ISyncService
+public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDisposable
 {
     private readonly GeoPackageStorageService _storage;
     private readonly IAuthenticationService _authService;
     private readonly IConnectivityService _connectivityService;
+    private readonly IFieldCollectionChangeUploader _changeUploader;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
+    private readonly CancellationTokenSource _pendingChangesCancellation = new();
+    private readonly Task _pendingChangesTask;
     private CancellationTokenSource? _syncCancellation;
+    private bool _disposed;
 
     [ObservableProperty]
     private bool isSyncing;
@@ -43,29 +55,47 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
     public GeoPackageSyncService(
         GeoPackageStorageService storage,
         IAuthenticationService authService,
-        IConnectivityService connectivityService)
+        IConnectivityService connectivityService,
+        IFieldCollectionChangeUploader? changeUploader = null)
     {
         _storage = storage;
         _authService = authService;
         _connectivityService = connectivityService;
+        _changeUploader = changeUploader ?? new UnconfiguredFieldCollectionChangeUploader();
 
         // Update pending changes count periodically
-        _ = Task.Run(UpdatePendingChangesAsync);
+        _pendingChangesTask = Task.Run(() => UpdatePendingChangesAsync(_pendingChangesCancellation.Token));
     }
 
-    private async Task UpdatePendingChangesAsync()
+    private async Task UpdatePendingChangesAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 var changes = await _storage.GetPendingChangesAsync();
                 PendingChangesCount = changes.Count;
-                await Task.Delay(5000); // Update every 5 seconds
             }
-            catch
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Ignore errors in background task
+                break;
+            }
+            catch (ObjectDisposedException) when (_disposed)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating pending changes count: {ex.Message}");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
         }
     }
@@ -102,14 +132,14 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
                 // Phase 1: Pull changes from server
                 Status = SyncStatus.PullingChanges;
                 SyncMessage = "Downloading changes from server...";
-                var pullResult = await PullChangesInternalAsync(session, _syncCancellation.Token);
+                await PullChangesInternalAsync(session, _syncCancellation.Token);
 
                 SyncProgress = 0.5;
 
                 // Phase 2: Push local changes
                 Status = SyncStatus.PushingChanges;
                 SyncMessage = "Uploading changes to server...";
-                var pushResult = await PushChangesInternalAsync(session, _syncCancellation.Token);
+                await PushChangesInternalAsync(session, _syncCancellation.Token);
 
                 SyncProgress = 0.8;
 
@@ -168,6 +198,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             Status = SyncStatus.Idle;
             SyncProgress = 0;
             SyncMessage = null;
+            _syncCancellation?.Dispose();
+            _syncCancellation = null;
             _syncLock.Release();
         }
     }
@@ -197,7 +229,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             IsSyncing = true;
             Status = SyncStatus.PullingChanges;
 
-            var result = await PullChangesInternalAsync(session, _syncCancellation.Token);
+            await PullChangesInternalAsync(session, _syncCancellation.Token);
             await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
             LastSyncTime = DateTime.UtcNow;
@@ -221,6 +253,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         {
             IsSyncing = false;
             Status = SyncStatus.Idle;
+            _syncCancellation?.Dispose();
+            _syncCancellation = null;
             _syncLock.Release();
         }
     }
@@ -317,6 +351,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         {
             IsSyncing = false;
             Status = SyncStatus.Idle;
+            _syncCancellation?.Dispose();
+            _syncCancellation = null;
             _syncLock.Release();
         }
     }
@@ -332,8 +368,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // In a real implementation, this would send to server via gRPC
-                var success = await SendChangeToServerAsync(change);
+                var success = await _changeUploader.UploadChangeAsync(change, cancellationToken);
 
                 if (success)
                 {
@@ -364,11 +399,11 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
 
     #region Conflict Resolution
 
-    public async Task<IEnumerable<ConflictInfo>> GetConflictsAsync()
+    public Task<IEnumerable<ConflictInfo>> GetConflictsAsync()
     {
         // In a real implementation, query ConflictRecord table
         // For now, return empty list
-        return new List<ConflictInfo>();
+        return Task.FromResult<IEnumerable<ConflictInfo>>(new List<ConflictInfo>());
     }
 
     public async Task<bool> ResolveConflictAsync(string conflictId, ConflictResolution resolution)
@@ -436,10 +471,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         }
     }
 
-    private async Task CreateConflictRecordAsync(ServerChange serverChange, Feature localFeature, StorageSyncSession session)
+    private Task CreateConflictRecordAsync(ServerChange serverChange, Feature localFeature, StorageSyncSession session)
     {
         // Implementation would create a ConflictRecord in storage
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     #endregion
@@ -463,7 +498,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         return session;
     }
 
-    private async Task CompleteSyncSessionAsync(StorageSyncSession session, StorageSyncSessionStatus status, string? errorMessage = null)
+    private Task CompleteSyncSessionAsync(StorageSyncSession session, StorageSyncSessionStatus status, string? errorMessage = null)
     {
         session.EndTime = DateTime.UtcNow;
         session.Status = status;
@@ -471,21 +506,23 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
 
         // Update in database
         // await _storage.UpdateSyncSessionAsync(session);
+        return Task.CompletedTask;
     }
 
     #endregion
 
     #region Helper Methods
 
-    private async Task<bool> CanSyncAsync()
+    private Task<bool> CanSyncAsync()
     {
-        return _connectivityService.IsConnected && _authService.IsAuthenticated;
+        return Task.FromResult(_connectivityService.IsConnected && _authService.IsAuthenticated);
     }
 
-    public async Task CancelSyncAsync()
+    public Task CancelSyncAsync()
     {
         _syncCancellation?.Cancel();
         Status = SyncStatus.Cancelled;
+        return Task.CompletedTask;
     }
 
     private async Task<List<ServerChange>> GetServerChangesAsync(long sinceGeneration)
@@ -493,13 +530,6 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
         // Mock implementation - would call actual gRPC service
         await Task.Delay(100);
         return new List<ServerChange>();
-    }
-
-    private async Task<bool> SendChangeToServerAsync(StorageChangeRecord change)
-    {
-        // Mock implementation - would call actual gRPC service
-        await Task.Delay(50);
-        return true;
     }
 
     private async Task<long> GetLatestServerGenerationAsync()
@@ -517,6 +547,47 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService
     }
 
     #endregion
+
+    #region IDisposable
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _pendingChangesCancellation.Cancel();
+        _syncCancellation?.Cancel();
+
+        try
+        {
+            _pendingChangesTask.Wait(TimeSpan.FromSeconds(1));
+        }
+        catch (AggregateException)
+        {
+            // Background status refresh has been cancelled; preserve disposal flow.
+        }
+        finally
+        {
+            _pendingChangesCancellation.Dispose();
+            _syncCancellation?.Dispose();
+            _syncLock.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    #endregion
+}
+
+internal sealed class UnconfiguredFieldCollectionChangeUploader : IFieldCollectionChangeUploader
+{
+    public Task<bool> UploadChangeAsync(StorageChangeRecord change, CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException(
+            "Field collection change upload is not configured. Pending local changes were left unsynced.");
+    }
 }
 
 /// <summary>

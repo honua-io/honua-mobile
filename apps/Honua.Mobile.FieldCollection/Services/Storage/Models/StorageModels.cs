@@ -10,7 +10,11 @@ namespace Honua.Mobile.FieldCollection.Services.Storage.Models;
 public class LocalFeature
 {
     [PrimaryKey]
+    [Column("storage_key")]
+    public string StorageKey { get; set; } = string.Empty;
+
     [Column("id")]
+    [Indexed]
     public string Id { get; set; } = string.Empty;
 
     [Column("layer_id")]

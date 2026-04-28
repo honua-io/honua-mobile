@@ -135,6 +135,7 @@ public class DatabaseService : IDisposable
         try
         {
             // Close existing connections
+            _syncService?.Dispose();
             _storageService?.Dispose();
             _syncService = null;
             _storageService = null;
@@ -172,6 +173,7 @@ public class DatabaseService : IDisposable
 
     public void Dispose()
     {
+        _syncService?.Dispose();
         _storageService?.Dispose();
         _initLock?.Dispose();
         GC.SuppressFinalize(this);

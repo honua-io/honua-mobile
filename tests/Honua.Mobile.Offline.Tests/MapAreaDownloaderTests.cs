@@ -60,7 +60,7 @@ public sealed class MapAreaDownloaderTests : IDisposable
         Assert.Single(areas);
         Assert.Equal("oahu-urban", areas[0].AreaId);
 
-        await using var packageConnection = new SqliteConnection($"Data Source={result.GeoPackagePath}");
+        await using var packageConnection = OpenSqliteConnection(result.GeoPackagePath);
         await packageConnection.OpenAsync();
 
         await using var cmd = packageConnection.CreateCommand();
@@ -127,6 +127,55 @@ public sealed class MapAreaDownloaderTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadAsync_HandlesAreaIdsWithConnectionStringCharacters()
+    {
+        var storePath = Path.Combine(_rootDirectory, "sync-store.gpkg");
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = storePath });
+
+        var httpClient = new HttpClient(new StubHttpMessageHandler((request, _) =>
+        {
+            var payload = Encoding.UTF8.GetBytes($"payload:{request.RequestUri}");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            });
+        }));
+
+        var downloader = new MapAreaDownloader(httpClient, store);
+        var result = await downloader.DownloadAsync(new MapAreaDownloadRequest
+        {
+            AreaId = "oahu;Mode=Memory",
+            Name = "Oahu",
+            BoundingBox = new BoundingBox(-158.30, 21.20, -157.60, 21.60),
+            OutputDirectory = Path.Combine(_rootDirectory, "packages"),
+            MinZoom = 10,
+            MaxZoom = 15,
+            Layers =
+            [
+                new MapLayerDownloadSource
+                {
+                    LayerKey = "assets",
+                    SourceUrl = "https://tiles.honua.test/data",
+                    Priority = 1,
+                    Required = true,
+                },
+            ],
+        });
+
+        Assert.Contains(";Mode=Memory", Path.GetFileNameWithoutExtension(result.GeoPackagePath), StringComparison.Ordinal);
+        Assert.True(File.Exists(result.GeoPackagePath));
+
+        await using var packageConnection = OpenSqliteConnection(result.GeoPackagePath);
+        await packageConnection.OpenAsync();
+
+        await using var cmd = packageConnection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM honua_layer_payloads;";
+        var count = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
     public async Task DownloadAsync_WhenLayerPayloadExceedsLimit_ThrowsInvalidOperationException()
     {
         var storePath = Path.Combine(_rootDirectory, "sync-store.gpkg");
@@ -172,6 +221,16 @@ public sealed class MapAreaDownloaderTests : IDisposable
         {
             Directory.Delete(_rootDirectory, recursive: true);
         }
+    }
+
+    private static SqliteConnection OpenSqliteConnection(string databasePath)
+    {
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+        };
+
+        return new SqliteConnection(builder.ToString());
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

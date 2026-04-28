@@ -44,7 +44,7 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
         }
 
         var packagePath = BuildPackagePath(request.OutputDirectory, request.AreaId);
-        await using var packageConnection = new SqliteConnection($"Data Source={packagePath}");
+        await using var packageConnection = OpenSqliteConnection(packagePath);
         await packageConnection.OpenAsync(ct).ConfigureAwait(false);
 
         await EnsureGeoPackageTablesAsync(packageConnection, ct).ConfigureAwait(false);
@@ -169,6 +169,16 @@ ON CONFLICT(layer_key) DO UPDATE SET
         cmd.Parameters.AddWithValue("$downloaded_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
 
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static SqliteConnection OpenSqliteConnection(string databasePath)
+    {
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+        };
+
+        return new SqliteConnection(builder.ToString());
     }
 
     private static string ApplyTemplate(string sourceUrl, MapAreaDownloadRequest request)

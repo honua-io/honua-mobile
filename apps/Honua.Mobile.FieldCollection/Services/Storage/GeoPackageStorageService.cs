@@ -6,6 +6,7 @@ using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
 using StorageSyncStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncStatus;
+using NtsEnvelope = NetTopologySuite.Geometries.Envelope;
 using NtsGeometry = NetTopologySuite.Geometries.Geometry;
 
 namespace Honua.Mobile.FieldCollection.Services.Storage;
@@ -116,11 +117,93 @@ public class GeoPackageStorageService : IDisposable
     private async Task CreateChangeTrackingTables()
     {
         // Honua change tracking for delta sync
-        await _connection.CreateTableAsync<LocalFeature>();
+        await EnsureLocalFeaturesTableAsync();
         await _connection.CreateTableAsync<ChangeRecord>();
         await _connection.CreateTableAsync<SyncSession>();
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
+    }
+
+    private async Task EnsureLocalFeaturesTableAsync()
+    {
+        var hasTable = await _connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'local_features'");
+
+        if (hasTable == 0)
+        {
+            await CreateLocalFeaturesTableAsync("local_features");
+        }
+        else if (!await LocalFeaturesTableUsesStorageKeyAsync())
+        {
+            await MigrateLocalFeaturesTableAsync();
+        }
+
+        await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_id_layer_id ON local_features(id, layer_id)");
+        await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_layer_id ON local_features(layer_id)");
+        await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_modified_at ON local_features(modified_at)");
+        await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_sync_status ON local_features(sync_status)");
+    }
+
+    private async Task<bool> LocalFeaturesTableUsesStorageKeyAsync()
+    {
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(local_features)");
+        return columns.Any(column =>
+            string.Equals(column.Name, "storage_key", StringComparison.OrdinalIgnoreCase) &&
+            column.PrimaryKey > 0);
+    }
+
+    private async Task MigrateLocalFeaturesTableAsync()
+    {
+        const string migrationTable = "local_features_migration";
+
+        await _connection.ExecuteAsync("BEGIN IMMEDIATE");
+        try
+        {
+            await _connection.ExecuteAsync($"DROP TABLE IF EXISTS {migrationTable}");
+            await CreateLocalFeaturesTableAsync(migrationTable);
+            await _connection.ExecuteAsync($@"
+                INSERT OR REPLACE INTO {migrationTable}
+                    (storage_key, id, layer_id, geometry, attributes, created_at, modified_at, version, sync_status, server_version, conflict_resolution)
+                SELECT
+                    CAST(layer_id AS TEXT) || ':' || id,
+                    id,
+                    layer_id,
+                    geometry,
+                    attributes,
+                    created_at,
+                    modified_at,
+                    version,
+                    sync_status,
+                    server_version,
+                    conflict_resolution
+                FROM local_features");
+            await _connection.ExecuteAsync("DROP TABLE local_features");
+            await _connection.ExecuteAsync($"ALTER TABLE {migrationTable} RENAME TO local_features");
+            await _connection.ExecuteAsync("COMMIT");
+        }
+        catch
+        {
+            await _connection.ExecuteAsync("ROLLBACK");
+            throw;
+        }
+    }
+
+    private Task CreateLocalFeaturesTableAsync(string tableName)
+    {
+        return _connection.ExecuteAsync($@"
+            CREATE TABLE IF NOT EXISTS {tableName} (
+                storage_key TEXT NOT NULL PRIMARY KEY,
+                id TEXT NOT NULL,
+                layer_id INTEGER NOT NULL,
+                geometry BLOB,
+                attributes TEXT,
+                created_at DATETIME NOT NULL,
+                modified_at DATETIME NOT NULL,
+                version INTEGER NOT NULL,
+                sync_status INTEGER NOT NULL,
+                server_version INTEGER,
+                conflict_resolution TEXT
+            )");
     }
 
     private async Task CreateSpatialIndexes()
@@ -173,7 +256,7 @@ public class GeoPackageStorageService : IDisposable
             if (spatialQuery != null)
             {
                 localFeatures = localFeatures
-                    .Where(feature => IntersectsBounds(feature, spatialQuery.Bounds))
+                    .Where(feature => MatchesSpatialQuery(feature, spatialQuery))
                     .ToList();
 
                 if (spatialQuery.MaxResults.HasValue)
@@ -289,6 +372,7 @@ public class GeoPackageStorageService : IDisposable
         var geometry = ConvertToNtsGeometry(feature.Geometry);
         var localFeature = new LocalFeature
         {
+            StorageKey = BuildStorageKey(feature.LayerId, feature.Id),
             Id = feature.Id,
             LayerId = feature.LayerId,
             Geometry = geometry != null ? _wkbWriter.Write(geometry) : null,
@@ -371,20 +455,31 @@ public class GeoPackageStorageService : IDisposable
 
     #region Spatial Queries
 
-    private bool IntersectsBounds(LocalFeature feature, BoundingBox bounds)
+    private bool MatchesSpatialQuery(LocalFeature feature, SpatialQuery spatialQuery)
     {
-        if (feature.Geometry == null)
+        if (feature.Geometry == null || !spatialQuery.Bounds.IsValid)
         {
             return false;
         }
 
         var geometry = _wkbReader.Read(feature.Geometry);
-        var envelope = geometry.EnvelopeInternal;
+        var bounds = spatialQuery.Bounds;
+        var queryGeometry = geometry.Factory.ToGeometry(new NtsEnvelope(
+            bounds.MinX,
+            bounds.MaxX,
+            bounds.MinY,
+            bounds.MaxY));
 
-        return envelope.MinX <= bounds.MaxX
-            && envelope.MaxX >= bounds.MinX
-            && envelope.MinY <= bounds.MaxY
-            && envelope.MaxY >= bounds.MinY;
+        return spatialQuery.Relationship switch
+        {
+            SpatialRelationship.Intersects => geometry.Intersects(queryGeometry),
+            SpatialRelationship.Contains => geometry.Contains(queryGeometry),
+            SpatialRelationship.Within => geometry.Within(queryGeometry),
+            SpatialRelationship.Overlaps => geometry.Overlaps(queryGeometry),
+            SpatialRelationship.Touches => geometry.Touches(queryGeometry),
+            SpatialRelationship.Crosses => geometry.Crosses(queryGeometry),
+            _ => geometry.Intersects(queryGeometry)
+        };
     }
 
     #endregion
@@ -551,6 +646,11 @@ public class GeoPackageStorageService : IDisposable
         throw new NotSupportedException($"Geometry type {ntsGeometry.GeometryType} not supported");
     }
 
+    private static string BuildStorageKey(int layerId, string featureId)
+    {
+        return $"{layerId}:{featureId}";
+    }
+
     #endregion
 
     #region Storage Statistics
@@ -601,4 +701,13 @@ public class StorageStatistics
     public int PendingChanges { get; set; }
     public double DatabaseSizeMb { get; set; }
     public DateTime LastCompaction { get; set; }
+}
+
+internal sealed class TableColumnInfo
+{
+    [Column("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [Column("pk")]
+    public int PrimaryKey { get; set; }
 }
