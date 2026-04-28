@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Honua.Mobile.Sdk.Scenes;
 using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.GeoPackage;
@@ -104,11 +105,35 @@ CREATE TABLE IF NOT EXISTS honua_map_areas (
     updated_at_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS honua_scene_packages (
+    package_id TEXT PRIMARY KEY,
+    scene_id TEXT NOT NULL,
+    display_name TEXT,
+    edition_gate TEXT NOT NULL,
+    server_revision TEXT NOT NULL,
+    extent_json TEXT,
+    package_directory TEXT NOT NULL,
+    manifest_path TEXT NOT NULL,
+    state TEXT NOT NULL,
+    declared_bytes INTEGER NOT NULL,
+    downloaded_bytes INTEGER NOT NULL,
+    required_asset_count INTEGER NOT NULL,
+    downloaded_asset_count INTEGER NOT NULL,
+    missing_optional_asset_keys_json TEXT NOT NULL DEFAULT '[]',
+    stale_after_utc TEXT,
+    offline_use_expires_at_utc TEXT,
+    auth_expires_at_utc TEXT,
+    updated_at_utc TEXT NOT NULL
+);
+
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_sync_queue', 'attributes', 'honua_sync_queue', 'Offline edit queue for Honua mobile sync', 4326);
 
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_map_areas', 'attributes', 'honua_map_areas', 'Downloaded map area package catalog', 4326);
+
+INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
+VALUES ('honua_scene_packages', 'attributes', 'honua_scene_packages', 'Downloaded immutable 3D scene package catalog', 4326);
 
 CREATE TABLE IF NOT EXISTS honua_features (
     layer_key TEXT NOT NULL,
@@ -127,6 +152,12 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
         await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(
+            connection,
+            "honua_scene_packages",
+            "missing_optional_asset_keys_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+            ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -409,6 +440,157 @@ ON CONFLICT(area_id) DO UPDATE SET
     }
 
     /// <inheritdoc />
+    public async Task UpsertScenePackageAsync(ScenePackageRecord scenePackage, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(scenePackage);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        var extent = scenePackage.Extent is null
+            ? null
+            : JsonSerializer.Serialize(scenePackage.Extent);
+        var missingOptionalAssetKeysJson = JsonSerializer.Serialize(scenePackage.MissingOptionalAssetKeys);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+INSERT INTO honua_scene_packages (
+  package_id,
+  scene_id,
+  display_name,
+  edition_gate,
+  server_revision,
+  extent_json,
+  package_directory,
+  manifest_path,
+  state,
+  declared_bytes,
+  downloaded_bytes,
+  required_asset_count,
+  downloaded_asset_count,
+  missing_optional_asset_keys_json,
+  stale_after_utc,
+  offline_use_expires_at_utc,
+  auth_expires_at_utc,
+  updated_at_utc)
+VALUES (
+  $package_id,
+  $scene_id,
+  $display_name,
+  $edition_gate,
+  $server_revision,
+  $extent_json,
+  $package_directory,
+  $manifest_path,
+  $state,
+  $declared_bytes,
+  $downloaded_bytes,
+  $required_asset_count,
+  $downloaded_asset_count,
+  $missing_optional_asset_keys_json,
+  $stale_after_utc,
+  $offline_use_expires_at_utc,
+  $auth_expires_at_utc,
+  $updated_at_utc)
+ON CONFLICT(package_id) DO UPDATE SET
+  scene_id = excluded.scene_id,
+  display_name = excluded.display_name,
+  edition_gate = excluded.edition_gate,
+  server_revision = excluded.server_revision,
+  extent_json = excluded.extent_json,
+  package_directory = excluded.package_directory,
+  manifest_path = excluded.manifest_path,
+  state = excluded.state,
+  declared_bytes = excluded.declared_bytes,
+  downloaded_bytes = excluded.downloaded_bytes,
+  required_asset_count = excluded.required_asset_count,
+  downloaded_asset_count = excluded.downloaded_asset_count,
+  missing_optional_asset_keys_json = excluded.missing_optional_asset_keys_json,
+  stale_after_utc = excluded.stale_after_utc,
+  offline_use_expires_at_utc = excluded.offline_use_expires_at_utc,
+  auth_expires_at_utc = excluded.auth_expires_at_utc,
+  updated_at_utc = excluded.updated_at_utc;
+";
+
+        command.Parameters.AddWithValue("$package_id", scenePackage.PackageId);
+        command.Parameters.AddWithValue("$scene_id", scenePackage.SceneId);
+        command.Parameters.AddWithValue("$display_name", ToDbValue(scenePackage.DisplayName));
+        command.Parameters.AddWithValue("$edition_gate", scenePackage.EditionGate);
+        command.Parameters.AddWithValue("$server_revision", scenePackage.ServerRevision);
+        command.Parameters.AddWithValue("$extent_json", ToDbValue(extent));
+        command.Parameters.AddWithValue("$package_directory", scenePackage.PackageDirectory);
+        command.Parameters.AddWithValue("$manifest_path", scenePackage.ManifestPath);
+        command.Parameters.AddWithValue("$state", scenePackage.State.ToString().ToLowerInvariant());
+        command.Parameters.AddWithValue("$declared_bytes", scenePackage.DeclaredBytes);
+        command.Parameters.AddWithValue("$downloaded_bytes", scenePackage.DownloadedBytes);
+        command.Parameters.AddWithValue("$required_asset_count", scenePackage.RequiredAssetCount);
+        command.Parameters.AddWithValue("$downloaded_asset_count", scenePackage.DownloadedAssetCount);
+        command.Parameters.AddWithValue("$missing_optional_asset_keys_json", missingOptionalAssetKeysJson);
+        command.Parameters.AddWithValue("$stale_after_utc", ToDbValue(scenePackage.StaleAfterUtc));
+        command.Parameters.AddWithValue("$offline_use_expires_at_utc", ToDbValue(scenePackage.OfflineUseExpiresAtUtc));
+        command.Parameters.AddWithValue("$auth_expires_at_utc", ToDbValue(scenePackage.AuthExpiresAtUtc));
+        command.Parameters.AddWithValue("$updated_at_utc", scenePackage.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture));
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ScenePackageRecord>> ListScenePackagesAsync(CancellationToken ct = default)
+    {
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT
+  package_id,
+  scene_id,
+  display_name,
+  edition_gate,
+  server_revision,
+  extent_json,
+  package_directory,
+  manifest_path,
+  state,
+  declared_bytes,
+  downloaded_bytes,
+  required_asset_count,
+  downloaded_asset_count,
+  missing_optional_asset_keys_json,
+  stale_after_utc,
+  offline_use_expires_at_utc,
+  auth_expires_at_utc,
+  updated_at_utc
+FROM honua_scene_packages
+ORDER BY scene_id ASC, package_id ASC;
+";
+
+        var items = new List<ScenePackageRecord>();
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            items.Add(ReadScenePackageRecord(reader));
+        }
+
+        return items;
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteScenePackageAsync(string packageId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM honua_scene_packages WHERE package_id = $package_id;";
+        command.Parameters.AddWithValue("$package_id", packageId);
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
@@ -583,6 +765,53 @@ LIMIT $limit;
             AttemptCount = reader.GetInt32(7),
         };
     }
+
+    private static ScenePackageRecord ReadScenePackageRecord(SqliteDataReader reader)
+    {
+        var extentJson = reader.IsDBNull(5) ? null : reader.GetString(5);
+        var extent = string.IsNullOrWhiteSpace(extentJson)
+            ? null
+            : JsonSerializer.Deserialize<HonuaSceneBounds>(extentJson)
+                ?? throw new InvalidOperationException("Invalid extent payload in honua_scene_packages.");
+
+        return new ScenePackageRecord
+        {
+            PackageId = reader.GetString(0),
+            SceneId = reader.GetString(1),
+            DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2),
+            EditionGate = reader.GetString(3),
+            ServerRevision = reader.GetString(4),
+            Extent = extent,
+            PackageDirectory = reader.GetString(6),
+            ManifestPath = reader.GetString(7),
+            State = Enum.Parse<HonuaScenePackageState>(reader.GetString(8), ignoreCase: true),
+            DeclaredBytes = reader.GetInt64(9),
+            DownloadedBytes = reader.GetInt64(10),
+            RequiredAssetCount = reader.GetInt32(11),
+            DownloadedAssetCount = reader.GetInt32(12),
+            MissingOptionalAssetKeys = ReadStringArrayJson(reader.GetString(13)),
+            StaleAfterUtc = ReadNullableDateTimeOffset(reader, 14),
+            OfflineUseExpiresAtUtc = ReadNullableDateTimeOffset(reader, 15),
+            AuthExpiresAtUtc = ReadNullableDateTimeOffset(reader, 16),
+            UpdatedAtUtc = DateTimeOffset.Parse(reader.GetString(17), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        };
+    }
+
+    private static IReadOnlyList<string> ReadStringArrayJson(string json)
+        => JsonSerializer.Deserialize<List<string>>(json) ?? [];
+
+    private static DateTimeOffset? ReadNullableDateTimeOffset(SqliteDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(ordinal), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    private static object ToDbValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? DBNull.Value : value;
+
+    private static object ToDbValue(DateTimeOffset? value)
+        => value.HasValue
+            ? value.Value.ToString("O", CultureInfo.InvariantCulture)
+            : DBNull.Value;
 
     private static string AddOperationIdParameters(SqliteCommand command, IReadOnlyList<string> operationIds)
     {

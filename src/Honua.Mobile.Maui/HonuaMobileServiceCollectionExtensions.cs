@@ -3,6 +3,7 @@ using Honua.Mobile.Field.Records;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
+using Honua.Mobile.Offline.ScenePackages;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Routing;
@@ -177,6 +178,28 @@ public static class HonuaMobileServiceCollectionExtensions
             var httpClient = factory.CreateClient("HonuaMapArea");
             var store = sp.GetRequiredService<IGeoPackageSyncStore>();
             return new MapAreaDownloader(httpClient, store);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="IHonuaScenePackageDownloader"/> for downloading immutable offline 3D scene packages.
+    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaScenePackageDownload(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddHttpClient("HonuaScenePackage");
+        services.AddSingleton<IHonuaScenePackageDownloader>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = factory.CreateClient("HonuaScenePackage");
+            var store = sp.GetRequiredService<IGeoPackageSyncStore>();
+            return new ScenePackageDownloader(httpClient, store);
         });
 
         return services;

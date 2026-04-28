@@ -1,5 +1,7 @@
 using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Annotations;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Offline.ScenePackages;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Honua.Mobile.Maui.Tests;
@@ -180,5 +182,19 @@ public sealed class HonuaAnnotationLayerTests
         var second = services.GetRequiredService<HonuaAnnotationLayer>();
 
         Assert.NotSame(first, second);
+    }
+
+    [Fact]
+    public void AddHonuaScenePackageDownload_RegistersDownloader()
+    {
+        var storePath = Path.Combine(Path.GetTempPath(), $"honua-scene-package-di-{Guid.NewGuid():N}.gpkg");
+        using var services = new ServiceCollection()
+            .AddHonuaGeoPackageOfflineSync(new GeoPackageSyncStoreOptions { DatabasePath = storePath })
+            .AddHonuaScenePackageDownload()
+            .BuildServiceProvider();
+
+        var downloader = services.GetRequiredService<IHonuaScenePackageDownloader>();
+
+        Assert.IsType<ScenePackageDownloader>(downloader);
     }
 }
