@@ -2,11 +2,11 @@
 # Automates building and publishing NuGet packages for the SDK
 
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "0.1.0-alpha.1",
     [string]$NuGetApiKey = "",
-    [string]$NuGetSource = "https://api.nuget.org/v3/index.json",
+    [string]$NuGetSource = "https://nuget.pkg.github.com/honua-io/index.json",
     [switch]$DryRun = $false,
-    [switch]$IncludeTemplates = $true,
+    [switch]$IncludeTemplates = $false,
     [switch]$SkipTests = $false
 )
 
@@ -22,24 +22,24 @@ if ($DryRun) {
 # Package definitions
 $packages = @(
     @{
-        Name = "Honua.Mobile.Core"
-        Path = "Honua.Mobile.Core/Honua.Mobile.Core.csproj"
-        Description = "Core gRPC client and authentication for Honua mobile apps"
+        Name = "Honua.Mobile.Sdk"
+        Path = "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
+        Description = "Core mobile client, gRPC transport, routing, and scene metadata"
     },
     @{
-        Name = "Honua.Mobile.Storage"
-        Path = "Honua.Mobile.Storage/Honua.Mobile.Storage.csproj"
-        Description = "Offline storage and sync capabilities"
+        Name = "Honua.Mobile.Field"
+        Path = "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj"
+        Description = "Field data collection forms, validation, and workflow"
     },
     @{
-        Name = "Honua.Mobile.IoT"
-        Path = "Honua.Mobile.IoT/Honua.Mobile.IoT.csproj"
-        Description = "IoT sensor integration (Bluetooth LE, LoRa, WiFi)"
+        Name = "Honua.Mobile.Offline"
+        Path = "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"
+        Description = "Offline GeoPackage storage and sync capabilities"
     },
     @{
         Name = "Honua.Mobile.Maui"
-        Path = "Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
-        Description = "MAUI platform handlers and UI components"
+        Path = "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
+        Description = "MAUI dependency injection and platform integration helpers"
     }
 )
 
@@ -58,7 +58,7 @@ function Test-Prerequisites {
         Write-Host "✅ .NET SDK: $dotnetVersion" -ForegroundColor Green
     }
     catch {
-        Write-Error "❌ .NET SDK not found. Please install .NET 8.0+ SDK"
+        Write-Error "❌ .NET SDK not found. Please install .NET 10.0+ SDK"
         exit 1
     }
 
@@ -74,7 +74,7 @@ function Test-Prerequisites {
 
     # Validate API key if not dry run
     if (-not $DryRun -and [string]::IsNullOrEmpty($NuGetApiKey)) {
-        Write-Error "❌ NuGet API key is required for publishing. Use -NuGetApiKey parameter or set NUGET_API_KEY environment variable"
+        Write-Error "❌ GitHub Packages token is required for publishing. Use -NuGetApiKey or pass GITHUB_TOKEN/PAT through this parameter"
         exit 1
     }
 
@@ -111,8 +111,7 @@ function Build-Package {
             --configuration Release `
             --output "./dist" `
             -p:PackageVersion=$Version `
-            -p:AssemblyVersion=$Version `
-            -p:FileVersion=$Version `
+            -p:Version=$Version `
             --include-symbols `
             --include-source
     }
@@ -168,15 +167,15 @@ function Update-PackageVersions {
     # Update version in all .csproj files
     Get-ChildItem -Recurse -Filter "*.csproj" | ForEach-Object {
         $content = Get-Content $_.FullName
-        $updated = $content -replace '<Version>[\d\.]+</Version>', "<Version>$Version</Version>"
-        $updated = $updated -replace '<PackageVersion>[\d\.]+</PackageVersion>', "<PackageVersion>$Version</PackageVersion>"
+        $updated = $content -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>"
+        $updated = $updated -replace '<PackageVersion>[^<]+</PackageVersion>', "<PackageVersion>$Version</PackageVersion>"
         Set-Content $_.FullName $updated
     }
 
     # Update version in template nuspec
     if (Test-Path $templatePackage.Path) {
         $content = Get-Content $templatePackage.Path
-        $updated = $content -replace '<version>[\d\.]+</version>', "<version>$Version</version>"
+        $updated = $content -replace '<version>[^<]+</version>', "<version>$Version</version>"
         Set-Content $templatePackage.Path $updated
     }
 
@@ -198,10 +197,10 @@ function Generate-ReleaseNotes {
 ## 📦 Packages Released
 
 ### Core Libraries
-- **Honua.Mobile.Core** v$Version - gRPC client and authentication
-- **Honua.Mobile.Storage** v$Version - Offline storage and sync
-- **Honua.Mobile.IoT** v$Version - IoT sensor integration
-- **Honua.Mobile.Maui** v$Version - MAUI platform handlers
+- **Honua.Mobile.Sdk** v$Version - Core mobile client and gRPC transport
+- **Honua.Mobile.Field** v$Version - Field forms, validation, and workflow
+- **Honua.Mobile.Offline** v$Version - Offline storage and sync
+- **Honua.Mobile.Maui** v$Version - MAUI platform integration
 
 ### Development Tools
 - **Honua.Mobile.Templates** v$Version - Visual Studio project templates
@@ -228,9 +227,9 @@ dotnet new honua-fieldcollector -n MyFieldApp
 
 ### Manual Package Installation
 ```bash
-dotnet add package Honua.Mobile.Core --version $Version
-dotnet add package Honua.Mobile.Storage --version $Version
-dotnet add package Honua.Mobile.IoT --version $Version
+dotnet add package Honua.Mobile.Sdk --version $Version
+dotnet add package Honua.Mobile.Field --version $Version
+dotnet add package Honua.Mobile.Offline --version $Version
 dotnet add package Honua.Mobile.Maui --version $Version
 ```
 
@@ -291,7 +290,7 @@ function Main {
         }
 
         Write-Host "🎉 All packages published successfully!" -ForegroundColor Green
-        Write-Host "📖 View packages at: https://www.nuget.org/profiles/HonuaProject" -ForegroundColor Cyan
+        Write-Host "📖 View packages at: https://github.com/orgs/honua-io/packages" -ForegroundColor Cyan
     }
     else {
         Write-Host "🔍 DRY RUN COMPLETED" -ForegroundColor Yellow

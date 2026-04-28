@@ -1,0 +1,275 @@
+name: Publish Mobile .NET Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to build"
+        required: false
+        default: "0.1.0-alpha.1"
+        type: string
+      dry_run:
+        description: "Run validation only (skip publish)"
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags:
+      - "mobile-dotnet-v*"
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  package-smoke:
+    name: Package Smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ github.repository }}-${{ runner.os }}-nuget-
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Resolve package version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            package_version="${GITHUB_REF_NAME#mobile-dotnet-v}"
+          else
+            package_version="${{ github.event.inputs.version }}"
+          fi
+
+          if [[ -z "${package_version}" ]]; then
+            echo "Package version is required."
+            exit 1
+          fi
+
+          echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
+
+      - name: Build mobile packages
+        shell: bash
+        run: |
+          projects=(
+            "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
+            "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj"
+            "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"
+            "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
+          )
+
+          for project in "${projects[@]}"; do
+            dotnet build "${project}" \
+              --configuration Release \
+              /p:TreatWarningsAsErrors=true
+          done
+
+      - name: Test mobile packages
+        shell: bash
+        run: |
+          tests=(
+            "tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj"
+            "tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj"
+            "tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj"
+            "tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj"
+            "tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj"
+          )
+
+          for project in "${tests[@]}"; do
+            dotnet test "${project}" \
+              --configuration Release \
+              /p:TreatWarningsAsErrors=true
+          done
+
+      - name: Pack NuGet packages
+        shell: bash
+        run: |
+          mkdir -p nupkgs
+          projects=(
+            "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
+            "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj"
+            "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"
+            "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
+          )
+
+          for project in "${projects[@]}"; do
+            dotnet pack "${project}" \
+              --configuration Release \
+              --no-build \
+              -o nupkgs \
+              -p:PackageVersion="${PACKAGE_VERSION}" \
+              -p:Version="${PACKAGE_VERSION}"
+          done
+
+      - name: Package install smoke
+        shell: bash
+        run: |
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "${smoke_dir}"' EXIT
+
+          dotnet new console --framework net10.0 --output "${smoke_dir}"
+
+          pushd "${smoke_dir}" >/dev/null
+
+          cat > NuGet.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local-mobile" value="${GITHUB_WORKSPACE}/nupkgs" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+              <add key="github-honua" value="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <github-honua>
+                <add key="Username" value="${{ github.actor }}" />
+                <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
+              </github-honua>
+            </packageSourceCredentials>
+            <packageSourceMapping>
+              <packageSource key="local-mobile">
+                <package pattern="Honua.Mobile.*" />
+              </packageSource>
+              <packageSource key="github-honua">
+                <package pattern="Geospatial.Grpc" />
+                <package pattern="Honua.Core" />
+                <package pattern="Honua.Sdk.*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+
+          dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
+          dotnet add package Honua.Mobile.Sdk --version "${PACKAGE_VERSION}"
+          dotnet add package Honua.Mobile.Field --version "${PACKAGE_VERSION}"
+          dotnet add package Honua.Mobile.Offline --version "${PACKAGE_VERSION}"
+          dotnet add package Honua.Mobile.Maui --version "${PACKAGE_VERSION}"
+
+          cat > Program.cs <<'EOF'
+          using Honua.Mobile.Field.Forms;
+          using Honua.Mobile.Maui;
+          using Honua.Mobile.Offline.GeoPackage;
+          using Honua.Mobile.Offline.Sync;
+          using Honua.Mobile.Sdk;
+          using Honua.Mobile.Sdk.Models;
+          using Microsoft.Extensions.DependencyInjection;
+
+          var services = new ServiceCollection();
+
+          services
+              .AddHonuaMobileSdk(new HonuaMobileClientOptions
+              {
+                  BaseUri = new Uri("https://example.honua.test"),
+                  PreferGrpcForFeatureQueries = false,
+                  PreferGrpcForFeatureEdits = false
+              })
+              .AddHonuaMobileFieldCollection()
+              .AddHonuaApiOfflineUploader()
+              .AddHonuaGeoPackageOfflineSync(
+                  new GeoPackageSyncStoreOptions
+                  {
+                      DatabasePath = Path.Combine(Path.GetTempPath(), "honua-mobile-package-smoke.gpkg")
+                  },
+                  new OfflineSyncEngineOptions
+                  {
+                      BatchSize = 1,
+                      ConflictStrategy = SyncConflictStrategy.ManualReview
+                  });
+
+          _ = new QueryFeaturesRequest
+          {
+              ServiceId = "field",
+              LayerId = 0,
+              ResultRecordCount = 1
+          };
+
+          _ = new FormDefinition
+          {
+              FormId = "inspection",
+              Name = "Inspection",
+              Sections = new[]
+              {
+                  new FormSection
+                  {
+                      SectionId = "details",
+                      Label = "Details",
+                      Fields = new[]
+                      {
+                          new FormField
+                          {
+                              FieldId = "name",
+                              Label = "Name",
+                              Type = FormFieldType.Text,
+                              Required = true
+                          }
+                      }
+                  }
+              }
+          };
+          EOF
+
+          dotnet build --configuration Release /p:TreatWarningsAsErrors=true
+
+          popd >/dev/null
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-packages
+          path: nupkgs/*.nupkg
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Dry-run summary
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        shell: bash
+        run: |
+          echo "Dry run complete. Built packages:" >> "${GITHUB_STEP_SUMMARY}"
+          ls -1 nupkgs/*.nupkg >> "${GITHUB_STEP_SUMMARY}"
+
+  publish:
+    name: Publish to GitHub Packages
+    needs: package-smoke
+    if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-packages
+          path: nupkgs
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish to GitHub Packages
+        run: |
+          dotnet nuget push nupkgs/*.nupkg \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
