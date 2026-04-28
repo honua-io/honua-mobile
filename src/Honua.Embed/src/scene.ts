@@ -197,6 +197,7 @@ export class HonuaSceneElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this.#loadVersion += 1;
     this.#destroyCesium();
   }
 
@@ -256,6 +257,7 @@ export class HonuaSceneElement extends HTMLElement {
     const config = this.config;
 
     if (!config.tilesetUrl && !config.terrainUrl) {
+      this.#destroyCesium();
       this.#setStatus('Set a 3D Tiles URL to load a scene.');
       return;
     }
@@ -436,9 +438,7 @@ export class HonuaSceneElement extends HTMLElement {
       (window as Window & { CESIUM_BASE_URL?: string }).CESIUM_BASE_URL = baseUrl;
     }
 
-    if (config.ionToken) {
-      cesium.Ion.defaultAccessToken = config.ionToken;
-    }
+    cesium.Ion.defaultAccessToken = config.ionToken ?? '';
   }
 
   #appendCesiumStyles(config: HonuaSceneConfig): void {
