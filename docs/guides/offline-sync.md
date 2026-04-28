@@ -529,5 +529,6 @@ public async Task Sync_ConflictResolution_HandlesCorrectly()
 
 - [Mobile SDK Overview](../README.md)
 - [Camera Integration](camera-integration.md)
+- [Offline 3D Scene Packages](offline-3d-scene-packages.md)
 - [Performance Guide](performance.md)
 - [Troubleshooting](troubleshooting.md)
