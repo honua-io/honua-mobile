@@ -36,7 +36,7 @@ The 3D and AR path should move in this order:
 | 6 | honua-io/honua-server#839 and honua-io/honua-server#840 terrain and elevation | Adds the surface and query data needed for field context and profiles. |
 | 7 | honua-io/honua-server#841 and honua-io/honua-server#842 3D features and generation | Produces Honua-owned operational 3D data instead of only hosted external assets. |
 | 8 | #36 offline 3D cache packaging policy | Defines whether 3D scenes can be trusted in disconnected field workflows. |
-| 9 | #37 protected 3D tiles auth handoff | Decides how private scene assets are safely loaded by browsers, WebViews, and native hosts. |
+| 9 | #37 protected 3D tiles auth handoff | Defines how private scene assets are safely loaded by browsers, WebViews, and native hosts. |
 | 10 | #38 native scene anchoring requirements | Narrows ARKit, ARCore, WebXR, and MAUI requirements before #23 implementation. |
 | 11 | #23 AR/VR field workflow enablement | Starts native AR/VR only after scene data, auth, offline, and platform risks are explicit. |
 
@@ -79,9 +79,12 @@ Open decisions are tracked as follow-up tickets:
 
 | Ticket | Question |
 |--------|----------|
-| #37 | Should protected tilesets use signed URLs, short-lived scene tokens, proxying, request-header injection, or a hybrid model? |
 | #38 | Which AR anchoring strategy and first prototype platform should #23 use? |
 
 The offline 3D package model from #36 is captured in
 [Offline 3D Scene Packages](offline-3d-scene-packages.md), with implementation
 follow-ups in #40, #41, and #42.
+
+The protected scene auth handoff from #37 is captured in
+[Protected 3D Scene Auth](protected-3d-scene-auth.md), with implementation
+follow-ups in #44 and honua-io/honua-server#849.
