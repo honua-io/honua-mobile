@@ -53,7 +53,7 @@ The 3D and AR path should move in this order:
 | I3S / Esri Scene Layer compatibility | honua-io/honua-server#843 | Future compatibility or adapter ticket | ArcGIS-compatible clients and conformance fixtures | Offline I3S packaging is out of scope until the spike defines demand | High: protocol compatibility and conformance risk | Enterprise |
 | Browser/WebXR scene prototype | honua-io/honua-server#837, honua-io/honua-server#838, honua-io/honua-server#844 | #31, #32, #38 | Secure browser context with WebXR and WebGL-capable device/browser | Offline support is limited until #36 defines packages and cache behavior | High: browser/device support varies and must be validated per target | Enterprise for production AR/VR modules |
 | Native AR overlay prototype | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#841 | #23, #38 | iOS ARKit or Android ARCore capable devices; MAUI wrapper strategy TBD | Needs lightweight cached features, terrain/elevation context, and predictable auth | High: device pose, GPS accuracy, calibration, and depth alignment are product risks | Enterprise |
-| Offline 3D scene package | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#842, honua-io/honua-server#844 | #36, #8 | iOS/Android/MAUI storage management; browser cache support where viable | Package manifest must cover extent, LOD, byte budget, hashes, auth expiry, and eviction | High: package size, stale data, and battery/network usage can break field UX | Pro for managed offline packages; Enterprise for large operational deployments |
+| Offline 3D scene package | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#842, honua-io/honua-server#844 | #36 policy, #40, #41, #42, #8 | iOS/Android/MAUI storage management; browser cache support where viable | Package manifest must cover extent, LOD, byte budget, hashes, auth expiry, and eviction | High: package size, stale data, and battery/network usage can break field UX | Pro for managed offline packages; Enterprise for large operational deployments |
 | MAUI scene wrapper | honua-io/honua-server#837, honua-io/honua-server#844 | #31, #32, future MAUI wrapper ticket | MAUI WebView first; native graphics surface only after renderer decision | Same as underlying renderer; WebView cache must not outlive auth policy | Medium: WebView differences across Android, iOS, Windows, and Mac Catalyst | Community for wrapper; Pro/Enterprise by backing service |
 
 ## Platform Capability Requirements
@@ -79,7 +79,9 @@ Open decisions are tracked as follow-up tickets:
 
 | Ticket | Question |
 |--------|----------|
-| #36 | What 3D Tiles, terrain, elevation, manifest, quota, and invalidation model should offline packages use? |
 | #37 | Should protected tilesets use signed URLs, short-lived scene tokens, proxying, request-header injection, or a hybrid model? |
 | #38 | Which AR anchoring strategy and first prototype platform should #23 use? |
 
+The offline 3D package model from #36 is captured in
+[Offline 3D Scene Packages](offline-3d-scene-packages.md), with implementation
+follow-ups in #40, #41, and #42.
