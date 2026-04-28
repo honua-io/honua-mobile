@@ -43,6 +43,11 @@ private static string GetSecureApiKey()
 }
 ```
 
+Protected 3D scene assets need a separate renderer handoff because scene
+renderers fetch nested tiles, terrain, textures, and binary payloads after the
+initial SDK request. Use [Protected 3D Scene Auth](protected-3d-scene-auth.md)
+for signed URL, proxy, CORS, cache, and revocation guidance.
+
 ### Secure API Key Storage
 
 Implement secure key management:
