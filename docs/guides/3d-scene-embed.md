@@ -69,3 +69,5 @@ The package build copies Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets`
 ## Current Scope
 
 This first slice proves client-side 3D Tiles loading, scene events, and typed SDK scene discovery. Honua-hosted scene registry, terrain tiles, elevation APIs, 3D Tiles generation, and I3S compatibility are tracked in the linked server backlog.
+
+Use the [mobile 3D and AR dependency matrix](mobile-3d-ar-dependency-matrix.md) before starting native AR/VR or offline 3D work. It captures the required server tickets, SDK tickets, platform risks, offline constraints, and edition gates for each client capability.
