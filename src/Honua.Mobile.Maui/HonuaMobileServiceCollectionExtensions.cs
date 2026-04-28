@@ -5,6 +5,7 @@ using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Mobile.Sdk.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -51,6 +52,20 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<IOfflineOperationUploader, HonuaApiOfflineOperationUploader>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="HonuaRoutingClient"/> from the configured <see cref="HonuaMobileClient"/>.
+    /// Requires <see cref="AddHonuaMobileSdk"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaRouting(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(sp => sp.GetRequiredService<HonuaMobileClient>().Routing);
         return services;
     }
 
