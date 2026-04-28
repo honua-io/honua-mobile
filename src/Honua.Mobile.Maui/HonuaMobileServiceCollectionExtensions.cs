@@ -1,5 +1,6 @@
 using Honua.Mobile.Field.Forms;
 using Honua.Mobile.Field.Records;
+using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.Sync;
@@ -148,6 +149,19 @@ public static class HonuaMobileServiceCollectionExtensions
             return new MapAreaDownloader(httpClient, store);
         });
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the client-side map annotation layer used by platform map renderers.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaMapAnnotations(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddTransient<HonuaAnnotationLayer>();
         return services;
     }
 }
