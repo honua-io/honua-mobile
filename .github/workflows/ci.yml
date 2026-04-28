@@ -10,6 +10,7 @@ permissions: {}
 
 env:
   DOTNET_VERSION: '10.0.x'  # Current repo targets net10
+  NODE_VERSION: '24.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
 
@@ -70,6 +71,11 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
@@ -83,6 +89,7 @@ jobs:
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
           dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
+          npm ci --prefix src/Honua.Embed
 
       - name: Build Core Libraries (warnings as errors)
         id: build
@@ -96,6 +103,8 @@ jobs:
 
           dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
+
+          npm run build --prefix src/Honua.Embed
 
       - name: Format Check
         run: |
@@ -121,6 +130,11 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Cache NuGet packages
         uses: actions/cache@v5
         with:
@@ -135,6 +149,7 @@ jobs:
           dotnet restore tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj
           dotnet restore tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj
           dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
+          npm ci --prefix src/Honua.Embed
 
       - name: Create Test Results Directory
         run: mkdir -p ./TestResults
@@ -185,6 +200,9 @@ jobs:
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
+
+      - name: Run Embed Component Tests
+        run: npm test --prefix src/Honua.Embed
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v7
