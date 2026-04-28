@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "honua.mobile-contract-harmonization.v1",
+  "mobileIssue": "honua-mobile#48",
+  "sdkIssue": "honua-sdk-dotnet#68",
+  "companionOfflineIssue": "honua-sdk-dotnet#56",
+  "status": "baseline",
+  "mobileBaseline": {
+    "repository": "honua-io/honua-mobile",
+    "ref": "main",
+    "packageVersion": "unreleased-source"
+  },
+  "sdkBaseline": {
+    "repository": "honua-io/honua-sdk-dotnet",
+    "ref": "main",
+    "packages": [
+      {
+        "packageId": "Honua.Sdk.Abstractions",
+        "version": "0.1.0-alpha.1"
+      }
+    ]
+  },
+  "modelFamilies": [
+    {
+      "id": "feature-query",
+      "displayName": "Feature query requests and result pages",
+      "owner": "honua-sdk-dotnet",
+      "authoritativePackage": "Honua.Sdk.Abstractions",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Features.FeatureQueryRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureQueryResult",
+        "Honua.Sdk.Abstractions.Features.FeatureRecord",
+        "Honua.Sdk.Abstractions.Features.FeatureSource",
+        "Honua.Sdk.Abstractions.Features.SourceDescriptor",
+        "Honua.Sdk.Abstractions.Features.SourceQuery"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Models.QueryFeaturesRequest",
+        "Honua.Mobile.Sdk.Models.OgcItemsRequest",
+        "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator"
+      ],
+      "mobileDisposition": "adapter-required",
+      "notes": "Mobile request DTOs remain transport shims until callers can construct Honua.Sdk.Abstractions feature queries directly."
+    },
+    {
+      "id": "feature-edit",
+      "displayName": "Feature edit envelopes and results",
+      "owner": "honua-sdk-dotnet",
+      "authoritativePackage": "Honua.Sdk.Abstractions",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Features.FeatureEditRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureEditResponse",
+        "Honua.Sdk.Abstractions.Features.FeatureEditFeature",
+        "Honua.Sdk.Abstractions.Features.FeatureEditResult",
+        "Honua.Sdk.Abstractions.Features.FeatureEditError"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Models.ApplyEditsRequest",
+        "Honua.Mobile.Sdk.Models.OgcCreateItemRequest",
+        "Honua.Mobile.Sdk.Models.OgcReplaceItemRequest",
+        "Honua.Mobile.Sdk.Models.OgcPatchItemRequest",
+        "Honua.Mobile.Sdk.Models.OgcDeleteItemRequest",
+        "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation"
+      ],
+      "mobileDisposition": "adapter-required",
+      "notes": "Offline queue rows keep mobile retry metadata, but uploaded payloads should map to FeatureEditRequest."
+    },
+    {
+      "id": "geometry",
+      "displayName": "Geometry and spatial reference values",
+      "owner": "shared-split",
+      "authoritativePackage": "pending Honua.Sdk geometry package",
+      "authoritativeTypes": [],
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator",
+        "Honua.Mobile.Sdk.Routing.RoutingCoordinate",
+        "Honua.Mobile.Maui.Annotations.HonuaMapCoordinate",
+        "Honua.Mobile.Maui.Annotations.HonuaAnnotationBounds"
+      ],
+      "mobileDisposition": "quarantine-until-sdk-geometry",
+      "notes": "Keep mobile coordinates at platform edges. Shared geometry should graduate after honua-sdk-dotnet P0.4 defines WKID/WKT/GeoJSON conversion ownership."
+    },
+    {
+      "id": "offline-sync-state",
+      "displayName": "Offline package, sync state, journal, and conflict state",
+      "owner": "shared-split",
+      "authoritativePackage": "pending Honua.Sdk offline contracts",
+      "authoritativeTypes": [],
+      "mobileTypes": [
+        "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation",
+        "Honua.Mobile.Offline.Sync.SyncRunResult",
+        "Honua.Mobile.Offline.Sync.SyncFailure",
+        "Honua.Mobile.Offline.Sync.DeltaDownloadOptions",
+        "Honua.Mobile.Offline.Sync.DeltaDownloadResult"
+      ],
+      "mobileDisposition": "mobile-runtime-plus-sdk-gap",
+      "notes": "Mobile owns native queue persistence, scheduling, and GeoPackage storage. Shared SDK contracts must define source descriptors, journals, checkpoints, and conflict envelopes in honua-sdk-dotnet#56."
+    },
+    {
+      "id": "form-feature-schema",
+      "displayName": "Form-related feature schemas and field workflows",
+      "owner": "shared-split",
+      "authoritativePackage": "Honua.Sdk.Abstractions for source schema",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Features.SourceDescriptor",
+        "Honua.Sdk.Abstractions.Features.SourceSchema",
+        "Honua.Sdk.Abstractions.Features.SourceField"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Field.Forms.FormDefinition",
+        "Honua.Mobile.Field.Forms.FormField",
+        "Honua.Mobile.Field.Forms.FormValidation",
+        "Honua.Mobile.Field.Records.FieldRecord",
+        "Honua.Mobile.Field.Records.RecordWorkflow"
+      ],
+      "mobileDisposition": "mobile-workflow-owned",
+      "notes": "SDK source schema owns provider-neutral field metadata. Mobile owns device form rendering, calculated fields, duplicate detection, and capture workflow."
+    },
+    {
+      "id": "scene-metadata",
+      "displayName": "3D scene metadata and offline scene packages",
+      "owner": "honua-mobile",
+      "authoritativePackage": "Honua.Mobile.Sdk",
+      "authoritativeTypes": [
+        "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveRequest",
+        "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveResult",
+        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageManifest",
+        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageAsset"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Offline.ScenePackages.IHonuaScenePackageDownloader",
+        "Honua.Mobile.Offline.GeoPackage.ScenePackageRecord"
+      ],
+      "mobileDisposition": "mobile-authoritative-candidate-for-sdk",
+      "notes": "Scene contracts stay mobile-owned until honua-sdk-dotnet introduces a scene package. Server handoff and manifest fixtures should remain portable."
+    },
+    {
+      "id": "routing",
+      "displayName": "Routing and network analysis requests",
+      "owner": "honua-mobile",
+      "authoritativePackage": "Honua.Mobile.Sdk",
+      "authoritativeTypes": [
+        "Honua.Mobile.Sdk.Routing.RouteDirectionsRequest",
+        "Honua.Mobile.Sdk.Routing.RouteOptimizationRequest",
+        "Honua.Mobile.Sdk.Routing.ServiceAreaRequest",
+        "Honua.Mobile.Sdk.Routing.ClosestFacilityRequest",
+        "Honua.Mobile.Sdk.Routing.RoutingLocation"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Routing.HonuaRoutingClient",
+        "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider"
+      ],
+      "mobileDisposition": "mobile-authoritative",
+      "notes": "Routing remains mobile-owned because it includes device location providers and GeoServices NAServer form encoding."
+    },
+    {
+      "id": "geopackage-sync",
+      "displayName": "GeoPackage storage and native offline adapters",
+      "owner": "honua-mobile",
+      "authoritativePackage": "Honua.Mobile.Offline",
+      "authoritativeTypes": [
+        "Honua.Mobile.Offline.GeoPackage.IGeoPackageSyncStore",
+        "Honua.Mobile.Offline.GeoPackage.GeoPackageSyncStore",
+        "Honua.Mobile.Offline.GeoPackage.MapAreaPackage",
+        "Honua.Mobile.Offline.GeoPackage.ScenePackageRecord"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Offline.MapAreas.IMapAreaDownloader",
+        "Honua.Mobile.Offline.ScenePackages.IHonuaScenePackageDownloader",
+        "Honua.Mobile.Offline.Sync.BackgroundSyncOrchestrator"
+      ],
+      "mobileDisposition": "mobile-runtime-owned",
+      "notes": "SDK contracts may describe offline packages and journals, but mobile owns MAUI/native storage, GeoPackage tables, and background execution behavior."
+    }
+  ],
+  "legacyMobileSdk": {
+    "repository": "honua-io/honua-mobile-sdk",
+    "disposition": "quarantine",
+    "rules": [
+      "Do not copy DTOs into honua-mobile without mapping them through this fixture.",
+      "Migrate useful concepts only when they have a declared owner in honua-sdk-dotnet or honua-mobile.",
+      "Treat older generated clients and demo-only contracts as superseded unless a ticket names the specific concept to recover."
+    ]
+  }
+}
