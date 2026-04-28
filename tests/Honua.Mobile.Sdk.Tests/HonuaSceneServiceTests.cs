@@ -81,6 +81,27 @@ public sealed class HonuaSceneServiceTests
     }
 
     [Fact]
+    public async Task ResolveSceneAsync_WithEndpointArrayOnly_PopulatesUrlsAndInheritedAuth()
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse(ReadFixture("resolve-array-only-scene.json")));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync(
+            "array-only",
+            new HonuaSceneResolveRequest
+            {
+                RequiredCapabilities = new[] { HonuaSceneCapabilities.ThreeDimensionalTiles },
+            });
+
+        Assert.Equal(new Uri("https://api.honua.test/api/scenes/array-only/tileset.json"), resolution.TilesetUrl);
+        Assert.Equal(new Uri("https://api.honua.test/api/scenes/array-only/terrain"), resolution.TerrainUrl);
+        Assert.All(resolution.Endpoints, endpoint => Assert.True(endpoint.RequiresAuthentication));
+    }
+
+    [Fact]
     public async Task ResolveSceneAsync_WithSdkCredentials_SendsAuthHeaders()
     {
         string? apiKey = null;

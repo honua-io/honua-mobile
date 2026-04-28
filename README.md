@@ -149,7 +149,7 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (35 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (36 tests)
   Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (42 tests)
   Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)

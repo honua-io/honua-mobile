@@ -204,8 +204,8 @@ internal static class HonuaSceneJsonParser
             return new HonuaSceneResolution
             {
                 SceneId = sceneId,
-                TilesetUrl = tileset?.Url ?? GetUri(root, "tilesetUrl"),
-                TerrainUrl = terrain?.Url ?? GetUri(root, "terrainUrl"),
+                TilesetUrl = GetUri(root, "tilesetUrl") ?? tileset?.Url ?? FindEndpointUrl(endpoints, HonuaSceneCapabilities.ThreeDimensionalTiles),
+                TerrainUrl = GetUri(root, "terrainUrl") ?? terrain?.Url ?? FindEndpointUrl(endpoints, HonuaSceneCapabilities.Terrain),
                 Endpoints = endpoints,
                 Capabilities = capabilities,
                 Auth = ParseAuth(root),
@@ -294,9 +294,11 @@ internal static class HonuaSceneJsonParser
         string objectPropertyName,
         string urlPropertyName)
     {
+        var inheritedRequiresAuthentication = ParseAuth(root).RequiresAuthentication;
+
         if (TryGetProperty(root, objectPropertyName, out var endpoint) && endpoint.ValueKind == JsonValueKind.Object)
         {
-            return ParseEndpointObject(endpoint, defaultKind);
+            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication);
         }
 
         if (TryGetProperty(root, "endpoints", out var endpoints) &&
@@ -304,7 +306,7 @@ internal static class HonuaSceneJsonParser
             TryGetProperty(endpoints, objectPropertyName, out endpoint) &&
             endpoint.ValueKind == JsonValueKind.Object)
         {
-            return ParseEndpointObject(endpoint, defaultKind);
+            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication);
         }
 
         var url = GetUri(root, urlPropertyName);
@@ -325,7 +327,10 @@ internal static class HonuaSceneJsonParser
         };
     }
 
-    private static HonuaSceneEndpoint ParseEndpointObject(JsonElement endpoint, string defaultKind)
+    private static HonuaSceneEndpoint ParseEndpointObject(
+        JsonElement endpoint,
+        string defaultKind,
+        bool inheritedRequiresAuthentication)
     {
         var url = GetUri(endpoint, "url", "href")
             ?? throw new InvalidOperationException($"Scene endpoint '{defaultKind}' is missing a url.");
@@ -336,7 +341,7 @@ internal static class HonuaSceneJsonParser
             Url = url,
             MediaType = GetString(endpoint, "mediaType", "contentType"),
             Format = GetString(endpoint, "format") ?? defaultKind,
-            RequiresAuthentication = GetBool(endpoint, "requiresAuthentication", "requiresAuth") ?? false,
+            RequiresAuthentication = GetBool(endpoint, "requiresAuthentication", "requiresAuth") ?? inheritedRequiresAuthentication,
             Headers = ParseHeaders(endpoint),
         };
     }
@@ -348,11 +353,20 @@ internal static class HonuaSceneJsonParser
             return Array.Empty<HonuaSceneEndpoint>();
         }
 
+        var inheritedRequiresAuthentication = ParseAuth(root).RequiresAuthentication;
         return endpoints.EnumerateArray()
             .Where(endpoint => endpoint.ValueKind == JsonValueKind.Object)
-            .Select(endpoint => ParseEndpointObject(endpoint, GetString(endpoint, "kind", "type") ?? "resource"))
+            .Select(endpoint => ParseEndpointObject(
+                endpoint,
+                GetString(endpoint, "kind", "type") ?? "resource",
+                inheritedRequiresAuthentication))
             .ToArray();
     }
+
+    private static Uri? FindEndpointUrl(IReadOnlyList<HonuaSceneEndpoint> endpoints, string kind)
+        => endpoints.FirstOrDefault(endpoint =>
+            string.Equals(endpoint.Kind, kind, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(endpoint.Format, kind, StringComparison.OrdinalIgnoreCase))?.Url;
 
     private static IReadOnlyDictionary<string, string> ParseHeaders(JsonElement endpoint)
     {
