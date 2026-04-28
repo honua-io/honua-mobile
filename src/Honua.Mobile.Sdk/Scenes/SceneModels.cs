@@ -269,6 +269,11 @@ public sealed class HonuaSceneResolution
     public DateTimeOffset? ExpiresAt { get; init; }
 
     /// <summary>
+    /// Renderer-safe access envelope describing how resolved scene URLs may be used.
+    /// </summary>
+    public HonuaSceneAccessEnvelope? Access { get; init; }
+
+    /// <summary>
     /// Raw JSON object for callers that need server-specific metadata not modeled by the SDK yet.
     /// </summary>
     public JsonElement RawResponse { get; init; }
@@ -308,6 +313,141 @@ public sealed class HonuaSceneEndpoint
     /// Server-supplied request headers for clients that support custom resource headers.
     /// </summary>
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Access envelope for this endpoint. When <see langword="null"/>, use the parent scene resolution access envelope.
+    /// </summary>
+    public HonuaSceneAccessEnvelope? Access { get; init; }
+}
+
+/// <summary>
+/// Well-known access modes for scene render endpoints.
+/// </summary>
+public static class HonuaSceneAccessModes
+{
+    /// <summary>
+    /// Public URL that does not require extra renderer authentication.
+    /// </summary>
+    public const string Public = "public";
+
+    /// <summary>
+    /// Short-lived signed URL or signed asset prefix.
+    /// </summary>
+    public const string SignedUrl = "signed-url";
+
+    /// <summary>
+    /// First-party proxy URL used to serve protected scene assets.
+    /// </summary>
+    public const string Proxy = "proxy";
+
+    /// <summary>
+    /// Native-only mode where every nested renderer request can attach custom headers.
+    /// </summary>
+    public const string Headers = "headers";
+
+    /// <summary>
+    /// Returns whether <paramref name="mode"/> is a mode understood by this SDK version.
+    /// </summary>
+    public static bool IsSupported(string? mode)
+        => string.Equals(mode, Public, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(mode, SignedUrl, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(mode, Proxy, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(mode, Headers, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// Renderer-safe access metadata for resolved scene URLs.
+/// </summary>
+public sealed class HonuaSceneAccessEnvelope
+{
+    /// <summary>
+    /// Access mode. Known values are in <see cref="HonuaSceneAccessModes"/>.
+    /// </summary>
+    public required string Mode { get; init; }
+
+    /// <summary>
+    /// Time when the host should refresh scene access before a long render session reaches hard expiry.
+    /// </summary>
+    public DateTimeOffset? RefreshAfter { get; init; }
+
+    /// <summary>
+    /// Hard expiry for using the resolved renderer URLs.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// CORS policy descriptor advertised by the server, such as <c>public</c> or <c>registered-origins</c>.
+    /// </summary>
+    public string? CorsMode { get; init; }
+
+    /// <summary>
+    /// Renderer cache policy for this access envelope.
+    /// </summary>
+    public HonuaSceneAccessCachePolicy Cache { get; init; } = HonuaSceneAccessCachePolicy.Empty;
+
+    /// <summary>
+    /// Whether custom request headers are allowed for clients that own all nested renderer requests.
+    /// </summary>
+    public bool CustomHeadersAllowed { get; init; }
+
+    /// <summary>
+    /// Server revision or policy key used to revoke previously issued access.
+    /// </summary>
+    public string? RevocationKey { get; init; }
+
+    /// <summary>
+    /// Whether this SDK version understands the advertised mode.
+    /// </summary>
+    public bool IsSupportedMode => HonuaSceneAccessModes.IsSupported(Mode);
+
+    /// <summary>
+    /// Whether the access envelope can be passed to browser or WebView renderers without custom headers.
+    /// </summary>
+    public bool IsBrowserSafe =>
+        string.Equals(Mode, HonuaSceneAccessModes.Public, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Mode, HonuaSceneAccessModes.SignedUrl, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Mode, HonuaSceneAccessModes.Proxy, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns whether the access envelope is expired at <paramref name="utcNow"/>.
+    /// </summary>
+    public bool IsExpired(DateTimeOffset utcNow) => ExpiresAt.HasValue && utcNow >= ExpiresAt.Value;
+
+    /// <summary>
+    /// Returns whether callers should refresh access at <paramref name="utcNow"/>.
+    /// </summary>
+    public bool ShouldRefresh(DateTimeOffset utcNow) => RefreshAfter.HasValue && utcNow >= RefreshAfter.Value;
+}
+
+/// <summary>
+/// Cache policy advertised for a resolved scene access envelope.
+/// </summary>
+public sealed class HonuaSceneAccessCachePolicy
+{
+    /// <summary>
+    /// Empty cache policy used when the server omits cache metadata.
+    /// </summary>
+    public static HonuaSceneAccessCachePolicy Empty { get; } = new();
+
+    /// <summary>
+    /// Whether responses can be stored in a shared/public cache.
+    /// </summary>
+    public bool? Public { get; init; }
+
+    /// <summary>
+    /// Maximum cache lifetime in seconds.
+    /// </summary>
+    public int? MaxAgeSeconds { get; init; }
+
+    /// <summary>
+    /// Stale-while-revalidate cache lifetime in seconds.
+    /// </summary>
+    public int? StaleWhileRevalidateSeconds { get; init; }
+
+    /// <summary>
+    /// Whether renderers and host apps should avoid persistent storage for these responses.
+    /// </summary>
+    public bool NoStore { get; init; }
 }
 
 /// <summary>
