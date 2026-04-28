@@ -1,0 +1,39 @@
+{
+  "sceneId": "protected-downtown",
+  "tilesetUrl": "https://cdn.honua.test/scenes/protected-downtown/tileset.json?sig=render",
+  "terrainUrl": "https://cdn.honua.test/scenes/protected-downtown/terrain?sig=render",
+  "capabilities": ["3d-tiles", "terrain"],
+  "auth": {
+    "requiresAuthentication": true,
+    "schemes": ["SignedUrl"],
+    "policy": "scene-render-protected"
+  },
+  "expiresAt": "2026-04-28T18:30:00Z",
+  "access": {
+    "mode": "signed-url",
+    "refreshAfterUtc": "2026-04-28T18:20:00Z",
+    "expiresAtUtc": "2026-04-28T18:30:00Z",
+    "corsMode": "registered-origins",
+    "cache": {
+      "public": false,
+      "maxAgeSeconds": 300,
+      "staleWhileRevalidateSeconds": 60
+    },
+    "customHeadersAllowed": false,
+    "revocationKey": "scene-rev-42"
+  },
+  "endpoints": [
+    {
+      "kind": "3d-tiles",
+      "url": "https://cdn.honua.test/scenes/protected-downtown/tileset.json?sig=render",
+      "format": "3d-tiles",
+      "requiresAuthentication": true
+    },
+    {
+      "kind": "terrain",
+      "url": "https://cdn.honua.test/scenes/protected-downtown/terrain?sig=render",
+      "format": "quantized-mesh",
+      "requiresAuthentication": true
+    }
+  ]
+}

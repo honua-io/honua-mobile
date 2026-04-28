@@ -90,6 +90,19 @@ Required access fields:
 - Do not put bearer tokens, API keys, or header JSON into DOM attributes.
 - Prefer signed URL query strings or signed path prefixes over cookies.
 
+```csharp
+var resolvedScene = await client.Scenes.ResolveSceneAsync("downtown-honolulu");
+
+if (resolvedScene.Access is { IsBrowserSafe: false })
+{
+    throw new InvalidOperationException("Scene access requires a native renderer.");
+}
+
+// Host apps pass only renderer-safe URLs to the web component.
+var tilesetUrl = resolvedScene.TilesetUrl;
+var terrainUrl = resolvedScene.TerrainUrl;
+```
+
 ### MAUI
 
 - Use `HonuaSceneService` as the shared access resolver.
@@ -154,4 +167,3 @@ Access expiry is separate from offline package use:
 | honua-io/honua-server#849 | Add server scene access envelopes with signed URL/proxy/header modes. |
 | honua-io/honua-server#837 | Apply auth, CORS, and cache behavior while serving hosted 3D Tiles assets. |
 | honua-io/honua-server#844 | Expose public/protected scene access configuration in the scene registry. |
-

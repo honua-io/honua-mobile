@@ -190,9 +190,10 @@ internal static class HonuaSceneJsonParser
         {
             var root = document.RootElement;
             var sceneId = GetString(root, "sceneId", "id") ?? fallbackSceneId;
-            var tileset = ParseEndpoint(root, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl");
-            var terrain = ParseEndpoint(root, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl");
-            var endpoints = ParseEndpointArray(root)
+            var access = ParseAccessEnvelope(root);
+            var tileset = ParseEndpoint(root, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl", access);
+            var terrain = ParseEndpoint(root, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl", access);
+            var endpoints = ParseEndpointArray(root, access)
                 .Concat(
                     new[] { tileset, terrain }
                         .Where(endpoint => endpoint is not null)
@@ -210,6 +211,7 @@ internal static class HonuaSceneJsonParser
                 Capabilities = capabilities,
                 Auth = ParseAuth(root),
                 ExpiresAt = GetDateTimeOffset(root, "expiresAt", "expiration", "validUntil"),
+                Access = access,
                 RawResponse = root.Clone(),
             };
         }
@@ -223,8 +225,9 @@ internal static class HonuaSceneJsonParser
     {
         var id = GetString(element, "id", "sceneId")
             ?? throw new InvalidOperationException("Scene item is missing an id.");
-        var tileset = ParseEndpoint(element, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl");
-        var terrain = ParseEndpoint(element, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl");
+        var access = ParseAccessEnvelope(element);
+        var tileset = ParseEndpoint(element, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl", access);
+        var terrain = ParseEndpoint(element, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl", access);
         var endpoints = new[] { tileset, terrain }.Where(endpoint => endpoint is not null).Cast<HonuaSceneEndpoint>().ToArray();
 
         return new HonuaSceneSummary
@@ -245,8 +248,9 @@ internal static class HonuaSceneJsonParser
     {
         var id = GetString(element, "id", "sceneId")
             ?? throw new InvalidOperationException("Scene metadata is missing an id.");
-        var tileset = ParseEndpoint(element, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl");
-        var terrain = ParseEndpoint(element, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl");
+        var access = ParseAccessEnvelope(element);
+        var tileset = ParseEndpoint(element, HonuaSceneCapabilities.ThreeDimensionalTiles, "tileset", "tilesetUrl", access);
+        var terrain = ParseEndpoint(element, HonuaSceneCapabilities.Terrain, "terrain", "terrainUrl", access);
         var endpoints = new[] { tileset, terrain }
             .Where(endpoint => endpoint is not null)
             .Cast<HonuaSceneEndpoint>()
@@ -292,13 +296,14 @@ internal static class HonuaSceneJsonParser
         JsonElement root,
         string defaultKind,
         string objectPropertyName,
-        string urlPropertyName)
+        string urlPropertyName,
+        HonuaSceneAccessEnvelope? inheritedAccess)
     {
         var inheritedRequiresAuthentication = ParseAuth(root).RequiresAuthentication;
 
         if (TryGetProperty(root, objectPropertyName, out var endpoint) && endpoint.ValueKind == JsonValueKind.Object)
         {
-            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication);
+            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication, inheritedAccess);
         }
 
         if (TryGetProperty(root, "endpoints", out var endpoints) &&
@@ -306,7 +311,7 @@ internal static class HonuaSceneJsonParser
             TryGetProperty(endpoints, objectPropertyName, out endpoint) &&
             endpoint.ValueKind == JsonValueKind.Object)
         {
-            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication);
+            return ParseEndpointObject(endpoint, defaultKind, inheritedRequiresAuthentication, inheritedAccess);
         }
 
         var url = GetUri(root, urlPropertyName);
@@ -324,16 +329,19 @@ internal static class HonuaSceneJsonParser
                 : null,
             Format = defaultKind,
             RequiresAuthentication = ParseAuth(root).RequiresAuthentication,
+            Access = inheritedAccess,
         };
     }
 
     private static HonuaSceneEndpoint ParseEndpointObject(
         JsonElement endpoint,
         string defaultKind,
-        bool inheritedRequiresAuthentication)
+        bool inheritedRequiresAuthentication,
+        HonuaSceneAccessEnvelope? inheritedAccess)
     {
         var url = GetUri(endpoint, "url", "href")
             ?? throw new InvalidOperationException($"Scene endpoint '{defaultKind}' is missing a url.");
+        var access = ParseAccessEnvelope(endpoint) ?? inheritedAccess;
 
         return new HonuaSceneEndpoint
         {
@@ -343,10 +351,13 @@ internal static class HonuaSceneJsonParser
             Format = GetString(endpoint, "format") ?? defaultKind,
             RequiresAuthentication = GetBool(endpoint, "requiresAuthentication", "requiresAuth") ?? inheritedRequiresAuthentication,
             Headers = ParseHeaders(endpoint),
+            Access = access,
         };
     }
 
-    private static IReadOnlyList<HonuaSceneEndpoint> ParseEndpointArray(JsonElement root)
+    private static IReadOnlyList<HonuaSceneEndpoint> ParseEndpointArray(
+        JsonElement root,
+        HonuaSceneAccessEnvelope? inheritedAccess)
     {
         if (!TryGetProperty(root, "endpoints", out var endpoints) || endpoints.ValueKind != JsonValueKind.Array)
         {
@@ -359,7 +370,8 @@ internal static class HonuaSceneJsonParser
             .Select(endpoint => ParseEndpointObject(
                 endpoint,
                 GetString(endpoint, "kind", "type") ?? "resource",
-                inheritedRequiresAuthentication))
+                inheritedRequiresAuthentication,
+                inheritedAccess))
             .ToArray();
     }
 
@@ -465,6 +477,53 @@ internal static class HonuaSceneJsonParser
             RequiresAuthentication = requiresAuthentication,
             Schemes = GetStringArray(auth, "schemes", "methods"),
             Policy = GetString(auth, "policy", "policyId"),
+        };
+    }
+
+    private static HonuaSceneAccessEnvelope? ParseAccessEnvelope(JsonElement root)
+    {
+        var hasAccessObject =
+            TryGetProperty(root, "access", out var accessElement) &&
+            accessElement.ValueKind == JsonValueKind.Object;
+        var access = hasAccessObject ? accessElement : root;
+        var rawMode = GetString(access, "mode", "accessMode", "type") ?? GetString(root, "accessMode");
+
+        if (string.IsNullOrWhiteSpace(rawMode) && !hasAccessObject)
+        {
+            return null;
+        }
+
+        var mode = NormalizeAccessMode(rawMode ?? "unknown");
+        var expiresAt =
+            GetDateTimeOffset(access, "expiresAtUtc", "expiresAt", "expiration", "validUntil") ??
+            (hasAccessObject ? GetDateTimeOffset(root, "expiresAt", "expiration", "validUntil") : null);
+
+        return new HonuaSceneAccessEnvelope
+        {
+            Mode = mode,
+            RefreshAfter = GetDateTimeOffset(access, "refreshAfterUtc", "refreshAfter", "refreshAt"),
+            ExpiresAt = expiresAt,
+            CorsMode = GetString(access, "corsMode", "cors"),
+            Cache = ParseAccessCachePolicy(access),
+            CustomHeadersAllowed = GetBool(access, "customHeadersAllowed", "headersAllowed", "allowCustomHeaders") ??
+                string.Equals(mode, HonuaSceneAccessModes.Headers, StringComparison.OrdinalIgnoreCase),
+            RevocationKey = GetString(access, "revocationKey", "revision", "serverRevision"),
+        };
+    }
+
+    private static HonuaSceneAccessCachePolicy ParseAccessCachePolicy(JsonElement access)
+    {
+        if (!TryGetProperty(access, "cache", out var cache) || cache.ValueKind != JsonValueKind.Object)
+        {
+            return HonuaSceneAccessCachePolicy.Empty;
+        }
+
+        return new HonuaSceneAccessCachePolicy
+        {
+            Public = GetBool(cache, "public", "shared"),
+            MaxAgeSeconds = GetInt(cache, "maxAgeSeconds", "maxAge"),
+            StaleWhileRevalidateSeconds = GetInt(cache, "staleWhileRevalidateSeconds", "staleWhileRevalidate"),
+            NoStore = GetBool(cache, "noStore", "no-store") ?? false,
         };
     }
 
@@ -693,6 +752,30 @@ internal static class HonuaSceneJsonParser
         return null;
     }
 
+    private static int? GetInt(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!TryGetProperty(element, propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            {
+                return number;
+            }
+
+            if (value.ValueKind == JsonValueKind.String &&
+                int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
     private static DateTimeOffset? GetDateTimeOffset(JsonElement element, params string[] propertyNames)
     {
         foreach (var propertyName in propertyNames)
@@ -742,6 +825,19 @@ internal static class HonuaSceneJsonParser
         {
             capabilities.Add(capability);
         }
+    }
+
+    private static string NormalizeAccessMode(string value)
+    {
+        var mode = value.Trim().Replace('_', '-').ToLowerInvariant();
+        return mode switch
+        {
+            "signedurl" or "signed-url" => HonuaSceneAccessModes.SignedUrl,
+            "header" or "headers" => HonuaSceneAccessModes.Headers,
+            "proxy" => HonuaSceneAccessModes.Proxy,
+            "public" => HonuaSceneAccessModes.Public,
+            _ => mode,
+        };
     }
 
     private static HonuaMobileApiException Malformed(Exception ex)

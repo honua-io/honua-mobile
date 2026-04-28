@@ -81,6 +81,136 @@ public sealed class HonuaSceneServiceTests
     }
 
     [Fact]
+    public async Task ResolveSceneAsync_ParsesSignedUrlAccessEnvelope()
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse(ReadFixture("resolve-access-scene.json")));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync("protected-downtown");
+
+        Assert.Equal(new DateTimeOffset(2026, 4, 28, 18, 30, 0, TimeSpan.Zero), resolution.ExpiresAt);
+        var access = resolution.Access;
+        Assert.NotNull(access);
+        Assert.Equal(HonuaSceneAccessModes.SignedUrl, access.Mode);
+        Assert.True(access.IsSupportedMode);
+        Assert.True(access.IsBrowserSafe);
+        Assert.False(access.CustomHeadersAllowed);
+        Assert.Equal("registered-origins", access.CorsMode);
+        Assert.Equal("scene-rev-42", access.RevocationKey);
+        Assert.Equal(300, access.Cache.MaxAgeSeconds);
+        Assert.Equal(60, access.Cache.StaleWhileRevalidateSeconds);
+        Assert.False(access.Cache.Public);
+        Assert.True(access.ShouldRefresh(new DateTimeOffset(2026, 4, 28, 18, 21, 0, TimeSpan.Zero)));
+        Assert.False(access.IsExpired(new DateTimeOffset(2026, 4, 28, 18, 21, 0, TimeSpan.Zero)));
+        Assert.All(resolution.Endpoints, endpoint => Assert.Same(access, endpoint.Access));
+    }
+
+    [Theory]
+    [InlineData("public", true, true, false)]
+    [InlineData("signedUrl", true, true, false)]
+    [InlineData("proxy", true, true, false)]
+    [InlineData("headers", false, true, true)]
+    [InlineData("device-cert", false, false, false)]
+    public async Task ResolveSceneAsync_ParsesAccessModeMetadata(
+        string mode,
+        bool browserSafe,
+        bool supported,
+        bool customHeadersAllowed)
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse(AccessModeFixture(mode, customHeadersAllowed)));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync("mode-test");
+
+        var access = resolution.Access;
+        Assert.NotNull(access);
+        Assert.Equal(browserSafe, access.IsBrowserSafe);
+        Assert.Equal(supported, access.IsSupportedMode);
+        Assert.Equal(customHeadersAllowed, access.CustomHeadersAllowed);
+    }
+
+    [Fact]
+    public async Task ResolveSceneAsync_EndpointAccessOverridesRootForNativeHeaders()
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse("""
+                {
+                  "sceneId": "native-header-scene",
+                  "access": {
+                    "mode": "signed-url",
+                    "expiresAtUtc": "2026-04-28T18:30:00Z"
+                  },
+                  "endpoints": [
+                    {
+                      "kind": "3d-tiles",
+                      "url": "https://api.honua.test/api/scenes/native-header-scene/tileset.json",
+                      "format": "3d-tiles",
+                      "requiresAuthentication": true,
+                      "headers": {
+                        "X-Honua-Scene": "native-header-scene"
+                      },
+                      "access": {
+                        "mode": "headers",
+                        "customHeadersAllowed": true,
+                        "corsMode": "native-only"
+                      }
+                    }
+                  ]
+                }
+                """));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync("native-header-scene");
+
+        Assert.Equal(HonuaSceneAccessModes.SignedUrl, resolution.Access!.Mode);
+        var endpoint = Assert.Single(resolution.Endpoints);
+        var endpointAccess = endpoint.Access;
+        Assert.NotNull(endpointAccess);
+        Assert.Equal(HonuaSceneAccessModes.Headers, endpointAccess.Mode);
+        Assert.True(endpointAccess.CustomHeadersAllowed);
+        Assert.False(endpointAccess.IsBrowserSafe);
+        Assert.Equal("native-only", endpointAccess.CorsMode);
+        Assert.Equal("native-header-scene", endpoint.Headers["X-Honua-Scene"]);
+    }
+
+    [Fact]
+    public async Task ResolveSceneAsync_ExpiredAccessEnvelope_ReportsExpiredAndRefreshDue()
+    {
+        var handler = new RecordingHandler((_, _) =>
+        {
+            return Task.FromResult(JsonResponse("""
+                {
+                  "sceneId": "expired-access",
+                  "tilesetUrl": "https://cdn.honua.test/scenes/expired/tileset.json?sig=old",
+                  "capabilities": ["3d-tiles"],
+                  "access": {
+                    "mode": "signed-url",
+                    "refreshAfterUtc": "2026-04-28T16:55:00Z",
+                    "expiresAtUtc": "2026-04-28T17:00:00Z"
+                  }
+                }
+                """));
+        });
+        var client = CreateClient(handler);
+
+        var resolution = await client.Scenes.ResolveSceneAsync("expired-access");
+
+        var access = resolution.Access;
+        Assert.NotNull(access);
+        var now = new DateTimeOffset(2026, 4, 28, 17, 1, 0, TimeSpan.Zero);
+        Assert.True(access.ShouldRefresh(now));
+        Assert.True(access.IsExpired(now));
+    }
+
+    [Fact]
     public async Task ResolveSceneAsync_WithEndpointArrayOnly_PopulatesUrlsAndInheritedAuth()
     {
         var handler = new RecordingHandler((_, _) =>
@@ -233,6 +363,22 @@ public sealed class HonuaSceneServiceTests
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
     };
+
+    private static string AccessModeFixture(string mode, bool customHeadersAllowed)
+    {
+        var headers = customHeadersAllowed.ToString().ToLowerInvariant();
+        return $$"""
+            {
+              "sceneId": "mode-test",
+              "tilesetUrl": "https://cdn.honua.test/scenes/mode-test/tileset.json",
+              "capabilities": ["3d-tiles"],
+              "access": {
+                "mode": "{{mode}}",
+                "customHeadersAllowed": {{headers}}
+              }
+            }
+            """;
+    }
 
     private static string ReadFixture(string name, [CallerFilePath] string sourceFile = "")
     {
