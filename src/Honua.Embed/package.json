@@ -1,0 +1,36 @@
+{
+  "name": "@honua/embed",
+  "version": "0.1.0",
+  "description": "Framework-agnostic Honua embeddable map web component.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "honua",
+    "map",
+    "web-component",
+    "gis"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "happy-dom": "^20.0.10",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}

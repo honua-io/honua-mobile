@@ -12,6 +12,7 @@ dynamic forms, and background sync.
 | **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
+| **@honua/embed** | Framework-agnostic `<honua-map>` web component for ISV embeds |
 
 ## Quick Start
 
@@ -118,6 +119,8 @@ var reachable = await client.Routing.GetServiceAreaAsync(depot, TimeSpan.FromMin
 
 ```
 src/
+  Honua.Embed/                Embeddable map web component package
+    tests/                    Web component DOM behavior tests (9 tests)
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Field/         Field collection components
   Honua.Mobile.Offline/       GeoPackage sync engine
@@ -128,7 +131,7 @@ apps/
 tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing (26 tests)
   Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (40 tests)
+  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (42 tests)
   Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
 proto/
@@ -141,6 +144,9 @@ proto/
 dotnet build Honua.Mobile.sln
 dotnet test Honua.Mobile.sln
 dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj
+npm ci --prefix src/Honua.Embed
+npm run build --prefix src/Honua.Embed
+npm test --prefix src/Honua.Embed
 ```
 
 Building Android targets requires a configured Android SDK. The library projects
@@ -150,8 +156,8 @@ without the MAUI workload.
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
-93 tests across 5 test projects. `dotnet test Honua.Mobile.sln` runs the
-SDK, Field, Offline, and MAUI suites; run the Smoke test project separately.
+.NET test coverage across SDK, Field, Offline, MAUI, and Smoke projects, plus
+DOM tests for the embeddable map package.
 
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
 no implementation yet.

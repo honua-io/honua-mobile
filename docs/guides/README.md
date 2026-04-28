@@ -6,6 +6,7 @@ In-depth guides for building with the Honua Mobile SDK.
 |-------|-------------|
 | [Advanced Features](advanced-features.md) | Power-user capabilities including AR, IoT, and AI-assisted workflows |
 | [Camera Integration](camera-integration.md) | Photo and video capture, AI face blurring, and media management |
+| [Embeddable Map](embeddable-map.md) | Framework-agnostic `<honua-map>` web component for ISV integrations |
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
