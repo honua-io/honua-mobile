@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [main, trunk]
 
-permissions: {}
+permissions:
+  contents: read
+  packages: read
 
 env:
   DOTNET_VERSION: '10.0.x'  # Current repo targets net10
@@ -20,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     outputs:
       src_changed: ${{ steps.filter.outputs.src_changed }}
       test_changed: ${{ steps.filter.outputs.test_changed }}
@@ -61,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     outputs:
       build-succeeded: ${{ steps.build.outcome == 'success' }}
     steps:
@@ -70,6 +74,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -121,6 +128,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      packages: read
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +137,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -220,6 +231,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -227,6 +239,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -277,6 +292,7 @@ jobs:
     if: needs.changes.outputs.src_changed == 'true'
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -284,6 +300,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Install MAUI workload
         run: dotnet workload install maui
@@ -308,6 +327,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -315,6 +335,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Validate gRPC Protocol Compatibility
         run: |
@@ -340,6 +363,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      packages: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
@@ -353,6 +377,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Restore and Build for Analysis
         run: |
@@ -373,6 +400,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      packages: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -381,6 +409,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Cache NuGet packages
         uses: actions/cache@v5

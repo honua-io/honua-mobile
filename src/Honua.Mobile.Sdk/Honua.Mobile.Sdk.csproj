@@ -4,9 +4,20 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>Honua.Mobile.Sdk</PackageId>
+    <PackageVersion>0.1.0-alpha.1</PackageVersion>
+    <Authors>Honua</Authors>
+    <Description>Core mobile client for Honua feature queries, edits, routing, scenes, and gRPC transport.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/honua-io/honua-mobile</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/honua-io/honua-mobile</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>honua;mobile;geospatial;gis;grpc</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Google.Protobuf" Version="3.33.1" />
     <PackageReference Include="Grpc.Core.Api" Version="2.71.0" />
     <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />

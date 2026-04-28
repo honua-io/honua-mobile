@@ -2,10 +2,18 @@
   "name": "@honua/embed",
   "version": "0.1.0",
   "description": "Framework-agnostic Honua embeddable map web component.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/honua-io/honua-mobile.git",
+    "directory": "src/Honua.Embed"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
