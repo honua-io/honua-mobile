@@ -6,6 +6,7 @@ using Grpc.Core;
 using Grpc.Net.Client;
 using Honua.Mobile.Sdk.Grpc;
 using Honua.Mobile.Sdk.Models;
+using Honua.Mobile.Sdk.Routing;
 using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk;
@@ -43,7 +44,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             _grpcChannel = GrpcChannel.ForAddress(grpcAddress);
             _grpcClient = new Proto.FeatureService.FeatureServiceClient(_grpcChannel);
         }
+
+        Routing = new HonuaRoutingClient(this, options);
     }
+
+    /// <summary>
+    /// Routing and network-analysis client for directions, service areas, closest facility, and route optimization.
+    /// </summary>
+    public HonuaRoutingClient Routing { get; }
 
     /// <summary>
     /// Queries features from a feature service layer, preferring gRPC when available.
@@ -336,7 +344,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return SendJsonAsync(HttpMethod.Post, path, query: null, new FormUrlEncodedContent(body), ct);
     }
 
-    private async Task<JsonDocument> SendJsonAsync(
+    internal async Task<JsonDocument> SendJsonAsync(
         HttpMethod method,
         string relativePath,
         IReadOnlyDictionary<string, string?>? query,

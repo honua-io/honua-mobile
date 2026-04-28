@@ -8,7 +8,7 @@ dynamic forms, and background sync.
 
 | Package | Purpose |
 |---------|---------|
-| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client with REST fallback |
+| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing SDK |
 | **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
@@ -30,6 +30,7 @@ builder.Services
         ApiKey = "<your-api-key>",
         PreferGrpcForFeatureQueries = true,
     })
+    .AddHonuaRouting()
     .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
     .AddHonuaGeoPackageOfflineSync(
@@ -92,6 +93,27 @@ await foreach (var page in client.QueryFeaturesStreamAsync(request))
 Transport security enforced -- API keys and bearer tokens are never sent over HTTP
 unless `AllowInsecureTransportForDevelopment` is explicitly set.
 
+## Routing
+
+Experimental GeoServices-compatible NAServer client for directions, service
+areas, closest facility, and route optimization:
+
+```csharp
+var route = await client.Routing.GetDirectionsAsync(
+    RoutingLocation.FromLatitudeLongitude(21.3069, -157.8583, "Start"),
+    RoutingLocation.FromLatitudeLongitude(21.2810, -157.8037, "Finish"));
+
+var optimized = await client.Routing.Route()
+    .From(currentLocation)
+    .Via(jobSite)
+    .To(depot)
+    .WithTraffic()
+    .AvoidTolls()
+    .ExecuteAsync();
+
+var reachable = await client.Routing.GetServiceAreaAsync(depot, TimeSpan.FromMinutes(30));
+```
+
 ## Repository Structure
 
 ```
@@ -104,7 +126,7 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation (19 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing (26 tests)
   Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (40 tests)
   Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)
@@ -128,7 +150,7 @@ without the MAUI workload.
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
-86 tests across 5 test projects. `dotnet test Honua.Mobile.sln` runs the
+93 tests across 5 test projects. `dotnet test Honua.Mobile.sln` runs the
 SDK, Field, Offline, and MAUI suites; run the Smoke test project separately.
 
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --

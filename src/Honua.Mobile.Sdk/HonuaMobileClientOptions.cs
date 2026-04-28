@@ -62,4 +62,24 @@ public sealed class HonuaMobileClientOptions
     /// User-Agent product header sent with every request. Defaults to <c>honua-mobile-sdk/0.1.0</c>.
     /// </summary>
     public ProductInfoHeaderValue UserAgent { get; init; } = new("honua-mobile-sdk", "0.1.0");
+
+    /// <summary>
+    /// GeoServices-compatible NAServer service id used by routing APIs.
+    /// </summary>
+    public string RoutingServiceId { get; init; } = "Routing";
+
+    /// <summary>
+    /// NAServer route layer name used for directions and route optimization.
+    /// </summary>
+    public string RoutingRouteLayerName { get; init; } = "Route";
+
+    /// <summary>
+    /// NAServer service-area layer name used for isochrone requests.
+    /// </summary>
+    public string RoutingServiceAreaLayerName { get; init; } = "ServiceArea";
+
+    /// <summary>
+    /// NAServer closest-facility layer name used for nearest-facility requests.
+    /// </summary>
+    public string RoutingClosestFacilityLayerName { get; init; } = "ClosestFacility";
 }
