@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://npm.pkg.github.com"
-          scope: "@honua"
+          scope: "@honua-io"
 
       - name: Install dependencies
         run: npm ci
@@ -108,7 +108,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://npm.pkg.github.com"
-          scope: "@honua"
+          scope: "@honua-io"
 
       - name: Publish to GitHub Packages
         shell: bash

@@ -1,5 +1,5 @@
 {
-  "name": "@honua/embed",
+  "name": "@honua-io/embed",
   "version": "0.1.0",
   "description": "Framework-agnostic Honua embeddable map web component.",
   "repository": {
