@@ -26,10 +26,10 @@ jobs:
         working-directory: src/Honua.Embed
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://npm.pkg.github.com"
@@ -98,13 +98,13 @@ jobs:
       packages: write
     steps:
       - name: Download package artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
           path: npm-packages
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://npm.pkg.github.com"
@@ -114,4 +114,12 @@ jobs:
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish npm-packages/*.tgz --registry "https://npm.pkg.github.com"
+        run: |
+          package="$(find npm-packages -maxdepth 1 -type f -name '*.tgz' | sort | head -n 1)"
+
+          if [[ -z "${package}" ]]; then
+            echo "No npm package artifact found."
+            exit 1
+          fi
+
+          npm publish "${package}" --registry "https://npm.pkg.github.com"
