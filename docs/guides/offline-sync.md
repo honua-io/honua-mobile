@@ -77,6 +77,8 @@ builder.Services
 - `HonuaMobileSdkFeatureClient` for SDK query/edit abstractions over the existing `HonuaMobileClient`.
 - `SdkOfflineSyncRunner` for the existing mobile `IOfflineSyncRunner` used by foreground and background sync scheduling.
 
+The adapter partitions cached features and queued edits by SDK package ID and source ID, so multiple offline packages can safely include the same source without overwriting feature rows or claiming each other's pending edits.
+
 ## Configuration
 
 ### Basic Setup

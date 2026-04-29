@@ -110,6 +110,41 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPendingByLayerKeyPrefixAsync_ClaimsOnlyMatchingLayerKeys()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "area-1-op",
+            LayerKey = "sdk-package:area-1:parks",
+            TargetCollection = "parks",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "area-2-op",
+            LayerKey = "sdk-package:area-2:parks",
+            TargetCollection = "parks",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var area1Pending = await store.GetPendingByLayerKeyPrefixAsync("sdk-package:area-1:", 10);
+        var area2Pending = await store.GetPendingByLayerKeyPrefixAsync("sdk-package:area-2:", 10);
+
+        Assert.Collection(area1Pending, operation => Assert.Equal("area-1-op", operation.OperationId));
+        Assert.Collection(area2Pending, operation => Assert.Equal("area-2-op", operation.OperationId));
+    }
+
+    [Fact]
     public async Task MapAreas_CanBeUpsertedAndListed()
     {
         var store = CreateStore();

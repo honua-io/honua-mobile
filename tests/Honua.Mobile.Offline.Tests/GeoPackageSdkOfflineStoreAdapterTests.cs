@@ -44,12 +44,32 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
             },
         });
 
-        var features = await store.GetFeaturesAsync("parks");
+        var features = await store.GetFeaturesAsync("sdk-package:area-1:parks");
+        var unpartitionedFeatures = await store.GetFeaturesAsync("parks");
 
         var featureJson = Assert.Single(features);
         using var document = JsonDocument.Parse(featureJson);
         Assert.Equal(42, document.RootElement.GetProperty("attributes").GetProperty("objectid").GetInt64());
         Assert.Equal("Ala Moana", document.RootElement.GetProperty("attributes").GetProperty("name").GetString());
+        Assert.Empty(unpartitionedFeatures);
+    }
+
+    [Fact]
+    public async Task SaveFeaturesAsync_PartitionsSameSourceIdByPackage()
+    {
+        var store = CreateStore();
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(store);
+
+        await adapter.SaveFeaturesAsync(CreateFeaturePage("area-1", "parks", "42", "Ala Moana"));
+        await adapter.SaveFeaturesAsync(CreateFeaturePage("area-2", "parks", "42", "Kapiolani"));
+
+        var area1Features = await store.GetFeaturesAsync("sdk-package:area-1:parks");
+        var area2Features = await store.GetFeaturesAsync("sdk-package:area-2:parks");
+
+        using var area1Document = JsonDocument.Parse(Assert.Single(area1Features));
+        using var area2Document = JsonDocument.Parse(Assert.Single(area2Features));
+        Assert.Equal("Ala Moana", area1Document.RootElement.GetProperty("attributes").GetProperty("name").GetString());
+        Assert.Equal("Kapiolani", area2Document.RootElement.GetProperty("attributes").GetProperty("name").GetString());
     }
 
     [Fact]
@@ -102,6 +122,26 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task ChangeJournal_OnlyClaimsEntriesForRequestedPackage()
+    {
+        var store = CreateStore();
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(store);
+
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+        await adapter.EnqueueAsync(CreateJournalEntry("area-2", "parks", "op-2"));
+
+        var area1Pending = await adapter.GetPendingAsync("area-1", 10);
+        var area2Pending = await adapter.GetPendingAsync("area-2", 10);
+
+        Assert.Collection(
+            area1Pending,
+            entry => Assert.Equal("op-1", entry.OperationId));
+        Assert.Collection(
+            area2Pending,
+            entry => Assert.Equal("op-2", entry.OperationId));
+    }
+
+    [Fact]
     public async Task CheckpointsAndState_RoundTripThroughSyncCursors()
     {
         var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
@@ -144,6 +184,49 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
 
     private GeoPackageSyncStore CreateStore()
         => new(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+
+    private static OfflineFeaturePage CreateFeaturePage(string packageId, string sourceId, string featureId, string name)
+        => new()
+        {
+            PackageId = packageId,
+            SourceId = sourceId,
+            Source = CreateSourceDescriptor(),
+            Result = new FeatureQueryResult
+            {
+                ProviderName = "fake",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = featureId,
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["name"] = JsonSerializer.SerializeToElement(name),
+                        },
+                    },
+                ],
+                NumberReturned = 1,
+            },
+        };
+
+    private static OfflineChangeJournalEntry CreateJournalEntry(string packageId, string sourceId, string operationId)
+        => new()
+        {
+            OperationId = operationId,
+            PackageId = packageId,
+            SourceId = sourceId,
+            Source = new FeatureSource { CollectionId = sourceId },
+            OperationKind = OfflineEditOperationKind.Update,
+            Feature = new FeatureEditFeature
+            {
+                Id = $"{operationId}-feature",
+                Attributes = new Dictionary<string, JsonElement>
+                {
+                    ["name"] = JsonSerializer.SerializeToElement(operationId),
+                },
+            },
+        };
 
     private static SourceDescriptor CreateSourceDescriptor()
         => new()

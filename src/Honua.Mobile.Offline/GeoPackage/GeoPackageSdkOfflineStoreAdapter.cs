@@ -35,12 +35,15 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
     public async Task SaveFeaturesAsync(OfflineFeaturePage page, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(page);
+        ArgumentException.ThrowIfNullOrWhiteSpace(page.PackageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(page.SourceId);
 
         await _store.InitializeAsync(ct).ConfigureAwait(false);
+        var layerKey = GetPackageSourceKey(page.PackageId, page.SourceId);
         foreach (var feature in page.Result.Features)
         {
             var featureJson = SerializeFeatureRecord(feature, page.Result.ObjectIdFieldName);
-            await _store.UpsertFeatureAsync(page.SourceId, featureJson, ct).ConfigureAwait(false);
+            await _store.UpsertFeatureAsync(layerKey, featureJson, ct).ConfigureAwait(false);
         }
     }
 
@@ -52,19 +55,21 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         IReadOnlyList<long> objectIds,
         CancellationToken ct = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
 
         await _store.InitializeAsync(ct).ConfigureAwait(false);
+        var layerKey = GetPackageSourceKey(packageId, sourceId);
         foreach (var objectId in objectIds)
         {
-            await _store.DeleteFeatureAsync(sourceId, objectId, ct).ConfigureAwait(false);
+            await _store.DeleteFeatureAsync(layerKey, objectId, ct).ConfigureAwait(false);
         }
 
         foreach (var featureId in featureIds)
         {
             if (long.TryParse(featureId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectId))
             {
-                await _store.DeleteFeatureAsync(sourceId, objectId, ct).ConfigureAwait(false);
+                await _store.DeleteFeatureAsync(layerKey, objectId, ct).ConfigureAwait(false);
             }
         }
     }
@@ -87,7 +92,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
 
         await _store.InitializeAsync(ct).ConfigureAwait(false);
-        var pending = await _store.GetPendingAsync(maxCount, ct).ConfigureAwait(false);
+        var pending = await _store.GetPendingByLayerKeyPrefixAsync(GetPackageKeyPrefix(packageId), maxCount, ct).ConfigureAwait(false);
         return pending.Select(operation => ToSdkEntry(packageId, operation)).ToArray();
     }
 
@@ -176,7 +181,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         return new OfflineEditOperation
         {
             OperationId = entry.OperationId,
-            LayerKey = entry.SourceId,
+            LayerKey = GetPackageSourceKey(entry.PackageId, entry.SourceId),
             TargetCollection = payload.CollectionId ?? payload.ServiceId ?? entry.SourceId,
             OperationType = entry.OperationKind switch
             {
@@ -227,7 +232,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         {
             OperationId = operation.OperationId,
             PackageId = payload.PackageId ?? fallbackPackageId,
-            SourceId = payload.SourceId ?? operation.LayerKey,
+            SourceId = payload.SourceId ?? GetSourceIdFromLayerKey(fallbackPackageId, operation.LayerKey),
             Source = source,
             OperationKind = operation.OperationType switch
             {
@@ -396,4 +401,18 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         => string.IsNullOrWhiteSpace(sourceId)
             ? $"sdk-state:{packageId}"
             : $"sdk-state:{packageId}:{sourceId}";
+
+    private static string GetPackageSourceKey(string packageId, string sourceId)
+        => $"{GetPackageKeyPrefix(packageId)}{sourceId}";
+
+    private static string GetPackageKeyPrefix(string packageId)
+        => $"sdk-package:{packageId}:";
+
+    private static string GetSourceIdFromLayerKey(string packageId, string layerKey)
+    {
+        var prefix = GetPackageKeyPrefix(packageId);
+        return layerKey.StartsWith(prefix, StringComparison.Ordinal)
+            ? layerKey[prefix.Length..]
+            : layerKey;
+    }
 }

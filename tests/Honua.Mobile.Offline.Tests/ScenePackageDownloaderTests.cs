@@ -463,6 +463,9 @@ public sealed class ScenePackageDownloaderTests : IDisposable
         public Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default)
             => throw new NotSupportedException();
 
+        public Task<IReadOnlyList<OfflineEditOperation>> GetPendingByLayerKeyPrefixAsync(string layerKeyPrefix, int maxCount, CancellationToken ct = default)
+            => throw new NotSupportedException();
+
         public Task<int> CountPendingAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
 
