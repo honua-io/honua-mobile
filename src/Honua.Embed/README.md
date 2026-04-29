@@ -1,18 +1,18 @@
-# @honua/embed
+# @honua-io/embed
 
 Framework-agnostic web components for embedding Honua map and 3D scene views in SaaS and ISV applications.
 
 ## Install
 
 ```bash
-npm install @honua/embed
+npm install @honua-io/embed
 ```
 
 ## Map Use
 
 ```html
 <script type="module">
-  import '@honua/embed';
+  import '@honua-io/embed';
 </script>
 
 <honua-map
@@ -32,7 +32,7 @@ npm install @honua/embed
 
 ```html
 <script type="module">
-  import '@honua/embed';
+  import '@honua-io/embed';
 </script>
 
 <honua-scene
