@@ -8,8 +8,16 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Routing;
 using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SdkOfflineChangeJournal = Honua.Sdk.Offline.Abstractions.IOfflineChangeJournal;
+using SdkOfflineFeatureStore = Honua.Sdk.Offline.Abstractions.IOfflineFeatureStore;
+using SdkOfflinePackageManifest = Honua.Sdk.Offline.Abstractions.OfflinePackageManifest;
+using SdkOfflineStateStore = Honua.Sdk.Offline.Abstractions.IOfflineSyncStateStore;
+using SdkOfflineCheckpointStore = Honua.Sdk.Offline.Abstractions.IOfflineSyncCheckpointStore;
+using SdkOfflineSyncEngine = Honua.Sdk.Offline.OfflineSyncEngine;
+using SdkOfflineSyncEngineOptions = Honua.Sdk.Offline.OfflineSyncEngineOptions;
 
 namespace Honua.Mobile.Maui;
 
@@ -132,6 +140,54 @@ public static class HonuaMobileServiceCollectionExtensions
             return new OfflineSyncEngine(store, uploader, options);
         });
         services.AddSingleton<IOfflineSyncRunner>(sp => sp.GetRequiredService<OfflineSyncEngine>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the SDK-owned offline sync engine with mobile GeoPackage storage adapters.
+    /// Requires <see cref="AddHonuaMobileSdk"/> to be called first.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="storeOptions">GeoPackage store configuration.</param>
+    /// <param name="manifest">SDK offline package manifest to sync.</param>
+    /// <param name="syncOptions">SDK sync engine options; defaults are used when <see langword="null"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaSdkGeoPackageOfflineSync(
+        this IServiceCollection services,
+        GeoPackageSyncStoreOptions storeOptions,
+        SdkOfflinePackageManifest manifest,
+        SdkOfflineSyncEngineOptions? syncOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(storeOptions);
+        ArgumentNullException.ThrowIfNull(manifest);
+
+        services.AddSingleton(storeOptions);
+        services.AddSingleton(manifest);
+        services.AddSingleton(syncOptions ?? new SdkOfflineSyncEngineOptions());
+        services.AddSingleton<IGeoPackageSyncStore, GeoPackageSyncStore>();
+        services.AddSingleton<IConnectivityStateProvider, AlwaysOnlineConnectivityStateProvider>();
+        services.AddSingleton<GeoPackageSdkOfflineStoreAdapter>();
+        services.AddSingleton<HonuaMobileSdkFeatureClient>();
+        services.AddSingleton<IHonuaFeatureQueryClient>(sp => sp.GetRequiredService<HonuaMobileSdkFeatureClient>());
+        services.AddSingleton<IHonuaFeatureEditClient>(sp => sp.GetRequiredService<HonuaMobileSdkFeatureClient>());
+        services.AddSingleton<SdkOfflineFeatureStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
+        services.AddSingleton<SdkOfflineChangeJournal>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
+        services.AddSingleton<SdkOfflineCheckpointStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
+        services.AddSingleton<SdkOfflineStateStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
+
+        services.AddSingleton<SdkOfflineSyncEngine>(sp => new SdkOfflineSyncEngine(
+            sp.GetRequiredService<IHonuaFeatureQueryClient>(),
+            sp.GetRequiredService<IHonuaFeatureEditClient>(),
+            sp.GetRequiredService<SdkOfflineFeatureStore>(),
+            sp.GetRequiredService<SdkOfflineChangeJournal>(),
+            sp.GetRequiredService<SdkOfflineCheckpointStore>(),
+            sp.GetRequiredService<SdkOfflineSyncEngineOptions>(),
+            sp.GetRequiredService<SdkOfflineStateStore>()));
+
+        services.AddSingleton<SdkOfflineSyncRunner>();
+        services.AddSingleton<IOfflineSyncRunner>(sp => sp.GetRequiredService<SdkOfflineSyncRunner>());
 
         return services;
     }
