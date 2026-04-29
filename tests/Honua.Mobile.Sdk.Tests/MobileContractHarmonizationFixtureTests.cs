@@ -94,9 +94,12 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Equal("honua-io/honua-mobile", fixture.MobileBaseline.Repository);
         Assert.Equal("unreleased-source", fixture.MobileBaseline.PackageVersion);
 
-        var abstractionsPackage = Assert.Single(fixture.SdkBaseline.Packages);
+        var abstractionsPackage = fixture.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
         Assert.Equal("0.1.0-alpha.1", abstractionsPackage.Version);
+
+        Assert.Contains(fixture.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
+        Assert.Contains(fixture.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
     }
 
     private static ContractFixture LoadFixture()

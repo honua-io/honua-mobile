@@ -29,6 +29,17 @@ public interface IGeoPackageSyncStore
     Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default);
 
     /// <summary>
+    /// Claims pending operations whose layer keys start with <paramref name="layerKeyPrefix"/>, marking them as in-progress.
+    /// Stale claims older than the configured lease timeout are reclaimed.
+    /// </summary>
+    /// <param name="layerKeyPrefix">Layer key prefix used to partition queued operations.</param>
+    /// <param name="maxCount">Maximum number of operations to retrieve.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The claimed operations ordered by priority then creation time.</returns>
+    Task<IReadOnlyList<OfflineEditOperation>> GetPendingByLayerKeyPrefixAsync(string layerKeyPrefix, int maxCount, CancellationToken ct = default)
+        => throw new NotSupportedException("This GeoPackage sync store does not support partitioned queue claims by layer key prefix.");
+
+    /// <summary>
     /// Returns the number of operations in pending or retry status.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>

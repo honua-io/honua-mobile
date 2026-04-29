@@ -199,6 +199,22 @@ ON CONFLICT(operation_id) DO UPDATE SET
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default)
+        => await GetPendingCoreAsync(maxCount, layerKeyPrefix: null, ct).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<OfflineEditOperation>> GetPendingByLayerKeyPrefixAsync(
+        string layerKeyPrefix,
+        int maxCount,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKeyPrefix);
+        return await GetPendingCoreAsync(maxCount, layerKeyPrefix, ct).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<OfflineEditOperation>> GetPendingCoreAsync(
+        int maxCount,
+        string? layerKeyPrefix,
+        CancellationToken ct)
     {
         if (maxCount <= 0)
         {
@@ -215,7 +231,12 @@ ON CONFLICT(operation_id) DO UPDATE SET
                 ? TimeSpan.Zero
                 : _options.InProgressLeaseTimeout;
             var staleClaimCutoffUtc = DateTimeOffset.UtcNow - leaseTimeout;
-            var claimedOperationIds = await ReadPendingOperationIdsAsync(connection, maxCount, staleClaimCutoffUtc, ct).ConfigureAwait(false);
+            var claimedOperationIds = await ReadPendingOperationIdsAsync(
+                connection,
+                maxCount,
+                staleClaimCutoffUtc,
+                layerKeyPrefix,
+                ct).ConfigureAwait(false);
             if (claimedOperationIds.Count == 0)
             {
                 await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
@@ -718,25 +739,31 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         SqliteConnection connection,
         int maxCount,
         DateTimeOffset staleClaimCutoffUtc,
+        string? layerKeyPrefix,
         CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = @"
 SELECT operation_id
 FROM honua_sync_queue
-WHERE status IN ('pending', 'retry')
-   OR (
-      status = 'in_progress'
-      AND (
-        claimed_at_utc IS NULL
-        OR claimed_at_utc <= $stale_claim_cutoff_utc
-      )
-   )
+WHERE ($layer_key_prefix IS NULL OR layer_key LIKE $layer_key_prefix_like ESCAPE '\')
+  AND (
+    status IN ('pending', 'retry')
+    OR (
+        status = 'in_progress'
+        AND (
+          claimed_at_utc IS NULL
+          OR claimed_at_utc <= $stale_claim_cutoff_utc
+        )
+    )
+  )
 ORDER BY priority ASC, created_at_utc ASC
 LIMIT $limit;
 ";
         command.Parameters.AddWithValue("$limit", maxCount);
         command.Parameters.AddWithValue("$stale_claim_cutoff_utc", staleClaimCutoffUtc.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$layer_key_prefix", ToDbValue(layerKeyPrefix));
+        command.Parameters.AddWithValue("$layer_key_prefix_like", layerKeyPrefix is null ? DBNull.Value : EscapeLikePattern(layerKeyPrefix) + "%");
 
         var operationIds = new List<string>(capacity: maxCount);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -747,6 +774,11 @@ LIMIT $limit;
 
         return operationIds;
     }
+
+    private static string EscapeLikePattern(string value)
+        => value.Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
 
     private static OfflineEditOperation ReadOfflineEditOperation(SqliteDataReader reader)
     {

@@ -16,6 +16,14 @@
       {
         "packageId": "Honua.Sdk.Abstractions",
         "version": "0.1.0-alpha.1"
+      },
+      {
+        "packageId": "Honua.Sdk.Offline.Abstractions",
+        "version": "0.1.0-alpha.1"
+      },
+      {
+        "packageId": "Honua.Sdk.Offline",
+        "version": "0.1.0-alpha.1"
       }
     ]
   },
@@ -83,17 +91,28 @@
       "id": "offline-sync-state",
       "displayName": "Offline package, sync state, journal, and conflict state",
       "owner": "shared-split",
-      "authoritativePackage": "pending Honua.Sdk offline contracts",
-      "authoritativeTypes": [],
+      "authoritativePackage": "Honua.Sdk.Offline.Abstractions",
+      "authoritativeTypes": [
+        "Honua.Sdk.Offline.Abstractions.OfflinePackageManifest",
+        "Honua.Sdk.Offline.Abstractions.OfflineSourceDescriptor",
+        "Honua.Sdk.Offline.Abstractions.OfflineSyncState",
+        "Honua.Sdk.Offline.Abstractions.OfflineSyncCheckpoint",
+        "Honua.Sdk.Offline.Abstractions.OfflineChangeJournalEntry",
+        "Honua.Sdk.Offline.Abstractions.OfflineConflictEnvelope",
+        "Honua.Sdk.Offline.Abstractions.OfflineRetryCheckpoint"
+      ],
       "mobileTypes": [
         "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation",
+        "Honua.Mobile.Offline.GeoPackage.GeoPackageSdkOfflineStoreAdapter",
+        "Honua.Mobile.Offline.Sync.HonuaMobileSdkFeatureClient",
+        "Honua.Mobile.Offline.Sync.SdkOfflineSyncRunner",
         "Honua.Mobile.Offline.Sync.SyncRunResult",
         "Honua.Mobile.Offline.Sync.SyncFailure",
         "Honua.Mobile.Offline.Sync.DeltaDownloadOptions",
         "Honua.Mobile.Offline.Sync.DeltaDownloadResult"
       ],
-      "mobileDisposition": "mobile-runtime-plus-sdk-gap",
-      "notes": "Mobile owns native queue persistence, scheduling, and GeoPackage storage. Shared SDK contracts must define source descriptors, journals, checkpoints, and conflict envelopes in honua-sdk-dotnet#56."
+      "mobileDisposition": "mobile-runtime-adapter",
+      "notes": "Mobile owns native queue persistence, scheduling, and GeoPackage storage. SDK contracts define source descriptors, journals, checkpoints, retry checkpoints, and conflict envelopes; mobile adapters bridge those contracts to SQLite/GeoPackage and MAUI runtime behavior."
     },
     {
       "id": "form-feature-schema",

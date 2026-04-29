@@ -6,6 +6,13 @@ This guide covers implementing offline-first data synchronization in mobile appl
 
 The Honua Mobile SDK provides comprehensive offline synchronization capabilities designed for field data collection scenarios where network connectivity may be intermittent or unavailable.
 
+The reusable offline package, journal, checkpoint, conflict, and sync engine contracts are supplied by `honua-sdk-dotnet`:
+
+- `Honua.Sdk.Offline.Abstractions`
+- `Honua.Sdk.Offline`
+
+This mobile repo supplies the native runtime layer around those SDK contracts: GeoPackage/SQLite adapters, local file placement, MAUI dependency injection, app lifecycle integration, reachability checks, background scheduling, permissions, and field workflow UX.
+
 ## Core Concepts
 
 ### Offline-First Architecture
@@ -21,6 +28,56 @@ The SDK follows an offline-first approach:
 - **SQLite**: Local database for structured data
 - **File System**: Local storage for photos, attachments, and cached maps
 - **GeoPackage**: Standards-compliant offline geodatabase format
+
+### SDK-backed sync registration
+
+For new offline workflows, register the SDK sync core with the mobile GeoPackage adapters:
+
+```csharp
+using Honua.Mobile.Maui;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
+var manifest = new OfflinePackageManifest
+{
+    PackageId = "inspection-area-1",
+    Sources =
+    [
+        new OfflineSourceDescriptor
+        {
+            SourceId = "parks",
+            Source = new SourceDescriptor
+            {
+                Id = "parks",
+                Protocol = FeatureProtocolIds.OgcFeatures,
+                Locator = new SourceLocator { CollectionId = "parks" },
+            },
+            OutFields = ["name", "status"],
+            PageSize = 500,
+        },
+    ],
+};
+
+builder.Services
+    .AddHonuaMobileSdk(new HonuaMobileClientOptions
+    {
+        BaseUri = new Uri("https://api.example.com"),
+    })
+    .AddHonuaSdkGeoPackageOfflineSync(
+        new GeoPackageSyncStoreOptions { DatabasePath = "fielddata.gpkg" },
+        manifest)
+    .AddHonuaBackgroundSync();
+```
+
+`AddHonuaSdkGeoPackageOfflineSync` wires `Honua.Sdk.Offline.OfflineSyncEngine` to:
+
+- `GeoPackageSdkOfflineStoreAdapter` for SDK feature store, journal, checkpoint, and sync state interfaces.
+- `HonuaMobileSdkFeatureClient` for SDK query/edit abstractions over the existing `HonuaMobileClient`.
+- `SdkOfflineSyncRunner` for the existing mobile `IOfflineSyncRunner` used by foreground and background sync scheduling.
+
+The adapter partitions cached features and queued edits by SDK package ID and source ID, so multiple offline packages can safely include the same source without overwriting feature rows or claiming each other's pending edits.
 
 ## Configuration
 

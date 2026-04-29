@@ -350,6 +350,21 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 public sealed class OfflineOperationPayload
 {
     /// <summary>
+    /// SDK offline package identifier when the payload was produced from <c>Honua.Sdk.Offline.Abstractions</c>.
+    /// </summary>
+    public string? PackageId { get; init; }
+
+    /// <summary>
+    /// SDK offline source identifier when the payload was produced from <c>Honua.Sdk.Offline.Abstractions</c>.
+    /// </summary>
+    public string? SourceId { get; init; }
+
+    /// <summary>
+    /// Provider sync token observed when the local edit was queued.
+    /// </summary>
+    public string? BaseSyncToken { get; init; }
+
+    /// <summary>
     /// API protocol to use: <c>"FeatureServer"</c>/<c>"esri"</c> or <c>"ogcfeatures"</c>/<c>"ogc"</c>. Defaults to <c>"FeatureServer"</c>.
     /// </summary>
     public string Protocol { get; init; } = "FeatureServer";
@@ -403,4 +418,9 @@ public sealed class OfflineOperationPayload
     /// Typed list of object IDs for delete operations (alternative to <see cref="DeletesCsv"/>).
     /// </summary>
     public IReadOnlyList<long>? DeleteObjectIds { get; init; }
+
+    /// <summary>
+    /// SDK or application metadata associated with the queued edit.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Metadata { get; init; }
 }
