@@ -77,13 +77,6 @@ public sealed class MobileContractHarmonizationFixtureTests
     {
         var fixture = LoadFixture();
 
-        var scene = FindFamily(fixture, "scene-metadata");
-        Assert.Equal("shared-split", scene.Owner);
-        Assert.Equal("pending Honua.Sdk.Scene contracts", scene.AuthoritativePackage);
-        Assert.Contains(
-            "Honua.Mobile.Sdk.Scenes.HonuaScenePackageManifest",
-            scene.MobileTypes);
-
         var routing = FindFamily(fixture, "routing");
         Assert.Equal("honua-sdk-dotnet", routing.Owner);
         Assert.Equal("Honua.Sdk.Abstractions", routing.AuthoritativePackage);
@@ -104,6 +97,21 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Mobile.Offline.GeoPackage.IGeoPackageSyncStore",
             geopackage.AuthoritativeTypes);
+
+        var scene = FindFamily(fixture, "scene-metadata");
+        Assert.Equal("honua-sdk-dotnet", scene.Owner);
+        Assert.Equal("Honua.Sdk.Abstractions; Honua.Sdk.Scenes", scene.AuthoritativePackage);
+        Assert.Contains(
+            "Honua.Sdk.Abstractions.Scenes.IHonuaSceneClient",
+            scene.AuthoritativeTypes);
+        Assert.Contains(
+            "Honua.Mobile.Offline.ScenePackages.IHonuaScenePackageDownloader",
+            scene.MobileTypes);
+        var mobileSdkScenePrefix = string.Concat("Honua.Mobile.Sdk.", "Scenes.");
+        Assert.DoesNotContain(
+            scene.MobileTypes,
+            type => type.StartsWith(mobileSdkScenePrefix, StringComparison.Ordinal));
+        Assert.Equal("mobile-runtime-adapter", scene.MobileDisposition);
     }
 
     [Fact]
@@ -119,13 +127,15 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
-        Assert.Equal("0.1.5-alpha.1", abstractionsPackage.Version);
+        Assert.Equal("0.1.7-alpha.1", abstractionsPackage.Version);
 
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Grpc");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.GeoServices");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Scenes");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.OgcFeatures");
+        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package => Assert.Equal("0.1.7-alpha.1", package.Version));
     }
 
     private static ContractFixture LoadFixture()

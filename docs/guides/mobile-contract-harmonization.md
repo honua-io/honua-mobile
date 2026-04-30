@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #67 plus routing adapter work | `Honua.Sdk.*` `0.1.5-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, and offline contracts |
+| `honua-mobile` source packages from `main` after #68 plus scene adapter work | `Honua.Sdk.*` `0.1.7-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
@@ -29,7 +29,7 @@ published shared SDK package versions above. When mobile packages gain
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
 | Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
 | Form-related feature schemas | Split | SDK source schema owns provider-neutral fields; mobile owns form rendering, validation, calculated fields, and record workflow. |
-| Scene metadata and offline scene packages | Split pending SDK scene contracts after server dependencies | Keep manifest/server handoff portable and fixture-backed; mobile owns renderers, downloads, and display lifecycle. |
+| Scene metadata and offline scene packages | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions.Scenes` plus `Honua.Sdk.Scenes` | Mobile owns renderers, downloads, local storage, and display lifecycle. |
 | Routing and network analysis | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.GeoServices` NAServer client | Mobile keeps only device location providers, permission flows, route display, and map interaction adapters. |
 | GeoPackage sync and native storage adapters | `honua-mobile` | Keep database tables, background sync, file-system downloads, and MAUI registration in mobile. |
 | Display/embed maps | `honua-mobile` / `Honua.Embed` | SDK returns portable contracts only; MapLibre, deck.gl, Cesium, Mapsui, WebGL/WebGPU, and map controls stay outside SDK core. |
@@ -50,6 +50,11 @@ published shared SDK package versions above. When mobile packages gain
   `Honua.Sdk.Abstractions.Routing.IHonuaRoutingClient`, `RoutingLocation`,
   `RouteDirectionsRequest`, `RouteOptimizationRequest`, `ServiceAreaRequest`,
   and `ClosestFacilityRequest`.
+- New provider-neutral scene metadata code should target
+  `Honua.Sdk.Abstractions.Scenes.IHonuaSceneClient`,
+  `HonuaSceneResolveRequest`, `HonuaSceneResolution`, and
+  `HonuaScenePackageManifest`, with `Honua.Sdk.Scenes` providing the portable
+  client implementation.
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
   camera/location, route-location-provider, display, and offline file-system
   concerns.
@@ -73,7 +78,10 @@ published shared SDK package versions above. When mobile packages gain
 - #54 moves reusable `Honua.Mobile.Sdk` feature clients toward SDK contracts and
   package consumption.
 - #54 now consumes SDK routing contracts and the `Honua.Sdk.GeoServices` routing
-  client from `Honua.Sdk.*` `0.1.5-alpha.1`; mobile keeps only
+  client from `Honua.Sdk.*`; mobile keeps only
   location-provider helpers.
+- #55 consumes SDK scene metadata and package manifest contracts from
+  `Honua.Sdk.*` `0.1.7-alpha.1`; mobile keeps downloader, GeoPackage catalog,
+  display, and renderer lifecycle code.
 - Once a mobile package version exists, add it to the compatibility table and
   fixture before changing public model ownership.

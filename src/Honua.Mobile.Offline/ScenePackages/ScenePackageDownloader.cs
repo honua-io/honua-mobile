@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
 
 namespace Honua.Mobile.Offline.ScenePackages;
 

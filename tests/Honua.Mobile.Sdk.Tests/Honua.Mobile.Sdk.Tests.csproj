@@ -9,10 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.5-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Scenes" Version="0.1.7-alpha.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -24,6 +25,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\Scenes\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

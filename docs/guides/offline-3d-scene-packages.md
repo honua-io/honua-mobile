@@ -109,7 +109,7 @@ Required fields:
 |-------|-------------|
 | `schemaVersion` | Must be `honua.scene-package.v1` until a migration ticket defines v2. |
 | `packageId` | Stable ID for the downloaded package. Used for local catalog, resume, and eviction. |
-| `sceneId` | Matches the server scene ID returned by `HonuaSceneService`. |
+| `sceneId` | Matches the server scene ID returned by `IHonuaSceneClient`. |
 | `editionGate` | Client-visible feature gate for package use: `community`, `pro`, or `enterprise`. |
 | `serverRevision` | Changes whenever server scene content or required auth policy changes. |
 | `createdAtUtc` | Server timestamp for package generation. |

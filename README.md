@@ -8,7 +8,7 @@ dynamic forms, and background sync.
 
 | Package | Purpose |
 |---------|---------|
-| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing and scene metadata SDK |
+| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter |
 | **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
@@ -122,7 +122,7 @@ Scene discovery resolves server-managed 3D Tiles and terrain URLs before a
 renderer loads them:
 
 ```csharp
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
 
 var scene = await client.Scenes.ResolveSceneAsync(
     "downtown-honolulu",

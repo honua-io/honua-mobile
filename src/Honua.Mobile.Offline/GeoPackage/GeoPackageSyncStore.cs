@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
 using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.GeoPackage;

@@ -1,12 +1,12 @@
 using System.Net;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
+using Honua.Sdk.Scenes.Exceptions;
 
 namespace Honua.Mobile.Sdk.Tests;
 
-public sealed class HonuaSceneServiceTests
+public sealed class HonuaSceneClientAdapterTests
 {
     [Fact]
     public async Task ListScenesAsync_ParsesSceneCatalogFixture()
@@ -307,7 +307,7 @@ public sealed class HonuaSceneServiceTests
         });
         var client = CreateClient(handler);
 
-        var ex = await Assert.ThrowsAsync<HonuaMobileApiException>(() => client.Scenes.GetSceneAsync("missing"));
+        var ex = await Assert.ThrowsAsync<HonuaSceneException>(() => client.Scenes.GetSceneAsync("missing"));
 
         Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
         Assert.Contains("404", ex.Message);
@@ -325,7 +325,7 @@ public sealed class HonuaSceneServiceTests
         });
         var client = CreateClient(handler);
 
-        var ex = await Assert.ThrowsAsync<HonuaMobileApiException>(() => client.Scenes.ResolveSceneAsync("protected"));
+        var ex = await Assert.ThrowsAsync<HonuaSceneException>(() => client.Scenes.ResolveSceneAsync("protected"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, ex.StatusCode);
         Assert.NotNull(ex.ResponseBody);
@@ -341,7 +341,7 @@ public sealed class HonuaSceneServiceTests
         });
         var client = CreateClient(handler);
 
-        var ex = await Assert.ThrowsAsync<HonuaMobileApiException>(() => client.Scenes.ResolveSceneAsync(
+        var ex = await Assert.ThrowsAsync<HonuaSceneException>(() => client.Scenes.ResolveSceneAsync(
             "terrain-only",
             new HonuaSceneResolveRequest
             {
@@ -360,7 +360,7 @@ public sealed class HonuaSceneServiceTests
         });
         var client = CreateClient(handler);
 
-        var ex = await Assert.ThrowsAsync<HonuaMobileApiException>(() => client.Scenes.GetSceneAsync("bad"));
+        var ex = await Assert.ThrowsAsync<HonuaSceneException>(() => client.Scenes.GetSceneAsync("bad"));
 
         Assert.Contains("malformed", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -374,7 +374,7 @@ public sealed class HonuaSceneServiceTests
         });
         var client = CreateClient(handler);
 
-        var ex = await Assert.ThrowsAsync<HonuaMobileApiException>(() => client.Scenes.ListScenesAsync());
+        var ex = await Assert.ThrowsAsync<HonuaSceneException>(() => client.Scenes.ListScenesAsync());
 
         Assert.Contains("invalid JSON", ex.Message);
     }
@@ -400,7 +400,7 @@ public sealed class HonuaSceneServiceTests
 
     private static string AccessModeFixture(string mode, bool customHeadersAllowed)
     {
-        var headers = customHeadersAllowed.ToString().ToLowerInvariant();
+        var headers = customHeadersAllowed ? "true" : "false";
         return $$"""
             {
               "sceneId": "mode-test",
@@ -414,12 +414,8 @@ public sealed class HonuaSceneServiceTests
             """;
     }
 
-    private static string ReadFixture(string name, [CallerFilePath] string sourceFile = "")
-    {
-        var testDirectory = Path.GetDirectoryName(sourceFile)
-            ?? throw new InvalidOperationException("Unable to resolve test directory.");
-        return File.ReadAllText(Path.Combine(testDirectory, "Fixtures", "Scenes", name));
-    }
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Scenes", name));
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
