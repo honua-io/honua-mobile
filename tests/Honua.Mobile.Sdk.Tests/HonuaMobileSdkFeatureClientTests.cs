@@ -145,7 +145,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
             DeleteObjectIds = [42],
         });
 
-        Assert.Contains("/ogc/features/collections/buildings/items/42", capturedPaths);
+        Assert.Contains(capturedPaths, path => path.Contains("/ogc/features/collections/buildings/items/42", StringComparison.Ordinal));
         Assert.True(result.Succeeded);
         Assert.Equal("42", result.DeleteResults[0].Id);
         Assert.Equal(42, result.DeleteResults[0].ObjectId);

@@ -1,11 +1,14 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
 using Honua.Mobile.Sdk.Routing;
 using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.GeoServices.FeatureServer;
+using Honua.Sdk.GeoServices.FeatureServer.Exceptions;
 using Honua.Sdk.Grpc;
+using Honua.Sdk.OgcFeatures;
+using Honua.Sdk.OgcFeatures.Exceptions;
 using Microsoft.Extensions.Options;
 
 namespace Honua.Mobile.Sdk;
@@ -18,6 +21,9 @@ namespace Honua.Mobile.Sdk;
 public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 {
     private readonly HttpClient _http;
+    private readonly HttpClient _sdkHttp;
+    private readonly HonuaFeatureServerClient _featureServerClient;
+    private readonly HonuaOgcFeaturesClient _ogcFeaturesClient;
     private readonly HonuaMobileClientOptions _options;
     private readonly object _grpcClientSync = new();
     private readonly bool _canUseGrpcEndpoint;
@@ -37,6 +43,17 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         _http.Timeout = options.Timeout;
         _http.DefaultRequestHeaders.UserAgent.Clear();
         _http.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
+
+        _sdkHttp = new HttpClient(
+            new AuthenticatedSdkHttpMessageHandler(_http, ApplyHttpAuthenticationAsync),
+            disposeHandler: true)
+        {
+            BaseAddress = options.BaseUri,
+            Timeout = options.Timeout,
+        };
+
+        _featureServerClient = new HonuaFeatureServerClient(_sdkHttp);
+        _ogcFeaturesClient = new HonuaOgcFeaturesClient(_sdkHttp);
 
         var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
         _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
@@ -165,8 +182,18 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> describing available collections.</returns>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> GetOgcCollectionsAsync(CancellationToken ct = default)
-        => SendJsonAsync(HttpMethod.Get, "/ogc/features/collections", new Dictionary<string, string?> { ["f"] = "json" }, null, ct);
+    public async Task<JsonDocument> GetOgcCollectionsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var collections = await _ogcFeaturesClient.ListCollectionsAsync(ct).ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(collections);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
+    }
 
     /// <summary>
     /// Retrieves items from an OGC Features API collection with optional filtering and pagination.
@@ -176,12 +203,21 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <returns>A <see cref="JsonDocument"/> containing the matched items.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> GetOgcItemsAsync(OgcItemsRequest request, CancellationToken ct = default)
+    public async Task<JsonDocument> GetOgcItemsAsync(OgcItemsRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
-        return SendJsonAsync(HttpMethod.Get, path, SdkFeatureTransportMappings.ToOgcItemsQueryParameters(request), null, ct);
+        try
+        {
+            var response = await _ogcFeaturesClient
+                .GetItemsAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcItemsParams(request), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
     }
 
     /// <summary>
@@ -192,13 +228,21 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <returns>A <see cref="JsonDocument"/> containing the server response for the created item.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> CreateOgcItemAsync(OgcCreateItemRequest request, CancellationToken ct = default)
+    public async Task<JsonDocument> CreateOgcItemAsync(OgcCreateItemRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
-        var payload = SdkFeatureTransportMappings.SerializeOgcFeature(request.Feature);
-        return SendJsonAsync(HttpMethod.Post, path, null, new StringContent(payload, Encoding.UTF8, "application/geo+json"), ct);
+        try
+        {
+            var response = await _ogcFeaturesClient
+                .CreateItemAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
     }
 
     /// <summary>
@@ -209,13 +253,21 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> ReplaceOgcItemAsync(OgcReplaceItemRequest request, CancellationToken ct = default)
+    public async Task<JsonDocument> ReplaceOgcItemAsync(OgcReplaceItemRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
-        var payload = SdkFeatureTransportMappings.SerializeOgcFeature(request.Feature);
-        return SendJsonAsync(HttpMethod.Put, path, null, new StringContent(payload, Encoding.UTF8, "application/geo+json"), ct);
+        try
+        {
+            var response = await _ogcFeaturesClient
+                .UpdateItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
     }
 
     /// <summary>
@@ -226,13 +278,21 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> PatchOgcItemAsync(OgcPatchItemRequest request, CancellationToken ct = default)
+    public async Task<JsonDocument> PatchOgcItemAsync(OgcPatchItemRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
-        var payload = JsonSerializer.Serialize(request.Patch);
-        return SendJsonAsync(HttpMethod.Patch, path, null, new StringContent(payload, Encoding.UTF8, "application/merge-patch+json"), ct);
+        try
+        {
+            var response = await _ogcFeaturesClient
+                .PatchItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToJsonElement(request.Patch), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
     }
 
     /// <summary>
@@ -243,12 +303,12 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public Task<JsonDocument> DeleteOgcItemAsync(OgcDeleteItemRequest request, CancellationToken ct = default)
+    public async Task<JsonDocument> DeleteOgcItemAsync(OgcDeleteItemRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
-        return SendJsonAsync(HttpMethod.Delete, path, null, null, ct);
+        return await SendJsonAsync(HttpMethod.Delete, path, null, null, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -259,6 +319,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             _grpcClient?.Dispose();
             _grpcClient = null;
         }
+
+        _sdkHttp.Dispose();
     }
 
     /// <inheritdoc />
@@ -300,22 +362,50 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return SdkGrpcTransportMappings.ToJsonDocument(response);
     }
 
-    private Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
+    private async Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
-        return SendJsonAsync(HttpMethod.Get, path, SdkFeatureTransportMappings.ToFeatureServerQueryParameters(request), content: null, ct);
+        try
+        {
+            var response = await _featureServerClient
+                .QueryAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerQueryParams(request), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer", ex);
+        }
     }
 
-    private Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
+    private async Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
     {
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
-        return SendJsonAsync(
-            HttpMethod.Post,
-            path,
-            query: null,
-            new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
-            ct);
+        if (!IsDefaultJsonResponseFormat(request.ResponseFormat))
+        {
+            var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
+            return await SendJsonAsync(
+                HttpMethod.Post,
+                path,
+                query: null,
+                new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
+                ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var response = await _featureServerClient
+                .ApplyEditsAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerEditRequest(request), ct)
+                .ConfigureAwait(false);
+            return SdkFeatureTransportMappings.ToJsonDocument(response);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer", ex);
+        }
     }
+
+    private static bool IsDefaultJsonResponseFormat(string? responseFormat)
+        => string.IsNullOrWhiteSpace(responseFormat) ||
+            string.Equals(responseFormat, "json", StringComparison.OrdinalIgnoreCase);
 
     internal async Task<JsonDocument> SendJsonAsync(
         HttpMethod method,
@@ -468,5 +558,66 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
 
         return new Uri($"{relativePath}?{queryText}", UriKind.Relative);
+    }
+
+    private static HonuaMobileApiException ToMobileApiException(string provider, HonuaFeatureServerException ex)
+        => new(
+            ex.StatusCode,
+            $"{provider} request failed with status {(int)ex.StatusCode} {ex.Message}",
+            ex.ResponseBody);
+
+    private static HonuaMobileApiException ToMobileApiException(string provider, HonuaOgcFeaturesException ex)
+        => new(
+            ex.StatusCode,
+            $"{provider} request failed with status {(int)ex.StatusCode} {ex.Message}",
+            ex.ResponseBody);
+
+    private sealed class AuthenticatedSdkHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly HttpClient _inner;
+        private readonly Func<HttpRequestMessage, CancellationToken, ValueTask> _authenticate;
+
+        public AuthenticatedSdkHttpMessageHandler(
+            HttpClient inner,
+            Func<HttpRequestMessage, CancellationToken, ValueTask> authenticate)
+        {
+            _inner = inner;
+            _authenticate = authenticate;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var forwarded = await CloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            await _authenticate(forwarded, cancellationToken).ConfigureAwait(false);
+            return await _inner.SendAsync(forwarded, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<HttpRequestMessage> CloneRequestAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var clone = new HttpRequestMessage(request.Method, request.RequestUri)
+            {
+                Version = request.Version,
+                VersionPolicy = request.VersionPolicy,
+            };
+
+            foreach (var header in request.Headers)
+            {
+                clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+
+            if (request.Content is not null)
+            {
+                var bytes = await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                clone.Content = new ByteArrayContent(bytes);
+                foreach (var header in request.Content.Headers)
+                {
+                    clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
+
+            return clone;
+        }
     }
 }

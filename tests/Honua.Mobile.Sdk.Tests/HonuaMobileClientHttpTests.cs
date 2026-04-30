@@ -134,15 +134,81 @@ public sealed class HonuaMobileClientHttpTests
             ],
             Deletes = [7],
             RollbackOnFailure = true,
+            ForceWrite = true,
         });
 
         Assert.NotNull(capturedBody);
         var form = ParseForm(capturedBody);
         Assert.True(bool.Parse(form["rollbackOnFailure"]));
+        Assert.True(bool.Parse(form["forceWrite"]));
         Assert.Equal("7", form["deletes"]);
         Assert.Contains("\"name\":\"Test\"", form["adds"]);
         Assert.Contains("\"geometry\"", form["adds"]);
         Assert.True(result.RootElement.GetProperty("addResults")[0].GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ApplyEditsAsync_WithNonDefaultResponseFormat_ForwardsFormat()
+    {
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"addResults":[{"objectId":42,"success":true}]}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.ApplyEditsAsync(new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            AddsJson = """[{"attributes":{"name":"Test"}}]""",
+            ResponseFormat = "pjson",
+        });
+
+        Assert.NotNull(capturedBody);
+        var form = ParseForm(capturedBody);
+        Assert.Equal("pjson", form["f"]);
+        Assert.Equal(42, result.RootElement.GetProperty("addResults")[0].GetProperty("objectId").GetInt32());
+    }
+
+    [Fact]
+    public async Task QueryFeaturesAsync_WithSdkQueryFlags_SerializesFeatureServerParams()
+    {
+        Uri? capturedUri = null;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"count":3}""", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = "assets",
+            LayerId = 0,
+            ReturnCountOnly = true,
+            ReturnIdsOnly = true,
+            ReturnExtentOnly = true,
+            ReturnDistinct = true,
+        });
+
+        Assert.NotNull(capturedUri);
+        var pathAndQuery = capturedUri.PathAndQuery;
+        Assert.Contains("returnCountOnly=true", pathAndQuery);
+        Assert.Contains("returnIdsOnly=true", pathAndQuery);
+        Assert.Contains("returnExtentOnly=true", pathAndQuery);
+        Assert.Contains("returnDistinctValues=true", pathAndQuery);
+        Assert.Equal(3, result.RootElement.GetProperty("count").GetInt32());
     }
 
     [Fact]
@@ -254,6 +320,70 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task PatchOgcItemAsync_UsesSdkPatchAndMergePatchContentType()
+    {
+        string? capturedBody = null;
+        string? capturedMediaType = null;
+        Uri? capturedUri = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedUri = request.RequestUri;
+            capturedMediaType = request.Content?.Headers.ContentType?.MediaType;
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"type":"Feature","id":"building-1"}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.PatchOgcItemAsync(new OgcPatchItemRequest
+        {
+            CollectionId = "buildings",
+            FeatureId = "building-1",
+            Patch = JsonSerializer.SerializeToElement(new
+            {
+                properties = new { name = "HQ" },
+            }),
+        });
+
+        Assert.NotNull(capturedUri);
+        Assert.Contains("/ogc/features/collections/buildings/items/building-1", capturedUri.PathAndQuery);
+        Assert.Equal("application/merge-patch+json", capturedMediaType);
+        Assert.NotNull(capturedBody);
+        Assert.Contains("\"name\":\"HQ\"", capturedBody);
+        Assert.Equal("building-1", result.RootElement.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteOgcItemAsync_PreservesServerResponsePayload()
+    {
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            Assert.Equal(HttpMethod.Delete, request.Method);
+            Assert.Contains("/ogc/features/collections/buildings/items/building-1", request.RequestUri!.PathAndQuery);
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"id":"building-1","deleted":true}""", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.DeleteOgcItemAsync(new OgcDeleteItemRequest
+        {
+            CollectionId = "buildings",
+            FeatureId = "building-1",
+        });
+
+        Assert.Equal("building-1", result.RootElement.GetProperty("id").GetString());
+        Assert.True(result.RootElement.GetProperty("deleted").GetBoolean());
+    }
+
+    [Fact]
     public async Task SendJsonAsync_NonSuccessStatusCode_ThrowsHonuaMobileApiException()
     {
         var handler = new StubHttpMessageHandler((_, _) =>
@@ -349,7 +479,7 @@ public sealed class HonuaMobileClientHttpTests
         {
             ServiceId = "default",
             LayerId = 0,
-            AddsJson = "[]",
+            AddsJson = """[{"attributes":{"name":"Test"}}]""",
         });
 
         Assert.NotNull(capturedAuthHeader);

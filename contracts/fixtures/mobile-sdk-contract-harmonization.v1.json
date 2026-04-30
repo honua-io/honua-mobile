@@ -6,7 +6,7 @@
   "compatibility": {
     "mobileBaseline": {
       "repository": "honua-io/honua-mobile",
-      "ref": "main after honua-mobile#52",
+      "ref": "main after honua-mobile#65",
       "packageVersion": "unreleased-source"
     },
     "sdkBaseline": {
@@ -15,27 +15,27 @@
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline.Abstractions",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "0.1.2-alpha.1"
+          "version": "0.1.3-alpha.1"
         }
       ]
     }

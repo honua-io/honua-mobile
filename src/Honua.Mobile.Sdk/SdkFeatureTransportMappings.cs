@@ -10,62 +10,36 @@ namespace Honua.Mobile.Sdk;
 
 internal static class SdkFeatureTransportMappings
 {
-    public static IReadOnlyDictionary<string, string?> ToFeatureServerQueryParameters(QueryFeaturesRequest request)
+    public static FeatureServerEditRequest ToFeatureServerEditRequest(ApplyEditsRequest request)
     {
-        var query = ToFeatureServerQueryParams(request);
-        return new Dictionary<string, string?>
+        ArgumentNullException.ThrowIfNull(request);
+
+        return new FeatureServerEditRequest
         {
-            ["f"] = request.ResponseFormat,
-            ["where"] = query.Where ?? "1=1",
-            ["objectIds"] = query.ObjectIds is { Count: > 0 } ? JoinInvariant(query.ObjectIds) : null,
-            ["outFields"] = query.OutFields,
-            ["returnGeometry"] = query.ReturnGeometry is false ? "false" : "true",
-            ["resultOffset"] = query.ResultOffset?.ToString(CultureInfo.InvariantCulture),
-            ["resultRecordCount"] = query.ResultRecordCount?.ToString(CultureInfo.InvariantCulture),
-            ["orderByFields"] = query.OrderByFields,
-            ["returnDistinctValues"] = query.ReturnDistinctValues is true ? "true" : null,
-            ["returnCountOnly"] = request.ReturnCountOnly ? "true" : null,
-            ["returnIdsOnly"] = request.ReturnIdsOnly ? "true" : null,
-            ["returnExtentOnly"] = request.ReturnExtentOnly ? "true" : null,
+            Adds = ResolveFeatureServerFeatures(request.Adds, request.AddsJson, "adds"),
+            Updates = ResolveFeatureServerFeatures(request.Updates, request.UpdatesJson, "updates"),
+            Deletes = ResolveFeatureServerDeletes(request.Deletes, request.DeletesCsv),
+            RollbackOnFailure = request.RollbackOnFailure,
+            ForceWrite = request.ForceWrite,
         };
     }
 
     public static IReadOnlyDictionary<string, string> ToFeatureServerEditFormParameters(ApplyEditsRequest request)
     {
-        var edit = new FeatureServerEditRequest
-        {
-            Adds = request.Adds,
-            Updates = request.Updates,
-            Deletes = request.Deletes,
-            RollbackOnFailure = request.RollbackOnFailure,
-        };
-
+        var edit = ToFeatureServerEditRequest(request);
         var body = new Dictionary<string, string?>
         {
             ["f"] = request.ResponseFormat,
-            ["adds"] = edit.Adds is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Adds) : request.AddsJson,
-            ["updates"] = edit.Updates is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Updates) : request.UpdatesJson,
-            ["deletes"] = edit.Deletes is { Count: > 0 } ? JoinInvariant(edit.Deletes) : request.DeletesCsv,
+            ["adds"] = edit.Adds is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Adds) : null,
+            ["updates"] = edit.Updates is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Updates) : null,
+            ["deletes"] = edit.Deletes is { Count: > 0 } ? JoinInvariant(edit.Deletes) : null,
             ["rollbackOnFailure"] = edit.RollbackOnFailure ? "true" : "false",
-            ["forceWrite"] = request.ForceWrite ? "true" : null,
+            ["forceWrite"] = edit.ForceWrite ? "true" : null,
         };
 
         return body
             .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
             .ToDictionary(pair => pair.Key, pair => pair.Value!);
-    }
-
-    public static IReadOnlyDictionary<string, string?> ToOgcItemsQueryParameters(OgcItemsRequest request)
-    {
-        var query = ToOgcItemsParams(request);
-        return new Dictionary<string, string?>
-        {
-            ["f"] = request.ResponseFormat,
-            ["limit"] = query.Limit?.ToString(CultureInfo.InvariantCulture),
-            ["offset"] = query.Offset?.ToString(CultureInfo.InvariantCulture),
-            ["properties"] = query.Properties,
-            ["filter"] = query.Filter,
-        };
     }
 
     public static FeatureServerFeature ToFeatureServerFeature(FeatureEditFeature feature)
@@ -111,12 +85,7 @@ internal static class SdkFeatureTransportMappings
     public static string ToOgcFeatureId(long objectId)
         => objectId.ToString(CultureInfo.InvariantCulture);
 
-    public static string SerializeOgcFeature(object feature)
-        => feature is OgcFeature ogcFeature
-            ? JsonSerializer.Serialize(ogcFeature, HonuaMobileSdkTransportJsonContext.Default.OgcFeature)
-            : JsonSerializer.Serialize(feature);
-
-    private static FeatureServerQueryParams ToFeatureServerQueryParams(QueryFeaturesRequest request)
+    public static FeatureServerQueryParams ToFeatureServerQueryParams(QueryFeaturesRequest request)
         => new()
         {
             Where = request.Where,
@@ -127,10 +96,13 @@ internal static class SdkFeatureTransportMappings
             ResultRecordCount = request.ResultRecordCount,
             OrderByFields = request.OrderBy,
             ReturnDistinctValues = request.ReturnDistinct ? true : null,
+            ReturnCountOnly = request.ReturnCountOnly ? true : null,
+            ReturnIdsOnly = request.ReturnIdsOnly ? true : null,
+            ReturnExtentOnly = request.ReturnExtentOnly ? true : null,
             Format = ToFeatureServerFormat(request.ResponseFormat),
         };
 
-    private static OgcItemsParams ToOgcItemsParams(OgcItemsRequest request)
+    public static OgcItemsParams ToOgcItemsParams(OgcItemsRequest request)
         => new()
         {
             Limit = request.Limit,
@@ -139,6 +111,114 @@ internal static class SdkFeatureTransportMappings
             Filter = request.CqlFilter,
             Format = ToOgcFeaturesFormat(request.ResponseFormat),
         };
+
+    public static OgcFeature ToOgcFeature(object feature)
+    {
+        ArgumentNullException.ThrowIfNull(feature);
+
+        if (feature is OgcFeature ogcFeature)
+        {
+            return ogcFeature;
+        }
+
+        var json = feature switch
+        {
+            JsonElement element => element.GetRawText(),
+            JsonDocument document => document.RootElement.GetRawText(),
+            _ => JsonSerializer.Serialize(feature),
+        };
+
+        return JsonSerializer.Deserialize(json, HonuaMobileSdkTransportJsonContext.Default.OgcFeature)
+            ?? throw new ArgumentException("OGC feature payload could not be deserialized.", nameof(feature));
+    }
+
+    public static JsonElement ToJsonElement(object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value switch
+        {
+            JsonElement element => element.Clone(),
+            JsonDocument document => document.RootElement.Clone(),
+            _ => JsonSerializer.SerializeToElement(value),
+        };
+    }
+
+    public static JsonDocument ToJsonDocument(FeatureServerQueryResponse response)
+        => JsonDocument.Parse(JsonSerializer.Serialize(
+            response,
+            HonuaMobileSdkTransportJsonContext.Default.FeatureServerQueryResponse));
+
+    public static JsonDocument ToJsonDocument(FeatureServerEditResponse response)
+        => JsonDocument.Parse(JsonSerializer.Serialize(
+            response,
+            HonuaMobileSdkTransportJsonContext.Default.FeatureServerEditResponse));
+
+    public static JsonDocument ToJsonDocument(IReadOnlyList<OgcCollection> collections)
+        => JsonDocument.Parse(JsonSerializer.Serialize(
+            new OgcCollectionsEnvelope { Collections = collections },
+            HonuaMobileSdkTransportJsonContext.Default.OgcCollectionsEnvelope));
+
+    public static JsonDocument ToJsonDocument(OgcFeatureCollection response)
+        => JsonDocument.Parse(JsonSerializer.Serialize(
+            response,
+            HonuaMobileSdkTransportJsonContext.Default.OgcFeatureCollection));
+
+    public static JsonDocument ToJsonDocument(OgcFeature response)
+        => JsonDocument.Parse(JsonSerializer.Serialize(
+            response,
+            HonuaMobileSdkTransportJsonContext.Default.OgcFeature));
+
+    private static IReadOnlyList<FeatureServerFeature>? ResolveFeatureServerFeatures(
+        IReadOnlyList<FeatureServerFeature>? features,
+        string? json,
+        string payloadName)
+    {
+        if (features is { Count: > 0 })
+        {
+            return features;
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return features;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, HonuaMobileSdkTransportJsonContext.Default.FeatureServerFeatureArray);
+        }
+        catch (JsonException ex)
+        {
+            throw new ArgumentException($"FeatureServer {payloadName} JSON payload is invalid.", payloadName, ex);
+        }
+    }
+
+    private static IReadOnlyList<long>? ResolveFeatureServerDeletes(IReadOnlyList<long>? deletes, string? deletesCsv)
+    {
+        if (deletes is { Count: > 0 })
+        {
+            return deletes;
+        }
+
+        if (string.IsNullOrWhiteSpace(deletesCsv))
+        {
+            return deletes;
+        }
+
+        var objectIds = new List<long>();
+        foreach (var value in deletesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectId))
+            {
+                throw new ArgumentException("FeatureServer deletesCsv payload must contain numeric object IDs.", nameof(deletesCsv));
+            }
+
+            objectIds.Add(objectId);
+        }
+
+        return objectIds;
+    }
 
     private static string SerializeFeatureServerFeatures(IReadOnlyList<FeatureServerFeature> features)
         => JsonSerializer.Serialize(
@@ -178,10 +258,20 @@ internal static class SdkFeatureTransportMappings
         };
 }
 
+internal sealed class OgcCollectionsEnvelope
+{
+    [JsonPropertyName("collections")]
+    public IReadOnlyList<OgcCollection> Collections { get; init; } = [];
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(FeatureServerFeature[]))]
+[JsonSerializable(typeof(FeatureServerQueryResponse))]
+[JsonSerializable(typeof(FeatureServerEditResponse))]
+[JsonSerializable(typeof(OgcCollectionsEnvelope))]
+[JsonSerializable(typeof(OgcFeatureCollection))]
 [JsonSerializable(typeof(OgcFeature))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class HonuaMobileSdkTransportJsonContext : JsonSerializerContext
