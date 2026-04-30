@@ -1,32 +1,53 @@
 {
   "schemaVersion": "honua.mobile-contract-harmonization.v1",
-  "mobileIssue": "honua-mobile#48",
   "sdkIssue": "honua-sdk-dotnet#68",
-  "companionOfflineIssue": "honua-sdk-dotnet#56",
+  "mobileIssue": "honua-mobile#48",
   "status": "baseline",
-  "mobileBaseline": {
-    "repository": "honua-io/honua-mobile",
-    "ref": "main",
-    "packageVersion": "unreleased-source"
+  "compatibility": {
+    "mobileBaseline": {
+      "repository": "honua-io/honua-mobile",
+      "ref": "main after honua-mobile#52",
+      "packageVersion": "unreleased-source"
+    },
+    "sdkBaseline": {
+      "repository": "honua-io/honua-sdk-dotnet",
+      "ref": "trunk",
+      "packages": [
+        {
+          "packageId": "Honua.Sdk.Abstractions",
+          "version": "0.1.2-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.Offline.Abstractions",
+          "version": "0.1.2-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.Offline",
+          "version": "0.1.2-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.Grpc",
+          "version": "0.1.2-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.GeoServices",
+          "version": "0.1.2-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.OgcFeatures",
+          "version": "0.1.2-alpha.1"
+        }
+      ]
+    }
   },
-  "sdkBaseline": {
-    "repository": "honua-io/honua-sdk-dotnet",
-    "ref": "main",
-    "packages": [
-      {
-        "packageId": "Honua.Sdk.Abstractions",
-        "version": "0.1.0-alpha.1"
-      },
-      {
-        "packageId": "Honua.Sdk.Offline.Abstractions",
-        "version": "0.1.0-alpha.1"
-      },
-      {
-        "packageId": "Honua.Sdk.Offline",
-        "version": "0.1.0-alpha.1"
-      }
-    ]
-  },
+  "rules": [
+    "Sibling repos consume Honua.Sdk.* through published NuGet packages.",
+    "Do not copy SDK source into honua-mobile.",
+    "Do not add long-lived honua-mobile ProjectReference links to SDK projects.",
+    "Canonical proto definitions stay in geospatial-grpc.",
+    "Mobile owns MAUI, native storage, background scheduling, device services, display adapters, and renderer caches.",
+    "SDK owns provider-neutral contracts, portable clients, and host-neutral test fixtures."
+  ],
   "modelFamilies": [
     {
       "id": "feature-query",
@@ -47,7 +68,8 @@
         "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator"
       ],
       "mobileDisposition": "adapter-required",
-      "notes": "Mobile request DTOs remain transport shims until callers can construct Honua.Sdk.Abstractions feature queries directly."
+      "migrationIssue": "honua-mobile#54",
+      "notes": "Mobile request DTOs remain transport shims until callers construct Honua.Sdk.Abstractions feature queries directly."
     },
     {
       "id": "feature-edit",
@@ -70,13 +92,14 @@
         "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation"
       ],
       "mobileDisposition": "adapter-required",
+      "migrationIssue": "honua-mobile#54",
       "notes": "Offline queue rows keep mobile retry metadata, but uploaded payloads should map to FeatureEditRequest."
     },
     {
       "id": "geometry",
       "displayName": "Geometry and spatial reference values",
       "owner": "shared-split",
-      "authoritativePackage": "pending Honua.Sdk geometry package",
+      "authoritativePackage": "pending Honua.Sdk geometry contracts",
       "authoritativeTypes": [],
       "mobileTypes": [
         "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator",
@@ -85,7 +108,8 @@
         "Honua.Mobile.Maui.Annotations.HonuaAnnotationBounds"
       ],
       "mobileDisposition": "quarantine-until-sdk-geometry",
-      "notes": "Keep mobile coordinates at platform edges. Shared geometry should graduate after honua-sdk-dotnet P0.4 defines WKID/WKT/GeoJSON conversion ownership."
+      "migrationIssue": "honua-sdk-dotnet#55",
+      "notes": "Keep mobile coordinates at platform edges. Shared geometry should graduate through SDK contracts backed by NetTopologySuite and ProjNet where possible."
     },
     {
       "id": "offline-sync-state",
@@ -112,13 +136,19 @@
         "Honua.Mobile.Offline.Sync.DeltaDownloadResult"
       ],
       "mobileDisposition": "mobile-runtime-adapter",
-      "notes": "Mobile owns native queue persistence, scheduling, and GeoPackage storage. SDK contracts define source descriptors, journals, checkpoints, retry checkpoints, and conflict envelopes; mobile adapters bridge those contracts to SQLite/GeoPackage and MAUI runtime behavior."
+      "migrationIssue": "honua-mobile#49",
+      "serverDependencyIssues": [
+        "honua-server#830",
+        "honua-server#831",
+        "honua-server#371"
+      ],
+      "notes": "Mobile owns native queue persistence, scheduling, and GeoPackage storage. SDK contracts define source descriptors, journals, checkpoints, retry checkpoints, and conflict envelopes."
     },
     {
       "id": "form-feature-schema",
       "displayName": "Form-related feature schemas and field workflows",
       "owner": "shared-split",
-      "authoritativePackage": "Honua.Sdk.Abstractions for source schema",
+      "authoritativePackage": "Honua.Sdk.Abstractions for source schema; pending Honua.Sdk.Field for workflow contracts",
       "authoritativeTypes": [
         "Honua.Sdk.Abstractions.Features.SourceDescriptor",
         "Honua.Sdk.Abstractions.Features.SourceSchema",
@@ -132,44 +162,60 @@
         "Honua.Mobile.Field.Records.RecordWorkflow"
       ],
       "mobileDisposition": "mobile-workflow-owned",
-      "notes": "SDK source schema owns provider-neutral field metadata. Mobile owns device form rendering, calculated fields, duplicate detection, and capture workflow."
+      "migrationIssue": "honua-sdk-dotnet#71",
+      "notes": "SDK source schema owns provider-neutral field metadata. Mobile owns device form rendering, calculated fields, duplicate detection, and capture workflow until field contracts graduate."
     },
     {
       "id": "scene-metadata",
       "displayName": "3D scene metadata and offline scene packages",
-      "owner": "honua-mobile",
-      "authoritativePackage": "Honua.Mobile.Sdk",
-      "authoritativeTypes": [
+      "owner": "shared-split",
+      "authoritativePackage": "pending Honua.Sdk.Scene contracts",
+      "authoritativeTypes": [],
+      "mobileTypes": [
         "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveRequest",
         "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveResult",
         "Honua.Mobile.Sdk.Scenes.HonuaScenePackageManifest",
-        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageAsset"
-      ],
-      "mobileTypes": [
+        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageAsset",
         "Honua.Mobile.Offline.ScenePackages.IHonuaScenePackageDownloader",
         "Honua.Mobile.Offline.GeoPackage.ScenePackageRecord"
       ],
-      "mobileDisposition": "mobile-authoritative-candidate-for-sdk",
-      "notes": "Scene contracts stay mobile-owned until honua-sdk-dotnet introduces a scene package. Server handoff and manifest fixtures should remain portable."
+      "mobileDisposition": "mobile-authoritative-until-sdk-scene",
+      "migrationIssue": "honua-sdk-dotnet#70",
+      "serverDependencyIssues": [
+        "honua-server#530",
+        "honua-server#837",
+        "honua-server#838",
+        "honua-server#839",
+        "honua-server#840",
+        "honua-server#841",
+        "honua-server#842",
+        "honua-server#843",
+        "honua-server#844",
+        "honua-server#849"
+      ],
+      "notes": "Scene manifests should become portable SDK contracts once server scene APIs stabilize. Mobile and embed own renderer caches, downloads, and display execution."
     },
     {
       "id": "routing",
       "displayName": "Routing and network analysis requests",
-      "owner": "honua-mobile",
-      "authoritativePackage": "Honua.Mobile.Sdk",
-      "authoritativeTypes": [
+      "owner": "shared-split",
+      "authoritativePackage": "pending Honua.Sdk.Routing contracts",
+      "authoritativeTypes": [],
+      "mobileTypes": [
         "Honua.Mobile.Sdk.Routing.RouteDirectionsRequest",
         "Honua.Mobile.Sdk.Routing.RouteOptimizationRequest",
         "Honua.Mobile.Sdk.Routing.ServiceAreaRequest",
         "Honua.Mobile.Sdk.Routing.ClosestFacilityRequest",
-        "Honua.Mobile.Sdk.Routing.RoutingLocation"
-      ],
-      "mobileTypes": [
+        "Honua.Mobile.Sdk.Routing.RoutingLocation",
         "Honua.Mobile.Sdk.Routing.HonuaRoutingClient",
         "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider"
       ],
-      "mobileDisposition": "mobile-authoritative",
-      "notes": "Routing remains mobile-owned because it includes device location providers and GeoServices NAServer form encoding."
+      "mobileDisposition": "mobile-authoritative-until-sdk-routing",
+      "migrationIssue": "honua-sdk-dotnet#60",
+      "serverDependencyIssues": [
+        "honua-server#366"
+      ],
+      "notes": "Routing contracts can move to SDK; device location providers and platform permission flows stay mobile-owned."
     },
     {
       "id": "geopackage-sync",
@@ -189,15 +235,49 @@
       ],
       "mobileDisposition": "mobile-runtime-owned",
       "notes": "SDK contracts may describe offline packages and journals, but mobile owns MAUI/native storage, GeoPackage tables, and background execution behavior."
+    },
+    {
+      "id": "display-embed",
+      "displayName": "Map and 3D display adapters",
+      "owner": "honua-mobile",
+      "authoritativePackage": "Honua.Embed",
+      "authoritativeTypes": [
+        "Honua.Embed"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Maui",
+        "Honua.Embed"
+      ],
+      "mobileDisposition": "display-owned",
+      "notes": "SDK returns portable contracts only. MapLibre, deck.gl, Cesium, Mapsui, WebGL/WebGPU, map controls, and renderer lifecycle stay outside SDK core."
+    },
+    {
+      "id": "plugin-contracts",
+      "displayName": "Non-UI plugin manifests and workflow hooks",
+      "owner": "shared-split",
+      "authoritativePackage": "pending Honua.Sdk.Plugin contracts",
+      "authoritativeTypes": [],
+      "mobileTypes": [
+        "Honua.Mobile plugin host contracts"
+      ],
+      "mobileDisposition": "host-runtime-owned-until-sdk-plugin",
+      "migrationIssue": "honua-sdk-dotnet#72",
+      "serverDependencyIssues": [
+        "honua-server#347"
+      ],
+      "notes": "SDK should own manifests, declared permissions, compatibility requirements, and safe configuration envelopes. Hosts own runtime loading, UI registration, sandboxing, and code signing."
+    },
+    {
+      "id": "legacy-mobile-sdk",
+      "displayName": "Legacy honua-mobile-sdk contracts",
+      "owner": "quarantine",
+      "authoritativePackage": "none",
+      "authoritativeTypes": [],
+      "mobileTypes": [
+        "honua-mobile-sdk generated clients and demo DTOs"
+      ],
+      "mobileDisposition": "quarantine",
+      "notes": "Do not copy DTOs into honua-mobile or SDK without assigning explicit ownership in this fixture."
     }
-  ],
-  "legacyMobileSdk": {
-    "repository": "honua-io/honua-mobile-sdk",
-    "disposition": "quarantine",
-    "rules": [
-      "Do not copy DTOs into honua-mobile without mapping them through this fixture.",
-      "Migrate useful concepts only when they have a declared owner in honua-sdk-dotnet or honua-mobile.",
-      "Treat older generated clients and demo-only contracts as superseded unless a ticket names the specific concept to recover."
-    ]
-  }
+  ]
 }

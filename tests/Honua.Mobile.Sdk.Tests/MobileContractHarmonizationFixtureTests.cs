@@ -20,12 +20,15 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         Assert.Equal(
         [
+            "display-embed",
             "feature-edit",
             "feature-query",
             "form-feature-schema",
             "geometry",
             "geopackage-sync",
+            "legacy-mobile-sdk",
             "offline-sync-state",
+            "plugin-contracts",
             "routing",
             "scene-metadata",
         ], familyIds);
@@ -63,14 +66,14 @@ public sealed class MobileContractHarmonizationFixtureTests
         var fixture = LoadFixture();
 
         var scene = FindFamily(fixture, "scene-metadata");
-        Assert.Equal("honua-mobile", scene.Owner);
-        Assert.Equal("Honua.Mobile.Sdk", scene.AuthoritativePackage);
+        Assert.Equal("shared-split", scene.Owner);
+        Assert.Equal("pending Honua.Sdk.Scene contracts", scene.AuthoritativePackage);
         Assert.Contains(
             "Honua.Mobile.Sdk.Scenes.HonuaScenePackageManifest",
-            scene.AuthoritativeTypes);
+            scene.MobileTypes);
 
         var routing = FindFamily(fixture, "routing");
-        Assert.Equal("honua-mobile", routing.Owner);
+        Assert.Equal("shared-split", routing.Owner);
         Assert.Contains(
             "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider",
             routing.MobileTypes);
@@ -91,15 +94,18 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Equal("honua.mobile-contract-harmonization.v1", fixture.SchemaVersion);
         Assert.Equal("honua-mobile#48", fixture.MobileIssue);
         Assert.Equal("honua-sdk-dotnet#68", fixture.SdkIssue);
-        Assert.Equal("honua-io/honua-mobile", fixture.MobileBaseline.Repository);
-        Assert.Equal("unreleased-source", fixture.MobileBaseline.PackageVersion);
+        Assert.Equal("honua-io/honua-mobile", fixture.Compatibility.MobileBaseline.Repository);
+        Assert.Equal("unreleased-source", fixture.Compatibility.MobileBaseline.PackageVersion);
 
-        var abstractionsPackage = fixture.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
+        var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
-        Assert.Equal("0.1.0-alpha.1", abstractionsPackage.Version);
+        Assert.Equal("0.1.2-alpha.1", abstractionsPackage.Version);
 
-        Assert.Contains(fixture.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
-        Assert.Contains(fixture.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Grpc");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.GeoServices");
+        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.OgcFeatures");
     }
 
     private static ContractFixture LoadFixture()
@@ -141,11 +147,16 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         public string SdkIssue { get; init; } = string.Empty;
 
+        public ContractCompatibility Compatibility { get; init; } = new();
+
+        public IReadOnlyList<ContractFamily> ModelFamilies { get; init; } = [];
+    }
+
+    private sealed record ContractCompatibility
+    {
         public ContractBaseline MobileBaseline { get; init; } = new();
 
         public SdkBaseline SdkBaseline { get; init; } = new();
-
-        public IReadOnlyList<ContractFamily> ModelFamilies { get; init; } = [];
     }
 
     private sealed record ContractBaseline
