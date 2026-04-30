@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #52 | `Honua.Sdk.*` `0.1.2-alpha.1` | Fixture-level compatibility for shared feature, source, edit, and offline contracts |
+| `honua-mobile` source packages from `main` after #65 | `Honua.Sdk.*` `0.1.3-alpha.1` | Fixture-level compatibility for shared feature, source, edit, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the

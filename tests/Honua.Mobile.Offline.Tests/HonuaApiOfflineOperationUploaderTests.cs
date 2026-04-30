@@ -99,7 +99,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
-    public async Task UploadAsync_FeatureServerMalformedApplyEditsEnvelope_ReturnsFatalFailure()
+    public async Task UploadAsync_FeatureServerFailureWithoutError_ReturnsFatalFailure()
     {
         var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -122,7 +122,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         }, forceWrite: false);
 
         Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
-        Assert.Contains("malformed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reported failure", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
