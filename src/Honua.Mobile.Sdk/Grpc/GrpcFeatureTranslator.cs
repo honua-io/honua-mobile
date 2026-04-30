@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.GeoServices.FeatureServer.Models;
 using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk.Grpc;
@@ -67,17 +68,17 @@ public static class GrpcFeatureTranslator
             ForceWrite = request.ForceWrite,
         };
 
-        foreach (var feature in ParseFeaturePayload(request.AddsJson))
+        foreach (var feature in ParseFeaturePayload(request.Adds, request.AddsJson))
         {
             proto.Adds.Add(feature);
         }
 
-        foreach (var feature in ParseFeaturePayload(request.UpdatesJson))
+        foreach (var feature in ParseFeaturePayload(request.Updates, request.UpdatesJson))
         {
             proto.Updates.Add(feature);
         }
 
-        foreach (var objectId in ParseDeleteObjectIds(request.DeletesCsv))
+        foreach (var objectId in ParseDeleteObjectIds(request.Deletes, request.DeletesCsv))
         {
             proto.Deletes.Add(objectId);
         }
@@ -169,6 +170,16 @@ public static class GrpcFeatureTranslator
         return JsonSerializer.SerializeToDocument(payload);
     }
 
+    private static IEnumerable<Proto.Feature> ParseFeaturePayload(IReadOnlyList<FeatureServerFeature>? features, string? json)
+    {
+        if (features is { Count: > 0 })
+        {
+            return features.Select(ToFeature);
+        }
+
+        return ParseFeaturePayload(json);
+    }
+
     private static IEnumerable<Proto.Feature> ParseFeaturePayload(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -193,6 +204,9 @@ public static class GrpcFeatureTranslator
             yield return ToFeature(document.RootElement);
         }
     }
+
+    private static IEnumerable<long> ParseDeleteObjectIds(IReadOnlyList<long>? deletes, string? deletesCsv)
+        => deletes is { Count: > 0 } ? deletes : ParseDeleteObjectIds(deletesCsv);
 
     private static IEnumerable<long> ParseDeleteObjectIds(string? deletesCsv)
     {
@@ -235,6 +249,30 @@ public static class GrpcFeatureTranslator
         }
 
         if (source.TryGetProperty("geometry", out var geometryNode) && geometryNode.ValueKind == JsonValueKind.Object)
+        {
+            var geometry = ToGeometry(geometryNode);
+            if (geometry is not null)
+            {
+                feature.Geometry = geometry;
+            }
+        }
+
+        return feature;
+    }
+
+    private static Proto.Feature ToFeature(FeatureServerFeature source)
+    {
+        var feature = new Proto.Feature();
+
+        if (source.Attributes is not null)
+        {
+            foreach (var attribute in source.Attributes)
+            {
+                feature.Attributes[attribute.Key] = ToAttributeValue(attribute.Value);
+            }
+        }
+
+        if (source.Geometry is { ValueKind: JsonValueKind.Object } geometryNode)
         {
             var geometry = ToGeometry(geometryNode);
             if (geometry is not null)

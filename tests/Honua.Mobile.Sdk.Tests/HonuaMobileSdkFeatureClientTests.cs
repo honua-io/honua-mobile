@@ -125,6 +125,32 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Equal(7, result.DeleteResults[0].ObjectId);
     }
 
+    [Fact]
+    public async Task ApplyEditsAsync_OgcRequest_DeletesObjectIdsThroughSdkFeatureContract()
+    {
+        var capturedPaths = new List<string>();
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedPaths.Add(request.RequestUri!.PathAndQuery);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var adapter = CreateAdapter(handler);
+        var result = await adapter.ApplyEditsAsync(new FeatureEditRequest
+        {
+            Source = new FeatureSource { CollectionId = "buildings" },
+            DeleteObjectIds = [42],
+        });
+
+        Assert.Contains("/ogc/features/collections/buildings/items/42", capturedPaths);
+        Assert.True(result.Succeeded);
+        Assert.Equal("42", result.DeleteResults[0].Id);
+        Assert.Equal(42, result.DeleteResults[0].ObjectId);
+    }
+
     private static HonuaMobileSdkFeatureClient CreateAdapter(HttpMessageHandler handler)
     {
         var options = new HonuaMobileClientOptions

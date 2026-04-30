@@ -1,3 +1,5 @@
+using Honua.Sdk.GeoServices.FeatureServer.Models;
+
 namespace Honua.Mobile.Sdk.Models;
 
 public sealed class QueryFeaturesRequest
@@ -36,6 +38,12 @@ public sealed class ApplyEditsRequest
     public required string ServiceId { get; init; }
 
     public required int LayerId { get; init; }
+
+    public IReadOnlyList<FeatureServerFeature>? Adds { get; init; }
+
+    public IReadOnlyList<FeatureServerFeature>? Updates { get; init; }
+
+    public IReadOnlyList<long>? Deletes { get; init; }
 
     public string? AddsJson { get; init; }
 
