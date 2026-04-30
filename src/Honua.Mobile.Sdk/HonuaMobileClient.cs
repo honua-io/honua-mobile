@@ -19,6 +19,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 {
     private readonly HttpClient _http;
     private readonly HonuaMobileClientOptions _options;
+    private readonly object _grpcClientSync = new();
     private readonly bool _canUseGrpcEndpoint;
     private HonuaGrpcClient? _grpcClient;
 
@@ -253,7 +254,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        _grpcClient?.Dispose();
+        lock (_grpcClientSync)
+        {
+            _grpcClient?.Dispose();
+            _grpcClient = null;
+        }
     }
 
     /// <inheritdoc />
@@ -377,14 +382,25 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return token;
     }
 
-    private HonuaGrpcClient GetGrpcClient()
-        => _grpcClient ??= new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions()));
-
-    private HonuaGrpcClientOptions BuildGrpcClientOptions()
+    internal HonuaGrpcClient GetGrpcClient()
     {
+        lock (_grpcClientSync)
+        {
+            return _grpcClient ??= new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions()));
+        }
+    }
+
+    internal HonuaGrpcClientOptions BuildGrpcClientOptions()
+    {
+        var address = _options.GrpcEndpoint ?? _options.BaseUri;
+        if (HasConfiguredGrpcAuthentication)
+        {
+            EnsureSecureTransport(address);
+        }
+
         return new HonuaGrpcClientOptions
         {
-            Address = (_options.GrpcEndpoint ?? _options.BaseUri).ToString(),
+            Address = address.ToString(),
             ApiKey = _options.ApiKey,
             BearerToken = _options.BearerToken,
             BearerTokenProvider = _options.AccessTokenProvider is null
@@ -393,6 +409,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             Timeout = _options.Timeout,
         };
     }
+
+    private bool HasConfiguredGrpcAuthentication =>
+        !string.IsNullOrWhiteSpace(_options.ApiKey) ||
+        !string.IsNullOrWhiteSpace(_options.BearerToken) ||
+        _options.AccessTokenProvider is not null;
 
     private Uri ResolveAbsoluteRequestUri(HttpRequestMessage request)
     {
