@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Honua.Mobile.Sdk.Grpc;
 using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.GeoServices.FeatureServer.Models;
 using Proto = Honua.Server.Features.Grpc.Proto;
 
 namespace Honua.Mobile.Sdk.Tests;
@@ -86,6 +88,38 @@ public sealed class GrpcFeatureTranslatorTests
 
         Assert.Equal(11L, proto.Updates[0].Id);
         Assert.Equal(4L, proto.Updates[0].Attributes["priority"].Int64Value);
+    }
+
+    [Fact]
+    public void ToProtoApplyEditsRequest_MapsSdkFeatureServerModels()
+    {
+        var request = new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            Adds =
+            [
+                new FeatureServerFeature
+                {
+                    Attributes = new Dictionary<string, JsonElement>
+                    {
+                        ["asset_id"] = JsonSerializer.SerializeToElement("A-1"),
+                        ["priority"] = JsonSerializer.SerializeToElement(3),
+                    },
+                    Geometry = JsonSerializer.SerializeToElement(new { x = -157.8583, y = 21.3069 }),
+                },
+            ],
+            Deletes = [9, 10],
+        };
+
+        var proto = GrpcFeatureTranslator.ToProtoApplyEditsRequest(request);
+
+        Assert.Single(proto.Adds);
+        Assert.Equal([9L, 10L], proto.Deletes);
+        Assert.Equal("A-1", proto.Adds[0].Attributes["asset_id"].StringValue);
+        Assert.Equal(3L, proto.Adds[0].Attributes["priority"].Int64Value);
+        Assert.Equal(-157.8583, proto.Adds[0].Geometry.Point.X, 4);
+        Assert.Equal(21.3069, proto.Adds[0].Geometry.Point.Y, 4);
     }
 
     [Fact]

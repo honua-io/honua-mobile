@@ -3,11 +3,24 @@ using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.GeoServices.FeatureServer.Models;
+using Honua.Sdk.OgcFeatures.Models;
 
 namespace Honua.Mobile.Sdk.Tests;
 
 public sealed class HonuaMobileClientHttpTests
 {
+    [Fact]
+    public void HonuaMobileSdk_ReferencesSdkTransportPackages()
+    {
+        var references = typeof(HonuaMobileClient).Assembly.GetReferencedAssemblies()
+            .Select(reference => reference.Name)
+            .ToArray();
+
+        Assert.Contains("Honua.Sdk.GeoServices", references);
+        Assert.Contains("Honua.Sdk.OgcFeatures", references);
+    }
+
     [Fact]
     public async Task QueryFeaturesAsync_Success_ReturnsEsriJson()
     {
@@ -78,6 +91,60 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task ApplyEditsAsync_WithSdkFeatureServerModels_SerializesEditForm()
+    {
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                        "addResults": [{ "objectId": 42, "success": true }],
+                        "updateResults": [],
+                        "deleteResults": [{ "objectId": 7, "success": true }]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.ApplyEditsAsync(new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            Adds =
+            [
+                new FeatureServerFeature
+                {
+                    Attributes = new Dictionary<string, JsonElement>
+                    {
+                        ["name"] = JsonSerializer.SerializeToElement("Test"),
+                    },
+                    Geometry = JsonSerializer.SerializeToElement(new { x = -157.8, y = 21.3 }),
+                },
+            ],
+            Deletes = [7],
+            RollbackOnFailure = true,
+        });
+
+        Assert.NotNull(capturedBody);
+        var form = ParseForm(capturedBody);
+        Assert.True(bool.Parse(form["rollbackOnFailure"]));
+        Assert.Equal("7", form["deletes"]);
+        Assert.Contains("\"name\":\"Test\"", form["adds"]);
+        Assert.Contains("\"geometry\"", form["adds"]);
+        Assert.True(result.RootElement.GetProperty("addResults")[0].GetProperty("success").GetBoolean());
+    }
+
+    [Fact]
     public async Task GetOgcCollectionsAsync_Success_ReturnsCollections()
     {
         var responseJson = """
@@ -139,6 +206,50 @@ public sealed class HonuaMobileClientHttpTests
         var features = result.RootElement.GetProperty("features");
         Assert.Equal(1, features.GetArrayLength());
         Assert.Equal("HQ", features[0].GetProperty("properties").GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task CreateOgcItemAsync_WithSdkOgcFeature_SendsGeoJsonContent()
+    {
+        string? capturedBody = null;
+        string? capturedMediaType = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedMediaType = request.Content?.Headers.ContentType?.MediaType;
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"type":"Feature","id":"building-1"}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.CreateOgcItemAsync(new OgcCreateItemRequest
+        {
+            CollectionId = "buildings",
+            Feature = new OgcFeature
+            {
+                Id = JsonSerializer.SerializeToElement("building-1"),
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["name"] = JsonSerializer.SerializeToElement("HQ"),
+                },
+                Geometry = JsonSerializer.SerializeToElement(new
+                {
+                    type = "Point",
+                    coordinates = new[] { -157.8, 21.3 },
+                }),
+            },
+        });
+
+        Assert.Equal("application/geo+json", capturedMediaType);
+        Assert.NotNull(capturedBody);
+        Assert.Contains("\"type\":\"Feature\"", capturedBody);
+        Assert.Contains("\"name\":\"HQ\"", capturedBody);
+        Assert.Equal("building-1", result.RootElement.GetProperty("id").GetString());
     }
 
     [Fact]
@@ -325,6 +436,14 @@ public sealed class HonuaMobileClientHttpTests
             },
             options);
     }
+
+    private static IReadOnlyDictionary<string, string> ParseForm(string body)
+        => body
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(
+                pair => Uri.UnescapeDataString(pair[0]),
+                pair => pair.Length == 2 ? Uri.UnescapeDataString(pair[1]).Replace("+", " ", StringComparison.Ordinal) : string.Empty);
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {

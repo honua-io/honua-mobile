@@ -11,8 +11,6 @@ namespace Honua.Mobile.Sdk.Features;
 /// </summary>
 public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHonuaFeatureEditClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     private readonly HonuaMobileClient _client;
 
     /// <summary>
@@ -127,7 +125,7 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
             using var response = await _client.CreateOgcItemAsync(new OgcCreateItemRequest
             {
                 CollectionId = collectionId,
-                Feature = ToGeoJsonFeature(add),
+                Feature = SdkFeatureTransportMappings.ToOgcFeature(add),
             }, ct).ConfigureAwait(false);
             addResults.Add(ToOgcSuccessResult(response.RootElement, add.Id, add.ObjectId));
         }
@@ -149,7 +147,7 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
             {
                 CollectionId = collectionId,
                 FeatureId = update.Id,
-                Feature = ToGeoJsonFeature(update),
+                Feature = SdkFeatureTransportMappings.ToOgcFeature(update, update.Id),
             }, ct).ConfigureAwait(false);
             updateResults.Add(ToOgcSuccessResult(response.RootElement, update.Id, update.ObjectId));
         }
@@ -162,6 +160,17 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
                 FeatureId = deleteId,
             }, ct).ConfigureAwait(false);
             deleteResults.Add(ToOgcSuccessResult(response.RootElement, deleteId, null));
+        }
+
+        foreach (var deleteObjectId in request.DeleteObjectIds)
+        {
+            var deleteId = SdkFeatureTransportMappings.ToOgcFeatureId(deleteObjectId);
+            using var response = await _client.DeleteOgcItemAsync(new OgcDeleteItemRequest
+            {
+                CollectionId = collectionId,
+                FeatureId = deleteId,
+            }, ct).ConfigureAwait(false);
+            deleteResults.Add(ToOgcSuccessResult(response.RootElement, deleteId, deleteObjectId));
         }
 
         return new FeatureEditResponse
@@ -202,11 +211,13 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
         {
             ServiceId = request.Source.ServiceId ?? throw new InvalidOperationException("FeatureServer edit requires service ID."),
             LayerId = request.Source.LayerId ?? throw new InvalidOperationException("FeatureServer edit requires layer ID."),
-            AddsJson = request.Adds.Count == 0 ? null : JsonSerializer.Serialize(request.Adds.Select(ToFeatureServerFeature), JsonOptions),
-            UpdatesJson = request.Updates.Count == 0 ? null : JsonSerializer.Serialize(request.Updates.Select(ToFeatureServerFeature), JsonOptions),
-            DeletesCsv = request.DeleteObjectIds.Count > 0
-                ? string.Join(',', request.DeleteObjectIds)
-                : request.DeleteIds.Count == 0 ? null : string.Join(',', request.DeleteIds),
+            Adds = request.Adds.Count == 0
+                ? null
+                : request.Adds.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToList(),
+            Updates = request.Updates.Count == 0
+                ? null
+                : request.Updates.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToList(),
+            Deletes = SdkFeatureTransportMappings.ToFeatureServerDeleteObjectIds(request),
             RollbackOnFailure = request.RollbackOnFailure,
             ForceWrite = request.ForceWrite,
         };
@@ -305,22 +316,6 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
             Succeeded = true,
         };
     }
-
-    private static JsonElement ToFeatureServerFeature(FeatureEditFeature feature)
-        => JsonSerializer.SerializeToElement(new Dictionary<string, object?>
-        {
-            ["attributes"] = feature.Attributes,
-            ["geometry"] = feature.Geometry,
-        }, JsonOptions);
-
-    private static JsonElement ToGeoJsonFeature(FeatureEditFeature feature)
-        => JsonSerializer.SerializeToElement(new Dictionary<string, object?>
-        {
-            ["type"] = "Feature",
-            ["id"] = feature.Id,
-            ["properties"] = feature.Attributes,
-            ["geometry"] = feature.Geometry,
-        }, JsonOptions);
 
     private static IReadOnlyDictionary<string, JsonElement> ReadJsonObject(JsonElement element)
     {

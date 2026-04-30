@@ -10,8 +10,8 @@
     <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.2-alpha.1" />
     <PackageReference Include="Honua.Sdk.Offline" Version="0.1.2-alpha.1" />
     <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.2-alpha.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
   </ItemGroup>
 
   <PropertyGroup>

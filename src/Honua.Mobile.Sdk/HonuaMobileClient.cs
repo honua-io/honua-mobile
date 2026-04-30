@@ -185,17 +185,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var query = new Dictionary<string, string?>
-        {
-            ["f"] = request.ResponseFormat,
-            ["limit"] = request.Limit?.ToString(),
-            ["offset"] = request.Offset?.ToString(),
-            ["properties"] = request.PropertyNames is { Count: > 0 } ? string.Join(',', request.PropertyNames) : null,
-            ["filter"] = request.CqlFilter,
-        };
-
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
-        return SendJsonAsync(HttpMethod.Get, path, query, null, ct);
+        return SendJsonAsync(HttpMethod.Get, path, SdkFeatureTransportMappings.ToOgcItemsQueryParameters(request), null, ct);
     }
 
     /// <summary>
@@ -211,8 +202,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(request);
 
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
-        var payload = JsonSerializer.Serialize(request.Feature);
-        return SendJsonAsync(HttpMethod.Post, path, null, new StringContent(payload, Encoding.UTF8, "application/json"), ct);
+        var payload = SdkFeatureTransportMappings.SerializeOgcFeature(request.Feature);
+        return SendJsonAsync(HttpMethod.Post, path, null, new StringContent(payload, Encoding.UTF8, "application/geo+json"), ct);
     }
 
     /// <summary>
@@ -228,8 +219,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(request);
 
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
-        var payload = JsonSerializer.Serialize(request.Feature);
-        return SendJsonAsync(HttpMethod.Put, path, null, new StringContent(payload, Encoding.UTF8, "application/json"), ct);
+        var payload = SdkFeatureTransportMappings.SerializeOgcFeature(request.Feature);
+        return SendJsonAsync(HttpMethod.Put, path, null, new StringContent(payload, Encoding.UTF8, "application/geo+json"), ct);
     }
 
     /// <summary>
@@ -313,42 +304,19 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     private Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
-        var query = new Dictionary<string, string?>
-        {
-            ["f"] = request.ResponseFormat,
-            ["where"] = request.Where,
-            ["objectIds"] = request.ObjectIds is { Count: > 0 } ? string.Join(',', request.ObjectIds) : null,
-            ["outFields"] = request.OutFields is { Count: > 0 } ? string.Join(',', request.OutFields) : "*",
-            ["returnGeometry"] = request.ReturnGeometry ? "true" : "false",
-            ["resultOffset"] = request.ResultOffset?.ToString(),
-            ["resultRecordCount"] = request.ResultRecordCount?.ToString(),
-            ["orderByFields"] = request.OrderBy,
-            ["returnDistinctValues"] = request.ReturnDistinct ? "true" : null,
-            ["returnCountOnly"] = request.ReturnCountOnly ? "true" : null,
-            ["returnIdsOnly"] = request.ReturnIdsOnly ? "true" : null,
-            ["returnExtentOnly"] = request.ReturnExtentOnly ? "true" : null,
-        };
-
         var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
-        return SendJsonAsync(HttpMethod.Get, path, query, content: null, ct);
+        return SendJsonAsync(HttpMethod.Get, path, SdkFeatureTransportMappings.ToFeatureServerQueryParameters(request), content: null, ct);
     }
 
     private Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
     {
         var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
-        var body = new Dictionary<string, string?>
-        {
-            ["f"] = request.ResponseFormat,
-            ["adds"] = request.AddsJson,
-            ["updates"] = request.UpdatesJson,
-            ["deletes"] = request.DeletesCsv,
-            ["rollbackOnFailure"] = request.RollbackOnFailure ? "true" : "false",
-            ["forceWrite"] = request.ForceWrite ? "true" : null,
-        }
-        .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
-        .ToDictionary(pair => pair.Key, pair => pair.Value!);
-
-        return SendJsonAsync(HttpMethod.Post, path, query: null, new FormUrlEncodedContent(body), ct);
+        return SendJsonAsync(
+            HttpMethod.Post,
+            path,
+            query: null,
+            new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
+            ct);
     }
 
     internal async Task<JsonDocument> SendJsonAsync(
