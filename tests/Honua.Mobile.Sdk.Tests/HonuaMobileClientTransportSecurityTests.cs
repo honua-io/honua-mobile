@@ -92,6 +92,57 @@ public sealed class HonuaMobileClientTransportSecurityTests
         Assert.Equal(0, handler.RequestCount);
     }
 
+    [Fact]
+    public void BuildGrpcClientOptions_WithGrpcAuthOverLoopbackHttp_ThrowsUnlessDevOverrideEnabled()
+    {
+        var client = CreateClient(new RecordingHandler(CreateEmptyResponse), new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            GrpcEndpoint = new Uri("http://localhost:5000"),
+            ApiKey = "test-key",
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => client.BuildGrpcClientOptions());
+        Assert.Contains("Refusing to send authentication over non-HTTPS transport", exception.Message);
+    }
+
+    [Fact]
+    public void BuildGrpcClientOptions_WithGrpcAuthOverLoopbackHttp_AllowsWhenDevOverrideEnabled()
+    {
+        var client = CreateClient(new RecordingHandler(CreateEmptyResponse), new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            GrpcEndpoint = new Uri("http://localhost:5000"),
+            ApiKey = "test-key",
+            AllowInsecureTransportForDevelopment = true,
+        });
+
+        var options = client.BuildGrpcClientOptions();
+
+        Assert.Equal("http://localhost:5000/", options.Address);
+        Assert.Equal("test-key", options.ApiKey);
+    }
+
+    [Fact]
+    public async Task GetGrpcClient_WhenCalledConcurrently_ReturnsSingleSharedClient()
+    {
+        using var client = CreateClient(new RecordingHandler(CreateEmptyResponse), new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://localhost:5001"),
+        });
+
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(client.GetGrpcClient))
+            .ToArray();
+
+        var clients = await Task.WhenAll(tasks);
+
+        foreach (var grpcClient in clients)
+        {
+            Assert.Same(clients[0], grpcClient);
+        }
+    }
+
     private static QueryFeaturesRequest CreateQueryRequest() => new()
     {
         ServiceId = "assets",
@@ -107,6 +158,12 @@ public sealed class HonuaMobileClientTransportSecurityTests
             },
             options);
     }
+
+    private static Task<HttpResponseMessage> CreateEmptyResponse(HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        });
 
     private sealed class RecordingHandler : HttpMessageHandler
     {

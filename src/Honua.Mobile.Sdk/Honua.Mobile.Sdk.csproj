@@ -17,23 +17,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.2-alpha.1" />
-    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.2-alpha.1" />
-    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.2-alpha.1" />
-    <PackageReference Include="Google.Protobuf" Version="3.33.1" />
-    <PackageReference Include="Grpc.Core.Api" Version="2.71.0" />
-    <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.71.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <InternalsVisibleTo Include="Honua.Mobile.Sdk.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\..\proto\honua\v1\feature_service.proto"
-              GrpcServices="Client"
-              ProtoRoot="..\..\proto" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.2-alpha.1" />
+    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.2-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.2-alpha.1" />
+    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.2-alpha.1" />
   </ItemGroup>
 
 </Project>

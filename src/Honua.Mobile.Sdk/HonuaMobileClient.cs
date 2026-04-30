@@ -2,13 +2,11 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using Grpc.Core;
-using Grpc.Net.Client;
-using Honua.Mobile.Sdk.Grpc;
 using Honua.Mobile.Sdk.Models;
 using Honua.Mobile.Sdk.Routing;
 using Honua.Mobile.Sdk.Scenes;
-using Proto = Honua.Server.Features.Grpc.Proto;
+using Honua.Sdk.Grpc;
+using Microsoft.Extensions.Options;
 
 namespace Honua.Mobile.Sdk;
 
@@ -21,8 +19,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 {
     private readonly HttpClient _http;
     private readonly HonuaMobileClientOptions _options;
-    private readonly GrpcChannel? _grpcChannel;
-    private readonly Proto.FeatureService.FeatureServiceClient? _grpcClient;
+    private readonly object _grpcClientSync = new();
+    private readonly bool _canUseGrpcEndpoint;
+    private HonuaGrpcClient? _grpcClient;
 
     /// <summary>
     /// Initializes a new <see cref="HonuaMobileClient"/> with the supplied HTTP client and options.
@@ -40,11 +39,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         _http.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
 
         var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
-        if (grpcAddress.Scheme is "http" or "https")
-        {
-            _grpcChannel = GrpcChannel.ForAddress(grpcAddress);
-            _grpcClient = new Proto.FeatureService.FeatureServiceClient(_grpcChannel);
-        }
+        _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
 
         Routing = new HonuaRoutingClient(this, options);
         Scenes = new HonuaSceneService(this, options);
@@ -79,7 +74,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             {
                 return await QueryFeaturesGrpcAsync(request, ct).ConfigureAwait(false);
             }
-            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
             {
                 // Fall through to REST transport.
             }
@@ -123,7 +118,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
                     nextPage = grpcEnumerator.Current;
                 }
-                catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure && !yieldedGrpcPage)
+                catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure && !yieldedGrpcPage)
                 {
                     break;
                 }
@@ -155,7 +150,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             {
                 return await ApplyEditsGrpcAsync(request, ct).ConfigureAwait(false);
             }
-            catch (RpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
             {
                 // Fall through to REST transport.
             }
@@ -259,7 +254,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        _grpcChannel?.Dispose();
+        lock (_grpcClientSync)
+        {
+            _grpcClient?.Dispose();
+            _grpcClient = null;
+        }
     }
 
     /// <inheritdoc />
@@ -269,37 +268,36 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return ValueTask.CompletedTask;
     }
 
-    private bool CanUseGrpcForQueries => _options.PreferGrpcForFeatureQueries && _grpcClient is not null;
+    private bool CanUseGrpcForQueries => _options.PreferGrpcForFeatureQueries && _canUseGrpcEndpoint;
 
-    private bool CanUseGrpcForEdits => _options.PreferGrpcForFeatureEdits && _grpcClient is not null;
+    private bool CanUseGrpcForEdits => _options.PreferGrpcForFeatureEdits && _canUseGrpcEndpoint;
 
     private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
-        var protoRequest = GrpcFeatureTranslator.ToProtoQueryRequest(request);
-        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
-        var response = await _grpcClient!.QueryFeaturesAsync(protoRequest, metadata, cancellationToken: ct).ConfigureAwait(false);
-        return GrpcFeatureTranslator.ToJsonDocument(response);
+        var response = await GetGrpcClient()
+            .QueryFeaturesAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .ConfigureAwait(false);
+        return SdkGrpcTransportMappings.ToJsonDocument(response);
     }
 
     private async IAsyncEnumerable<JsonDocument> QueryFeaturesGrpcPagesAsync(
         QueryFeaturesRequest request,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        var protoRequest = GrpcFeatureTranslator.ToProtoQueryRequest(request);
-        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
-        using var call = _grpcClient!.QueryFeaturesStream(protoRequest, metadata, cancellationToken: ct);
-        await foreach (var page in call.ResponseStream.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var page in GetGrpcClient()
+            .QueryFeaturesStreamAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .ConfigureAwait(false))
         {
-            yield return GrpcFeatureTranslator.ToJsonDocument(page);
+            yield return SdkGrpcTransportMappings.ToJsonDocument(page);
         }
     }
 
     private async Task<JsonDocument> ApplyEditsGrpcAsync(ApplyEditsRequest request, CancellationToken ct)
     {
-        var protoRequest = GrpcFeatureTranslator.ToProtoApplyEditsRequest(request);
-        var metadata = await BuildGrpcMetadataAsync(ct).ConfigureAwait(false);
-        var response = await _grpcClient!.ApplyEditsAsync(protoRequest, metadata, cancellationToken: ct).ConfigureAwait(false);
-        return GrpcFeatureTranslator.ToJsonDocument(response);
+        var response = await GetGrpcClient()
+            .ApplyEditsAsync(SdkGrpcTransportMappings.ToGrpcApplyEditsRequest(request), ct)
+            .ConfigureAwait(false);
+        return SdkGrpcTransportMappings.ToJsonDocument(response);
     }
 
     private Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
@@ -373,31 +371,6 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
     }
 
-    private async Task<Metadata> BuildGrpcMetadataAsync(CancellationToken ct)
-    {
-        var metadata = new Metadata();
-        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
-        var hasApiKey = !string.IsNullOrWhiteSpace(_options.ApiKey);
-        var hasBearerToken = !string.IsNullOrWhiteSpace(token);
-
-        if (hasApiKey || hasBearerToken)
-        {
-            EnsureSecureTransport(_options.GrpcEndpoint ?? _options.BaseUri);
-        }
-
-        if (hasApiKey)
-        {
-            metadata.Add("x-api-key", _options.ApiKey!);
-        }
-
-        if (hasBearerToken)
-        {
-            metadata.Add("authorization", $"Bearer {token!}");
-        }
-
-        return metadata;
-    }
-
     private async ValueTask<string?> ResolveBearerTokenAsync(CancellationToken ct)
     {
         var token = _options.BearerToken;
@@ -408,6 +381,39 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
         return token;
     }
+
+    internal HonuaGrpcClient GetGrpcClient()
+    {
+        lock (_grpcClientSync)
+        {
+            return _grpcClient ??= new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions()));
+        }
+    }
+
+    internal HonuaGrpcClientOptions BuildGrpcClientOptions()
+    {
+        var address = _options.GrpcEndpoint ?? _options.BaseUri;
+        if (HasConfiguredGrpcAuthentication)
+        {
+            EnsureSecureTransport(address);
+        }
+
+        return new HonuaGrpcClientOptions
+        {
+            Address = address.ToString(),
+            ApiKey = _options.ApiKey,
+            BearerToken = _options.BearerToken,
+            BearerTokenProvider = _options.AccessTokenProvider is null
+                ? null
+                : async ct => await _options.AccessTokenProvider(ct).ConfigureAwait(false) ?? _options.BearerToken,
+            Timeout = _options.Timeout,
+        };
+    }
+
+    private bool HasConfiguredGrpcAuthentication =>
+        !string.IsNullOrWhiteSpace(_options.ApiKey) ||
+        !string.IsNullOrWhiteSpace(_options.BearerToken) ||
+        _options.AccessTokenProvider is not null;
 
     private Uri ResolveAbsoluteRequestUri(HttpRequestMessage request)
     {
