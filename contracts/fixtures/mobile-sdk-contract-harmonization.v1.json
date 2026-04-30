@@ -6,7 +6,7 @@
   "compatibility": {
     "mobileBaseline": {
       "repository": "honua-io/honua-mobile",
-      "ref": "main after honua-mobile#65",
+      "ref": "main after honua-mobile#66 plus attachment package slice",
       "packageVersion": "unreleased-source"
     },
     "sdkBaseline": {
@@ -15,27 +15,27 @@
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline.Abstractions",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "0.1.3-alpha.1"
+          "version": "0.1.4-alpha.1"
         }
       ]
     }
@@ -94,6 +94,30 @@
       "mobileDisposition": "adapter-required",
       "migrationIssue": "honua-mobile#54",
       "notes": "Offline queue rows keep mobile retry metadata, but uploaded payloads should map to FeatureEditRequest."
+    },
+    {
+      "id": "feature-attachments",
+      "displayName": "Feature attachment metadata and content operations",
+      "owner": "honua-sdk-dotnet",
+      "authoritativePackage": "Honua.Sdk.Abstractions",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Features.IHonuaFeatureAttachmentClient",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentCapabilities",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentInfo",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentListRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentDownloadRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentAddRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentUpdateRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentDeleteRequest",
+        "Honua.Sdk.Abstractions.Features.FeatureAttachmentResult"
+      ],
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient",
+        "Honua.Mobile.Offline.Sync.HonuaMobileSdkFeatureClient"
+      ],
+      "mobileDisposition": "adapter-only",
+      "migrationIssue": "honua-mobile#54",
+      "notes": "Mobile exposes attachment support through SDK contracts and keeps only runtime auth/DI adapters."
     },
     {
       "id": "geometry",

@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #65 | `Honua.Sdk.*` `0.1.3-alpha.1` | Fixture-level compatibility for shared feature, source, edit, and offline contracts |
+| `honua-mobile` source packages from `main` after #66 plus attachment adapter work | `Honua.Sdk.*` `0.1.4-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
@@ -25,6 +25,7 @@ published shared SDK package versions above. When mobile packages gain
 |--------------|-------|--------------------|
 | Feature query requests/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile DTOs are transport shims; add adapters to `FeatureQueryRequest` and `FeatureQueryResult`. |
 | Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile edit DTOs and offline queue payloads should map to `FeatureEditRequest`. |
+| Feature attachment operations | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile exposes `IHonuaFeatureAttachmentClient` through adapters only; no mobile-local attachment DTOs. |
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
 | Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
 | Form-related feature schemas | Split | SDK source schema owns provider-neutral fields; mobile owns form rendering, validation, calculated fields, and record workflow. |
@@ -42,6 +43,9 @@ published shared SDK package versions above. When mobile packages gain
   `FeatureQueryResult`, `FeatureSource`, and `SourceDescriptor`.
 - New provider-neutral feature edit code should target
   `FeatureEditRequest`, `FeatureEditResponse`, and related edit result models.
+- New provider-neutral attachment code should target
+  `IHonuaFeatureAttachmentClient` and the SDK `FeatureAttachment*` request/result
+  contracts.
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
   camera/location, route-location-provider, display, and offline file-system
   concerns.

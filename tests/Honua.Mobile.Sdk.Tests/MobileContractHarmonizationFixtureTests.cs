@@ -21,6 +21,7 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Equal(
         [
             "display-embed",
+            "feature-attachments",
             "feature-edit",
             "feature-query",
             "form-feature-schema",
@@ -58,6 +59,17 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation",
             edits.MobileTypes);
+
+        var attachments = FindFamily(fixture, "feature-attachments");
+        Assert.Equal("honua-sdk-dotnet", attachments.Owner);
+        Assert.Equal("Honua.Sdk.Abstractions", attachments.AuthoritativePackage);
+        Assert.Contains(
+            "Honua.Sdk.Abstractions.Features.IHonuaFeatureAttachmentClient",
+            attachments.AuthoritativeTypes);
+        Assert.Contains(
+            "Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient",
+            attachments.MobileTypes);
+        Assert.Equal("adapter-only", attachments.MobileDisposition);
     }
 
     [Fact]
@@ -99,7 +111,7 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
-        Assert.Equal("0.1.3-alpha.1", abstractionsPackage.Version);
+        Assert.Equal("0.1.4-alpha.1", abstractionsPackage.Version);
 
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
