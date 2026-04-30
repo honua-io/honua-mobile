@@ -15,7 +15,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         var uploader = CreateUploader((request, _) =>
         {
             postedBody = request.Content is null ? null : request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            var body = "{\"addResults\":[{\"success\":true,\"objectId\":1}]}";
+            var body = "{\"addResults\":[{\"success\":true,\"objectId\":1}],\"updateResults\":[],\"deleteResults\":[]}";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -37,16 +37,25 @@ public sealed class HonuaApiOfflineOperationUploaderTests
             """,
         }, forceWrite: false);
 
-        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.True(result.Outcome == UploadOutcome.Success, result.Message);
         Assert.Contains("adds=", postedBody, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task UploadAsync_FeatureServerConflict_ReturnsConflict()
     {
-        var uploader = CreateUploader((_, _) =>
+        var uploader = CreateUploader((request, _) =>
         {
-            var body = "{\"updateResults\":[{\"success\":false,\"error\":{\"code\":409,\"message\":\"conflict\"}}]}";
+            if (request.Method == HttpMethod.Get &&
+                request.RequestUri!.PathAndQuery.Contains("/rest/services/default/FeatureServer/0", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"objectIdField":"objectid"}""", Encoding.UTF8, "application/json"),
+                };
+            }
+
+            var body = "{\"addResults\":[],\"updateResults\":[{\"success\":false,\"error\":{\"code\":409,\"message\":\"conflict\"}}],\"deleteResults\":[]}";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -68,7 +77,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
             """,
         }, forceWrite: false);
 
-        Assert.Equal(UploadOutcome.Conflict, result.Outcome);
+        Assert.True(result.Outcome == UploadOutcome.Conflict, result.Message);
     }
 
     [Fact]
@@ -95,7 +104,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         }, forceWrite: false);
 
         Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
-        Assert.Contains("missing", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("malformed", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -103,7 +112,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     {
         var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("""{"addResults":[{}]}""", Encoding.UTF8, "application/json"),
+            Content = new StringContent("""{"addResults":[{}],"updateResults":[],"deleteResults":[]}""", Encoding.UTF8, "application/json"),
         });
 
         var result = await uploader.UploadAsync(new OfflineEditOperation
@@ -152,6 +161,85 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
+    public async Task UploadAsync_OgcAdd_UsesSdkFeatureEditRequest()
+    {
+        string? capturedPath = null;
+        string? capturedMediaType = null;
+        string? capturedBody = null;
+        var uploader = CreateUploader((request, _) =>
+        {
+            capturedPath = request.RequestUri!.PathAndQuery;
+            capturedMediaType = request.Content?.Headers.ContentType?.MediaType;
+            capturedBody = request.Content is null ? null : request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"type":"Feature","id":"building-1"}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "buildings",
+            TargetCollection = "buildings",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "ogcfeatures",
+              "collectionId": "buildings",
+              "feature": {
+                "type": "Feature",
+                "properties": { "name": "HQ" },
+                "geometry": { "type": "Point", "coordinates": [-157.8, 21.3] }
+              }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Contains("/ogc/features/collections/buildings/items", capturedPath);
+        Assert.Equal("application/geo+json", capturedMediaType);
+        Assert.Contains("\"name\":\"HQ\"", capturedBody);
+    }
+
+    [Fact]
+    public async Task UploadAsync_OgcPatch_KeepsCompatibilityPatchPath()
+    {
+        HttpMethod? capturedMethod = null;
+        string? capturedPath = null;
+        string? capturedMediaType = null;
+        var uploader = CreateUploader((request, _) =>
+        {
+            capturedMethod = request.Method;
+            capturedPath = request.RequestUri!.PathAndQuery;
+            capturedMediaType = request.Content?.Headers.ContentType?.MediaType;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"type":"Feature","id":"building-1"}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "buildings",
+            TargetCollection = "buildings",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = """
+            {
+              "protocol": "ogcfeatures",
+              "collectionId": "buildings",
+              "featureId": "building-1",
+              "patch": { "properties": { "name": "HQ" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Equal(HttpMethod.Patch, capturedMethod);
+        Assert.Contains("/ogc/features/collections/buildings/items/building-1", capturedPath);
+        Assert.Equal("application/merge-patch+json", capturedMediaType);
+    }
+
+    [Fact]
     public async Task UploadAsync_MalformedDeletePayload_ReturnsFatalFailure()
     {
         var requestCount = 0;
@@ -180,6 +268,39 @@ public sealed class HonuaApiOfflineOperationUploaderTests
 
         Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
         Assert.Contains("Delete operation requires", result.Message, StringComparison.Ordinal);
+        Assert.Equal(0, requestCount);
+    }
+
+    [Fact]
+    public async Task UploadAsync_MalformedDeleteCsv_ReturnsFatalFailure()
+    {
+        var requestCount = 0;
+        var uploader = CreateUploader((_, _) =>
+        {
+            requestCount++;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Delete,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "deletesCsv": "1,not-an-id"
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("invalid object id", result.Message, StringComparison.Ordinal);
         Assert.Equal(0, requestCount);
     }
 
@@ -216,6 +337,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
             new HonuaMobileClientOptions
             {
                 BaseUri = new Uri("https://api.honua.test"),
+                PreferGrpcForFeatureEdits = false,
             });
 
         return new HonuaApiOfflineOperationUploader(client);

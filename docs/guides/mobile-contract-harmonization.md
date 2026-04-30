@@ -24,7 +24,7 @@ published shared SDK package versions above. When mobile packages gain
 | Model family | Owner | Mobile disposition |
 |--------------|-------|--------------------|
 | Feature query requests/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | `HonuaMobileSdkFeatureClient` uses SDK-native query paths; legacy mobile DTOs remain compatibility shims. |
-| Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | `HonuaMobileSdkFeatureClient` uses SDK-native edit paths; offline queue payloads still need migration to `FeatureEditRequest`. |
+| Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | `HonuaMobileSdkFeatureClient` and offline uploads use SDK-native edit paths where supported; OGC merge-patch remains a compatibility shim. |
 | Feature attachment operations | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile exposes `IHonuaFeatureAttachmentClient` through adapters only; no mobile-local attachment DTOs. |
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
 | Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
@@ -86,6 +86,9 @@ published shared SDK package versions above. When mobile packages gain
 - #54 now routes `HonuaMobileSdkFeatureClient` through SDK-native
   `FeatureQueryRequest` and `FeatureEditRequest` paths while preserving legacy
   JSON compatibility methods for existing callers.
+- #54 now routes FeatureServer and OGC add/replace/delete offline uploads
+  through SDK-native `FeatureEditRequest`; OGC merge-patch remains on the
+  compatibility wrapper until the SDK owns that operation.
 - #54 now consumes SDK routing contracts and the `Honua.Sdk.GeoServices` routing
   client from `Honua.Sdk.*`; mobile keeps only
   location-provider helpers.

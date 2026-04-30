@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.Abstractions.Features;
 
 namespace Honua.Mobile.Offline.Sync;
 
@@ -62,6 +64,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
         }
+        catch (ArgumentNullException ex) when (string.Equals(ex.ParamName, "source", StringComparison.Ordinal))
+        {
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
+        }
         catch (ArgumentException ex)
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
@@ -99,39 +105,28 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
             };
         }
 
-        var addsJson = payload.AddsJson;
-        var updatesJson = payload.UpdatesJson;
-        var deletesCsv = payload.DeletesCsv;
-
-        if (operation.OperationType == OfflineOperationType.Add && string.IsNullOrWhiteSpace(addsJson))
+        var request = new FeatureEditRequest
         {
-            addsJson = WrapSingleFeature(payload.Feature, "Add operation requires feature payload.");
-        }
-
-        if (operation.OperationType == OfflineOperationType.Update && string.IsNullOrWhiteSpace(updatesJson))
-        {
-            updatesJson = WrapSingleFeature(payload.Feature, "Update operation requires feature payload.");
-        }
-
-        if (operation.OperationType == OfflineOperationType.Delete && string.IsNullOrWhiteSpace(deletesCsv))
-        {
-            deletesCsv = payload.DeleteObjectIds is { Count: > 0 }
-                ? string.Join(',', payload.DeleteObjectIds)
-                : throw new InvalidOperationException("Delete operation requires deleteObjectIds or deletesCsv.");
-        }
-
-        using var response = await _client.ApplyEditsAsync(new ApplyEditsRequest
-        {
-            ServiceId = payload.ServiceId,
-            LayerId = payload.LayerId.Value,
-            AddsJson = addsJson,
-            UpdatesJson = updatesJson,
-            DeletesCsv = deletesCsv,
+            Source = new FeatureSource
+            {
+                ServiceId = payload.ServiceId,
+                LayerId = payload.LayerId,
+            },
+            Adds = operation.OperationType == OfflineOperationType.Add
+                ? ResolveFeatureServerFeatures(payload.AddsJson, payload.Feature, "Add operation requires feature payload.")
+                : [],
+            Updates = operation.OperationType == OfflineOperationType.Update
+                ? ResolveFeatureServerFeatures(payload.UpdatesJson, payload.Feature, "Update operation requires feature payload.")
+                : [],
+            DeleteObjectIds = operation.OperationType == OfflineOperationType.Delete
+                ? ResolveFeatureServerDeleteObjectIds(payload)
+                : [],
             RollbackOnFailure = false,
             ForceWrite = forceWrite,
-        }, ct).ConfigureAwait(false);
+        };
 
-        return ParseApplyEditsResponse(response.RootElement);
+        var response = await _client.ApplyEditsAsync(request, ct).ConfigureAwait(false);
+        return ToUploadResult(response);
     }
 
     private async Task<UploadResult> UploadOgcAsync(
@@ -148,125 +143,91 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
             };
         }
 
-        JsonDocument response;
         switch (operation.OperationType)
         {
             case OfflineOperationType.Add:
-                response = await _client.CreateOgcItemAsync(new OgcCreateItemRequest
                 {
-                    CollectionId = payload.CollectionId,
-                    Feature = payload.Feature ?? throw new InvalidOperationException("Add operation requires feature payload."),
-                }, ct).ConfigureAwait(false);
-                break;
+                    var response = await _client.ApplyEditsAsync(new FeatureEditRequest
+                    {
+                        Source = new FeatureSource { CollectionId = payload.CollectionId },
+                        Adds = [ToOgcFeatureEditFeature(payload.Feature, null, "Add operation requires feature payload.")],
+                        RollbackOnFailure = false,
+                    }, ct).ConfigureAwait(false);
+                    return ToUploadResult(response);
+                }
 
             case OfflineOperationType.Update:
                 if (!string.IsNullOrWhiteSpace(payload.FeatureId) && payload.Patch is not null)
                 {
-                    response = await _client.PatchOgcItemAsync(new OgcPatchItemRequest
+                    using var patchResponse = await _client.PatchOgcItemAsync(new OgcPatchItemRequest
                     {
                         CollectionId = payload.CollectionId,
                         FeatureId = payload.FeatureId,
                         Patch = payload.Patch.Value,
                     }, ct).ConfigureAwait(false);
-                    break;
+
+                    if (TryReadError(patchResponse.RootElement, out var code, out var message))
+                    {
+                        return FromErrorCode(code, message);
+                    }
+
+                    return new UploadResult { Outcome = UploadOutcome.Success };
                 }
 
-                response = await _client.ReplaceOgcItemAsync(new OgcReplaceItemRequest
+                var updateResponse = await _client.ApplyEditsAsync(new FeatureEditRequest
                 {
-                    CollectionId = payload.CollectionId,
-                    FeatureId = payload.FeatureId ?? throw new InvalidOperationException("Update operation requires featureId."),
-                    Feature = payload.Feature ?? throw new InvalidOperationException("Update operation requires feature payload."),
+                    Source = new FeatureSource { CollectionId = payload.CollectionId },
+                    Updates =
+                    [
+                        ToOgcFeatureEditFeature(
+                            payload.Feature,
+                            payload.FeatureId ?? throw new InvalidOperationException("Update operation requires featureId."),
+                            "Update operation requires feature payload.")
+                    ],
+                    RollbackOnFailure = false,
                 }, ct).ConfigureAwait(false);
-                break;
+                return ToUploadResult(updateResponse);
 
             case OfflineOperationType.Delete:
-                response = await _client.DeleteOgcItemAsync(new OgcDeleteItemRequest
+                var deleteResponse = await _client.ApplyEditsAsync(new FeatureEditRequest
                 {
-                    CollectionId = payload.CollectionId,
-                    FeatureId = payload.FeatureId ?? throw new InvalidOperationException("Delete operation requires featureId."),
+                    Source = new FeatureSource { CollectionId = payload.CollectionId },
+                    DeleteIds = [payload.FeatureId ?? throw new InvalidOperationException("Delete operation requires featureId.")],
+                    RollbackOnFailure = false,
                 }, ct).ConfigureAwait(false);
-                break;
+                return ToUploadResult(deleteResponse);
 
             default:
                 return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "Unsupported OGC operation." };
         }
-
-        using (response)
-        {
-            if (TryReadError(response.RootElement, out var code, out var message))
-            {
-                return FromErrorCode(code, message);
-            }
-        }
-
-        return new UploadResult { Outcome = UploadOutcome.Success };
     }
 
-    private static UploadResult ParseApplyEditsResponse(JsonElement root)
+    private static UploadResult ToUploadResult(FeatureEditResponse response)
     {
-        if (root.ValueKind != JsonValueKind.Object)
+        if (response.Error is not null)
         {
-            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
+            return FromErrorCode(response.Error.Code, response.Error.Message);
         }
 
-        if (TryReadError(root, out var topLevelCode, out var topLevelMessage))
-        {
-            return FromErrorCode(topLevelCode, topLevelMessage);
-        }
-
-        var resultArrays = new[] { "addResults", "updateResults", "deleteResults" };
-        var foundResultArray = false;
-        var foundResultEntry = false;
-
-        foreach (var propertyName in resultArrays)
-        {
-            if (!root.TryGetProperty(propertyName, out var results))
-            {
-                continue;
-            }
-
-            foundResultArray = true;
-            if (results.ValueKind != JsonValueKind.Array)
-            {
-                return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
-            }
-
-            foreach (var result in results.EnumerateArray())
-            {
-                foundResultEntry = true;
-
-                if (result.ValueKind != JsonValueKind.Object)
-                {
-                    return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result payload is malformed." };
-                }
-
-                if (result.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True)
-                {
-                    continue;
-                }
-
-                if (result.TryGetProperty("error", out var error) && TryReadError(error, out var code, out var message))
-                {
-                    return FromErrorCode(code, message);
-                }
-
-                if (result.TryGetProperty("success", out success) && success.ValueKind == JsonValueKind.False)
-                {
-                    return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result reported failure." };
-                }
-
-                return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result payload is malformed." };
-            }
-        }
-
-        if (!foundResultArray)
+        var editResults = (response.AddResults ?? [])
+            .Concat(response.UpdateResults ?? [])
+            .Concat(response.DeleteResults ?? [])
+            .ToArray();
+        if (editResults.Length == 0)
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response is missing edit result arrays." };
         }
 
-        if (!foundResultEntry)
+        foreach (var result in editResults)
         {
-            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response contains no edit results." };
+            if (result.Succeeded)
+            {
+                continue;
+            }
+
+            return result.Error is not null
+                ? FromErrorCode(result.Error.Code, result.Error.Message)
+                : new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result reported failure." };
         }
 
         return new UploadResult { Outcome = UploadOutcome.Success };
@@ -332,14 +293,129 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         return code.HasValue || !string.IsNullOrWhiteSpace(message);
     }
 
-    private static string WrapSingleFeature(JsonElement? feature, string errorMessage)
+    private static IReadOnlyList<FeatureEditFeature> ResolveFeatureServerFeatures(
+        string? featuresJson,
+        JsonElement? singleFeature,
+        string errorMessage)
+    {
+        if (!string.IsNullOrWhiteSpace(featuresJson))
+        {
+            return ReadFeatureServerFeatures(featuresJson);
+        }
+
+        return [ToFeatureServerFeatureEditFeature(singleFeature, errorMessage)];
+    }
+
+    private static IReadOnlyList<FeatureEditFeature> ReadFeatureServerFeatures(string featuresJson)
+    {
+        using var document = JsonDocument.Parse(featuresJson);
+        return document.RootElement.ValueKind == JsonValueKind.Array
+            ? document.RootElement.EnumerateArray().Select(feature => ToFeatureServerFeatureEditFeature(feature, "Feature payload is required.")).ToArray()
+            : [ToFeatureServerFeatureEditFeature(document.RootElement, "Feature payload is required.")];
+    }
+
+    private static IReadOnlyList<long> ResolveFeatureServerDeleteObjectIds(OfflineOperationPayload payload)
+    {
+        if (payload.DeleteObjectIds is { Count: > 0 })
+        {
+            return payload.DeleteObjectIds;
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.DeletesCsv))
+        {
+            var values = payload.DeletesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var objectIds = new long[values.Length];
+            for (var index = 0; index < values.Length; index++)
+            {
+                if (!long.TryParse(values[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectId))
+                {
+                    throw new InvalidOperationException($"Delete operation contains an invalid object id '{values[index]}'.");
+                }
+
+                objectIds[index] = objectId;
+            }
+
+            return objectIds;
+        }
+
+        throw new InvalidOperationException("Delete operation requires deleteObjectIds or deletesCsv.");
+    }
+
+    private static FeatureEditFeature ToFeatureServerFeatureEditFeature(JsonElement? feature, string errorMessage)
     {
         if (feature is null)
         {
             throw new InvalidOperationException(errorMessage);
         }
 
-        return JsonSerializer.Serialize(new[] { feature.Value });
+        return ToFeatureEditFeature(feature.Value, fallbackId: null, includeFeatureId: false, includeObjectId: true);
+    }
+
+    private static FeatureEditFeature ToOgcFeatureEditFeature(JsonElement? feature, string? fallbackId, string errorMessage)
+    {
+        if (feature is null)
+        {
+            throw new InvalidOperationException(errorMessage);
+        }
+
+        return ToFeatureEditFeature(feature.Value, fallbackId, includeFeatureId: true, includeObjectId: true);
+    }
+
+    private static FeatureEditFeature ToFeatureEditFeature(
+        JsonElement feature,
+        string? fallbackId,
+        bool includeFeatureId,
+        bool includeObjectId)
+    {
+        var id = fallbackId;
+        if (includeFeatureId && feature.TryGetProperty("id", out var idElement))
+        {
+            id = idElement.ValueKind == JsonValueKind.String ? idElement.GetString() : idElement.GetRawText();
+        }
+
+        var attributes = feature.TryGetProperty("attributes", out var featureServerAttributes)
+            ? ReadJsonObject(featureServerAttributes)
+            : feature.TryGetProperty("properties", out var geoJsonProperties)
+                ? ReadJsonObject(geoJsonProperties)
+                : new Dictionary<string, JsonElement>();
+        var objectId = includeObjectId ? TryReadObjectId(attributes) : null;
+
+        JsonElement? geometry = null;
+        if (feature.TryGetProperty("geometry", out var geometryElement) && geometryElement.ValueKind != JsonValueKind.Null)
+        {
+            geometry = geometryElement.Clone();
+        }
+
+        return new FeatureEditFeature
+        {
+            Id = id,
+            ObjectId = objectId,
+            Attributes = attributes,
+            Geometry = geometry,
+        };
+    }
+
+    private static long? TryReadObjectId(IReadOnlyDictionary<string, JsonElement> attributes)
+    {
+        foreach (var key in new[] { "OBJECTID", "objectid", "ObjectID", "FID" })
+        {
+            if (attributes.TryGetValue(key, out var objectId) && objectId.TryGetInt64(out var parsedObjectId))
+            {
+                return parsedObjectId;
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> ReadJsonObject(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, JsonElement>();
+        }
+
+        return element.EnumerateObject().ToDictionary(property => property.Name, property => property.Value.Clone());
     }
 }
 
