@@ -7,9 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.7-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline" Version="0.1.7-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Field" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Offline" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.8-alpha.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
   </ItemGroup>

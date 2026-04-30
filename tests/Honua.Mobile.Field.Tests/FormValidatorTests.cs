@@ -1,5 +1,6 @@
-using Honua.Mobile.Field.Forms;
-using Honua.Mobile.Field.Records;
+using Honua.Mobile.Field.Capture;
+using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Records;
 
 namespace Honua.Mobile.Field.Tests;
 
@@ -51,8 +52,8 @@ public sealed class FormValidatorTests
             },
         };
 
-        var validator = new FormValidator();
-        var result = validator.Validate(form, record);
+        var workflow = CreateWorkflow();
+        var result = workflow.Validate(form, record);
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.FieldId == "asset_id");
@@ -99,8 +100,8 @@ public sealed class FormValidatorTests
             },
         };
 
-        var evaluator = new CalculatedFieldEvaluator();
-        evaluator.ApplyCalculatedFields(form, record);
+        var workflow = CreateWorkflow();
+        workflow.ApplyCalculatedFields(form, record);
 
         Assert.Equal("alpha-beta", record.Values["display"]);
         Assert.Equal(8d, record.Values["total"]);
@@ -143,8 +144,8 @@ public sealed class FormValidatorTests
             },
         };
 
-        var validator = new FormValidator();
-        var result = validator.Validate(form, record);
+        var workflow = CreateWorkflow();
+        var result = workflow.Validate(form, record);
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.FieldId == "tags");
@@ -194,8 +195,8 @@ public sealed class FormValidatorTests
             },
         };
 
-        var validator = new FormValidator();
-        var result = validator.Validate(form, record);
+        var workflow = CreateWorkflow();
+        var result = workflow.Validate(form, record);
 
         Assert.True(result.IsValid);
         Assert.DoesNotContain(result.Errors, error => error.FieldId == "followup");
@@ -241,8 +242,8 @@ public sealed class FormValidatorTests
             },
         };
 
-        var validator = new FormValidator();
-        var result = validator.Validate(form, record);
+        var workflow = CreateWorkflow();
+        var result = workflow.Validate(form, record);
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.FieldId == "code");
@@ -288,11 +289,86 @@ public sealed class FormValidatorTests
             },
         };
 
-        var validator = new FormValidator();
-        var validationTask = Task.Run(() => validator.Validate(form, record));
+        var workflow = CreateWorkflow();
+        var validationTask = Task.Run(() => workflow.Validate(form, record));
         var result = await validationTask.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.FieldId == "code");
     }
+
+    [Fact]
+    public void Validate_MediaCountUsesSdkAttachmentMetadata()
+    {
+        var form = new FormDefinition
+        {
+            FormId = "inspection",
+            Name = "Inspection",
+            Sections =
+            [
+                new FormSection
+                {
+                    SectionId = "main",
+                    Label = "Main",
+                    Fields =
+                    [
+                        new FormField
+                        {
+                            FieldId = "photos",
+                            Label = "Photos",
+                            Type = FormFieldType.Photo,
+                            Required = true,
+                            Validation = new FieldValidationRule { MinMediaCount = 2 },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var record = new FieldRecord
+        {
+            RecordId = "r-photo",
+            FormId = "inspection",
+            Media =
+            [
+                new FieldMediaAttachment { AttachmentId = "a1", FieldId = "photos", MediaType = FieldMediaType.Photo, FileName = "asset.jpg" },
+            ],
+        };
+
+        var workflow = CreateWorkflow();
+        var result = workflow.Validate(form, record);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.FieldId == "photos");
+    }
+
+    [Fact]
+    public void MobileMediaAttachment_ConvertsToSdkAttachmentWithoutLocalPath()
+    {
+        var mobileAttachment = new MobileFieldMediaAttachment
+        {
+            AttachmentId = "a-local",
+            FieldId = "photos",
+            LocalPath = Path.Combine("offline", "captures", "asset.jpg"),
+            MediaType = FieldMediaType.Photo,
+            ContentType = "image/jpeg",
+            SizeBytes = 42,
+            CaptureLocation = new FieldGeoPoint(21.3069, -157.8583),
+            RequiresFaceBlur = true,
+        };
+
+        var sdkAttachment = mobileAttachment.ToSdkAttachment();
+
+        Assert.Equal("a-local", sdkAttachment.AttachmentId);
+        Assert.Equal("photos", sdkAttachment.FieldId);
+        Assert.Equal("asset.jpg", sdkAttachment.FileName);
+        Assert.Equal(FieldMediaType.Photo, sdkAttachment.MediaType);
+        Assert.Equal("image/jpeg", sdkAttachment.ContentType);
+        Assert.Equal(42, sdkAttachment.SizeBytes);
+        Assert.Equal(mobileAttachment.CaptureLocation, sdkAttachment.CaptureLocation);
+        Assert.True(sdkAttachment.RequiresFaceBlur);
+    }
+
+    private static MobileFieldCaptureWorkflow CreateWorkflow()
+        => new(new DuplicateDetector());
 }

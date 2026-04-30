@@ -1,4 +1,5 @@
-using Honua.Mobile.Field.Records;
+using Honua.Mobile.Field.Capture;
+using Honua.Sdk.Field.Records;
 
 namespace Honua.Mobile.Field.Tests;
 
@@ -18,7 +19,7 @@ public sealed class RecordWorkflowTests
             CreatedAtUtc = createdAt,
         };
 
-        var workflow = new RecordWorkflow();
+        var workflow = CreateWorkflow();
         workflow.Transition(record, RecordStatus.Submitted, submittedAt);
         workflow.Transition(record, RecordStatus.Approved, completedAt);
 
@@ -37,14 +38,14 @@ public sealed class RecordWorkflowTests
             {
                 RecordId = "r-1",
                 FormId = "inspection",
-                Location = new GeoPoint(21.3069, -157.8583),
+                Location = new FieldGeoPoint(21.3069, -157.8583),
                 Values = { ["asset_id"] = "A-100" },
             },
             new()
             {
                 RecordId = "r-2",
                 FormId = "inspection",
-                Location = new GeoPoint(21.3100, -157.8600),
+                Location = new FieldGeoPoint(21.3100, -157.8600),
                 Values = { ["asset_id"] = "A-200" },
             },
         };
@@ -53,12 +54,12 @@ public sealed class RecordWorkflowTests
         {
             RecordId = "r-new",
             FormId = "inspection",
-            Location = new GeoPoint(21.30691, -157.85831),
+            Location = new FieldGeoPoint(21.30691, -157.85831),
             Values = { ["asset_id"] = "A-100" },
         };
 
-        var detector = new DuplicateDetector();
-        var duplicates = detector.FindPotentialDuplicates(existing, candidate, new DuplicateDetectionOptions
+        var workflow = CreateWorkflow();
+        var duplicates = workflow.FindPotentialDuplicates(existing, candidate, new DuplicateDetectionOptions
         {
             MaxDistanceMeters = 50,
             MatchFieldIds = ["asset_id"],
@@ -85,7 +86,7 @@ public sealed class RecordWorkflowTests
             CompletedAtUtc = completedAt,
         };
 
-        var workflow = new RecordWorkflow();
+        var workflow = CreateWorkflow();
         workflow.Transition(record, RecordStatus.Submitted, resubmittedAt);
 
         Assert.Equal(RecordStatus.Submitted, record.Status);
@@ -93,4 +94,7 @@ public sealed class RecordWorkflowTests
         Assert.Null(record.CompletedAtUtc);
         Assert.Null(record.Duration);
     }
+
+    private static MobileFieldCaptureWorkflow CreateWorkflow()
+        => new(new DuplicateDetector());
 }
