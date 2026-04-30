@@ -36,6 +36,7 @@ public sealed class SdkOfflineRegistrationTests
             Assert.IsType<GeoPackageSdkOfflineStoreAdapter>(provider.GetRequiredService<SdkOfflineFeatureStore>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureQueryClient>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureEditClient>());
+            Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureAttachmentClient>());
             Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<HonuaMobileSdkFeatureClient>());
         }
         finally

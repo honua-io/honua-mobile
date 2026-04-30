@@ -174,6 +174,7 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton<HonuaMobileSdkFeatureClient>();
         services.AddSingleton<IHonuaFeatureQueryClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureEditClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
+        services.AddSingleton<IHonuaFeatureAttachmentClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<SdkOfflineFeatureStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
         services.AddSingleton<SdkOfflineChangeJournal>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
         services.AddSingleton<SdkOfflineCheckpointStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());

@@ -9,7 +9,10 @@ namespace Honua.Mobile.Sdk.Features;
 /// <summary>
 /// Adapts <see cref="HonuaMobileClient"/> to the SDK feature query and edit abstractions.
 /// </summary>
-public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHonuaFeatureEditClient
+public sealed class HonuaMobileSdkFeatureClient :
+    IHonuaFeatureQueryClient,
+    IHonuaFeatureEditClient,
+    IHonuaFeatureAttachmentClient
 {
     private readonly HonuaMobileClient _client;
 
@@ -33,6 +36,17 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
         SupportsDeletes = true,
         SupportsRollbackOnFailure = true,
         NativeSurface = "HonuaMobileClient",
+    };
+
+    /// <inheritdoc />
+    public FeatureAttachmentCapabilities AttachmentCapabilities { get; } = new()
+    {
+        SupportsList = true,
+        SupportsDownload = true,
+        SupportsAdd = true,
+        SupportsUpdate = true,
+        SupportsDelete = true,
+        NativeSurface = "HonuaMobileClient FeatureServer attachments",
     };
 
     /// <inheritdoc />
@@ -111,6 +125,80 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
             ProviderName = ProviderName,
             Error = new FeatureEditError { Message = "Feature edit requires either an OGC collection ID or FeatureServer service/layer identifiers." },
         };
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureFeatureServerAttachmentSource(request.Source);
+        return _client.ListAttachmentsAsync(request, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<FeatureAttachmentContent> DownloadAttachmentAsync(
+        FeatureAttachmentDownloadRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureFeatureServerAttachmentSource(request.Source);
+        return _client.DownloadAttachmentAsync(request, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<FeatureAttachmentResult> AddAttachmentAsync(
+        FeatureAttachmentAddRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureFeatureServerAttachmentSource(request.Source);
+
+        try
+        {
+            return await _client.AddAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaMobileApiException ex)
+        {
+            return ToAttachmentErrorResult(ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<FeatureAttachmentResult> UpdateAttachmentAsync(
+        FeatureAttachmentUpdateRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureFeatureServerAttachmentSource(request.Source);
+
+        try
+        {
+            return await _client.UpdateAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaMobileApiException ex)
+        {
+            return ToAttachmentErrorResult(ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<FeatureAttachmentResult> DeleteAttachmentAsync(
+        FeatureAttachmentDeleteRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureFeatureServerAttachmentSource(request.Source);
+
+        try
+        {
+            return await _client.DeleteAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaMobileApiException ex)
+        {
+            return ToAttachmentErrorResult(ex);
+        }
     }
 
     private async Task<FeatureEditResponse> ApplyOgcEditsAsync(FeatureEditRequest request, CancellationToken ct)
@@ -220,6 +308,26 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
             Deletes = SdkFeatureTransportMappings.ToFeatureServerDeleteObjectIds(request),
             RollbackOnFailure = request.RollbackOnFailure,
             ForceWrite = request.ForceWrite,
+        };
+
+    private static void EnsureFeatureServerAttachmentSource(FeatureSource source)
+    {
+        if (string.IsNullOrWhiteSpace(source.ServiceId) || !source.LayerId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Mobile attachment operations currently require FeatureServer service and layer identifiers.");
+        }
+    }
+
+    private static FeatureAttachmentResult ToAttachmentErrorResult(HonuaMobileApiException exception)
+        => new()
+        {
+            Succeeded = false,
+            Error = new FeatureEditError
+            {
+                Code = (int)exception.StatusCode,
+                Message = exception.Message,
+            },
         };
 
     private static FeatureQueryResult ParseQueryResult(JsonElement root, FeatureQueryRequest request, string providerName)

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Features;
@@ -149,6 +150,167 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.True(result.Succeeded);
         Assert.Equal("42", result.DeleteResults[0].Id);
         Assert.Equal(42, result.DeleteResults[0].ObjectId);
+    }
+
+    [Fact]
+    public async Task AttachmentOperationsAsync_FeatureServerRequest_UsesSdkAttachmentContract()
+    {
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get &&
+                path == "/rest/services/assets/FeatureServer/0/42/attachments")
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "attachmentInfos": [
+                            {
+                              "id": 7,
+                              "parentObjectId": 42,
+                              "name": "photo.txt",
+                              "contentType": "text/plain",
+                              "size": 5,
+                              "keywords": "field"
+                            }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            }
+
+            if (request.Method == HttpMethod.Get &&
+                path == "/rest/services/assets/FeatureServer/0/42/attachments/7")
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(Encoding.UTF8.GetBytes("photo")),
+                };
+                response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+                response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
+                {
+                    FileName = "\"photo.txt\"",
+                };
+                return response;
+            }
+
+            if (request.Method == HttpMethod.Post &&
+                path == "/rest/services/assets/FeatureServer/0/42/addAttachment")
+            {
+                var body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
+                Assert.Contains("name=attachment", body);
+                Assert.Contains("filename=photo.txt", body);
+                Assert.Contains("field", body);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{ "addAttachmentResult": { "objectId": 8, "success": true } }""",
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            }
+
+            if (request.Method == HttpMethod.Post &&
+                path == "/rest/services/assets/FeatureServer/0/42/updateAttachment")
+            {
+                var body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
+                Assert.Contains("name=attachmentId", body);
+                Assert.Contains("7", body);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{ "updateAttachmentResult": { "objectId": 7, "success": true } }""",
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            }
+
+            if (request.Method == HttpMethod.Post &&
+                path == "/rest/services/assets/FeatureServer/0/42/deleteAttachments")
+            {
+                var body = await request.Content!.ReadAsStringAsync().ConfigureAwait(false);
+                Assert.Contains("attachmentIds=7", body);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{ "deleteAttachmentResults": [{ "objectId": 7, "success": true }] }""",
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var adapter = CreateAdapter(handler);
+        var attachments = (IHonuaFeatureAttachmentClient)adapter;
+        var source = new FeatureSource { ServiceId = "assets", LayerId = 0 };
+
+        Assert.True(attachments.AttachmentCapabilities.SupportsList);
+        Assert.True(attachments.AttachmentCapabilities.SupportsDownload);
+        Assert.True(attachments.AttachmentCapabilities.SupportsAdd);
+        Assert.True(attachments.AttachmentCapabilities.SupportsUpdate);
+        Assert.True(attachments.AttachmentCapabilities.SupportsDelete);
+
+        var listed = await attachments.ListAttachmentsAsync(new FeatureAttachmentListRequest
+        {
+            Source = source,
+            ObjectId = 42,
+        });
+        var info = Assert.Single(listed);
+        Assert.Equal(7, info.AttachmentId);
+        Assert.Equal("photo.txt", info.Name);
+
+        var downloaded = await attachments.DownloadAttachmentAsync(new FeatureAttachmentDownloadRequest
+        {
+            Source = source,
+            ObjectId = 42,
+            AttachmentId = 7,
+        });
+        using var reader = new StreamReader(downloaded.Content, Encoding.UTF8);
+        Assert.Equal("photo", await reader.ReadToEndAsync());
+        Assert.Equal("photo.txt", downloaded.Info.Name);
+
+        using var addContent = new MemoryStream(Encoding.UTF8.GetBytes("photo"));
+        var addResult = await attachments.AddAttachmentAsync(new FeatureAttachmentAddRequest
+        {
+            Source = source,
+            ObjectId = 42,
+            Name = "photo.txt",
+            ContentType = "text/plain",
+            Content = addContent,
+            Keywords = "field",
+        });
+        Assert.True(addResult.Succeeded);
+        Assert.Equal(8, addResult.AttachmentId);
+        Assert.True(addContent.CanRead);
+
+        using var updateContent = new MemoryStream(Encoding.UTF8.GetBytes("updated"));
+        var updateResult = await attachments.UpdateAttachmentAsync(new FeatureAttachmentUpdateRequest
+        {
+            Source = source,
+            ObjectId = 42,
+            AttachmentId = 7,
+            Name = "photo.txt",
+            ContentType = "text/plain",
+            Content = updateContent,
+        });
+        Assert.True(updateResult.Succeeded);
+        Assert.Equal(7, updateResult.AttachmentId);
+        Assert.True(updateContent.CanRead);
+
+        var deleteResult = await attachments.DeleteAttachmentAsync(new FeatureAttachmentDeleteRequest
+        {
+            Source = source,
+            ObjectId = 42,
+            AttachmentId = 7,
+        });
+        Assert.True(deleteResult.Succeeded);
+        Assert.Equal(7, deleteResult.AttachmentId);
     }
 
     private static HonuaMobileSdkFeatureClient CreateAdapter(HttpMessageHandler handler)

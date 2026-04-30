@@ -4,6 +4,7 @@ using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
 using Honua.Mobile.Sdk.Routing;
 using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.GeoServices.FeatureServer;
 using Honua.Sdk.GeoServices.FeatureServer.Exceptions;
 using Honua.Sdk.Grpc;
@@ -174,6 +175,116 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
 
         return await ApplyEditsRestAsync(request, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Lists FeatureServer attachments using the shared SDK attachment contract.
+    /// </summary>
+    /// <param name="request">SDK attachment list request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Attachment metadata for the requested feature.</returns>
+    public async Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            return await _featureServerClient.ListAttachmentsAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer attachments", ex);
+        }
+    }
+
+    /// <summary>
+    /// Downloads one FeatureServer attachment using the shared SDK attachment contract.
+    /// </summary>
+    /// <param name="request">SDK attachment download request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Downloaded attachment content. Dispose the returned content stream when finished.</returns>
+    public async Task<FeatureAttachmentContent> DownloadAttachmentAsync(
+        FeatureAttachmentDownloadRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            return await _featureServerClient.DownloadAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer attachments", ex);
+        }
+    }
+
+    /// <summary>
+    /// Adds one FeatureServer attachment using the shared SDK attachment contract.
+    /// </summary>
+    /// <param name="request">SDK attachment add request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Attachment edit result.</returns>
+    public async Task<FeatureAttachmentResult> AddAttachmentAsync(
+        FeatureAttachmentAddRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            return await _featureServerClient.AddAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer attachments", ex);
+        }
+    }
+
+    /// <summary>
+    /// Updates one FeatureServer attachment using the shared SDK attachment contract.
+    /// </summary>
+    /// <param name="request">SDK attachment update request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Attachment edit result.</returns>
+    public async Task<FeatureAttachmentResult> UpdateAttachmentAsync(
+        FeatureAttachmentUpdateRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            return await _featureServerClient.UpdateAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer attachments", ex);
+        }
+    }
+
+    /// <summary>
+    /// Deletes one FeatureServer attachment using the shared SDK attachment contract.
+    /// </summary>
+    /// <param name="request">SDK attachment delete request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Attachment edit result.</returns>
+    public async Task<FeatureAttachmentResult> DeleteAttachmentAsync(
+        FeatureAttachmentDeleteRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            return await _featureServerClient.DeleteAttachmentAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer attachments", ex);
+        }
     }
 
     /// <summary>

@@ -8,7 +8,10 @@ namespace Honua.Mobile.Offline.Sync;
 /// <summary>
 /// Backward-compatible offline namespace shim for the SDK feature adapter.
 /// </summary>
-public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHonuaFeatureEditClient
+public sealed class HonuaMobileSdkFeatureClient :
+    IHonuaFeatureQueryClient,
+    IHonuaFeatureEditClient,
+    IHonuaFeatureAttachmentClient
 {
     private readonly SdkFeatureClient _inner;
 
@@ -28,6 +31,9 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
     public FeatureEditCapabilities EditCapabilities => _inner.EditCapabilities;
 
     /// <inheritdoc />
+    public FeatureAttachmentCapabilities AttachmentCapabilities => _inner.AttachmentCapabilities;
+
+    /// <inheritdoc />
     public Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken ct = default)
         => _inner.QueryAsync(request, ct);
 
@@ -45,4 +51,34 @@ public sealed class HonuaMobileSdkFeatureClient : IHonuaFeatureQueryClient, IHon
     /// <inheritdoc />
     public Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken ct = default)
         => _inner.ApplyEditsAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken ct = default)
+        => _inner.ListAttachmentsAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task<FeatureAttachmentContent> DownloadAttachmentAsync(
+        FeatureAttachmentDownloadRequest request,
+        CancellationToken ct = default)
+        => _inner.DownloadAttachmentAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task<FeatureAttachmentResult> AddAttachmentAsync(
+        FeatureAttachmentAddRequest request,
+        CancellationToken ct = default)
+        => _inner.AddAttachmentAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task<FeatureAttachmentResult> UpdateAttachmentAsync(
+        FeatureAttachmentUpdateRequest request,
+        CancellationToken ct = default)
+        => _inner.UpdateAttachmentAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task<FeatureAttachmentResult> DeleteAttachmentAsync(
+        FeatureAttachmentDeleteRequest request,
+        CancellationToken ct = default)
+        => _inner.DeleteAttachmentAsync(request, ct);
 }
