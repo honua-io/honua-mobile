@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #68 plus scene adapter work | `Honua.Sdk.*` `0.1.7-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, and offline contracts |
+| `honua-mobile` source packages from `main` after #68 plus scene and field adapter work | `Honua.Sdk.*` `0.1.8-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, field, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
@@ -28,7 +28,7 @@ published shared SDK package versions above. When mobile packages gain
 | Feature attachment operations | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile exposes `IHonuaFeatureAttachmentClient` through adapters only; no mobile-local attachment DTOs. |
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
 | Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
-| Form-related feature schemas | Split | SDK source schema owns provider-neutral fields; mobile owns form rendering, validation, calculated fields, and record workflow. |
+| Form-related feature schemas and field workflows | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.Field` | SDK owns provider-neutral source fields, form schema, validation, calculated fields, duplicate detection, and record workflow. Mobile owns rendering, capture UX, local media paths, GPS acquisition, DI, and offline adapter integration. |
 | Scene metadata and offline scene packages | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions.Scenes` plus `Honua.Sdk.Scenes` | Mobile owns renderers, downloads, local storage, and display lifecycle. |
 | Routing and network analysis | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.GeoServices` NAServer client | Mobile keeps only device location providers, permission flows, route display, and map interaction adapters. |
 | GeoPackage sync and native storage adapters | `honua-mobile` | Keep database tables, background sync, file-system downloads, and MAUI registration in mobile. |
@@ -55,6 +55,12 @@ published shared SDK package versions above. When mobile packages gain
   `HonuaSceneResolveRequest`, `HonuaSceneResolution`, and
   `HonuaScenePackageManifest`, with `Honua.Sdk.Scenes` providing the portable
   client implementation.
+- New provider-neutral field workflow code should target
+  `Honua.Sdk.Field.Forms.FormDefinition`, `FormValidator`,
+  `CalculatedFieldEvaluator`, `Honua.Sdk.Field.Records.FieldRecord`,
+  `DuplicateDetector`, and `RecordWorkflow`; mobile code should add only
+  capture, local path, UI, DI, and offline adapter behavior around those
+  contracts.
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
   camera/location, route-location-provider, display, and offline file-system
   concerns.
@@ -81,7 +87,10 @@ published shared SDK package versions above. When mobile packages gain
   client from `Honua.Sdk.*`; mobile keeps only
   location-provider helpers.
 - #55 consumes SDK scene metadata and package manifest contracts from
-  `Honua.Sdk.*` `0.1.7-alpha.1`; mobile keeps downloader, GeoPackage catalog,
+  `Honua.Sdk.*` `0.1.8-alpha.1`; mobile keeps downloader, GeoPackage catalog,
   display, and renderer lifecycle code.
+- #56 consumes SDK field contracts from `Honua.Sdk.Field` `0.1.8-alpha.1`;
+  mobile keeps field rendering/capture UX, local media paths, GPS acquisition,
+  DI, and offline adapter integration.
 - Once a mobile package version exists, add it to the compatibility table and
   fixture before changing public model ownership.

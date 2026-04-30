@@ -1,5 +1,4 @@
-using Honua.Mobile.Field.Forms;
-using Honua.Mobile.Field.Records;
+using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
@@ -9,6 +8,7 @@ using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
+using Honua.Sdk.Field.Records;
 using Honua.Sdk.GeoServices.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -97,8 +97,7 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers field data-collection services: <see cref="FormValidator"/>,
-    /// <see cref="CalculatedFieldEvaluator"/>, <see cref="RecordWorkflow"/>, and <see cref="DuplicateDetector"/>.
+    /// Registers field data-collection services backed by SDK-owned field contracts.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>
@@ -106,10 +105,8 @@ public static class HonuaMobileServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<FormValidator>();
-        services.AddSingleton<CalculatedFieldEvaluator>();
-        services.AddSingleton<RecordWorkflow>();
         services.AddSingleton<DuplicateDetector>();
+        services.AddSingleton<MobileFieldCaptureWorkflow>();
         return services;
     }
 

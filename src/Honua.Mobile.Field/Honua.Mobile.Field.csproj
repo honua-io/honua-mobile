@@ -7,7 +7,7 @@
     <PackageId>Honua.Mobile.Field</PackageId>
     <PackageVersion>0.1.0-alpha.1</PackageVersion>
     <Authors>Honua</Authors>
-    <Description>Field data collection forms, validation, calculated fields, workflows, and duplicate detection for Honua mobile apps.</Description>
+    <Description>Mobile field data collection adapters for SDK-owned Honua field contracts.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/honua-io/honua-mobile</PackageProjectUrl>
@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Honua.Sdk.Field" Version="0.1.8-alpha.1" />
   </ItemGroup>
 
 </Project>

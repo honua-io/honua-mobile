@@ -1,9 +1,11 @@
+using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
+using Honua.Sdk.Field.Records;
 using Honua.Sdk.Offline.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
@@ -65,6 +67,17 @@ public sealed class SdkOfflineRegistrationTests
                 File.Delete(databasePath);
             }
         }
+    }
+
+    [Fact]
+    public void AddHonuaMobileFieldCollection_RegistersSdkBackedFieldWorkflow()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMobileFieldCollection()
+            .BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<DuplicateDetector>());
+        Assert.NotNull(provider.GetRequiredService<MobileFieldCaptureWorkflow>());
     }
 
     private static OfflinePackageManifest CreateManifest()

@@ -9,7 +9,7 @@ dynamic forms, and background sync.
 | Package | Purpose |
 |---------|---------|
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter |
-| **Honua.Mobile.Field** | Dynamic forms, validation, calculated fields, record workflow |
+| **Honua.Mobile.Field** | Mobile adapters for SDK-owned field forms, validation, media capture metadata, and workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
 | **@honua/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components for ISV embeds |
@@ -62,11 +62,9 @@ GeoPackage-backed offline storage with queue-based sync:
 
 ## Field Collection
 
-- **Dynamic forms** -- 18 field types (text, numeric, photo, video, signature, barcode, etc.)
-- **Validation** -- required fields, regex with ReDoS timeout, numeric ranges, min media count
-- **Calculated fields** -- `concat()` and `sum()` with `$fieldId` references
-- **Record workflow** -- Draft -> Submitted -> Approved/Rejected state machine
-- **Duplicate detection** -- Haversine distance + attribute matching
+- **SDK-owned contracts** -- `Honua.Sdk.Field` owns form schemas, validation, calculated fields, duplicate detection, and record workflow
+- **Mobile capture adapters** -- local media paths stay mobile-owned and convert to portable SDK attachment metadata before sync
+- **Validation and workflow DI** -- `AddHonuaMobileFieldCollection()` registers a mobile adapter over SDK field services
 
 ## gRPC Transport
 
@@ -142,7 +140,7 @@ src/
   Honua.Embed/                Embeddable map web component package
     tests/                    Web component DOM behavior tests (17 tests)
   Honua.Mobile.Sdk/           Core mobile client
-  Honua.Mobile.Field/         Field collection components
+  Honua.Mobile.Field/         SDK field workflow adapters
   Honua.Mobile.Offline/       GeoPackage sync engine
   Honua.Mobile.Maui/          MAUI platform integration
   Honua.Mobile.IoT/           IoT sensor abstractions (interface-only, future)
@@ -150,9 +148,9 @@ apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (36 tests)
-  Honua.Mobile.Field.Tests/   Validation, calculated fields, workflow (9 tests)
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (42 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (12 tests)
+  Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
+  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (59 tests)
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (16 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
 proto/
   honua/v1/                   gRPC protocol definitions
