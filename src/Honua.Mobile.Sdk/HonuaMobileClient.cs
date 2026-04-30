@@ -307,15 +307,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        try
-        {
-            await _ogcFeaturesClient.DeleteItemAsync(request.CollectionId, request.FeatureId, ct).ConfigureAwait(false);
-            return JsonDocument.Parse("{}");
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        return await SendJsonAsync(HttpMethod.Delete, path, null, null, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -386,6 +379,17 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     private async Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
     {
+        if (!IsDefaultJsonResponseFormat(request.ResponseFormat))
+        {
+            var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
+            return await SendJsonAsync(
+                HttpMethod.Post,
+                path,
+                query: null,
+                new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
+                ct).ConfigureAwait(false);
+        }
+
         try
         {
             var response = await _featureServerClient
@@ -398,6 +402,10 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             throw ToMobileApiException("FeatureServer", ex);
         }
     }
+
+    private static bool IsDefaultJsonResponseFormat(string? responseFormat)
+        => string.IsNullOrWhiteSpace(responseFormat) ||
+            string.Equals(responseFormat, "json", StringComparison.OrdinalIgnoreCase);
 
     internal async Task<JsonDocument> SendJsonAsync(
         HttpMethod method,

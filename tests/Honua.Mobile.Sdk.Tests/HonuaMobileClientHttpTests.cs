@@ -148,6 +148,37 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task ApplyEditsAsync_WithNonDefaultResponseFormat_ForwardsFormat()
+    {
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"addResults":[{"objectId":42,"success":true}]}""", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.ApplyEditsAsync(new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            AddsJson = """[{"attributes":{"name":"Test"}}]""",
+            ResponseFormat = "pjson",
+        });
+
+        Assert.NotNull(capturedBody);
+        var form = ParseForm(capturedBody);
+        Assert.Equal("pjson", form["f"]);
+        Assert.Equal(42, result.RootElement.GetProperty("addResults")[0].GetProperty("objectId").GetInt32());
+    }
+
+    [Fact]
     public async Task QueryFeaturesAsync_WithSdkQueryFlags_SerializesFeatureServerParams()
     {
         Uri? capturedUri = null;
@@ -325,6 +356,31 @@ public sealed class HonuaMobileClientHttpTests
         Assert.NotNull(capturedBody);
         Assert.Contains("\"name\":\"HQ\"", capturedBody);
         Assert.Equal("building-1", result.RootElement.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteOgcItemAsync_PreservesServerResponsePayload()
+    {
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            Assert.Equal(HttpMethod.Delete, request.Method);
+            Assert.Contains("/ogc/features/collections/buildings/items/building-1", request.RequestUri!.PathAndQuery);
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"id":"building-1","deleted":true}""", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.DeleteOgcItemAsync(new OgcDeleteItemRequest
+        {
+            CollectionId = "buildings",
+            FeatureId = "building-1",
+        });
+
+        Assert.Equal("building-1", result.RootElement.GetProperty("id").GetString());
+        Assert.True(result.RootElement.GetProperty("deleted").GetBoolean());
     }
 
     [Fact]

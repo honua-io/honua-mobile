@@ -24,6 +24,24 @@ internal static class SdkFeatureTransportMappings
         };
     }
 
+    public static IReadOnlyDictionary<string, string> ToFeatureServerEditFormParameters(ApplyEditsRequest request)
+    {
+        var edit = ToFeatureServerEditRequest(request);
+        var body = new Dictionary<string, string?>
+        {
+            ["f"] = request.ResponseFormat,
+            ["adds"] = edit.Adds is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Adds) : null,
+            ["updates"] = edit.Updates is { Count: > 0 } ? SerializeFeatureServerFeatures(edit.Updates) : null,
+            ["deletes"] = edit.Deletes is { Count: > 0 } ? JoinInvariant(edit.Deletes) : null,
+            ["rollbackOnFailure"] = edit.RollbackOnFailure ? "true" : "false",
+            ["forceWrite"] = edit.ForceWrite ? "true" : null,
+        };
+
+        return body
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
+            .ToDictionary(pair => pair.Key, pair => pair.Value!);
+    }
+
     public static FeatureServerFeature ToFeatureServerFeature(FeatureEditFeature feature)
     {
         ArgumentNullException.ThrowIfNull(feature);
@@ -201,6 +219,14 @@ internal static class SdkFeatureTransportMappings
 
         return objectIds;
     }
+
+    private static string SerializeFeatureServerFeatures(IReadOnlyList<FeatureServerFeature> features)
+        => JsonSerializer.Serialize(
+            features.ToArray(),
+            HonuaMobileSdkTransportJsonContext.Default.FeatureServerFeatureArray);
+
+    private static string JoinInvariant(IEnumerable<long> values)
+        => string.Join(',', values.Select(value => value.ToString(CultureInfo.InvariantCulture)));
 
     private static string? ResolveOptionalFeatureId(FeatureEditFeature feature)
         => !string.IsNullOrWhiteSpace(feature.Id)
