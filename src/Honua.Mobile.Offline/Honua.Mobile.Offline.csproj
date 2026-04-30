@@ -6,9 +6,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.4-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline" Version="0.1.4-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.4-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.5-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Offline" Version="0.1.5-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.5-alpha.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
   </ItemGroup>

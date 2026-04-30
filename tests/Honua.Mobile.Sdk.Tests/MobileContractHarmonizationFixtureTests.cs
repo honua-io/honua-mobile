@@ -85,10 +85,18 @@ public sealed class MobileContractHarmonizationFixtureTests
             scene.MobileTypes);
 
         var routing = FindFamily(fixture, "routing");
-        Assert.Equal("shared-split", routing.Owner);
+        Assert.Equal("honua-sdk-dotnet", routing.Owner);
+        Assert.Equal("Honua.Sdk.Abstractions", routing.AuthoritativePackage);
+        Assert.Contains(
+            "Honua.Sdk.Abstractions.Routing.IHonuaRoutingClient",
+            routing.AuthoritativeTypes);
         Assert.Contains(
             "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider",
             routing.MobileTypes);
+        Assert.DoesNotContain(
+            "Honua.Mobile.Sdk.Routing.HonuaRoutingClient",
+            routing.MobileTypes);
+        Assert.Equal("adapter-only", routing.MobileDisposition);
 
         var geopackage = FindFamily(fixture, "geopackage-sync");
         Assert.Equal("honua-mobile", geopackage.Owner);
@@ -111,7 +119,7 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
-        Assert.Equal("0.1.4-alpha.1", abstractionsPackage.Version);
+        Assert.Equal("0.1.5-alpha.1", abstractionsPackage.Version);
 
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");

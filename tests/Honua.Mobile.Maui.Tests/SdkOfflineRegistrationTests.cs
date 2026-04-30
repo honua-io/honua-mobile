@@ -3,9 +3,11 @@ using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Offline.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
+using SdkRoutingClient = Honua.Sdk.GeoServices.Routing.HonuaRoutingClient;
 using MobileOfflineSyncRunner = Honua.Mobile.Offline.Sync.IOfflineSyncRunner;
 using SdkOfflineFeatureStore = Honua.Sdk.Offline.Abstractions.IOfflineFeatureStore;
 
@@ -13,6 +15,23 @@ namespace Honua.Mobile.Maui.Tests;
 
 public sealed class SdkOfflineRegistrationTests
 {
+    [Fact]
+    public void AddHonuaRouting_RegistersSdkRoutingClientAndAbstraction()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMobileSdk(new HonuaMobileClientOptions
+            {
+                BaseUri = new Uri("https://example.honua.test"),
+            })
+            .AddHonuaRouting()
+            .BuildServiceProvider();
+
+        var concrete = provider.GetRequiredService<SdkRoutingClient>();
+        var abstraction = provider.GetRequiredService<IHonuaRoutingClient>();
+
+        Assert.Same(concrete, abstraction);
+    }
+
     [Fact]
     public void AddHonuaSdkGeoPackageOfflineSync_RegistersSdkBackedRunnerAndAdapters()
     {

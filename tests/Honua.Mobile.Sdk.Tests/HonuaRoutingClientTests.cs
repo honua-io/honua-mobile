@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Routing;
+using Honua.Sdk.Abstractions.Routing;
+using SdkRoutingClient = Honua.Sdk.GeoServices.Routing.HonuaRoutingClient;
 
 namespace Honua.Mobile.Sdk.Tests;
 
@@ -216,6 +218,39 @@ public sealed class HonuaRoutingClientTests
         Assert.Equal(0, handler.RequestCount);
     }
 
+    [Fact]
+    public async Task GetDirectionsFromCurrentLocationAsync_UsesMobileLocationProvider()
+    {
+        Dictionary<string, string>? form = null;
+        var handler = new RecordingHandler(async (request, ct) =>
+        {
+            form = await ReadFormAsync(request, ct);
+            return JsonResponse("{}");
+        });
+        var client = CreateClient(handler);
+        var locationProvider = new FixedRoutingLocationProvider(
+            RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Device"));
+        IHonuaRoutingClient routing = client.Routing;
+
+        await routing.GetDirectionsFromCurrentLocationAsync(
+            locationProvider,
+            RoutingLocation.FromLongitudeLatitude(-157.8037, 21.2810, "Finish"));
+
+        Assert.NotNull(form);
+        using var stops = JsonDocument.Parse(form["stops"]);
+        var features = stops.RootElement.GetProperty("features").EnumerateArray().ToArray();
+        Assert.Equal("Device", features[0].GetProperty("attributes").GetProperty("Name").GetString());
+    }
+
+    [Fact]
+    public void Routing_UsesPublishedSdkRoutingClient()
+    {
+        var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse("{}")));
+        var client = CreateClient(handler);
+
+        Assert.IsType<SdkRoutingClient>(client.Routing);
+    }
+
     private static HonuaMobileClient CreateClient(
         HttpMessageHandler handler,
         HonuaMobileClientOptions? options = null)
@@ -246,6 +281,19 @@ public sealed class HonuaRoutingClientTests
     }
 
     private static string Decode(string value) => Uri.UnescapeDataString(value.Replace("+", " "));
+
+    private sealed class FixedRoutingLocationProvider : IRoutingLocationProvider
+    {
+        private readonly RoutingLocation _location;
+
+        public FixedRoutingLocationProvider(RoutingLocation location)
+        {
+            _location = location;
+        }
+
+        public ValueTask<RoutingLocation> GetCurrentLocationAsync(CancellationToken ct = default)
+            => ValueTask.FromResult(_location);
+    }
 
     private sealed class RecordingHandler : HttpMessageHandler
     {

@@ -6,7 +6,7 @@
   "compatibility": {
     "mobileBaseline": {
       "repository": "honua-io/honua-mobile",
-      "ref": "main after honua-mobile#66 plus attachment package slice",
+      "ref": "main after honua-mobile#67 plus routing package slice",
       "packageVersion": "unreleased-source"
     },
     "sdkBaseline": {
@@ -15,27 +15,27 @@
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline.Abstractions",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "0.1.4-alpha.1"
+          "version": "0.1.5-alpha.1"
         }
       ]
     }
@@ -127,7 +127,6 @@
       "authoritativeTypes": [],
       "mobileTypes": [
         "Honua.Mobile.Sdk.SdkGrpcTransportMappings",
-        "Honua.Mobile.Sdk.Routing.RoutingCoordinate",
         "Honua.Mobile.Maui.Annotations.HonuaMapCoordinate",
         "Honua.Mobile.Maui.Annotations.HonuaAnnotationBounds"
       ],
@@ -222,24 +221,36 @@
     {
       "id": "routing",
       "displayName": "Routing and network analysis requests",
-      "owner": "shared-split",
-      "authoritativePackage": "pending Honua.Sdk.Routing contracts",
-      "authoritativeTypes": [],
-      "mobileTypes": [
-        "Honua.Mobile.Sdk.Routing.RouteDirectionsRequest",
-        "Honua.Mobile.Sdk.Routing.RouteOptimizationRequest",
-        "Honua.Mobile.Sdk.Routing.ServiceAreaRequest",
-        "Honua.Mobile.Sdk.Routing.ClosestFacilityRequest",
-        "Honua.Mobile.Sdk.Routing.RoutingLocation",
-        "Honua.Mobile.Sdk.Routing.HonuaRoutingClient",
-        "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider"
+      "owner": "honua-sdk-dotnet",
+      "authoritativePackage": "Honua.Sdk.Abstractions",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Routing.IHonuaRoutingClient",
+        "Honua.Sdk.Abstractions.Routing.RoutingCapabilities",
+        "Honua.Sdk.Abstractions.Routing.RouteServiceMetadataRequest",
+        "Honua.Sdk.Abstractions.Routing.RouteServiceMetadata",
+        "Honua.Sdk.Abstractions.Routing.RouteTravelMode",
+        "Honua.Sdk.Abstractions.Routing.RoutingCoordinate",
+        "Honua.Sdk.Abstractions.Routing.RoutingLocation",
+        "Honua.Sdk.Abstractions.Routing.RouteTimeWindow",
+        "Honua.Sdk.Abstractions.Routing.RouteDirectionsRequest",
+        "Honua.Sdk.Abstractions.Routing.RouteOptimizationRequest",
+        "Honua.Sdk.Abstractions.Routing.ServiceAreaRequest",
+        "Honua.Sdk.Abstractions.Routing.ClosestFacilityRequest",
+        "Honua.Sdk.Abstractions.Routing.RouteResult",
+        "Honua.Sdk.Abstractions.Routing.ServiceAreaResult",
+        "Honua.Sdk.Abstractions.Routing.ClosestFacilityResult"
       ],
-      "mobileDisposition": "mobile-authoritative-until-sdk-routing",
-      "migrationIssue": "honua-sdk-dotnet#60",
+      "mobileTypes": [
+        "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider",
+        "Honua.Mobile.Sdk.Routing.HonuaRoutingClientMobileExtensions",
+        "Honua.Mobile.Sdk.HonuaMobileClient"
+      ],
+      "mobileDisposition": "adapter-only",
+      "migrationIssue": "honua-mobile#54",
       "serverDependencyIssues": [
         "honua-server#366"
       ],
-      "notes": "Routing contracts can move to SDK; device location providers and platform permission flows stay mobile-owned."
+      "notes": "Routing contracts and GeoServices NAServer client are SDK-owned. Device location providers, platform permission flows, route display, and map interaction stay mobile-owned."
     },
     {
       "id": "geopackage-sync",
