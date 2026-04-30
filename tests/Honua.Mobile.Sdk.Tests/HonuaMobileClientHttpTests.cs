@@ -18,6 +18,7 @@ public sealed class HonuaMobileClientHttpTests
             .ToArray();
 
         Assert.Contains("Honua.Sdk.GeoServices", references);
+        Assert.Contains("Honua.Sdk.Grpc", references);
         Assert.Contains("Honua.Sdk.OgcFeatures", references);
     }
 

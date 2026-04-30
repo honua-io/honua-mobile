@@ -65,7 +65,7 @@
       "mobileTypes": [
         "Honua.Mobile.Sdk.Models.QueryFeaturesRequest",
         "Honua.Mobile.Sdk.Models.OgcItemsRequest",
-        "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator"
+        "Honua.Mobile.Sdk.SdkGrpcTransportMappings"
       ],
       "mobileDisposition": "adapter-required",
       "migrationIssue": "honua-mobile#54",
@@ -102,7 +102,7 @@
       "authoritativePackage": "pending Honua.Sdk geometry contracts",
       "authoritativeTypes": [],
       "mobileTypes": [
-        "Honua.Mobile.Sdk.Grpc.GrpcFeatureTranslator",
+        "Honua.Mobile.Sdk.SdkGrpcTransportMappings",
         "Honua.Mobile.Sdk.Routing.RoutingCoordinate",
         "Honua.Mobile.Maui.Annotations.HonuaMapCoordinate",
         "Honua.Mobile.Maui.Annotations.HonuaAnnotationBounds"
