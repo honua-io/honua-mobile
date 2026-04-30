@@ -171,6 +171,7 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton<IConnectivityStateProvider, AlwaysOnlineConnectivityStateProvider>();
         services.AddSingleton<GeoPackageSdkOfflineStoreAdapter>();
         services.AddSingleton<SdkFeatureClient>();
+        services.AddSingleton<HonuaMobileSdkFeatureClient>();
         services.AddSingleton<IHonuaFeatureQueryClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureEditClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<SdkOfflineFeatureStore>(sp => sp.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>());
