@@ -24,7 +24,7 @@ public static class HonuaRoutingClientMobileExtensions
     /// Gets directions from the current location resolved by <paramref name="locationProvider"/>.
     /// </summary>
     public static async Task<RouteResult> GetDirectionsFromCurrentLocationAsync(
-        this HonuaRoutingClient client,
+        this IHonuaRoutingClient client,
         IRoutingLocationProvider locationProvider,
         RoutingLocation destination,
         IReadOnlyList<RoutingLocation>? waypoints = null,
@@ -36,7 +36,15 @@ public static class HonuaRoutingClientMobileExtensions
         ArgumentNullException.ThrowIfNull(destination);
 
         var origin = await locationProvider.GetCurrentLocationAsync(ct).ConfigureAwait(false);
-        return await client.GetDirectionsAsync(origin, destination, waypoints, options, ct).ConfigureAwait(false);
+        return await client.GetDirectionsAsync(
+            new RouteDirectionsRequest
+            {
+                Origin = origin,
+                Destination = destination,
+                Waypoints = waypoints,
+                Options = options ?? new RouteSolveOptions(),
+            },
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>

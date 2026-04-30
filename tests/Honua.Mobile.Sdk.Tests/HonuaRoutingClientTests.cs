@@ -230,8 +230,9 @@ public sealed class HonuaRoutingClientTests
         var client = CreateClient(handler);
         var locationProvider = new FixedRoutingLocationProvider(
             RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Device"));
+        IHonuaRoutingClient routing = client.Routing;
 
-        await client.Routing.GetDirectionsFromCurrentLocationAsync(
+        await routing.GetDirectionsFromCurrentLocationAsync(
             locationProvider,
             RoutingLocation.FromLongitudeLatitude(-157.8037, 21.2810, "Finish"));
 
