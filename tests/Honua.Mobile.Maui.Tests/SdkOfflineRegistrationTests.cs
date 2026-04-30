@@ -5,6 +5,7 @@ using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
 using MobileOfflineSyncRunner = Honua.Mobile.Offline.Sync.IOfflineSyncRunner;
 using SdkOfflineFeatureStore = Honua.Sdk.Offline.Abstractions.IOfflineFeatureStore;
 
@@ -33,8 +34,9 @@ public sealed class SdkOfflineRegistrationTests
 
             Assert.IsType<SdkOfflineSyncRunner>(runner);
             Assert.IsType<GeoPackageSdkOfflineStoreAdapter>(provider.GetRequiredService<SdkOfflineFeatureStore>());
-            Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureQueryClient>());
-            Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureEditClient>());
+            Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureQueryClient>());
+            Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureEditClient>());
+            Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<HonuaMobileSdkFeatureClient>());
         }
         finally
         {

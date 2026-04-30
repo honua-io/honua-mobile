@@ -12,12 +12,12 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #52 | `Honua.Sdk.Abstractions` `0.1.0-alpha.1` | Fixture-level compatibility for shared feature/source contracts |
+| `honua-mobile` source packages from `main` after #52 | `Honua.Sdk.*` `0.1.2-alpha.1` | Fixture-level compatibility for shared feature, source, edit, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
-shared SDK package versions above. When mobile packages gain `PackageVersion`,
-add rows here before changing public DTO ownership.
+published shared SDK package versions above. When mobile packages gain
+`PackageVersion`, add rows here before changing public DTO ownership.
 
 ## Ownership Map
 
@@ -26,11 +26,14 @@ add rows here before changing public DTO ownership.
 | Feature query requests/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile DTOs are transport shims; add adapters to `FeatureQueryRequest` and `FeatureQueryResult`. |
 | Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile edit DTOs and offline queue payloads should map to `FeatureEditRequest`. |
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
-| Offline sync state, journals, conflicts | Split pending SDK offline contracts | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK should own portable manifests and conflict envelopes. |
+| Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
 | Form-related feature schemas | Split | SDK source schema owns provider-neutral fields; mobile owns form rendering, validation, calculated fields, and record workflow. |
-| Scene metadata and offline scene packages | `honua-mobile` candidate for future SDK scene package | Keep manifest/server handoff portable and fixture-backed. |
-| Routing and network analysis | `honua-mobile` | Keep NAServer encoding and device location provider behavior in mobile. |
+| Scene metadata and offline scene packages | Split pending SDK scene contracts after server dependencies | Keep manifest/server handoff portable and fixture-backed; mobile owns renderers, downloads, and display lifecycle. |
+| Routing and network analysis | Split pending SDK routing contracts after server dependency | Keep device location providers and platform permission flows in mobile. |
 | GeoPackage sync and native storage adapters | `honua-mobile` | Keep database tables, background sync, file-system downloads, and MAUI registration in mobile. |
+| Display/embed maps | `honua-mobile` / `Honua.Embed` | SDK returns portable contracts only; MapLibre, deck.gl, Cesium, Mapsui, WebGL/WebGPU, and map controls stay outside SDK core. |
+| Non-UI plugin contracts | Split pending SDK plugin contracts after server dependency | Hosts own runtime loading, UI registration, sandboxing, and signing. |
+| Legacy `honua-mobile-sdk` contracts | Quarantine | Migrate concepts only after the fixture assigns ownership. |
 
 ## Migration Rules
 
@@ -40,7 +43,15 @@ add rows here before changing public DTO ownership.
 - New provider-neutral feature edit code should target
   `FeatureEditRequest`, `FeatureEditResponse`, and related edit result models.
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
-  camera/location, route-location-provider, and offline file-system concerns.
+  camera/location, route-location-provider, display, and offline file-system
+  concerns.
+- Sibling repos consume `Honua.Sdk.*` through published NuGet packages from
+  GitHub Packages. Do not copy SDK source and do not add long-lived project
+  references.
+- Canonical `.proto` definitions stay in `geospatial-grpc`; SDK and mobile
+  consume generated or published protocol bindings instead of redefining them.
+- Any migrated SDK contract that requires backend behavior must link the
+  corresponding `honua-server` dependency issue before implementation starts.
 - Any DTO copied or recovered from `honua-mobile-sdk` must first be classified
   in the fixture as SDK-owned, mobile-owned, or quarantined.
 - Companion SDK issues must close SDK gaps before mobile deletes local runtime
@@ -50,7 +61,8 @@ add rows here before changing public DTO ownership.
 
 - #49 maps current offline queue and GeoPackage state to future SDK offline
   package, journal, checkpoint, and conflict-envelope contracts.
-- `honua-sdk-dotnet#68` should consume the fixture and add matching tests on
-  the shared SDK side.
+- `honua-sdk-dotnet#68` added the matching SDK-side fixture and tests.
+- #54 moves reusable `Honua.Mobile.Sdk` feature clients toward SDK contracts and
+  package consumption.
 - Once a mobile package version exists, add it to the compatibility table and
   fixture before changing public model ownership.
