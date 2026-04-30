@@ -76,6 +76,100 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     public IHonuaSceneClient Scenes { get; }
 
     /// <summary>
+    /// Queries features through the SDK provider-neutral feature contract.
+    /// OGC collection sources are handled by <see cref="HonuaOgcFeaturesClient"/>;
+    /// FeatureServer sources prefer gRPC when configured and otherwise use <see cref="HonuaFeatureServerClient"/>.
+    /// </summary>
+    /// <param name="request">SDK feature query request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A provider-neutral feature query result.</returns>
+    public async Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (HasOgcSource(request.Source))
+        {
+            return await QueryOgcFeaturesSdkAsync(request, ct).ConfigureAwait(false);
+        }
+
+        if (HasFeatureServerSource(request.Source))
+        {
+            return await QueryFeatureServerSdkAsync(request, ct).ConfigureAwait(false);
+        }
+
+        throw new InvalidOperationException(
+            "Feature query requires either an OGC collection ID or FeatureServer service/layer identifiers.");
+    }
+
+    /// <summary>
+    /// Streams feature query pages through the SDK provider-neutral feature contract.
+    /// </summary>
+    /// <param name="request">SDK feature query request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>An async sequence of provider-neutral feature query pages.</returns>
+    public async IAsyncEnumerable<FeatureQueryResult> QueryPagesAsync(
+        FeatureQueryRequest request,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (HasOgcSource(request.Source))
+        {
+            await foreach (var page in QueryOgcFeaturesSdkPagesAsync(request, ct).ConfigureAwait(false))
+            {
+                yield return page;
+            }
+
+            yield break;
+        }
+
+        if (HasFeatureServerSource(request.Source))
+        {
+            await foreach (var page in QueryFeatureServerSdkPagesAsync(request, ct).ConfigureAwait(false))
+            {
+                yield return page;
+            }
+
+            yield break;
+        }
+
+        throw new InvalidOperationException(
+            "Feature query requires either an OGC collection ID or FeatureServer service/layer identifiers.");
+    }
+
+    /// <summary>
+    /// Applies feature edits through the SDK provider-neutral feature contract.
+    /// OGC collection sources are handled by <see cref="HonuaOgcFeaturesClient"/>;
+    /// FeatureServer sources prefer gRPC when configured and otherwise use <see cref="HonuaFeatureServerClient"/>.
+    /// </summary>
+    /// <param name="request">SDK feature edit request.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A provider-neutral feature edit response.</returns>
+    public async Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (HasOgcSource(request.Source))
+        {
+            return await ApplyOgcSdkEditsAsync(request, ct).ConfigureAwait(false);
+        }
+
+        if (HasFeatureServerSource(request.Source))
+        {
+            return await ApplyFeatureServerSdkEditsAsync(request, ct).ConfigureAwait(false);
+        }
+
+        return new FeatureEditResponse
+        {
+            ProviderName = "honua-mobile",
+            Error = new FeatureEditError
+            {
+                Message = "Feature edit requires either an OGC collection ID or FeatureServer service/layer identifiers.",
+            },
+        };
+    }
+
+    /// <summary>
     /// Queries features from a feature service layer, preferring gRPC when available.
     /// Falls back to REST if gRPC fails and <see cref="HonuaMobileClientOptions.AllowRestFallbackOnGrpcFailure"/> is enabled.
     /// </summary>
@@ -528,9 +622,171 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         }
     }
 
+    private async Task<FeatureQueryResult> QueryOgcFeaturesSdkAsync(FeatureQueryRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return await _ogcFeaturesClient.QueryAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
+    }
+
+    private async IAsyncEnumerable<FeatureQueryResult> QueryOgcFeaturesSdkPagesAsync(
+        FeatureQueryRequest request,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        await using var enumerator = _ogcFeaturesClient.QueryPagesAsync(request, ct).GetAsyncEnumerator(ct);
+        while (true)
+        {
+            FeatureQueryResult? page;
+            try
+            {
+                if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                {
+                    yield break;
+                }
+
+                page = enumerator.Current;
+            }
+            catch (HonuaOgcFeaturesException ex)
+            {
+                throw ToMobileApiException("OGC Features", ex);
+            }
+
+            yield return page;
+        }
+    }
+
+    private async Task<FeatureQueryResult> QueryFeatureServerSdkAsync(FeatureQueryRequest request, CancellationToken ct)
+    {
+        if (CanUseGrpcForQueries)
+        {
+            try
+            {
+                return await GetGrpcClient().QueryAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            {
+                // Fall through to REST transport.
+            }
+        }
+
+        try
+        {
+            return await _featureServerClient.QueryAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer", ex);
+        }
+    }
+
+    private async IAsyncEnumerable<FeatureQueryResult> QueryFeatureServerSdkPagesAsync(
+        FeatureQueryRequest request,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (CanUseGrpcForQueries)
+        {
+            var yieldedGrpcPage = false;
+            await using var grpcEnumerator = GetGrpcClient().QueryPagesAsync(request, ct).GetAsyncEnumerator(ct);
+
+            while (true)
+            {
+                FeatureQueryResult? nextPage = null;
+                try
+                {
+                    if (!await grpcEnumerator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        if (yieldedGrpcPage)
+                        {
+                            yield break;
+                        }
+
+                        break;
+                    }
+
+                    nextPage = grpcEnumerator.Current;
+                }
+                catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure && !yieldedGrpcPage)
+                {
+                    break;
+                }
+
+                yieldedGrpcPage = true;
+                yield return nextPage!;
+            }
+        }
+
+        await using var restEnumerator = _featureServerClient.QueryPagesAsync(request, ct).GetAsyncEnumerator(ct);
+        while (true)
+        {
+            FeatureQueryResult? page;
+            try
+            {
+                if (!await restEnumerator.MoveNextAsync().ConfigureAwait(false))
+                {
+                    yield break;
+                }
+
+                page = restEnumerator.Current;
+            }
+            catch (HonuaFeatureServerException ex)
+            {
+                throw ToMobileApiException("FeatureServer", ex);
+            }
+
+            yield return page;
+        }
+    }
+
+    private async Task<FeatureEditResponse> ApplyOgcSdkEditsAsync(FeatureEditRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return await _ogcFeaturesClient.ApplyEditsAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaOgcFeaturesException ex)
+        {
+            throw ToMobileApiException("OGC Features", ex);
+        }
+    }
+
+    private async Task<FeatureEditResponse> ApplyFeatureServerSdkEditsAsync(FeatureEditRequest request, CancellationToken ct)
+    {
+        if (CanUseGrpcForEdits)
+        {
+            try
+            {
+                return await GetGrpcClient().ApplyEditsAsync(request, ct).ConfigureAwait(false);
+            }
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            {
+                // Fall through to REST transport.
+            }
+        }
+
+        try
+        {
+            return await _featureServerClient.ApplyEditsAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex)
+        {
+            throw ToMobileApiException("FeatureServer", ex);
+        }
+    }
+
     private static bool IsDefaultJsonResponseFormat(string? responseFormat)
         => string.IsNullOrWhiteSpace(responseFormat) ||
             string.Equals(responseFormat, "json", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasOgcSource(FeatureSource source)
+        => !string.IsNullOrWhiteSpace(source.CollectionId);
+
+    private static bool HasFeatureServerSource(FeatureSource source)
+        => !string.IsNullOrWhiteSpace(source.ServiceId) && source.LayerId.HasValue;
 
     internal async Task<JsonDocument> SendJsonAsync(
         HttpMethod method,

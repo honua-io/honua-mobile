@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #68 plus scene and field adapter work | `Honua.Sdk.*` `0.1.8-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, field, and offline contracts |
+| `honua-mobile` source packages from `main` after #68 plus scene, field, and feature adapter work | `Honua.Sdk.*` `0.1.8-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, field, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
@@ -23,8 +23,8 @@ published shared SDK package versions above. When mobile packages gain
 
 | Model family | Owner | Mobile disposition |
 |--------------|-------|--------------------|
-| Feature query requests/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile DTOs are transport shims; add adapters to `FeatureQueryRequest` and `FeatureQueryResult`. |
-| Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile edit DTOs and offline queue payloads should map to `FeatureEditRequest`. |
+| Feature query requests/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | `HonuaMobileSdkFeatureClient` uses SDK-native query paths; legacy mobile DTOs remain compatibility shims. |
+| Feature edit envelopes/results | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | `HonuaMobileSdkFeatureClient` uses SDK-native edit paths; offline queue payloads still need migration to `FeatureEditRequest`. |
 | Feature attachment operations | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` | Mobile exposes `IHonuaFeatureAttachmentClient` through adapters only; no mobile-local attachment DTOs. |
 | Geometry and spatial references | Split pending SDK geometry package | Keep mobile coordinates at platform edges until SDK geometry contracts graduate. |
 | Offline sync state, journals, conflicts | `Honua.Sdk.Offline.Abstractions` plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
@@ -83,6 +83,9 @@ published shared SDK package versions above. When mobile packages gain
 - `honua-sdk-dotnet#68` added the matching SDK-side fixture and tests.
 - #54 moves reusable `Honua.Mobile.Sdk` feature clients toward SDK contracts and
   package consumption.
+- #54 now routes `HonuaMobileSdkFeatureClient` through SDK-native
+  `FeatureQueryRequest` and `FeatureEditRequest` paths while preserving legacy
+  JSON compatibility methods for existing callers.
 - #54 now consumes SDK routing contracts and the `Honua.Sdk.GeoServices` routing
   client from `Honua.Sdk.*`; mobile keeps only
   location-provider helpers.

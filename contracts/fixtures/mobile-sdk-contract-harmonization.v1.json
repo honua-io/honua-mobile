@@ -2,11 +2,11 @@
   "schemaVersion": "honua.mobile-contract-harmonization.v1",
   "sdkIssue": "honua-sdk-dotnet#68",
   "mobileIssue": "honua-mobile#48",
-  "status": "baseline",
+  "status": "feature-adapter-sdk-native",
   "compatibility": {
     "mobileBaseline": {
       "repository": "honua-io/honua-mobile",
-      "ref": "main after honua-mobile#68 plus scene and field package slices",
+      "ref": "main after honua-mobile#68 plus scene, field, and feature adapter package slices",
       "packageVersion": "unreleased-source"
     },
     "sdkBaseline": {
@@ -73,11 +73,11 @@
       "mobileTypes": [
         "Honua.Mobile.Sdk.Models.QueryFeaturesRequest",
         "Honua.Mobile.Sdk.Models.OgcItemsRequest",
-        "Honua.Mobile.Sdk.SdkGrpcTransportMappings"
+        "Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient"
       ],
-      "mobileDisposition": "adapter-required",
+      "mobileDisposition": "compatibility-shim",
       "migrationIssue": "honua-mobile#54",
-      "notes": "Mobile request DTOs remain transport shims until callers construct Honua.Sdk.Abstractions feature queries directly."
+      "notes": "HonuaMobileSdkFeatureClient calls HonuaMobileClient SDK-native query paths with FeatureQueryRequest. Legacy JSON DTOs remain compatibility shims while remaining callers migrate."
     },
     {
       "id": "feature-edit",
@@ -99,9 +99,9 @@
         "Honua.Mobile.Sdk.Models.OgcDeleteItemRequest",
         "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation"
       ],
-      "mobileDisposition": "adapter-required",
+      "mobileDisposition": "compatibility-shim-and-mobile-runtime-adapter",
       "migrationIssue": "honua-mobile#54",
-      "notes": "Offline queue rows keep mobile retry metadata, but uploaded payloads should map to FeatureEditRequest."
+      "notes": "HonuaMobileSdkFeatureClient calls HonuaMobileClient SDK-native edit paths with FeatureEditRequest. Offline queue rows keep mobile retry metadata; uploader payload migration remains in honua-mobile#54."
     },
     {
       "id": "feature-attachments",

@@ -49,7 +49,10 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Mobile.Sdk.Models.QueryFeaturesRequest",
             query.MobileTypes);
-        Assert.Equal("adapter-required", query.MobileDisposition);
+        Assert.Contains(
+            "Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient",
+            query.MobileTypes);
+        Assert.Equal("compatibility-shim", query.MobileDisposition);
 
         var edits = FindFamily(fixture, "feature-edit");
         Assert.Equal("honua-sdk-dotnet", edits.Owner);
@@ -59,6 +62,7 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Mobile.Offline.GeoPackage.OfflineEditOperation",
             edits.MobileTypes);
+        Assert.Equal("compatibility-shim-and-mobile-runtime-adapter", edits.MobileDisposition);
 
         var attachments = FindFamily(fixture, "feature-attachments");
         Assert.Equal("honua-sdk-dotnet", attachments.Owner);

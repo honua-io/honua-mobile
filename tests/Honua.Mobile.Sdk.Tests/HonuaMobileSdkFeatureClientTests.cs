@@ -60,7 +60,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Contains("resultOffset=10", pathAndQuery);
         Assert.Contains("resultRecordCount=20", pathAndQuery);
 
-        Assert.Equal("featureserver", result.ProviderName);
+        Assert.Equal("geoservices-featureserver", result.ProviderName);
         Assert.Equal(1, result.NumberMatched);
         Assert.Equal(1, result.NumberReturned);
         Assert.Equal("objectid", result.ObjectIdFieldName);
@@ -120,7 +120,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Contains("\"name\":\"Pump Station\"", form["adds"]);
         Assert.Contains("\"geometry\"", form["adds"]);
 
-        Assert.Equal("featureserver", result.ProviderName);
+        Assert.Equal("geoservices-featureserver", result.ProviderName);
         Assert.True(result.Succeeded);
         Assert.Equal(42, result.AddResults[0].ObjectId);
         Assert.Equal(7, result.DeleteResults[0].ObjectId);
@@ -149,7 +149,6 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Contains(capturedPaths, path => path.Contains("/ogc/features/collections/buildings/items/42", StringComparison.Ordinal));
         Assert.True(result.Succeeded);
         Assert.Equal("42", result.DeleteResults[0].Id);
-        Assert.Equal(42, result.DeleteResults[0].ObjectId);
     }
 
     [Fact]
