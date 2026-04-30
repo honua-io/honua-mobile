@@ -13,7 +13,7 @@ Use a hybrid strategy:
 1. Public scenes use public HTTPS URLs with deterministic `ETag` and
    `Cache-Control` headers.
 2. Protected browser and WebView scenes use short-lived signed URLs or a signed
-   asset prefix returned by `HonuaSceneService.ResolveSceneAsync`.
+   asset prefix returned by `IHonuaSceneClient.ResolveSceneAsync`.
 3. Native runtimes may use request headers only when the client explicitly
    declares that nested renderer asset requests support headers.
 4. A first-party proxy is a fallback for strict tenant policy, audit, or
@@ -105,7 +105,7 @@ var terrainUrl = resolvedScene.TerrainUrl;
 
 ### MAUI
 
-- Use `HonuaSceneService` as the shared access resolver.
+- Use `IHonuaSceneClient` as the shared access resolver.
 - Prefer the same signed URL path as browser/WebView so MAUI WebView and native
   renderers behave consistently.
 - Store refresh credentials in platform secure storage, not in renderer markup

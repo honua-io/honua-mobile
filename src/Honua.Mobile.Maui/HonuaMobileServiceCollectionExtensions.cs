@@ -6,9 +6,9 @@ using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Scenes;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
+using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.GeoServices.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -83,7 +83,7 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers <see cref="IHonuaSceneService"/> from the configured <see cref="HonuaMobileClient"/>.
+    /// Registers <see cref="IHonuaSceneClient"/> from the configured <see cref="HonuaMobileClient"/>.
     /// Requires <see cref="AddHonuaMobileSdk"/> to be called first.
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -92,7 +92,7 @@ public static class HonuaMobileServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<IHonuaSceneService>(sp => sp.GetRequiredService<HonuaMobileClient>().Scenes);
+        services.AddSingleton<IHonuaSceneClient>(sp => sp.GetRequiredService<HonuaMobileClient>().Scenes);
         return services;
     }
 

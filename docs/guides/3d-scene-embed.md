@@ -20,10 +20,10 @@ CesiumJS is Apache-2.0 open source. The component does not require Cesium ion fo
 
 ## SDK Discovery
 
-Mobile and web hosts can resolve scene metadata through `HonuaSceneService` before assigning URLs to the renderer.
+Mobile and web hosts can resolve scene metadata through the SDK `IHonuaSceneClient` before assigning URLs to the renderer.
 
 ```csharp
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
 
 var scene = await client.Scenes.ResolveSceneAsync(
     "downtown-honolulu",
@@ -73,6 +73,6 @@ This first slice proves client-side 3D Tiles loading, scene events, and typed SD
 Use the [mobile 3D and AR dependency matrix](mobile-3d-ar-dependency-matrix.md) before starting native AR/VR or offline 3D work. It captures the required server tickets, SDK tickets, platform risks, offline constraints, and edition gates for each client capability.
 
 For protected Honua-hosted scenes, resolve renderer-safe signed URLs through
-`HonuaSceneService` before assigning `tileset-url` or `terrain-url`. Do not pass
+the SDK scene client before assigning `tileset-url` or `terrain-url`. Do not pass
 bearer tokens, API keys, or arbitrary request headers into `<honua-scene>`
 attributes. See [Protected 3D Scene Auth](protected-3d-scene-auth.md).

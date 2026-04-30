@@ -14,8 +14,9 @@ The 3D and AR path should move in this order:
 
 1. Honua Server serves or registers scene assets: hosted 3D Tiles, terrain,
    elevation profiles, extruded features, and generated tilesets.
-2. `HonuaSceneService` resolves scene metadata, endpoint URLs, capability flags,
-   attribution, and auth requirements for mobile and web clients.
+2. The SDK `IHonuaSceneClient` resolves scene metadata, endpoint URLs,
+   capability flags, attribution, and auth requirements for mobile and web
+   clients.
 3. `<honua-scene>` renders resolved 3D Tiles and terrain in browser or WebView
    hosts through CesiumJS.
 4. MAUI, React Native, Flutter, Swift, and Kotlin hosts wrap either the web
@@ -32,7 +33,7 @@ The 3D and AR path should move in this order:
 | 2 | honua-io/honua-server#838 CesiumJS smoke suite | Proves server output works in the renderer before mobile wrappers depend on it. |
 | 3 | #31 `<honua-scene>` web component | Provides the narrow client rendering surface for browser and WebView hosts. |
 | 4 | honua-io/honua-server#844 scene dataset registry | Gives clients stable scene IDs, endpoint metadata, attribution, and auth policy. |
-| 5 | #32 `HonuaSceneService` contracts | Lets apps discover scenes without hard-coded renderer URLs. |
+| 5 | #32 SDK scene client contracts | Lets apps discover scenes without hard-coded renderer URLs. |
 | 6 | honua-io/honua-server#839 and honua-io/honua-server#840 terrain and elevation | Adds the surface and query data needed for field context and profiles. |
 | 7 | honua-io/honua-server#841 and honua-io/honua-server#842 3D features and generation | Produces Honua-owned operational 3D data instead of only hosted external assets. |
 | 8 | #36 offline 3D cache packaging policy | Defines whether 3D scenes can be trusted in disconnected field workflows. |
@@ -63,7 +64,7 @@ The 3D and AR path should move in this order:
 | iOS | WKWebView/WebGL for `<honua-scene>`; ARKit-capable devices for native AR | Validate memory pressure with real tilesets before committing to offline packages. |
 | Android | Android WebView/WebGL for `<honua-scene>`; ARCore-capable devices for native AR | Device and GPU variability make #38 mandatory before broad AR commitments. |
 | Browser | WebGL for CesiumJS; secure context and WebXR-capable device/browser for AR experiments | Treat WebXR as a prototype path until target browser/device support is validated. |
-| MAUI | WebView host for the first scene wrapper; platform-specific native bridge only after renderer choice | Keep `HonuaSceneService` as the shared contract so renderer choice stays replaceable. |
+| MAUI | WebView host for the first scene wrapper; platform-specific native bridge only after renderer choice | Keep `IHonuaSceneClient` as the shared contract so renderer choice stays replaceable. |
 
 ## Edition Gates
 

@@ -22,10 +22,11 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.5-alpha.1" />
-    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.5-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.7-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Scenes" Version="0.1.7-alpha.1" />
   </ItemGroup>
 
 </Project>

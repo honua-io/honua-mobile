@@ -6,7 +6,7 @@
   "compatibility": {
     "mobileBaseline": {
       "repository": "honua-io/honua-mobile",
-      "ref": "main after honua-mobile#67 plus routing package slice",
+      "ref": "main after honua-mobile#68 plus scene package slice",
       "packageVersion": "unreleased-source"
     },
     "sdkBaseline": {
@@ -15,27 +15,31 @@
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline.Abstractions",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
+        },
+        {
+          "packageId": "Honua.Sdk.Scenes",
+          "version": "0.1.7-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "0.1.5-alpha.1"
+          "version": "0.1.7-alpha.1"
         }
       ]
     }
@@ -191,19 +195,32 @@
     {
       "id": "scene-metadata",
       "displayName": "3D scene metadata and offline scene packages",
-      "owner": "shared-split",
-      "authoritativePackage": "pending Honua.Sdk.Scene contracts",
-      "authoritativeTypes": [],
+      "owner": "honua-sdk-dotnet",
+      "authoritativePackage": "Honua.Sdk.Abstractions; Honua.Sdk.Scenes",
+      "authoritativeTypes": [
+        "Honua.Sdk.Abstractions.Scenes.IHonuaSceneClient",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneCapabilities",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneListRequest",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneResolveRequest",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneSummary",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneMetadata",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneResolution",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneEndpoint",
+        "Honua.Sdk.Abstractions.Scenes.HonuaSceneAccessEnvelope",
+        "Honua.Sdk.Abstractions.Scenes.HonuaScenePackageManifest",
+        "Honua.Sdk.Abstractions.Scenes.HonuaScenePackageAsset",
+        "Honua.Sdk.Abstractions.Scenes.HonuaScenePackageValidationResult"
+      ],
       "mobileTypes": [
-        "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveRequest",
-        "Honua.Mobile.Sdk.Scenes.HonuaSceneResolveResult",
-        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageManifest",
-        "Honua.Mobile.Sdk.Scenes.HonuaScenePackageAsset",
+        "Honua.Mobile.Sdk.HonuaMobileClient",
         "Honua.Mobile.Offline.ScenePackages.IHonuaScenePackageDownloader",
+        "Honua.Mobile.Offline.ScenePackages.ScenePackageDownloadRequest",
+        "Honua.Mobile.Offline.ScenePackages.ScenePackageDownloadResult",
+        "Honua.Mobile.Offline.ScenePackages.ScenePackageDownloader",
         "Honua.Mobile.Offline.GeoPackage.ScenePackageRecord"
       ],
-      "mobileDisposition": "mobile-authoritative-until-sdk-scene",
-      "migrationIssue": "honua-sdk-dotnet#70",
+      "mobileDisposition": "mobile-runtime-adapter",
+      "migrationIssue": "honua-mobile#55",
       "serverDependencyIssues": [
         "honua-server#530",
         "honua-server#837",
@@ -216,7 +233,7 @@
         "honua-server#844",
         "honua-server#849"
       ],
-      "notes": "Scene manifests should become portable SDK contracts once server scene APIs stabilize. Mobile and embed own renderer caches, downloads, and display execution."
+      "notes": "SDK owns scene discovery, access envelope, and package manifest contracts. Mobile and embed own renderer caches, package downloads, local storage, and display execution."
     },
     {
       "id": "routing",

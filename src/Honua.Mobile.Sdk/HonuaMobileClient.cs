@@ -2,8 +2,8 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
-using Honua.Mobile.Sdk.Scenes;
 using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.GeoServices;
 using Honua.Sdk.GeoServices.FeatureServer;
 using Honua.Sdk.GeoServices.FeatureServer.Exceptions;
@@ -11,6 +11,7 @@ using Honua.Sdk.GeoServices.Routing;
 using Honua.Sdk.Grpc;
 using Honua.Sdk.OgcFeatures;
 using Honua.Sdk.OgcFeatures.Exceptions;
+using Honua.Sdk.Scenes;
 using Microsoft.Extensions.Options;
 
 namespace Honua.Mobile.Sdk;
@@ -61,7 +62,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
 
         Routing = new HonuaRoutingClient(_sdkHttp, BuildGeoServicesRoutingOptions(options));
-        Scenes = new HonuaSceneService(this, options);
+        Scenes = new HonuaSceneClient(_sdkHttp, BuildSceneClientOptions(options));
     }
 
     /// <summary>
@@ -72,7 +73,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <summary>
     /// Scene metadata discovery client for 3D Tiles, terrain, and related render-ready endpoints.
     /// </summary>
-    public HonuaSceneService Scenes { get; }
+    public IHonuaSceneClient Scenes { get; }
 
     /// <summary>
     /// Queries features from a feature service layer, preferring gRPC when available.
@@ -623,6 +624,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             Timeout = _options.Timeout,
         };
     }
+
+    internal static HonuaSceneClientOptions BuildSceneClientOptions(HonuaMobileClientOptions options)
+        => new()
+        {
+            BaseAddress = options.BaseUri,
+            SceneApiPath = options.SceneApiPath,
+            Timeout = options.Timeout,
+        };
 
     private bool HasConfiguredGrpcAuthentication =>
         !string.IsNullOrWhiteSpace(_options.ApiKey) ||

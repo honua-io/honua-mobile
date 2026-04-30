@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.ScenePackages;
-using Honua.Mobile.Sdk.Scenes;
+using Honua.Sdk.Abstractions.Scenes;
 
 namespace Honua.Mobile.Offline.Tests;
 
