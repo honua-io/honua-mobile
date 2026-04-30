@@ -101,7 +101,7 @@
       ],
       "mobileDisposition": "compatibility-shim-and-mobile-runtime-adapter",
       "migrationIssue": "honua-mobile#54",
-      "notes": "HonuaMobileSdkFeatureClient calls HonuaMobileClient SDK-native edit paths with FeatureEditRequest. Offline queue rows keep mobile retry metadata; uploader payload migration remains in honua-mobile#54."
+      "notes": "HonuaMobileSdkFeatureClient and HonuaApiOfflineOperationUploader call HonuaMobileClient SDK-native edit paths with FeatureEditRequest where the shared contract supports the operation. Offline queue rows keep mobile retry metadata; OGC merge-patch remains a compatibility shim until an SDK patch contract exists."
     },
     {
       "id": "feature-attachments",
