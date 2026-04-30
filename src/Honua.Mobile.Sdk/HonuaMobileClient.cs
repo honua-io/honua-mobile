@@ -2,11 +2,12 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
-using Honua.Mobile.Sdk.Routing;
 using Honua.Mobile.Sdk.Scenes;
 using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.GeoServices;
 using Honua.Sdk.GeoServices.FeatureServer;
 using Honua.Sdk.GeoServices.FeatureServer.Exceptions;
+using Honua.Sdk.GeoServices.Routing;
 using Honua.Sdk.Grpc;
 using Honua.Sdk.OgcFeatures;
 using Honua.Sdk.OgcFeatures.Exceptions;
@@ -59,7 +60,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
         _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
 
-        Routing = new HonuaRoutingClient(this, options);
+        Routing = new HonuaRoutingClient(_sdkHttp, BuildGeoServicesRoutingOptions(options));
         Scenes = new HonuaSceneService(this, options);
     }
 
@@ -444,6 +445,18 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private bool CanUseGrpcForQueries => _options.PreferGrpcForFeatureQueries && _canUseGrpcEndpoint;
 
     private bool CanUseGrpcForEdits => _options.PreferGrpcForFeatureEdits && _canUseGrpcEndpoint;
+
+    private static HonuaGeoServicesClientOptions BuildGeoServicesRoutingOptions(HonuaMobileClientOptions options)
+        => new()
+        {
+            BaseAddress = options.BaseUri,
+            Timeout = options.Timeout,
+            EnableRetry = false,
+            RoutingServiceId = options.RoutingServiceId,
+            RoutingRouteLayerName = options.RoutingRouteLayerName,
+            RoutingServiceAreaLayerName = options.RoutingServiceAreaLayerName,
+            RoutingClosestFacilityLayerName = options.RoutingClosestFacilityLayerName,
+        };
 
     private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
