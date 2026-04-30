@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
@@ -322,10 +323,19 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 
         if (!string.IsNullOrWhiteSpace(payload.DeletesCsv))
         {
-            return payload.DeletesCsv
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(value => long.Parse(value, System.Globalization.CultureInfo.InvariantCulture))
-                .ToArray();
+            var values = payload.DeletesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var objectIds = new long[values.Length];
+            for (var index = 0; index < values.Length; index++)
+            {
+                if (!long.TryParse(values[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectId))
+                {
+                    throw new InvalidOperationException($"Delete operation contains an invalid object id '{values[index]}'.");
+                }
+
+                objectIds[index] = objectId;
+            }
+
+            return objectIds;
         }
 
         throw new InvalidOperationException("Delete operation requires deleteObjectIds or deletesCsv.");

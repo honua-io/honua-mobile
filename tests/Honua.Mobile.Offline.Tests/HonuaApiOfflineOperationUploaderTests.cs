@@ -272,6 +272,39 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
+    public async Task UploadAsync_MalformedDeleteCsv_ReturnsFatalFailure()
+    {
+        var requestCount = 0;
+        var uploader = CreateUploader((_, _) =>
+        {
+            requestCount++;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Delete,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "deletesCsv": "1,not-an-id"
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Contains("invalid object id", result.Message, StringComparison.Ordinal);
+        Assert.Equal(0, requestCount);
+    }
+
+    [Fact]
     public async Task UploadAsync_WhenCanceled_ThrowsOperationCanceledException()
     {
         var uploader = CreateUploader((_, _) => throw new TaskCanceledException("request canceled"));
