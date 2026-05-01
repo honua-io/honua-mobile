@@ -28,6 +28,25 @@ npm install @honua-io/embed
 </honua-map>
 ```
 
+For production display, pair MapLibre GL JS with the deck.gl adapter:
+
+```js
+import maplibregl from 'maplibre-gl';
+import { HonuaWebDisplayAdapter } from '@honua-io/embed';
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.example/styles/streets.json',
+  center: [-157.8583, 21.3069],
+  zoom: 12,
+});
+const display = new HonuaWebDisplayAdapter(map);
+
+display.setFeatureQueryResult(featureQueryResultPage, {
+  source: sourceDescriptor,
+});
+```
+
 ## Scene Use
 
 ```html
@@ -45,6 +64,20 @@ npm install @honua-io/embed
 ```
 
 `<honua-scene>` uses CesiumJS from npm and the package build copies Cesium runtime assets into `dist/cesium`. CesiumJS is Apache-2.0 open source; Cesium ion is optional and only needed when an integrator chooses ion-hosted assets or services.
+
+Offline browser/WebView packages can assign a host-controlled resolver:
+
+```js
+import { createCacheStorageScenePackageResolver } from '@honua-io/embed';
+
+const scene = document.querySelector('honua-scene');
+scene.packageAssetResolver = createCacheStorageScenePackageResolver({
+  cacheName: 'honua-scene-packages',
+});
+scene.setAttribute('package-id', manifest.packageId);
+scene.setAttribute('tileset-asset', primaryTileset.path);
+scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
+```
 
 ## Map Attributes
 
@@ -69,6 +102,10 @@ npm install @honua-io/embed
 | --- | --- |
 | `tileset-url` | External or Honua-hosted 3D Tiles `tileset.json` URL. |
 | `terrain-url` | Optional Cesium terrain provider URL. |
+| `package-id` | SDK-validated offline scene package identifier. |
+| `tileset-asset` | Package-local `tileset.json` path resolved by `packageAssetResolver`. |
+| `terrain-asset` | Optional package-local terrain asset path resolved by `packageAssetResolver`. |
+| `package-expires-at` | Offline-use expiry timestamp. Expired packages emit `expired-package`. |
 | `ion-token` | Optional Cesium ion token. It is not rendered. |
 | `cesium-base-url` | Optional URL for hosted Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets`. |
 | `center` | Initial latitude/longitude pair, for example `21.3069,-157.8583`. |
@@ -89,7 +126,7 @@ npm install @honua-io/embed
 | `honua-map-identify` | `{ x, y, config }`. |
 | `honua-scene-ready` | `{ config, widget, tileset }`. |
 | `honua-scene-config-change` | Current `HonuaSceneConfig`. |
-| `honua-scene-load-error` | `{ source, message, config, error }`. |
+| `honua-scene-load-error` | `{ source, code, message, config, error }`. |
 | `honua-scene-camera-change` | `{ center, height, orientation, config }`. |
 | `honua-scene-identify` | `{ x, y, picked, config }`. |
 

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineHonuaSceneElement, HonuaSceneElement } from '../src/index';
+import {
+  defineHonuaSceneElement,
+  HonuaSceneElement,
+  HonuaScenePackageCacheError,
+} from '../src/index';
 
 interface MockCesiumModule {
   CesiumTerrainProvider: {
@@ -134,6 +138,10 @@ describe('honua-scene', () => {
     const element = document.createElement('honua-scene');
     element.setAttribute('tileset-url', 'https://data.example.test/tileset.json');
     element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    element.setAttribute('package-id', 'pkg-downtown');
+    element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    element.setAttribute('terrain-asset', 'terrain/layer.json');
+    element.setAttribute('package-expires-at', '2026-06-27T00:00:00Z');
     element.setAttribute('ion-token', 'secret-ion-token');
     element.setAttribute('cesium-base-url', '/assets/cesium');
     element.setAttribute('center', '21.3069,-157.8583');
@@ -149,6 +157,10 @@ describe('honua-scene', () => {
     expect(element.config).toMatchObject({
       tilesetUrl: 'https://data.example.test/tileset.json',
       terrainUrl: 'https://data.example.test/terrain',
+      packageId: 'pkg-downtown',
+      tilesetAssetPath: 'tilesets/buildings/tileset.json',
+      terrainAssetPath: 'terrain/layer.json',
+      packageExpiresAtUtc: '2026-06-27T00:00:00Z',
       ionToken: 'secret-ion-token',
       cesiumBaseUrl: '/assets/cesium/',
       center: { latitude: 21.3069, longitude: -157.8583 },
@@ -195,6 +207,98 @@ describe('honua-scene', () => {
       source: 'webgl',
       message: '3D scenes require WebGL support in the host browser.',
     });
+  });
+
+  it('resolves package-local scene assets through a host-provided resolver', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('package-id', 'pkg-downtown');
+    element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    element.setAttribute('terrain-asset', 'terrain/layer.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    const resolver = vi.fn((request) => `https://cache.example.test/${request.packageId}/${request.path}`);
+    element.packageAssetResolver = resolver;
+    document.body.append(element);
+
+    await element.load();
+
+    expect(resolver).toHaveBeenCalledWith(expect.objectContaining({
+      packageId: 'pkg-downtown',
+      path: 'tilesets/buildings/tileset.json',
+      kind: 'tileset',
+    }));
+    expect(resolver).toHaveBeenCalledWith(expect.objectContaining({
+      packageId: 'pkg-downtown',
+      path: 'terrain/layer.json',
+      kind: 'terrain',
+    }));
+    expect(cesium.CesiumTerrainProvider.fromUrl).toHaveBeenCalledWith(
+      'https://cache.example.test/pkg-downtown/terrain/layer.json',
+    );
+    webgl.mockRestore();
+  });
+
+  it('surfaces unsupported browser storage when package assets have no resolver', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('package-id', 'pkg-downtown');
+    element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-load-error', listener);
+
+    await element.load();
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      source: 'package-cache',
+      code: 'unsupported-browser-storage',
+    });
+    webgl.mockRestore();
+  });
+
+  it('surfaces cache misses and expired package grants before Cesium loads', async () => {
+    const webgl = mockWebGl();
+    const missing = document.createElement('honua-scene');
+    missing.setAttribute('package-id', 'pkg-downtown');
+    missing.setAttribute('tileset-asset', 'tilesets/missing/tileset.json');
+    missing.setAttribute('autoload', 'false');
+    missing.packageAssetResolver = () => {
+      throw new HonuaScenePackageCacheError('cache-miss', 'missing tileset');
+    };
+    document.body.append(missing);
+    const missingListener = vi.fn();
+    missing.addEventListener('honua-scene-load-error', missingListener);
+
+    await missing.load();
+
+    expect(missingListener.mock.calls[0][0].detail).toMatchObject({
+      source: 'package-cache',
+      code: 'cache-miss',
+      message: 'missing tileset',
+    });
+
+    const expired = document.createElement('honua-scene');
+    expired.setAttribute('package-id', 'pkg-expired');
+    expired.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    expired.setAttribute('package-expires-at', '2000-01-01T00:00:00Z');
+    expired.setAttribute('autoload', 'false');
+    const expiredResolver = vi.fn(() => 'https://cache.example.test/tileset.json');
+    expired.packageAssetResolver = expiredResolver;
+    document.body.append(expired);
+    const expiredListener = vi.fn();
+    expired.addEventListener('honua-scene-load-error', expiredListener);
+
+    await expired.load();
+
+    expect(expiredListener.mock.calls[0][0].detail).toMatchObject({
+      source: 'package-cache',
+      code: 'expired-package',
+    });
+    expect(expiredResolver).not.toHaveBeenCalled();
+    webgl.mockRestore();
   });
 
   it('does not render access tokens or Honua branding by default', () => {
