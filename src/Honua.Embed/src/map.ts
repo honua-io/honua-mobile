@@ -1,3 +1,8 @@
+import {
+  createHonuaEmbedExtensionHost,
+  type HonuaEmbedExtensionHost,
+} from './extensions';
+
 export interface HonuaMapCoordinate {
   latitude: number;
   longitude: number;
@@ -23,6 +28,7 @@ export interface HonuaMapConfig {
   identify: boolean;
   attribution: string | null;
   theme: 'light' | 'dark';
+  label: string;
 }
 
 export interface HonuaMapIdentifyDetail {
@@ -203,12 +209,25 @@ template.innerHTML = `
       flex-direction: column;
     }
 
+    .controls > button[data-action] {
+      display: none;
+    }
+
+    .controls[data-honua-extension-active="true"],
     :host([interactive]:not([interactive="false"]):not([interactive="0"]):not([interactive="no"])) .controls {
       display: flex;
     }
 
+    :host([interactive]:not([interactive="false"]):not([interactive="0"]):not([interactive="no"])) .controls > button[data-action] {
+      display: block;
+    }
+
     :host([search]:not([search="false"]):not([search="0"]):not([search="no"])) .controls {
       top: 62px;
+    }
+
+    .extension-controls {
+      display: contents;
     }
 
     .layers {
@@ -299,6 +318,7 @@ template.innerHTML = `
     <div class="controls" part="controls">
       <button type="button" data-action="zoom-in" aria-label="Zoom in">+</button>
       <button type="button" data-action="zoom-out" aria-label="Zoom out">&minus;</button>
+      <div class="extension-controls" part="extension-controls" data-honua-extension-controls></div>
     </div>
     <div class="layers" part="layers"></div>
     <output class="popup" part="popup"></output>
@@ -321,16 +341,23 @@ export class HonuaMapElement extends HTMLElement {
       'identify',
       'attribution',
       'theme',
+      'label',
     ];
   }
 
   readonly #root: ShadowRoot;
+  readonly #extensionHost: HonuaEmbedExtensionHost<'map'>;
   #readyDispatched = false;
 
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
+    this.#extensionHost = createHonuaEmbedExtensionHost({
+      target: 'map',
+      element: this,
+      getConfig: () => this.config,
+    });
   }
 
   get config(): HonuaMapConfig {
@@ -342,6 +369,7 @@ export class HonuaMapElement extends HTMLElement {
     this.#upgradeProperty('zoom');
     this.#render();
     this.#bindEvents();
+    this.#extensionHost.connect();
 
     if (!this.#readyDispatched) {
       this.#readyDispatched = true;
@@ -353,6 +381,10 @@ export class HonuaMapElement extends HTMLElement {
     }
   }
 
+  disconnectedCallback(): void {
+    this.#extensionHost.disconnect();
+  }
+
   attributeChangedCallback(): void {
     this.#render();
     this.dispatchEvent(new CustomEvent('honua-map-config-change', {
@@ -360,6 +392,7 @@ export class HonuaMapElement extends HTMLElement {
       composed: true,
       detail: this.config,
     }));
+    this.#extensionHost.configChanged();
   }
 
   setView(center: HonuaMapCoordinate, zoom = this.config.zoom): void {
@@ -458,6 +491,7 @@ export class HonuaMapElement extends HTMLElement {
     const meta = this.#query<HTMLElement>('.meta');
 
     map.tabIndex = config.interactive ? 0 : -1;
+    map.setAttribute('aria-label', config.label);
     surface.dataset.basemap = config.basemap;
     layers.replaceChildren(...config.layerIds.map((layerId) => {
       const chip = document.createElement('span');
@@ -513,6 +547,7 @@ function readConfig(element: HTMLElement): HonuaMapConfig {
     identify: parseBooleanAttribute(element, 'identify'),
     attribution: emptyToNull(element.getAttribute('attribution')),
     theme: element.getAttribute('theme') === 'dark' ? 'dark' : 'light',
+    label: emptyToNull(element.getAttribute('label')) ?? 'Embedded map',
   };
 }
 
