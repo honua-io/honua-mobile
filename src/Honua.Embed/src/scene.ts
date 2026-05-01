@@ -347,7 +347,12 @@ export class HonuaSceneElement extends HTMLElement {
     const config = this.config;
     const dataUrls = await this.#resolveSceneDataUrls(config);
 
-    if (version !== this.#loadVersion || dataUrls === null) {
+    if (version !== this.#loadVersion) {
+      return;
+    }
+
+    if (dataUrls === null) {
+      this.#destroyCesium();
       return;
     }
 

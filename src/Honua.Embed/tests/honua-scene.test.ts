@@ -333,6 +333,33 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('tears down the existing scene when package resolution fails', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('package-id', 'pkg-downtown');
+    element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    element.packageAssetResolver = () => 'https://cache.example.test/tileset.json';
+    document.body.append(element);
+
+    await element.load();
+    expect(cesium.__mock.widgets).toHaveLength(1);
+
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-load-error', listener);
+    element.setAttribute('package-expires-at', '2000-01-01T00:00:00Z');
+    await element.load();
+
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      source: 'package-cache',
+      code: 'expired-package',
+    });
+    expect(cesium.__mock.widgets[0].destroy).toHaveBeenCalledOnce();
+    expect(element.cesiumWidget).toBeNull();
+    webgl.mockRestore();
+  });
+
   it('cancels in-flight loads when disconnected', async () => {
     const webgl = mockWebGl();
     let resolveTerrain!: (value: unknown) => void;
