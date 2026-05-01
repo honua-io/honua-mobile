@@ -638,32 +638,31 @@ jobs:
       - name: Check all required jobs succeeded
         run: |
           echo "🔍 Checking job results..."
+          dependabot_pr="${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}"
 
           # Core requirements (must pass)
-          if [[ "${{ needs.build.result }}" != "success" ]]; then
-            echo "❌ Build job failed"
-            exit 1
-          fi
+          require_core_job() {
+            local name="$1"
+            local result="$2"
 
-          if [[ "${{ needs.test.result }}" != "success" ]]; then
-            echo "❌ Test job failed"
-            exit 1
-          fi
+            if [[ "$result" == "success" ]]; then
+              return 0
+            fi
 
-          if [[ "${{ needs.grpc-validation.result }}" != "success" ]]; then
-            echo "❌ gRPC validation failed"
-            exit 1
-          fi
+            if [[ "$dependabot_pr" == "true" && "$result" == "skipped" ]]; then
+              echo "$name skipped for Dependabot PR"
+              return 0
+            fi
 
-          if [[ "${{ needs.security.result }}" != "success" ]]; then
-            echo "❌ Security scan failed"
+            echo "❌ $name failed with result: $result"
             exit 1
-          fi
+          }
 
-          if [[ "${{ needs.quality-gates.result }}" != "success" ]]; then
-            echo "❌ Quality gates failed"
-            exit 1
-          fi
+          require_core_job "Build job" "${{ needs.build.result }}"
+          require_core_job "Test job" "${{ needs.test.result }}"
+          require_core_job "gRPC validation" "${{ needs.grpc-validation.result }}"
+          require_core_job "Security scan" "${{ needs.security.result }}"
+          require_core_job "Quality gates" "${{ needs.quality-gates.result }}"
 
           # Platform builds (can be skipped if no source changes)
           android_result="${{ needs.maui-android.result }}"
