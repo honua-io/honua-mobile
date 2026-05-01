@@ -19,11 +19,12 @@ The 3D and AR path should move in this order:
    clients.
 3. `<honua-scene>` renders resolved 3D Tiles and terrain in browser or WebView
    hosts through CesiumJS.
-4. MAUI, React Native, Flutter, Swift, and Kotlin hosts wrap either the web
-   scene component or a native renderer after the server and SDK contracts are
-   stable.
+4. MAUI, React Native, Swift, and Kotlin hosts wrap either the web scene
+   component or a native renderer after the server and SDK contracts are stable.
 5. AR/VR prototypes anchor lightweight scene data to device pose, camera, and
-   field context after the basic scene path is proven.
+   field context after the basic scene path is proven. The native anchoring
+   decision for #38 is captured in
+   [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md).
 
 ## Recommended Sequence
 
@@ -38,7 +39,7 @@ The 3D and AR path should move in this order:
 | 7 | honua-io/honua-server#841 and honua-io/honua-server#842 3D features and generation | Produces Honua-owned operational 3D data instead of only hosted external assets. |
 | 8 | #36 offline 3D cache packaging policy | Defines whether 3D scenes can be trusted in disconnected field workflows. |
 | 9 | #37 protected 3D tiles auth handoff | Defines how private scene assets are safely loaded by browsers, WebViews, and native hosts. |
-| 10 | #38 native scene anchoring requirements | Narrows ARKit, ARCore, WebXR, and MAUI requirements before #23 implementation. |
+| 10 | #38 native scene anchoring requirements | Recommends a MAUI native AR path, Android ARCore first, iOS ARKit second, and WebXR as a later demo path before #23 implementation. |
 | 11 | #23 AR/VR field workflow enablement | Starts native AR/VR only after scene data, auth, offline, and platform risks are explicit. |
 
 ## Capability Matrix
@@ -52,8 +53,8 @@ The 3D and AR path should move in this order:
 | Extruded 3D feature overlays | honua-io/honua-server#841 | Future feature-layer scene overlay ticket | Browser/WebView renderer first; native renderer later | Offline mode needs feature attributes, Z/height fields, styling, and versioning | Medium: styling parity between 2D MapLibre and 3D renderer can drift | Community for basic extrusion; Pro for hosted managed layers |
 | Generated 3D Tiles from Honua data or model assets | honua-io/honua-server#842 | #32 for discovery; future upload/import client contracts if needed | Browser/WebView renderer first; native renderer optional | Large generated tilesets need resumable download and storage quotas | High: data pipeline, LOD, textures, and device memory can dominate effort | Pro |
 | I3S / Esri Scene Layer compatibility | honua-io/honua-server#843 | Future compatibility or adapter ticket | ArcGIS-compatible clients and conformance fixtures | Offline I3S packaging is out of scope until the spike defines demand | High: protocol compatibility and conformance risk | Enterprise |
-| Browser/WebXR scene prototype | honua-io/honua-server#837, honua-io/honua-server#838, honua-io/honua-server#844 | #31, #32, #38 | Secure browser context with WebXR and WebGL-capable device/browser | Offline support is limited until #36 defines packages and cache behavior | High: browser/device support varies and must be validated per target | Enterprise for production AR/VR modules |
-| Native AR overlay prototype | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#841 | #23, #38 | iOS ARKit or Android ARCore capable devices; MAUI wrapper strategy TBD | Needs lightweight cached features, terrain/elevation context, and predictable auth | High: device pose, GPS accuracy, calibration, and depth alignment are product risks | Enterprise |
+| Browser/WebXR scene prototype | honua-io/honua-server#837, honua-io/honua-server#838, honua-io/honua-server#844 | #31, #32, #38 | Secure browser context with WebXR and WebGL-capable device/browser | Offline support is limited until #42 defines browser/WebView package cache behavior | High: browser/device support varies and must be validated per target; not the first #23 runtime | Enterprise for production AR/VR modules |
+| Native AR overlay prototype | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#841 | #23, #38, native Android/iOS follow-ups from [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | MAUI app surface with Android ARCore native handler first and iOS ARKit handler second | Needs lightweight cached features, terrain/elevation context, predictable auth, and cached control points for offline confidence | High: device pose, GPS accuracy, calibration, and depth alignment are product risks | Enterprise |
 | Offline 3D scene package | honua-io/honua-server#837, honua-io/honua-server#839, honua-io/honua-server#840, honua-io/honua-server#842, honua-io/honua-server#844 | #36 policy, #40, #41, #42, #8 | iOS/Android/MAUI storage management; browser cache support where viable | Package manifest must cover extent, LOD, byte budget, hashes, auth expiry, and eviction | High: package size, stale data, and battery/network usage can break field UX | Pro for managed offline packages; Enterprise for large operational deployments |
 | MAUI scene wrapper | honua-io/honua-server#837, honua-io/honua-server#844 | #31, #32, future MAUI wrapper ticket | MAUI WebView first; native graphics surface only after renderer decision | Same as underlying renderer; WebView cache must not outlive auth policy | Medium: WebView differences across Android, iOS, Windows, and Mac Catalyst | Community for wrapper; Pro/Enterprise by backing service |
 
@@ -61,10 +62,10 @@ The 3D and AR path should move in this order:
 
 | Platform | Baseline requirement | Notes |
 |----------|----------------------|-------|
-| iOS | WKWebView/WebGL for `<honua-scene>`; ARKit-capable devices for native AR | Validate memory pressure with real tilesets before committing to offline packages. |
-| Android | Android WebView/WebGL for `<honua-scene>`; ARCore-capable devices for native AR | Device and GPU variability make #38 mandatory before broad AR commitments. |
-| Browser | WebGL for CesiumJS; secure context and WebXR-capable device/browser for AR experiments | Treat WebXR as a prototype path until target browser/device support is validated. |
-| MAUI | WebView host for the first scene wrapper; platform-specific native bridge only after renderer choice | Keep `IHonuaSceneClient` as the shared contract so renderer choice stays replaceable. |
+| iOS | WKWebView/WebGL for `<honua-scene>`; ARKit-capable devices for native AR | Use ARKit native handlers for camera-pose anchoring. ARGeoTracking availability, location accuracy, and optional LiDAR/depth support must be checked at runtime. |
+| Android | Android WebView/WebGL for `<honua-scene>`; ARCore-capable devices for native AR | Use ARCore native handlers for the first #23 prototype. Geospatial, Depth, and VPS availability are device/location specific and must be checked at runtime. |
+| Browser | WebGL for CesiumJS; secure context and WebXR-capable device/browser for AR experiments | Treat WebXR as a later demo path, not the default field runtime, until target browser/device support and #42 cache behavior are validated. |
+| MAUI | WebView host for scene previews; platform-specific native handlers for AR anchoring | Keep `IHonuaSceneClient` and SDK package manifests as the shared data contracts while MAUI owns permissions, lifecycle, storage adapters, and native AR view integration. |
 
 ## Edition Gates
 
@@ -74,13 +75,13 @@ The 3D and AR path should move in this order:
 | Pro | Honua-hosted 3D Tiles, managed terrain, elevation APIs, generated 3D Tiles, and managed offline scene packages. |
 | Enterprise | Production AR/VR modules, I3S compatibility, large operational offline 3D deployments, and advanced building/floor-aware scene workflows. |
 
-## Open Questions
+## Anchoring Decision
 
-Open decisions are tracked as follow-up tickets:
-
-| Ticket | Question |
-|--------|----------|
-| #38 | Which AR anchoring strategy and first prototype platform should #23 use? |
+The #38 spike is captured in
+[Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md).
+It recommends a MAUI native AR prototype, Android ARCore Geospatial first, iOS
+ARKit second, control-point calibration for operational confidence, GPS-only as
+degraded preview, and WebXR as a later browser demo path after #42.
 
 The offline 3D package model from #36 is captured in
 [Offline 3D Scene Packages](offline-3d-scene-packages.md), with implementation
