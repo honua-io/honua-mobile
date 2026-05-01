@@ -11,6 +11,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
 | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) | Server, SDK, platform, offline, and edition dependencies for scene and AR work |
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
+| [Mobile SDK Backlog Roadmap](mobile-sdk-backlog-roadmap.md) | Epic #1 backlog sequencing, acceptance matrix, dependencies, and closure readiness |
 | [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
