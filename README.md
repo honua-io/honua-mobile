@@ -11,7 +11,7 @@ dynamic forms, and background sync.
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter |
 | **Honua.Mobile.Field** | Mobile adapters for SDK-owned field forms, validation, media capture metadata, and workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
-| **Honua.Mobile.Maui** | MAUI service registration and DI extensions |
+| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, and device location orchestration |
 | **@honua/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components for ISV embeds |
 
 ## Quick Start
@@ -150,7 +150,7 @@ tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (36 tests)
   Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (59 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations (16 tests)
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location (24 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
 proto/
   honua/v1/                   gRPC protocol definitions

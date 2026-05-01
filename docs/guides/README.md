@@ -11,6 +11,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
 | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) | Server, SDK, platform, offline, and edition dependencies for scene and AR work |
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
+| [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, Mapsui evaluation, and device location/geofencing lifecycle |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |

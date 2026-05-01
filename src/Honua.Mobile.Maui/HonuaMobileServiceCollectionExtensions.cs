@@ -1,5 +1,7 @@
 using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Annotations;
+using Honua.Mobile.Maui.Display;
+using Honua.Mobile.Maui.Location;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
@@ -273,6 +275,38 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTransient<HonuaAnnotationLayer>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the dependency-free native map display controller.
+    /// Applications must also register an <see cref="IHonuaNativeMapAdapter"/> and an SDK
+    /// <see cref="IHonuaFeatureQueryClient"/> for feature-backed layers.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaNativeDisplay(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddTransient<HonuaNativeMapDisplayController>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers device location orchestration over app-provided native permission and location adapters.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaDeviceLocation(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(sp => new HonuaDeviceLocationCoordinator(
+            sp.GetRequiredService<IHonuaDeviceLocationPermissionService>(),
+            sp.GetRequiredService<IHonuaDeviceLocationProvider>(),
+            sp.GetService<IHonuaBackgroundLocationProvider>(),
+            sp.GetService<IHonuaGeofenceMonitor>()));
         return services;
     }
 }
