@@ -14,6 +14,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
+| [Plugin and Host Extension Boundary](plugin-extension-api.md) | Web embed extension APIs and the SDK/mobile ownership split for plugin work |
 | [Protected 3D Scene Auth](protected-3d-scene-auth.md) | Signed URL, proxy, header, CORS, cache, and revocation policy for protected scene assets |
 | [Security](security.md) | Authentication, transport security, and secure storage best practices |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions for development and production |
