@@ -123,6 +123,55 @@ public sealed class BackgroundSyncOrchestratorOptions
 }
 
 /// <summary>
+/// Lifecycle event that should cancel optional background prefetch work.
+/// </summary>
+public enum PrefetchLifecycleEvent
+{
+    /// <summary>
+    /// The app is entering the background or suspended state.
+    /// </summary>
+    Suspend,
+
+    /// <summary>
+    /// The platform reported memory pressure.
+    /// </summary>
+    LowMemory,
+
+    /// <summary>
+    /// The scheduler is shutting down.
+    /// </summary>
+    Shutdown,
+}
+
+/// <summary>
+/// Configuration options for <see cref="BackgroundPrefetchScheduler"/>.
+/// </summary>
+public sealed class BackgroundPrefetchSchedulerOptions
+{
+    /// <summary>
+    /// Maximum number of prefetch items allowed to run at the same time.
+    /// </summary>
+    public int MaxConcurrency { get; init; } = 2;
+}
+
+/// <summary>
+/// Represents a cancellable background prefetch task.
+/// </summary>
+public interface IBackgroundPrefetchWorkItem
+{
+    /// <summary>
+    /// Stable identifier used for diagnostics.
+    /// </summary>
+    string ItemId { get; }
+
+    /// <summary>
+    /// Executes the prefetch work.
+    /// </summary>
+    /// <param name="ct">Cancellation token that is triggered for app suspend, low memory, or shutdown.</param>
+    Task ExecuteAsync(CancellationToken ct = default);
+}
+
+/// <summary>
 /// Summary of a single offline sync cycle.
 /// </summary>
 public sealed class SyncRunResult

@@ -224,11 +224,10 @@ jobs:
           retention-days: 7
 
   maui-android:
-    name: MAUI Android Build
+    name: MAUI Android Build & Trim Smoke
     runs-on: ubuntu-latest
     needs: [build, changes]
     if: needs.changes.outputs.src_changed == 'true'
-    continue-on-error: true
     permissions:
       contents: read
       packages: read
@@ -251,39 +250,143 @@ jobs:
 
       - name: Install MAUI workload
         run: |
-          dotnet workload install maui-android \
-            || echo "::warning::MAUI Android workload install failed; Android checks are advisory and do not block merge"
+          dotnet workload install maui-android
 
       - name: Restore
         run: |
-          status=0
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-android || status=$?
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-android || status=$?
-
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::Android restore failed; Android checks are advisory and do not block merge"
-          fi
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-android
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-android
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
-            || echo "::warning::MAUI component build failed in Android job; Android checks are advisory and do not block merge"
+            /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
         run: |
-          status=0
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net10.0-android || status=$?
+            --framework net10.0-android \
+            /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
-            --framework net10.0-android || status=$?
+            --framework net10.0-android \
+            /p:TreatWarningsAsErrors=true
 
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::Android app build failed; Android checks are advisory and do not block merge"
-          fi
+      - name: Android trim smoke
+        run: |
+          # Keep direct mobile-code trim warnings blocking, but do not fail on assembly-level
+          # summaries emitted by upstream NuGet packages during the baseline app smoke.
+          dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            --configuration Release \
+            --framework net10.0-android \
+            /p:PublishTrimmed=true \
+            /p:TrimMode=full \
+            /p:TreatWarningsAsErrors=true \
+            /p:WarningsNotAsErrors=IL2104 \
+            /p:AndroidPackageFormat=apk
+
+      - name: Android API 33 emulator smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
+          HONUA_MOBILE_SMOKE_SERVICE_ID: ${{ vars.HONUA_MOBILE_SMOKE_SERVICE_ID }}
+          HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
+          HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          script: |
+            adb shell getprop ro.build.version.sdk
+            dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj \
+              --configuration Release \
+              --logger "console;verbosity=minimal"
+
+  maui-ios:
+    name: MAUI iOS Build & AOT Smoke
+    runs-on: macos-latest
+    needs: [build, changes]
+    if: needs.changes.outputs.src_changed == 'true'
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Select Xcode 26.3
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Verify iOS 17+ simulator runtime
+        run: xcrun simctl list runtimes | grep -E "iOS (17|18|19|20)"
+
+      - name: Restore
+        run: |
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-ios
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-ios
+
+      - name: Build MAUI Components
+        run: |
+          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            --configuration Release \
+            /p:TreatWarningsAsErrors=true
+
+      - name: Build iOS Apps
+        run: |
+          dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            --configuration Release \
+            --framework net10.0-ios \
+            /p:RuntimeIdentifier=iossimulator-x64 \
+            /p:TreatWarningsAsErrors=true
+
+          dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
+            --configuration Release \
+            --framework net10.0-ios \
+            /p:RuntimeIdentifier=iossimulator-x64 \
+            /p:TreatWarningsAsErrors=true
+
+      - name: iOS trim and NativeAOT smoke
+        run: |
+          # Keep direct mobile-code trim/AOT warnings blocking, but do not fail on assembly-level
+          # summaries emitted by upstream NuGet packages during the baseline app smoke.
+          dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            --configuration Release \
+            --framework net10.0-ios \
+            /p:RuntimeIdentifier=ios-arm64 \
+            /p:PublishTrimmed=true \
+            /p:TrimMode=full \
+            /p:PublishAot=true \
+            /p:PublishAotUsingRuntimePack=true \
+            /p:EnableCodeSigning=false \
+            /p:ArchiveOnBuild=false \
+            /p:TreatWarningsAsErrors=true \
+            /p:WarningsNotAsErrors=IL2104%3BIL3053
+
+      - name: iOS live query smoke
+        env:
+          HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
+          HONUA_MOBILE_SMOKE_SERVICE_ID: ${{ vars.HONUA_MOBILE_SMOKE_SERVICE_ID }}
+          HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
+          HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
+        run: |
+          dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj \
+            --configuration Release \
+            --logger "console;verbosity=minimal"
 
   maui-windows:
     name: MAUI Windows Build
@@ -367,6 +470,21 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v6
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
 
       - name: Run CodeQL Analysis
         uses: github/codeql-action/init@v4
@@ -506,7 +624,7 @@ jobs:
   ci-gate:
     name: CI Gate
     runs-on: ubuntu-latest
-    needs: [build, test, maui-android, maui-windows, grpc-validation, security, quality-gates]
+    needs: [build, test, maui-android, maui-ios, maui-windows, grpc-validation, security, quality-gates]
     if: always()
     steps:
       - name: Check all required jobs succeeded
@@ -541,10 +659,17 @@ jobs:
 
           # Platform builds (can be skipped if no source changes)
           android_result="${{ needs.maui-android.result }}"
+          ios_result="${{ needs.maui-ios.result }}"
           windows_result="${{ needs.maui-windows.result }}"
 
           if [[ "$android_result" == "failure" ]]; then
-            echo "⚠️ Android build failed, but it is advisory and does not block merge"
+            echo "❌ Android build failed"
+            exit 1
+          fi
+
+          if [[ "$ios_result" == "failure" ]]; then
+            echo "❌ iOS build failed"
+            exit 1
           fi
 
           if [[ "$windows_result" == "failure" ]]; then

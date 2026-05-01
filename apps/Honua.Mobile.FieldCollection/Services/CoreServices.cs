@@ -3,6 +3,7 @@ using Honua.Mobile.FieldCollection.Models;
 using Microsoft.Maui.Devices.Sensors;
 using Microsoft.Maui.Networking;
 using Microsoft.Maui.Storage;
+using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 
 namespace Honua.Mobile.FieldCollection.Services;
 
@@ -152,7 +153,7 @@ public class FeatureService : IFeatureService
             {
                 Id = "1",
                 LayerId = layerId,
-                Geometry = new Point(37.7749, -122.4194),
+                Geometry = new FieldPoint(37.7749, -122.4194),
                 CreatedAt = DateTime.UtcNow.AddDays(-1),
                 ModifiedAt = DateTime.UtcNow.AddDays(-1),
                 Attributes = new Dictionary<string, object>
@@ -166,7 +167,7 @@ public class FeatureService : IFeatureService
             {
                 Id = "2",
                 LayerId = layerId,
-                Geometry = new Point(37.7849, -122.4094),
+                Geometry = new FieldPoint(37.7849, -122.4094),
                 CreatedAt = DateTime.UtcNow.AddHours(-2),
                 ModifiedAt = DateTime.UtcNow.AddHours(-2),
                 Attributes = new Dictionary<string, object>

@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using Honua.Mobile.Offline;
 using Honua.Mobile.Offline.Sync;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
@@ -15,11 +17,6 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
     IOfflineSyncCheckpointStore,
     IOfflineSyncStateStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
     private readonly IGeoPackageSyncStore _store;
 
     /// <summary>
@@ -136,7 +133,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         var value = await _store.GetSyncCursorAsync(GetCheckpointKey(packageId, sourceId), ct).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(value)
             ? null
-            : JsonSerializer.Deserialize<OfflineSyncCheckpoint>(value, JsonOptions);
+            : HonuaMobileOfflineJson.Deserialize<OfflineSyncCheckpoint>(value);
     }
 
     /// <inheritdoc />
@@ -147,7 +144,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         await _store.InitializeAsync(ct).ConfigureAwait(false);
         await _store.SetSyncCursorAsync(
             GetCheckpointKey(checkpoint.PackageId, checkpoint.SourceId),
-            JsonSerializer.Serialize(checkpoint, JsonOptions),
+            HonuaMobileOfflineJson.Serialize(checkpoint),
             ct).ConfigureAwait(false);
     }
 
@@ -160,7 +157,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         var value = await _store.GetSyncCursorAsync(GetStateKey(packageId, sourceId), ct).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(value)
             ? null
-            : JsonSerializer.Deserialize<OfflineSyncState>(value, JsonOptions);
+            : HonuaMobileOfflineJson.Deserialize<OfflineSyncState>(value);
     }
 
     /// <inheritdoc />
@@ -171,7 +168,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         await _store.InitializeAsync(ct).ConfigureAwait(false);
         await _store.SetSyncCursorAsync(
             GetStateKey(state.PackageId, state.SourceId),
-            JsonSerializer.Serialize(state, JsonOptions),
+            HonuaMobileOfflineJson.Serialize(state),
             ct).ConfigureAwait(false);
     }
 
@@ -190,7 +187,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
                 OfflineEditOperationKind.Delete => OfflineOperationType.Delete,
                 _ => throw new InvalidOperationException($"Unsupported SDK offline operation kind '{entry.OperationKind}'."),
             },
-            PayloadJson = JsonSerializer.Serialize(payload, JsonOptions),
+            PayloadJson = HonuaMobileOfflineJson.Serialize(payload),
             CreatedAtUtc = entry.CreatedAtUtc,
             AttemptCount = entry.AttemptCount,
         };
@@ -252,7 +249,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
     }
 
     private static OfflineOperationPayload DeserializePayload(string payloadJson)
-        => JsonSerializer.Deserialize<OfflineOperationPayload>(payloadJson, JsonOptions)
+        => HonuaMobileOfflineJson.Deserialize<OfflineOperationPayload>(payloadJson)
            ?? throw new InvalidOperationException("Offline operation payload cannot be null.");
 
     private static FeatureEditFeature? ToFeatureEditFeature(OfflineOperationPayload payload, OfflineOperationType operationType)
@@ -362,37 +359,106 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
             !attributes.ContainsKey("OBJECTID") &&
             long.TryParse(feature.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectId))
         {
-            attributes[objectIdField] = JsonSerializer.SerializeToElement(objectId);
+            attributes[objectIdField] = ToJsonElement(objectId);
         }
 
-        var payload = new Dictionary<string, object?>
+        return SerializeJson(writer =>
         {
-            ["attributes"] = attributes,
-        };
+            writer.WriteStartObject();
+            writer.WritePropertyName("attributes");
+            WriteJsonObject(writer, attributes);
 
-        if (feature.Geometry is not null)
-        {
-            payload["geometry"] = feature.Geometry.Value;
-        }
+            if (feature.Geometry is { } geometry)
+            {
+                writer.WritePropertyName("geometry");
+                geometry.WriteTo(writer);
+            }
 
-        return JsonSerializer.Serialize(payload, JsonOptions);
+            writer.WriteEndObject();
+        });
     }
 
     private static JsonElement ToFeatureServerFeature(FeatureEditFeature feature)
-        => JsonSerializer.SerializeToElement(new Dictionary<string, object?>
+        => ToJsonElement(writer =>
         {
-            ["attributes"] = feature.Attributes,
-            ["geometry"] = feature.Geometry,
-        }, JsonOptions);
+            writer.WriteStartObject();
+            writer.WritePropertyName("attributes");
+            WriteJsonObject(writer, feature.Attributes);
+            writer.WritePropertyName("geometry");
+            WriteJsonElementOrNull(writer, feature.Geometry);
+            writer.WriteEndObject();
+        });
 
     private static JsonElement ToGeoJsonFeature(FeatureEditFeature feature)
-        => JsonSerializer.SerializeToElement(new Dictionary<string, object?>
+        => ToJsonElement(writer =>
         {
-            ["type"] = "Feature",
-            ["id"] = feature.Id,
-            ["properties"] = feature.Attributes,
-            ["geometry"] = feature.Geometry,
-        }, JsonOptions);
+            writer.WriteStartObject();
+            writer.WriteString("type", "Feature");
+            if (feature.Id is null)
+            {
+                writer.WriteNull("id");
+            }
+            else
+            {
+                writer.WriteString("id", feature.Id);
+            }
+
+            writer.WritePropertyName("properties");
+            WriteJsonObject(writer, feature.Attributes);
+            writer.WritePropertyName("geometry");
+            WriteJsonElementOrNull(writer, feature.Geometry);
+            writer.WriteEndObject();
+        });
+
+    private static string SerializeJson(Action<Utf8JsonWriter> writeJson)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writeJson(writer);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static JsonElement ToJsonElement(long value)
+    {
+        using var document = JsonDocument.Parse(value.ToString(CultureInfo.InvariantCulture));
+        return document.RootElement.Clone();
+    }
+
+    private static JsonElement ToJsonElement(Action<Utf8JsonWriter> writeJson)
+    {
+        var json = SerializeJson(writeJson);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    private static void WriteJsonObject(Utf8JsonWriter writer, IReadOnlyDictionary<string, JsonElement>? values)
+    {
+        writer.WriteStartObject();
+        if (values is not null)
+        {
+            foreach (var (key, value) in values)
+            {
+                writer.WritePropertyName(key);
+                value.WriteTo(writer);
+            }
+        }
+
+        writer.WriteEndObject();
+    }
+
+    private static void WriteJsonElementOrNull(Utf8JsonWriter writer, JsonElement? value)
+    {
+        if (value is { } element)
+        {
+            element.WriteTo(writer);
+            return;
+        }
+
+        writer.WriteNullValue();
+    }
 
     private static string GetCheckpointKey(string packageId, string sourceId)
         => $"sdk-checkpoint:{packageId}:{sourceId}";

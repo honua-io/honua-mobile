@@ -62,6 +62,15 @@ public class ConflictInfo
     public DateTime DetectedAt { get; set; }
     public object? LocalVersion { get; set; }
     public object? ServerVersion { get; set; }
+
+    public string ConflictDescription => Type switch
+    {
+        ConflictType.UpdateUpdate => "Local and server versions were both updated.",
+        ConflictType.UpdateDelete => "Local changes conflict with a server delete.",
+        ConflictType.DeleteUpdate => "A local delete conflicts with server changes.",
+        ConflictType.GeometryOverlap => "Geometry overlaps with an existing feature.",
+        _ => "Sync conflict requires review."
+    };
 }
 
 public enum ConflictType

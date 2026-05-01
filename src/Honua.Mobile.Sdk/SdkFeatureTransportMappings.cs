@@ -76,7 +76,9 @@ internal static class SdkFeatureTransportMappings
         var id = featureId ?? ResolveOptionalFeatureId(feature);
         return new OgcFeature
         {
-            Id = id is null ? null : JsonSerializer.SerializeToElement(id),
+            Id = id is null
+                ? null
+                : JsonSerializer.SerializeToElement(id, HonuaMobileSdkTransportJsonContext.Default.String),
             Geometry = feature.Geometry.HasValue ? feature.Geometry.Value.Clone() : null,
             Properties = feature.Attributes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone()),
         };
@@ -125,7 +127,10 @@ internal static class SdkFeatureTransportMappings
         {
             JsonElement element => element.GetRawText(),
             JsonDocument document => document.RootElement.GetRawText(),
-            _ => JsonSerializer.Serialize(feature),
+            FeatureEditFeature editFeature => JsonSerializer.Serialize(
+                ToOgcFeature(editFeature),
+                HonuaMobileSdkTransportJsonContext.Default.OgcFeature),
+            _ => SerializeWithContext(feature),
         };
 
         return JsonSerializer.Deserialize(json, HonuaMobileSdkTransportJsonContext.Default.OgcFeature)
@@ -140,7 +145,7 @@ internal static class SdkFeatureTransportMappings
         {
             JsonElement element => element.Clone(),
             JsonDocument document => document.RootElement.Clone(),
-            _ => JsonSerializer.SerializeToElement(value),
+            _ => SerializeToElementWithContext(value),
         };
     }
 
@@ -225,6 +230,38 @@ internal static class SdkFeatureTransportMappings
             features.ToArray(),
             HonuaMobileSdkTransportJsonContext.Default.FeatureServerFeatureArray);
 
+    private static string SerializeWithContext(object value)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(value, value.GetType(), HonuaMobileSdkTransportJsonContext.Default);
+        }
+        catch (NotSupportedException ex)
+        {
+            throw new ArgumentException(
+                "OGC feature payload must be an OgcFeature, FeatureEditFeature, JsonElement, JsonDocument, or a source-generated JSON type.",
+                nameof(value),
+                ex);
+        }
+    }
+
+    private static JsonElement SerializeToElementWithContext(object value)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(value, value.GetType(), HonuaMobileSdkTransportJsonContext.Default);
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.Clone();
+        }
+        catch (NotSupportedException ex)
+        {
+            throw new ArgumentException(
+                "OGC patch payload must be a JsonElement, JsonDocument, or a source-generated JSON type.",
+                nameof(value),
+                ex);
+        }
+    }
+
     private static string JoinInvariant(IEnumerable<long> values)
         => string.Join(',', values.Select(value => value.ToString(CultureInfo.InvariantCulture)));
 
@@ -274,6 +311,7 @@ internal sealed class OgcCollectionsEnvelope
 [JsonSerializable(typeof(OgcFeatureCollection))]
 [JsonSerializable(typeof(OgcFeature))]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(string))]
 internal sealed partial class HonuaMobileSdkTransportJsonContext : JsonSerializerContext
 {
 }

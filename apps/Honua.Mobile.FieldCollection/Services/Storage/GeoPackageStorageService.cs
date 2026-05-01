@@ -5,6 +5,7 @@ using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
+using StorageSpatialRelationship = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialRelationship;
 using StorageSyncStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncStatus;
 using NtsEnvelope = NetTopologySuite.Geometries.Envelope;
 using NtsGeometry = NetTopologySuite.Geometries.Geometry;
@@ -472,12 +473,12 @@ public class GeoPackageStorageService : IDisposable
 
         return spatialQuery.Relationship switch
         {
-            SpatialRelationship.Intersects => geometry.Intersects(queryGeometry),
-            SpatialRelationship.Contains => geometry.Contains(queryGeometry),
-            SpatialRelationship.Within => geometry.Within(queryGeometry),
-            SpatialRelationship.Overlaps => geometry.Overlaps(queryGeometry),
-            SpatialRelationship.Touches => geometry.Touches(queryGeometry),
-            SpatialRelationship.Crosses => geometry.Crosses(queryGeometry),
+            StorageSpatialRelationship.Intersects => geometry.Intersects(queryGeometry),
+            StorageSpatialRelationship.Contains => geometry.Contains(queryGeometry),
+            StorageSpatialRelationship.Within => geometry.Within(queryGeometry),
+            StorageSpatialRelationship.Overlaps => geometry.Overlaps(queryGeometry),
+            StorageSpatialRelationship.Touches => geometry.Touches(queryGeometry),
+            StorageSpatialRelationship.Crosses => geometry.Crosses(queryGeometry),
             _ => geometry.Intersects(queryGeometry)
         };
     }

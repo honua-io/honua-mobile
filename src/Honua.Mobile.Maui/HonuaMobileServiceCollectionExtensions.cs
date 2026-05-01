@@ -1,10 +1,12 @@
 using Honua.Mobile.Field.Capture;
+using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Mobile.Sdk.Auth;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
@@ -48,8 +50,46 @@ public static class HonuaMobileServiceCollectionExtensions
         {
             var factory = sp.GetRequiredService<IHttpClientFactory>();
             var httpClient = factory.CreateClient("HonuaMobile");
-            return new HonuaMobileClient(httpClient, clientOptions);
+            var authTokenProvider = sp.GetService<IAuthTokenProvider>();
+            return new HonuaMobileClient(httpClient, clientOptions, authTokenProvider);
         });
+        return services;
+    }
+
+    /// <summary>
+    /// Registers mobile auth token storage and refresh services.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="tokenStore">Optional secure token store. When omitted, an in-memory store is registered.</param>
+    /// <param name="options">Optional token refresh options.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaMobileAuth(
+        this IServiceCollection services,
+        IAuthTokenStore? tokenStore = null,
+        RefreshingAuthTokenProviderOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (tokenStore is null)
+        {
+            services.AddSingleton<IAuthTokenStore, InMemoryAuthTokenStore>();
+        }
+        else
+        {
+            services.AddSingleton<IAuthTokenStore>(tokenStore);
+        }
+
+        services.AddSingleton(options ?? new RefreshingAuthTokenProviderOptions());
+        services.AddHttpClient("HonuaMobileAuth");
+        services.AddSingleton<IAuthTokenProvider>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            return new RefreshingAuthTokenProvider(
+                sp.GetRequiredService<IAuthTokenStore>(),
+                factory.CreateClient("HonuaMobileAuth"),
+                sp.GetRequiredService<RefreshingAuthTokenProviderOptions>());
+        });
+
         return services;
     }
 
@@ -216,6 +256,25 @@ public static class HonuaMobileServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<BackgroundSyncOrchestrator>>();
             return new BackgroundSyncOrchestrator(runner, connectivity, orchestratorOptions, logger: logger);
         });
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the cancellable background prefetch scheduler used for lifecycle-aware cache warming.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Scheduler options; defaults are used when <see langword="null"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaBackgroundPrefetch(
+        this IServiceCollection services,
+        BackgroundPrefetchSchedulerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(options ?? new BackgroundPrefetchSchedulerOptions());
+        services.AddSingleton<BackgroundPrefetchScheduler>(sp => new BackgroundPrefetchScheduler(
+            sp.GetRequiredService<BackgroundPrefetchSchedulerOptions>(),
+            sp.GetService<ILogger<BackgroundPrefetchScheduler>>()));
         return services;
     }
 

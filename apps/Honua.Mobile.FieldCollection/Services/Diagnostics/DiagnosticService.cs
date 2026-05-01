@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Networking;
+using System.Runtime.InteropServices;
 
 namespace Honua.Mobile.FieldCollection.Services.Diagnostics;
 
@@ -38,7 +39,7 @@ public class DiagnosticService
             Platform = DeviceInfo.Platform.ToString(),
             DeviceModel = DeviceInfo.Model,
             OperatingSystem = $"{DeviceInfo.Platform} {DeviceInfo.VersionString}",
-            Architecture = DeviceInfo.Architecture.ToString(),
+            Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Manufacturer = DeviceInfo.Manufacturer,
             DeviceName = DeviceInfo.Name,
             DeviceType = DeviceInfo.DeviceType.ToString(),

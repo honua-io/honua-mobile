@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Honua.Mobile.Sdk.Auth;
 using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
@@ -28,6 +29,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private readonly HonuaFeatureServerClient _featureServerClient;
     private readonly HonuaOgcFeaturesClient _ogcFeaturesClient;
     private readonly HonuaMobileClientOptions _options;
+    private readonly IAuthTokenProvider? _authTokenProvider;
     private readonly object _grpcClientSync = new();
     private readonly bool _canUseGrpcEndpoint;
     private HonuaGrpcClient? _grpcClient;
@@ -39,9 +41,22 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="options">Configuration controlling endpoints, authentication, and transport preferences.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
     public HonuaMobileClient(HttpClient httpClient, HonuaMobileClientOptions options)
+        : this(httpClient, options, authTokenProvider: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new <see cref="HonuaMobileClient"/> with the supplied HTTP client, options, and auth token provider.
+    /// </summary>
+    /// <param name="httpClient">The <see cref="HttpClient"/> used for REST requests.</param>
+    /// <param name="options">Configuration controlling endpoints, authentication, and transport preferences.</param>
+    /// <param name="authTokenProvider">Optional provider that resolves API-key or bearer-token credentials.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public HonuaMobileClient(HttpClient httpClient, HonuaMobileClientOptions options, IAuthTokenProvider? authTokenProvider)
     {
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _authTokenProvider = authTokenProvider ?? options.AuthTokenProvider;
         _http.BaseAddress = options.BaseUri;
         _http.Timeout = options.Timeout;
         _http.DefaultRequestHeaders.UserAgent.Clear();
@@ -822,8 +837,19 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
+        var apiKey = _options.ApiKey;
         var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
-        var hasApiKey = !string.IsNullOrWhiteSpace(_options.ApiKey);
+        var providerToken = await ResolveProviderTokenAsync(ct).ConfigureAwait(false);
+        if (providerToken is { Scheme: HonuaAuthScheme.ApiKey })
+        {
+            apiKey = providerToken.AccessToken;
+        }
+        else if (providerToken is { Scheme: HonuaAuthScheme.Bearer })
+        {
+            token = providerToken.AccessToken;
+        }
+
+        var hasApiKey = !string.IsNullOrWhiteSpace(apiKey);
         var hasBearerToken = !string.IsNullOrWhiteSpace(token);
 
         if (hasApiKey || hasBearerToken)
@@ -833,7 +859,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
         if (hasApiKey)
         {
-            request.Headers.TryAddWithoutValidation("X-API-Key", _options.ApiKey);
+            request.Headers.TryAddWithoutValidation("X-API-Key", apiKey);
         }
 
         if (!string.IsNullOrWhiteSpace(token))
@@ -852,6 +878,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
         return token;
     }
+
+    private async ValueTask<HonuaAuthToken?> ResolveProviderTokenAsync(CancellationToken ct)
+        => _authTokenProvider is null
+            ? null
+            : await _authTokenProvider.GetTokenAsync(ct).ConfigureAwait(false);
 
     internal HonuaGrpcClient GetGrpcClient()
     {
@@ -873,12 +904,48 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         {
             Address = address.ToString(),
             ApiKey = _options.ApiKey,
+            ApiKeyProvider = BuildGrpcApiKeyProvider(),
             BearerToken = _options.BearerToken,
-            BearerTokenProvider = _options.AccessTokenProvider is null
-                ? null
-                : async ct => await _options.AccessTokenProvider(ct).ConfigureAwait(false) ?? _options.BearerToken,
+            BearerTokenProvider = BuildGrpcBearerTokenProvider(),
             Timeout = _options.Timeout,
         };
+    }
+
+    private Func<CancellationToken, Task<string?>>? BuildGrpcApiKeyProvider()
+    {
+        if (_authTokenProvider is null)
+        {
+            return null;
+        }
+
+        return async ct =>
+        {
+            var token = await _authTokenProvider.GetTokenAsync(ct).ConfigureAwait(false);
+            return token is { Scheme: HonuaAuthScheme.ApiKey }
+                ? token.AccessToken
+                : _options.ApiKey;
+        };
+    }
+
+    private Func<CancellationToken, Task<string?>>? BuildGrpcBearerTokenProvider()
+    {
+        if (_authTokenProvider is not null)
+        {
+            return async ct =>
+            {
+                var token = await _authTokenProvider.GetTokenAsync(ct).ConfigureAwait(false);
+                if (token is { Scheme: HonuaAuthScheme.Bearer })
+                {
+                    return token.AccessToken;
+                }
+
+                return await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+            };
+        }
+
+        return _options.AccessTokenProvider is null
+            ? null
+            : async ct => await _options.AccessTokenProvider(ct).ConfigureAwait(false) ?? _options.BearerToken;
     }
 
     internal static HonuaSceneClientOptions BuildSceneClientOptions(HonuaMobileClientOptions options)
@@ -892,7 +959,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private bool HasConfiguredGrpcAuthentication =>
         !string.IsNullOrWhiteSpace(_options.ApiKey) ||
         !string.IsNullOrWhiteSpace(_options.BearerToken) ||
-        _options.AccessTokenProvider is not null;
+        _options.AccessTokenProvider is not null ||
+        _authTokenProvider is not null;
 
     private Uri ResolveAbsoluteRequestUri(HttpRequestMessage request)
     {

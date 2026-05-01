@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
+using Honua.Mobile.Sdk.Models;
 
 namespace Honua.Mobile.Smoke.Tests;
 
@@ -169,6 +172,46 @@ public sealed class SmokeTests : IDisposable
         // A cursor that was never set should return null.
         var missing = await store.GetSyncCursorAsync("nonexistent-key");
         Assert.Null(missing);
+    }
+
+    // ---------------------------------------------------------------
+    // 7. Optional live server smoke for platform CI
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task LiveFeatureQuery_WhenConfigured_CompletesUnderOneSecond()
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("HONUA_MOBILE_SMOKE_BASE_URL");
+        var serviceId = Environment.GetEnvironmentVariable("HONUA_MOBILE_SMOKE_SERVICE_ID");
+        var layerIdValue = Environment.GetEnvironmentVariable("HONUA_MOBILE_SMOKE_LAYER_ID");
+        if (string.IsNullOrWhiteSpace(baseUrl) ||
+            string.IsNullOrWhiteSpace(serviceId) ||
+            !int.TryParse(layerIdValue, out var layerId))
+        {
+            return;
+        }
+
+        using var http = new HttpClient();
+        var client = new HonuaMobileClient(http, new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri(baseUrl),
+            ApiKey = Environment.GetEnvironmentVariable("HONUA_MOBILE_SMOKE_API_KEY"),
+            PreferGrpcForFeatureQueries = false,
+            PreferGrpcForFeatureEdits = false,
+        });
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        var stopwatch = Stopwatch.StartNew();
+        using var result = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = serviceId,
+            LayerId = layerId,
+            ResultRecordCount = 1,
+        }, timeout.Token);
+        stopwatch.Stop();
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), $"Live query took {stopwatch.Elapsed}.");
+        Assert.True(result.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object);
     }
 
     // ---------------------------------------------------------------

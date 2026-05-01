@@ -9,11 +9,6 @@ namespace Honua.Mobile.Offline.Sync;
 /// </summary>
 public sealed class ReplicaSyncClient : IReplicaSyncClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
     private readonly HttpClient _httpClient;
 
     /// <summary>

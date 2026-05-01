@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using System.Collections.ObjectModel;
+using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 
@@ -28,7 +29,7 @@ public partial class MapViewModel : BaseViewModel
     private bool isAddingFeature;
 
     [ObservableProperty]
-    private Point? newFeatureLocation;
+    private FieldPoint? newFeatureLocation;
 
     public ObservableCollection<LayerInfo> AvailableLayers { get; } = new();
     public ObservableCollection<Feature> MapFeatures { get; } = new();
@@ -175,7 +176,7 @@ public partial class MapViewModel : BaseViewModel
     }
 
     [RelayCommand]
-    private async Task AddFeatureAtLocation(Point location)
+    private async Task AddFeatureAtLocation(FieldPoint location)
     {
         if (!IsAddingFeature || SelectedLayer == null)
             return;

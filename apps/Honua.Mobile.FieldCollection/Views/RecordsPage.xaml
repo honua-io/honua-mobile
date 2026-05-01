@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Honua.Mobile.FieldCollection.Models"
              xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
              x:Class="Honua.Mobile.FieldCollection.Views.RecordsPage"
              Title="{Binding Title}"
@@ -130,7 +131,7 @@
                 </CollectionView.EmptyView>
 
                 <CollectionView.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:DataType="models:Feature">
                         <Frame Style="{StaticResource CardFrameStyle}" Margin="0,5">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
 

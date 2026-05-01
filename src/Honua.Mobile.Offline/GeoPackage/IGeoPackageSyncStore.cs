@@ -144,4 +144,30 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Feature JSON strings for the specified layer.</returns>
     Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves cached feature JSON payloads whose stored feature envelope intersects <paramref name="boundingBox"/>.
+    /// </summary>
+    /// <param name="layerKey">The layer identifier.</param>
+    /// <param name="boundingBox">Bounding box used for R-tree candidate lookup.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Feature JSON strings for the specified layer and extent.</returns>
+    Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, BoundingBox boundingBox, CancellationToken ct = default)
+        => throw new NotSupportedException("This GeoPackage sync store does not support spatial feature queries.");
+
+    /// <summary>
+    /// Evicts expired cached features according to the configured per-layer TTL policy.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of cached features removed.</returns>
+    Task<int> EvictExpiredFeaturesAsync(CancellationToken ct = default)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// Returns the current GeoPackage database file size in bytes.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Database size in bytes, or 0 when the file does not exist.</returns>
+    Task<long> GetStorageSizeBytesAsync(CancellationToken ct = default)
+        => Task.FromResult(0L);
 }
