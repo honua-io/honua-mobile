@@ -5,6 +5,10 @@ import type {
   ScreenSpaceEventHandler,
 } from 'cesium';
 import {
+  createHonuaEmbedExtensionHost,
+  type HonuaEmbedExtensionHost,
+} from './extensions';
+import {
   HonuaScenePackageCacheError,
   type HonuaScenePackageAssetResolverInput,
   type HonuaScenePackageAssetKind,
@@ -148,9 +152,39 @@ sceneTemplate.innerHTML = `
     .status[data-hidden="true"] {
       display: none;
     }
+
+    .extension-controls {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      z-index: 1;
+      display: none;
+      gap: 6px;
+      flex-direction: column;
+    }
+
+    .extension-controls[data-honua-extension-active="true"] {
+      display: flex;
+    }
+
+    .extension-controls > button {
+      width: 36px;
+      height: 36px;
+      color: var(--honua-scene-foreground);
+      background: color-mix(in srgb, var(--honua-scene-background) 78%, transparent);
+      border: 1px solid var(--honua-scene-border);
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .extension-controls > button:hover {
+      border-color: var(--honua-scene-accent);
+    }
   </style>
   <section class="scene" role="application" aria-label="Embedded 3D scene">
     <div class="viewport" part="viewport"></div>
+    <div class="extension-controls" part="extension-controls" data-honua-extension-controls></div>
     <output class="status" part="status"></output>
   </section>
 `;
@@ -183,12 +217,18 @@ export class HonuaSceneElement extends HTMLElement {
   #handler: ScreenSpaceEventHandler | null = null;
   #removeCameraListener: CesiumEvent.RemoveCallback | null = null;
   #assetResolver: HonuaScenePackageAssetResolverInput | null = null;
+  readonly #extensionHost: HonuaEmbedExtensionHost<'scene'>;
   #loadVersion = 0;
 
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(sceneTemplate.content.cloneNode(true));
+    this.#extensionHost = createHonuaEmbedExtensionHost({
+      target: 'scene',
+      element: this,
+      getConfig: () => this.config,
+    });
   }
 
   get config(): HonuaSceneConfig {
@@ -215,6 +255,7 @@ export class HonuaSceneElement extends HTMLElement {
     this.#upgradeProperty('center');
     this.#upgradeProperty('packageAssetResolver');
     this.#render();
+    this.#extensionHost.connect();
 
     const config = this.config;
     if (config.autoload && hasSceneData(config)) {
@@ -224,6 +265,7 @@ export class HonuaSceneElement extends HTMLElement {
 
   disconnectedCallback(): void {
     this.#loadVersion += 1;
+    this.#extensionHost.disconnect();
     this.#destroyCesium();
   }
 
@@ -238,6 +280,7 @@ export class HonuaSceneElement extends HTMLElement {
       composed: true,
       detail: this.config,
     }));
+    this.#extensionHost.configChanged();
 
     if (!this.isConnected) {
       return;

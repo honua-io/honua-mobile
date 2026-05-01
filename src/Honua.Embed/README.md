@@ -95,6 +95,7 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 | `identify` | Enables click/identify events and emits `honua-map-identify`. |
 | `attribution` | Optional attribution text. No Honua branding is shown by default. |
 | `theme` | `light` or `dark`. |
+| `label` | Accessible map label, defaulting to `Embedded map`. |
 
 ## Scene Attributes
 
@@ -129,6 +130,63 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 | `honua-scene-load-error` | `{ source, code, message, config, error }`. |
 | `honua-scene-camera-change` | `{ center, height, orientation, config }`. |
 | `honua-scene-identify` | `{ x, y, picked, config }`. |
+| `honua-embed-extension-error` | `{ extensionId, target, lifecycle, error }`. |
+
+## Generated Map Snippets
+
+```ts
+import { createHonuaMapSnippet } from '@honua-io/embed';
+
+const snippet = createHonuaMapSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  interactive: true,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+  style: {
+    accent: '#0f766e',
+    fontFamily: 'Aptos, sans-serif',
+  },
+}, {
+  elementName: 'city-asset-map',
+});
+```
+
+Custom element names generate a script that calls `defineHonuaMapElement(...)`.
+`apiKey` is omitted unless `includeCredentials: true` is passed.
+
+Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
+an existing map element at runtime.
+
+## Host Extensions
+
+```ts
+import { registerHonuaEmbedExtension } from '@honua-io/embed';
+
+const registration = registerHonuaEmbedExtension({
+  id: 'isv-locate',
+  target: 'map',
+  activate(context) {
+    context.addControl({
+      id: 'locate',
+      label: 'Locate asset',
+      text: 'L',
+      onClick: (_event, clickContext) => {
+        clickContext.dispatch('isv-locate', {
+          zoom: clickContext.config.zoom,
+        });
+      },
+    });
+  },
+});
+```
+
+Extensions are runtime host hooks for controls, CSS variables, and DOM events.
+Shared plugin manifests, source descriptors, and data contracts should come from
+versioned `Honua.Sdk.*` packages.
 
 ## Styling
 
