@@ -74,6 +74,10 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             throw new HonuaMobileAuthException("Honua auth token resolution failed.", ex);
@@ -124,6 +128,10 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             MobileAuthTelemetry.RecordTokenRefresh("failure");
@@ -141,6 +149,10 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             await _store.WriteAsync(token, ct).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             throw new HonuaMobileAuthException("Honua auth token persistence failed.", ex);
@@ -153,6 +165,10 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         try
         {
             await _store.ClearAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {

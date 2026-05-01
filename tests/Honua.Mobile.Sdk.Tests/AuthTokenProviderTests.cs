@@ -38,6 +38,80 @@ public sealed class AuthTokenProviderTests
     }
 
     [Fact]
+    public async Task QueryFeaturesAsync_WithAuthTokenProviderAndThrowingLegacyProvider_UsesProviderToken()
+    {
+        var legacyProviderCalls = 0;
+        string? capturedApiKey = null;
+        var store = new InMemoryAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(HonuaAuthScheme.ApiKey, "provider-api-key"));
+
+        var client = CreateClient(request =>
+        {
+            if (request.Headers.TryGetValues("X-API-Key", out var values))
+            {
+                capturedApiKey = values.FirstOrDefault();
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"features":[]}""", Encoding.UTF8, "application/json"),
+            };
+        }, new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))),
+        new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            AccessTokenProvider = _ =>
+            {
+                legacyProviderCalls++;
+                throw new InvalidOperationException("Legacy provider should not be invoked when an auth token provider resolves a token.");
+            },
+            PreferGrpcForFeatureQueries = false,
+            PreferGrpcForFeatureEdits = false,
+        });
+
+        using var result = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = "assets",
+            LayerId = 0,
+        });
+
+        Assert.Equal("provider-api-key", capturedApiKey);
+        Assert.Equal(0, legacyProviderCalls);
+    }
+
+    [Fact]
+    public async Task BuildGrpcClientOptions_WithAuthTokenProviderApiKey_DoesNotInvokeLegacyBearerProvider()
+    {
+        var legacyProviderCalls = 0;
+        var store = new InMemoryAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(HonuaAuthScheme.ApiKey, "provider-api-key"));
+        var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK), new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))),
+        new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            AccessTokenProvider = _ =>
+            {
+                legacyProviderCalls++;
+                throw new InvalidOperationException("Legacy provider should not be invoked when an auth token provider resolves a token.");
+            },
+            PreferGrpcForFeatureQueries = false,
+            PreferGrpcForFeatureEdits = false,
+        });
+
+        var options = client.BuildGrpcClientOptions();
+
+        Assert.NotNull(options.ApiKeyProvider);
+        Assert.Equal("provider-api-key", await options.ApiKeyProvider!(CancellationToken.None));
+        Assert.NotNull(options.BearerTokenProvider);
+        Assert.Null(await options.BearerTokenProvider!(CancellationToken.None));
+        Assert.Equal(0, legacyProviderCalls);
+    }
+
+    [Fact]
     public async Task QueryFeaturesAsync_WithExpiredBearerToken_RefreshesBeforeSending()
     {
         string? capturedAuthHeader = null;
@@ -88,9 +162,24 @@ public sealed class AuthTokenProviderTests
         Assert.Equal("next-refresh-token", stored?.RefreshToken);
     }
 
-    private static HonuaMobileClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> handler, IAuthTokenProvider provider)
+    [Fact]
+    public async Task GetTokenAsync_WhenCanceled_ThrowsOperationCanceledException()
     {
-        var options = new HonuaMobileClientOptions
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var provider = new RefreshingAuthTokenProvider(
+            new InMemoryAuthTokenStore(),
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await provider.GetTokenAsync(cts.Token));
+    }
+
+    private static HonuaMobileClient CreateClient(
+        Func<HttpRequestMessage, HttpResponseMessage> handler,
+        IAuthTokenProvider provider,
+        HonuaMobileClientOptions? options = null)
+    {
+        options ??= new HonuaMobileClientOptions
         {
             BaseUri = new Uri("https://api.honua.test"),
             PreferGrpcForFeatureQueries = false,

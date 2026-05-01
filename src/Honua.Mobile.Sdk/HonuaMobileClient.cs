@@ -838,7 +838,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var apiKey = _options.ApiKey;
-        var token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+        var token = _options.BearerToken;
         var providerToken = await ResolveProviderTokenAsync(ct).ConfigureAwait(false);
         if (providerToken is { Scheme: HonuaAuthScheme.ApiKey })
         {
@@ -847,6 +847,10 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         else if (providerToken is { Scheme: HonuaAuthScheme.Bearer })
         {
             token = providerToken.AccessToken;
+        }
+        else
+        {
+            token = await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
         }
 
         var hasApiKey = !string.IsNullOrWhiteSpace(apiKey);
@@ -939,7 +943,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                     return token.AccessToken;
                 }
 
-                return await ResolveBearerTokenAsync(ct).ConfigureAwait(false);
+                return token is null
+                    ? await ResolveBearerTokenAsync(ct).ConfigureAwait(false)
+                    : _options.BearerToken;
             };
         }
 
