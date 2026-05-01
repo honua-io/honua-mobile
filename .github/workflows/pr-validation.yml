@@ -15,7 +15,7 @@ jobs:
       statuses: write
     steps:
       - name: Check PR Requirements
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
