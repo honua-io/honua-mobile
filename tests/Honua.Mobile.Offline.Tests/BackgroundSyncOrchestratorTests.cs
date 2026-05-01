@@ -32,7 +32,7 @@ public sealed class BackgroundSyncOrchestratorTests
             });
 
         await orchestrator.StartAsync();
-        await Task.Delay(120);
+        await runner.FirstRun.WaitAsync(TimeSpan.FromSeconds(5));
         await orchestrator.StopAsync();
 
         Assert.True(runner.CallCount >= 1);
@@ -53,7 +53,7 @@ public sealed class BackgroundSyncOrchestratorTests
             });
 
         await orchestrator.StartAsync();
-        await Task.Delay(150);
+        await runner.FirstSuccess.WaitAsync(TimeSpan.FromSeconds(5));
         await orchestrator.StopAsync();
 
         Assert.True(runner.CallCount >= 2);
@@ -62,11 +62,19 @@ public sealed class BackgroundSyncOrchestratorTests
 
     private sealed class FakeSyncRunner : IOfflineSyncRunner
     {
-        public int CallCount { get; private set; }
+        private int _callCount;
+
+        public Task FirstRun => _firstRun.Task;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        private readonly TaskCompletionSource _firstRun = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<SyncRunResult> SyncAsync(CancellationToken ct = default)
         {
-            CallCount++;
+            Interlocked.Increment(ref _callCount);
+            _firstRun.TrySetResult();
+
             return Task.FromResult(new SyncRunResult
             {
                 Loaded = 0,
@@ -84,27 +92,34 @@ public sealed class BackgroundSyncOrchestratorTests
     private sealed class FlakySyncRunner : IOfflineSyncRunner
     {
         private int _remainingFailures;
+        private int _callCount;
+        private int _successCount;
 
         public FlakySyncRunner(int initialFailures)
         {
             _remainingFailures = initialFailures;
         }
 
-        public int CallCount { get; private set; }
+        public Task FirstSuccess => _firstSuccess.Task;
 
-        public int SuccessCount { get; private set; }
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public int SuccessCount => Volatile.Read(ref _successCount);
+
+        private readonly TaskCompletionSource _firstSuccess = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<SyncRunResult> SyncAsync(CancellationToken ct = default)
         {
-            CallCount++;
+            Interlocked.Increment(ref _callCount);
 
-            if (_remainingFailures > 0)
+            if (Interlocked.Decrement(ref _remainingFailures) >= 0)
             {
-                _remainingFailures--;
                 throw new InvalidOperationException("transient sync error");
             }
 
-            SuccessCount++;
+            Interlocked.Increment(ref _successCount);
+            _firstSuccess.TrySetResult();
+
             return Task.FromResult(new SyncRunResult
             {
                 Loaded = 0,

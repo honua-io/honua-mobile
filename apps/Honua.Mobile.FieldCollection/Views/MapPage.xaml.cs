@@ -1,5 +1,7 @@
 using Honua.Mobile.FieldCollection.ViewModels;
+using Microsoft.Maui.Controls.Maps;
 using Microsoft.Maui.Maps;
+using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 
 namespace Honua.Mobile.FieldCollection.Views;
 
@@ -38,7 +40,7 @@ public partial class MapPage : ContentPage
         // Handle map clicks for adding new features
         if (_viewModel.IsAddingFeature)
         {
-            var point = new Models.Point
+            var point = new FieldPoint
             {
                 Latitude = e.Location.Latitude,
                 Longitude = e.Location.Longitude

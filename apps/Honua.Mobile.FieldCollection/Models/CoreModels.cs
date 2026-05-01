@@ -18,6 +18,44 @@ public class Feature
     public string? UpdatedBy { get; set; }
     public bool IsPendingSync { get; set; }
     public List<AttachmentInfo> Attachments { get; set; } = new();
+
+    public string DisplayTitle
+    {
+        get
+        {
+            if (Attributes.TryGetValue("name", out var name) && !string.IsNullOrWhiteSpace(name?.ToString()))
+            {
+                return name.ToString()!;
+            }
+
+            if (Attributes.TryGetValue("title", out var title) && !string.IsNullOrWhiteSpace(title?.ToString()))
+            {
+                return title.ToString()!;
+            }
+
+            return string.IsNullOrWhiteSpace(Id) ? "Untitled feature" : Id;
+        }
+    }
+
+    public string AttributeSummary
+    {
+        get
+        {
+            if (Attributes.Count == 0)
+            {
+                return "No attributes";
+            }
+
+            return string.Join(", ", Attributes
+                .Where(attribute => attribute.Value is not null)
+                .Take(3)
+                .Select(attribute => $"{attribute.Key}: {attribute.Value}"));
+        }
+    }
+
+    public bool HasAttachments => Attachments.Count > 0;
+
+    public int AttachmentsCount => Attachments.Count;
 }
 
 public abstract class Geometry

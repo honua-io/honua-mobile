@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Honua.Mobile.Offline;
 using Honua.Sdk.Abstractions.Scenes;
 using Microsoft.Data.Sqlite;
 
@@ -140,8 +142,30 @@ CREATE TABLE IF NOT EXISTS honua_features (
     object_id INTEGER NOT NULL,
     feature_json TEXT NOT NULL,
     updated_at_utc TEXT NOT NULL,
+    expires_at_utc TEXT,
+    min_x DOUBLE,
+    min_y DOUBLE,
+    max_x DOUBLE,
+    max_y DOUBLE,
     PRIMARY KEY (layer_key, object_id)
 );
+
+CREATE TABLE IF NOT EXISTS honua_feature_index_keys (
+    index_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    layer_key TEXT NOT NULL,
+    object_id INTEGER NOT NULL,
+    UNIQUE(layer_key, object_id)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS rtree_honua_features USING rtree(
+    index_id,
+    min_x,
+    max_x,
+    min_y,
+    max_y
+);
+
+CREATE INDEX IF NOT EXISTS idx_honua_features_layer_expires ON honua_features(layer_key, expires_at_utc);
 
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature cache for delta sync', 4326);
@@ -158,6 +182,11 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
             "missing_optional_asset_keys_json",
             "TEXT NOT NULL DEFAULT '[]'",
             ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(connection, "honua_features", "expires_at_utc", "TEXT", ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(connection, "honua_features", "min_x", "DOUBLE", ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(connection, "honua_features", "min_y", "DOUBLE", ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(connection, "honua_features", "max_x", "DOUBLE", ct).ConfigureAwait(false);
+        await EnsureColumnExistsAsync(connection, "honua_features", "max_y", "DOUBLE", ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -403,7 +432,7 @@ ON CONFLICT(cursor_key) DO UPDATE SET
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
-        var bbox = JsonSerializer.Serialize(mapArea.BoundingBox);
+        var bbox = HonuaMobileOfflineJson.Serialize(mapArea.BoundingBox);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -442,7 +471,7 @@ ON CONFLICT(area_id) DO UPDATE SET
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
-            var bbox = JsonSerializer.Deserialize<BoundingBox>(reader.GetString(2))
+            var bbox = HonuaMobileOfflineJson.Deserialize<BoundingBox>(reader.GetString(2))
                 ?? throw new InvalidOperationException("Invalid bbox payload in honua_map_areas.");
 
             items.Add(new MapAreaPackage
@@ -470,8 +499,8 @@ ON CONFLICT(area_id) DO UPDATE SET
 
         var extent = scenePackage.Extent is null
             ? null
-            : JsonSerializer.Serialize(scenePackage.Extent);
-        var missingOptionalAssetKeysJson = JsonSerializer.Serialize(scenePackage.MissingOptionalAssetKeys);
+            : HonuaMobileOfflineJson.Serialize(scenePackage.Extent);
+        var missingOptionalAssetKeysJson = HonuaMobileOfflineJson.Serialize(scenePackage.MissingOptionalAssetKeys.ToArray());
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -617,26 +646,61 @@ ORDER BY scene_id ASC, package_id ASC;
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(featureJson);
 
+        using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.upsert", ActivityKind.Internal);
+        activity?.SetTag("layer_key", layerKey);
+
         var objectId = ExtractObjectId(featureJson);
+        var extent = ExtractFeatureExtent(featureJson);
+        var expiresAtUtc = ResolveFeatureExpiresAtUtc(layerKey);
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = @"
-INSERT INTO honua_features (layer_key, object_id, feature_json, updated_at_utc)
-VALUES ($layer_key, $object_id, $feature_json, $updated_at_utc)
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"
+INSERT INTO honua_features (layer_key, object_id, feature_json, updated_at_utc, expires_at_utc, min_x, min_y, max_x, max_y)
+VALUES ($layer_key, $object_id, $feature_json, $updated_at_utc, $expires_at_utc, $min_x, $min_y, $max_x, $max_y)
 ON CONFLICT(layer_key, object_id) DO UPDATE SET
   feature_json = excluded.feature_json,
-  updated_at_utc = excluded.updated_at_utc;
+  updated_at_utc = excluded.updated_at_utc,
+  expires_at_utc = excluded.expires_at_utc,
+  min_x = excluded.min_x,
+  min_y = excluded.min_y,
+  max_x = excluded.max_x,
+  max_y = excluded.max_y;
 ";
 
-        command.Parameters.AddWithValue("$layer_key", layerKey);
-        command.Parameters.AddWithValue("$object_id", objectId);
-        command.Parameters.AddWithValue("$feature_json", featureJson);
-        command.Parameters.AddWithValue("$updated_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                command.Parameters.AddWithValue("$layer_key", layerKey);
+                command.Parameters.AddWithValue("$object_id", objectId);
+                command.Parameters.AddWithValue("$feature_json", featureJson);
+                command.Parameters.AddWithValue("$updated_at_utc", _options.TimeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture));
+                command.Parameters.AddWithValue("$expires_at_utc", ToDbValue(expiresAtUtc));
+                command.Parameters.AddWithValue("$min_x", ToDbValue(extent?.MinX));
+                command.Parameters.AddWithValue("$min_y", ToDbValue(extent?.MinY));
+                command.Parameters.AddWithValue("$max_x", ToDbValue(extent?.MaxX));
+                command.Parameters.AddWithValue("$max_y", ToDbValue(extent?.MaxY));
 
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            await UpsertFeatureIndexAsync(connection, layerKey, objectId, extent, ct).ConfigureAwait(false);
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+        }
+        catch (SqliteException ex)
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw new GeoPackageStorageException("GeoPackage feature cache write failed.", ex);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -647,12 +711,33 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM honua_features WHERE layer_key = $layer_key AND object_id = $object_id;";
-        command.Parameters.AddWithValue("$layer_key", layerKey);
-        command.Parameters.AddWithValue("$object_id", objectId);
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            var indexId = await GetFeatureIndexIdAsync(connection, layerKey, objectId, ct).ConfigureAwait(false);
+            if (indexId.HasValue)
+            {
+                await DeleteFeatureIndexAsync(connection, indexId.Value, ct).ConfigureAwait(false);
+            }
 
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM honua_features WHERE layer_key = $layer_key AND object_id = $object_id;";
+            command.Parameters.AddWithValue("$layer_key", layerKey);
+            command.Parameters.AddWithValue("$object_id", objectId);
+
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+        }
+        catch (SqliteException ex)
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw new GeoPackageStorageException("GeoPackage feature cache delete failed.", ex);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -660,21 +745,225 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
 
+        using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.query", ActivityKind.Internal);
+        activity?.SetTag("layer_key", layerKey);
+
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT feature_json FROM honua_features WHERE layer_key = $layer_key ORDER BY object_id ASC;";
+        command.CommandText = @"
+SELECT feature_json
+FROM honua_features
+WHERE layer_key = $layer_key
+  AND (expires_at_utc IS NULL OR expires_at_utc > $now_utc)
+ORDER BY object_id ASC;
+";
         command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$now_utc", _options.TimeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture));
 
         var items = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        try
         {
-            items.Add(reader.GetString(0));
+            await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                items.Add(reader.GetString(0));
+            }
+
+            MobileStorageTelemetry.RecordQuery("success");
+            return items;
+        }
+        catch (SqliteException ex)
+        {
+            MobileStorageTelemetry.RecordQuery("failure");
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw new GeoPackageStorageException("GeoPackage feature cache query failed.", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, BoundingBox boundingBox, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+
+        using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.query_bbox", ActivityKind.Internal);
+        activity?.SetTag("layer_key", layerKey);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT f.feature_json
+FROM honua_features f
+JOIN honua_feature_index_keys k
+  ON k.layer_key = f.layer_key
+ AND k.object_id = f.object_id
+JOIN rtree_honua_features r
+  ON r.index_id = k.index_id
+WHERE f.layer_key = $layer_key
+  AND (f.expires_at_utc IS NULL OR f.expires_at_utc > $now_utc)
+  AND r.min_x <= $max_x
+  AND r.max_x >= $min_x
+  AND r.min_y <= $max_y
+  AND r.max_y >= $min_y
+ORDER BY f.object_id ASC;
+";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$now_utc", _options.TimeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$min_x", boundingBox.MinLongitude);
+        command.Parameters.AddWithValue("$min_y", boundingBox.MinLatitude);
+        command.Parameters.AddWithValue("$max_x", boundingBox.MaxLongitude);
+        command.Parameters.AddWithValue("$max_y", boundingBox.MaxLatitude);
+
+        var items = new List<string>();
+        try
+        {
+            await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                items.Add(reader.GetString(0));
+            }
+
+            MobileStorageTelemetry.RecordQuery("success");
+            return items;
+        }
+        catch (SqliteException ex)
+        {
+            MobileStorageTelemetry.RecordQuery("failure");
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw new GeoPackageStorageException("GeoPackage feature cache query failed.", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> EvictExpiredFeaturesAsync(CancellationToken ct = default)
+    {
+        var nowUtc = _options.TimeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            var expiredIndexIds = await ReadExpiredFeatureIndexIdsAsync(connection, nowUtc, ct).ConfigureAwait(false);
+            if (expiredIndexIds.Count > 0)
+            {
+                await DeleteFeatureIndexesAsync(connection, expiredIndexIds, ct).ConfigureAwait(false);
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM honua_features WHERE expires_at_utc IS NOT NULL AND expires_at_utc <= $now_utc;";
+            command.Parameters.AddWithValue("$now_utc", nowUtc);
+            var evicted = await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+            MobileStorageTelemetry.RecordEvictions(evicted);
+            return evicted;
+        }
+        catch (SqliteException ex)
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw new GeoPackageStorageException("GeoPackage feature cache eviction failed.", ex);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<long> GetStorageSizeBytesAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var bytes = File.Exists(_options.DatabasePath)
+            ? new FileInfo(_options.DatabasePath).Length
+            : 0L;
+        MobileStorageTelemetry.RecordSizeBytes(bytes);
+        return Task.FromResult(bytes);
+    }
+
+    private DateTimeOffset? ResolveFeatureExpiresAtUtc(string layerKey)
+    {
+        TimeSpan? ttl = null;
+        if (_options.LayerFeatureCacheTtls.TryGetValue(layerKey, out var layerTtl))
+        {
+            ttl = layerTtl;
+        }
+        else
+        {
+            ttl = _options.DefaultFeatureCacheTtl;
         }
 
-        return items;
+        if (!ttl.HasValue || ttl.Value <= TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        return _options.TimeProvider.GetUtcNow().Add(ttl.Value);
+    }
+
+    private static FeatureExtent? ExtractFeatureExtent(string featureJson)
+    {
+        using var doc = JsonDocument.Parse(featureJson);
+        var root = doc.RootElement;
+        var geometry = root.TryGetProperty("geometry", out var geometryElement)
+            ? geometryElement
+            : root;
+
+        if (TryReadPointExtent(geometry, out var pointExtent))
+        {
+            return pointExtent;
+        }
+
+        if (TryReadEnvelopeExtent(geometry, out var envelopeExtent))
+        {
+            return envelopeExtent;
+        }
+
+        return null;
+    }
+
+    private static bool TryReadPointExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (TryGetDouble(geometry, "x", out var x) && TryGetDouble(geometry, "y", out var y))
+        {
+            extent = new FeatureExtent(x, y, x, y);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static bool TryReadEnvelopeExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (TryGetDouble(geometry, "xmin", out var minX) &&
+            TryGetDouble(geometry, "ymin", out var minY) &&
+            TryGetDouble(geometry, "xmax", out var maxX) &&
+            TryGetDouble(geometry, "ymax", out var maxY))
+        {
+            extent = new FeatureExtent(minX, minY, maxX, maxY);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) && property.TryGetDouble(out value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private static long ExtractObjectId(string featureJson)
@@ -733,6 +1022,153 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task RollbackQuietlyAsync(SqliteConnection connection)
+    {
+        try
+        {
+            await ExecuteTransactionCommandAsync(connection, "ROLLBACK;", CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Preserve the original exception.
+        }
+    }
+
+    private static async Task UpsertFeatureIndexAsync(
+        SqliteConnection connection,
+        string layerKey,
+        long objectId,
+        FeatureExtent? extent,
+        CancellationToken ct)
+    {
+        var indexId = await EnsureFeatureIndexIdAsync(connection, layerKey, objectId, ct).ConfigureAwait(false);
+        if (extent is null)
+        {
+            await DeleteFeatureIndexAsync(connection, indexId, ct).ConfigureAwait(false);
+            return;
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+INSERT OR REPLACE INTO rtree_honua_features (index_id, min_x, max_x, min_y, max_y)
+VALUES ($index_id, $min_x, $max_x, $min_y, $max_y);
+";
+        command.Parameters.AddWithValue("$index_id", indexId);
+        command.Parameters.AddWithValue("$min_x", extent.Value.MinX);
+        command.Parameters.AddWithValue("$max_x", extent.Value.MaxX);
+        command.Parameters.AddWithValue("$min_y", extent.Value.MinY);
+        command.Parameters.AddWithValue("$max_y", extent.Value.MaxY);
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<long> EnsureFeatureIndexIdAsync(
+        SqliteConnection connection,
+        string layerKey,
+        long objectId,
+        CancellationToken ct)
+    {
+        await using (var insertCommand = connection.CreateCommand())
+        {
+            insertCommand.CommandText = @"
+INSERT INTO honua_feature_index_keys (layer_key, object_id)
+VALUES ($layer_key, $object_id)
+ON CONFLICT(layer_key, object_id) DO NOTHING;
+";
+            insertCommand.Parameters.AddWithValue("$layer_key", layerKey);
+            insertCommand.Parameters.AddWithValue("$object_id", objectId);
+            await insertCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        return await GetFeatureIndexIdAsync(connection, layerKey, objectId, ct).ConfigureAwait(false)
+            ?? throw new GeoPackageStorageException("GeoPackage feature index key was not created.");
+    }
+
+    private static async Task<long?> GetFeatureIndexIdAsync(
+        SqliteConnection connection,
+        string layerKey,
+        long objectId,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT index_id
+FROM honua_feature_index_keys
+WHERE layer_key = $layer_key
+  AND object_id = $object_id
+LIMIT 1;
+";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$object_id", objectId);
+        var value = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return value is null or DBNull ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private static async Task DeleteFeatureIndexAsync(SqliteConnection connection, long indexId, CancellationToken ct)
+    {
+        await using (var rtreeCommand = connection.CreateCommand())
+        {
+            rtreeCommand.CommandText = "DELETE FROM rtree_honua_features WHERE index_id = $index_id;";
+            rtreeCommand.Parameters.AddWithValue("$index_id", indexId);
+            await rtreeCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        await using var keyCommand = connection.CreateCommand();
+        keyCommand.CommandText = "DELETE FROM honua_feature_index_keys WHERE index_id = $index_id;";
+        keyCommand.Parameters.AddWithValue("$index_id", indexId);
+        await keyCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<IReadOnlyList<long>> ReadExpiredFeatureIndexIdsAsync(
+        SqliteConnection connection,
+        string nowUtc,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT k.index_id
+FROM honua_feature_index_keys k
+JOIN honua_features f
+  ON f.layer_key = k.layer_key
+ AND f.object_id = k.object_id
+WHERE f.expires_at_utc IS NOT NULL
+  AND f.expires_at_utc <= $now_utc;
+";
+        command.Parameters.AddWithValue("$now_utc", nowUtc);
+
+        var indexIds = new List<long>();
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            indexIds.Add(reader.GetInt64(0));
+        }
+
+        return indexIds;
+    }
+
+    private static async Task DeleteFeatureIndexesAsync(
+        SqliteConnection connection,
+        IReadOnlyList<long> indexIds,
+        CancellationToken ct)
+    {
+        if (indexIds.Count == 0)
+        {
+            return;
+        }
+
+        await using (var rtreeCommand = connection.CreateCommand())
+        {
+            var parameters = AddIndexIdParameters(rtreeCommand, indexIds);
+            rtreeCommand.CommandText = $"DELETE FROM rtree_honua_features WHERE index_id IN ({parameters});";
+            await rtreeCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
+        await using var keyCommand = connection.CreateCommand();
+        var keyParameters = AddIndexIdParameters(keyCommand, indexIds);
+        keyCommand.CommandText = $"DELETE FROM honua_feature_index_keys WHERE index_id IN ({keyParameters});";
+        await keyCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     private static async Task<IReadOnlyList<string>> ReadPendingOperationIdsAsync(
@@ -803,7 +1239,7 @@ LIMIT $limit;
         var extentJson = reader.IsDBNull(5) ? null : reader.GetString(5);
         var extent = string.IsNullOrWhiteSpace(extentJson)
             ? null
-            : JsonSerializer.Deserialize<HonuaSceneBounds>(extentJson)
+            : HonuaMobileOfflineJson.Deserialize<HonuaSceneBounds>(extentJson)
                 ?? throw new InvalidOperationException("Invalid extent payload in honua_scene_packages.");
 
         return new ScenePackageRecord
@@ -830,7 +1266,7 @@ LIMIT $limit;
     }
 
     private static IReadOnlyList<string> ReadStringArrayJson(string json)
-        => JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        => HonuaMobileOfflineJson.Deserialize<string[]>(json) ?? [];
 
     private static DateTimeOffset? ReadNullableDateTimeOffset(SqliteDataReader reader, int ordinal)
         => reader.IsDBNull(ordinal)
@@ -845,6 +1281,9 @@ LIMIT $limit;
             ? value.Value.ToString("O", CultureInfo.InvariantCulture)
             : DBNull.Value;
 
+    private static object ToDbValue(double? value)
+        => value.HasValue ? value.Value : DBNull.Value;
+
     private static string AddOperationIdParameters(SqliteCommand command, IReadOnlyList<string> operationIds)
     {
         var parameterNames = new string[operationIds.Count];
@@ -857,6 +1296,21 @@ LIMIT $limit;
 
         return string.Join(", ", parameterNames);
     }
+
+    private static string AddIndexIdParameters(SqliteCommand command, IReadOnlyList<long> indexIds)
+    {
+        var parameterNames = new string[indexIds.Count];
+        for (var i = 0; i < indexIds.Count; i++)
+        {
+            var parameterName = $"$index_id_{i}";
+            command.Parameters.AddWithValue(parameterName, indexIds[i]);
+            parameterNames[i] = parameterName;
+        }
+
+        return string.Join(", ", parameterNames);
+    }
+
+    private readonly record struct FeatureExtent(double MinX, double MinY, double MaxX, double MaxY);
 
     private static void ValidateSqlIdentifier(string identifier, string parameterName)
     {

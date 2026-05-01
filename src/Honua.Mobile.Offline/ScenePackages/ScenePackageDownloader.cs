@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Honua.Mobile.Offline;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Sdk.Abstractions.Scenes;
 
@@ -15,12 +16,6 @@ namespace Honua.Mobile.Offline.ScenePackages;
 /// </summary>
 public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
 {
-    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
-
     private readonly HttpClient _httpClient;
     private readonly IGeoPackageSyncStore _syncStore;
 
@@ -373,7 +368,11 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
     {
         var manifestPath = Path.Combine(stagingDirectory, "manifest.json");
         await using var stream = File.Create(manifestPath);
-        await JsonSerializer.SerializeAsync(stream, manifest, ManifestJsonOptions, ct).ConfigureAwait(false);
+        await JsonSerializer.SerializeAsync(
+            stream,
+            manifest,
+            HonuaMobileScenePackageJsonContext.Default.HonuaScenePackageManifest,
+            ct).ConfigureAwait(false);
         return manifestPath;
     }
 

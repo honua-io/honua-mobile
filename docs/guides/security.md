@@ -107,6 +107,30 @@ public class SecureApiKeyManager
 }
 ```
 
+### Mobile Auth Token Provider
+
+For SDK code, prefer `IAuthTokenProvider` over passing static secrets through `HonuaMobileClientOptions`. The provider supports API-key and bearer-token modes, refreshes bearer tokens through a mockable `HttpClient`, and maps storage or refresh failures to `HonuaMobileAuthException` so raw platform exceptions are not exposed to consumers.
+
+```csharp
+using Honua.Mobile.Maui;
+using Honua.Mobile.Maui.Auth;
+using Honua.Mobile.Sdk.Auth;
+
+builder.Services
+    .AddHonuaMobileAuth(
+        new MauiSecureAuthTokenStore(new PlatformMauiSecureStorage()),
+        new RefreshingAuthTokenProviderOptions
+        {
+            RefreshEndpoint = new Uri("https://api.example.com/auth/refresh"),
+        })
+    .AddHonuaMobileSdk(new HonuaMobileClientOptions
+    {
+        BaseUri = new Uri("https://api.example.com"),
+    });
+```
+
+`PlatformMauiSecureStorage` uses MAUI Essentials secure storage on platform targets: iOS Keychain on Apple platforms and encrypted Android storage backed by the Android Keystore provider. For unit tests, use `InMemoryAuthTokenStore` and a stub `HttpMessageHandler` to exercise refresh logic without a live server.
+
 ### Certificate Pinning
 
 Implement certificate pinning for production:

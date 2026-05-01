@@ -65,6 +65,20 @@ jobs:
 
           echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
 
+      - name: Verify signed release tag
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          git verify-tag "${GITHUB_REF_NAME}"
+
+      - name: Block manual publishing outside signed releases
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        shell: bash
+        run: |
+          echo "::error::Mobile .NET packages publish only from signed mobile-dotnet-v* release tags. Use dry_run=true for manual validation."
+          exit 1
+
       - name: Build mobile packages
         shell: bash
         run: |
@@ -250,7 +264,7 @@ jobs:
   publish:
     name: Publish to GitHub Packages
     needs: package-smoke
-    if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

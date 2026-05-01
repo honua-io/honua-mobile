@@ -168,6 +168,55 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeatureAsync_WithPointGeometry_CreatesRTreeIndexAndSupportsBboxQuery()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":1,"name":"Inside"},"geometry":{"x":-157.8,"y":21.3}}""");
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":2,"name":"Outside"},"geometry":{"x":-158.2,"y":21.9}}""");
+
+        var hits = await store.GetFeaturesAsync("parks", new BoundingBox(-157.9, 21.2, -157.7, 21.4));
+        var indexedRows = await CountRowsAsync("rtree_honua_features");
+
+        Assert.Single(hits);
+        Assert.Contains("Inside", hits[0], StringComparison.Ordinal);
+        Assert.Equal(2, indexedRows);
+    }
+
+    [Fact]
+    public async Task EvictExpiredFeaturesAsync_RemovesExpiredLayerCacheEntries()
+    {
+        var timeProvider = new MutableTimeProvider(DateTimeOffset.Parse("2026-05-01T00:00:00Z", CultureInfo.InvariantCulture));
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = _databasePath,
+            TimeProvider = timeProvider,
+            LayerFeatureCacheTtls = new Dictionary<string, TimeSpan>
+            {
+                ["parks"] = TimeSpan.FromMinutes(5),
+            },
+        });
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":1},"geometry":{"x":-157.8,"y":21.3}}""");
+        Assert.Single(await store.GetFeaturesAsync("parks"));
+
+        timeProvider.Advance(TimeSpan.FromMinutes(6));
+        var evicted = await store.EvictExpiredFeaturesAsync();
+
+        Assert.Equal(1, evicted);
+        Assert.Empty(await store.GetFeaturesAsync("parks"));
+        Assert.Equal(0, await CountRowsAsync("rtree_honua_features"));
+    }
+
+    [Fact]
     public async Task InitializeAsync_HandlesDatabasePathsWithConnectionStringCharacters()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"honua-mobile-{Guid.NewGuid():N};Mode=Memory.gpkg");
@@ -232,5 +281,35 @@ WHERE operation_id = $operation_id;
         command.Parameters.AddWithValue("$operation_id", operationId);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<long> CountRowsAsync(string tableName)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+        }.ToString());
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {tableName};";
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private sealed class MutableTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now;
+
+        public MutableTimeProvider(DateTimeOffset now)
+        {
+            _now = now;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan duration)
+        {
+            _now = _now.Add(duration);
+        }
     }
 }

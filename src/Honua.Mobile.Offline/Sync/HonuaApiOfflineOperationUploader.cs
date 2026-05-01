@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using Honua.Mobile.Offline;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Models;
@@ -14,11 +15,6 @@ namespace Honua.Mobile.Offline.Sync;
 /// </summary>
 public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
     private readonly HonuaMobileClient _client;
 
     /// <summary>
@@ -39,7 +35,7 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         OfflineOperationPayload payload;
         try
         {
-            payload = JsonSerializer.Deserialize<OfflineOperationPayload>(operation.PayloadJson, JsonOptions)
+            payload = HonuaMobileOfflineJson.Deserialize<OfflineOperationPayload>(operation.PayloadJson)
                       ?? throw new InvalidOperationException("Payload cannot be null.");
         }
         catch (Exception ex)

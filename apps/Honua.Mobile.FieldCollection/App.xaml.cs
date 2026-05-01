@@ -5,24 +5,19 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
-        MainPage = new AppShell();
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = base.CreateWindow(activationState);
-
-        if (window != null)
+        var window = new Window(new AppShell())
         {
-            // Configure window properties
-            window.Title = "Honua Field Collection";
+            Title = "Honua Field Collection"
+        };
 
-            // Set minimum window size for desktop platforms
 #if WINDOWS || MACCATALYST
-            window.MinimumHeight = 600;
-            window.MinimumWidth = 800;
+        window.MinimumHeight = 600;
+        window.MinimumWidth = 800;
 #endif
-        }
 
         return window;
     }

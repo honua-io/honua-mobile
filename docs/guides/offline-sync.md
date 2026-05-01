@@ -79,6 +79,31 @@ builder.Services
 
 The adapter partitions cached features and queued edits by SDK package ID and source ID, so multiple offline packages can safely include the same source without overwriting feature rows or claiming each other's pending edits.
 
+## Cache Policy And Spatial Indexing
+
+`GeoPackageSyncStoreOptions` supports per-layer TTL policy for replicated feature caches:
+
+```csharp
+new GeoPackageSyncStoreOptions
+{
+    DatabasePath = "fielddata.gpkg",
+    DefaultFeatureCacheTtl = TimeSpan.FromDays(7),
+    LayerFeatureCacheTtls = new Dictionary<string, TimeSpan>
+    {
+        ["inspection-districts"] = TimeSpan.FromDays(30),
+        ["weather-alerts"] = TimeSpan.FromHours(6),
+    },
+};
+```
+
+`EvictExpiredFeaturesAsync` removes expired feature rows and their R-tree index records. Point and envelope geometries are indexed on insert in `rtree_honua_features`, and bbox queries use that finite spatial index before returning cached feature JSON. The GeoPackage SRS table keeps the OGC GeoPackage 1.3 built-in records, including EPSG:4326 as the default WGS-84 SRS for Honua-managed cache tables.
+
+SpatiaLite is not bundled for the baseline mobile cache path. Current feature-cache lookups only require SQLite R-tree envelope filtering, so SQLite-PCL-raw plus the platform SQLite provider is sufficient. If future work needs exact topology, CRS transforms, or SpatiaLite SQL functions on-device, add platform native binaries for iOS and Android in a separate packaging PR and gate them with AOT/trim smoke tests.
+
+## Lifecycle-Aware Prefetch
+
+`BackgroundPrefetchScheduler` runs optional cache-warming work with bounded concurrency. Call `CancelForLifecycleEventAsync(PrefetchLifecycleEvent.Suspend)` from app suspend handlers and `PrefetchLifecycleEvent.LowMemory` from platform memory-pressure hooks so downloads and cache fills observe cancellation before the OS reclaims resources.
+
 ## Configuration
 
 ### Basic Setup

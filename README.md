@@ -4,6 +4,10 @@
 offline-first field data collection with GeoPackage storage, gRPC transport,
 dynamic forms, and background sync.
 
+Current mobile SDK roadmap coordination is tracked from
+[honua-server#811](https://github.com/honua-io/honua-server/issues/811) and the
+[mobile SDK roadmap](https://github.com/honua-io/honua-server/blob/trunk/docs/developer/mobile-sdk-roadmap.md).
+
 ## Packages
 
 | Package | Purpose |
@@ -24,6 +28,7 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 
 builder.Services
+    .AddHonuaMobileAuth()
     .AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
         BaseUri = new Uri("https://your-honua-server.com"),
@@ -59,6 +64,7 @@ GeoPackage-backed offline storage with queue-based sync:
 - **Background sync** -- connectivity-aware with periodic timer and semaphore gating
 - **Map area download** -- offline basemap packages with path traversal protection
 - **Delta sync** -- replica-based incremental downloads with cursor persistence
+- **Cache governance** -- per-layer TTL eviction and R-tree-backed bbox lookups for replicated features
 
 ## Field Collection
 

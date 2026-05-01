@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Honua.Mobile.Sdk.Auth;
 
 namespace Honua.Mobile.Sdk;
 
@@ -46,6 +47,12 @@ public sealed class HonuaMobileClientOptions
     /// Async callback that resolves a fresh bearer token on each request. Takes precedence over <see cref="BearerToken"/>.
     /// </summary>
     public Func<CancellationToken, ValueTask<string?>>? AccessTokenProvider { get; init; }
+
+    /// <summary>
+    /// Optional first-class auth token provider. When set, the provider can supply API-key or bearer-token credentials
+    /// and can refresh bearer tokens before requests.
+    /// </summary>
+    public IAuthTokenProvider? AuthTokenProvider { get; init; }
 
     /// <summary>
     /// When <see langword="true"/>, authentication credentials are allowed over plain HTTP.

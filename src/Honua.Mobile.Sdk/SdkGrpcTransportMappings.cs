@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Models;
@@ -53,7 +54,7 @@ internal static class SdkGrpcTransportMappings
             ["extent"] = ToExtent(response.Extent),
         };
 
-        return JsonSerializer.SerializeToDocument(payload);
+        return SerializePayload(payload);
     }
 
     public static JsonDocument ToJsonDocument(GrpcModels.FeaturePage page)
@@ -68,7 +69,7 @@ internal static class SdkGrpcTransportMappings
             ["isLastPage"] = page.IsLastPage,
         };
 
-        return JsonSerializer.SerializeToDocument(payload);
+        return SerializePayload(payload);
     }
 
     public static JsonDocument ToJsonDocument(GrpcModels.ApplyEditsResponse response)
@@ -81,7 +82,7 @@ internal static class SdkGrpcTransportMappings
             ["error"] = response.Error is null ? null : ToEditError(response.Error),
         };
 
-        return JsonSerializer.SerializeToDocument(payload);
+        return SerializePayload(payload);
     }
 
     private static IReadOnlyList<GrpcModels.Feature>? ToGrpcFeatures(
@@ -325,4 +326,76 @@ internal static class SdkGrpcTransportMappings
             ["code"] = source.Code,
             ["message"] = source.Message,
         };
+
+    private static JsonDocument SerializePayload(IReadOnlyDictionary<string, object?> payload)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteObject(writer, payload);
+        }
+
+        return JsonDocument.Parse(stream.ToArray());
+    }
+
+    private static void WriteObject(Utf8JsonWriter writer, IReadOnlyDictionary<string, object?> values)
+    {
+        writer.WriteStartObject();
+        foreach (var (name, value) in values)
+        {
+            writer.WritePropertyName(name);
+            WriteValue(writer, value);
+        }
+
+        writer.WriteEndObject();
+    }
+
+    private static void WriteValue(Utf8JsonWriter writer, object? value)
+    {
+        switch (value)
+        {
+            case null:
+                writer.WriteNullValue();
+                break;
+            case string stringValue:
+                writer.WriteStringValue(stringValue);
+                break;
+            case bool boolValue:
+                writer.WriteBooleanValue(boolValue);
+                break;
+            case int intValue:
+                writer.WriteNumberValue(intValue);
+                break;
+            case long longValue:
+                writer.WriteNumberValue(longValue);
+                break;
+            case float floatValue:
+                writer.WriteNumberValue(floatValue);
+                break;
+            case double doubleValue:
+                writer.WriteNumberValue(doubleValue);
+                break;
+            case decimal decimalValue:
+                writer.WriteNumberValue(decimalValue);
+                break;
+            case JsonElement element:
+                element.WriteTo(writer);
+                break;
+            case IReadOnlyDictionary<string, object?> objectDictionary:
+                WriteObject(writer, objectDictionary);
+                break;
+            case IEnumerable enumerable:
+                writer.WriteStartArray();
+                foreach (var item in enumerable)
+                {
+                    WriteValue(writer, item);
+                }
+
+                writer.WriteEndArray();
+                break;
+            default:
+                writer.WriteStringValue(value.ToString());
+                break;
+        }
+    }
 }

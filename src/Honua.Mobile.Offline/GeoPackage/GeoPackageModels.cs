@@ -21,6 +21,22 @@ public sealed class GeoPackageSyncStoreOptions
     /// Duration after which an in-progress operation claim is considered stale and can be reclaimed. Defaults to 5 minutes.
     /// </summary>
     public TimeSpan InProgressLeaseTimeout { get; init; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Default TTL for cached replicated features. When <see langword="null"/>, cached features do not expire by default.
+    /// </summary>
+    public TimeSpan? DefaultFeatureCacheTtl { get; init; }
+
+    /// <summary>
+    /// Per-layer TTL policy keyed by layer key. Values override <see cref="DefaultFeatureCacheTtl"/>.
+    /// </summary>
+    public IReadOnlyDictionary<string, TimeSpan> LayerFeatureCacheTtls { get; init; } =
+        new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Clock used for TTL calculation. Defaults to <see cref="TimeProvider.System"/>.
+    /// </summary>
+    public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 }
 
 /// <summary>
