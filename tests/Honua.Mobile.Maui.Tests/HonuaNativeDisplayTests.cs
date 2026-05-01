@@ -80,6 +80,44 @@ public sealed class HonuaNativeDisplayTests
         Assert.Contains("defined more than once", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(double.NaN, 21, -157, 22)]
+    [InlineData(-158, double.PositiveInfinity, -157, 22)]
+    [InlineData(-158, 21, double.NegativeInfinity, 22)]
+    [InlineData(-158, 21, -157, double.NaN)]
+    public async Task RefreshAsync_RejectsNonFiniteViewExtent(
+        double minX,
+        double minY,
+        double maxX,
+        double maxY)
+    {
+        var adapter = new RecordingNativeMapAdapter();
+        var featureClient = new RecordingFeatureQueryClient();
+        var controller = new HonuaNativeMapDisplayController(adapter, featureClient);
+        var layer = new HonuaNativeMapLayer
+        {
+            Id = "parks",
+            Source = CreateSource("parks"),
+        };
+        var view = new HonuaNativeMapViewState
+        {
+            Extent = new FeatureBoundingBox
+            {
+                MinX = minX,
+                MinY = minY,
+                MaxX = maxX,
+                MaxY = maxY,
+                Crs = HonuaNativeMapProjection.Wgs84,
+            },
+        };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            controller.RefreshAsync(new HonuaNativeMapScene { Layers = [layer] }, view));
+
+        Assert.Contains("finite", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(featureClient.Requests);
+    }
+
     [Fact]
     public void AddHonuaNativeDisplay_RegistersController()
     {

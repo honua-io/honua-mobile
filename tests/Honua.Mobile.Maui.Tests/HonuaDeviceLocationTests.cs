@@ -99,6 +99,34 @@ public sealed class HonuaDeviceLocationTests
         Assert.Empty(permissions.RequestedAccesses);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public async Task StartGeofencingAsync_RejectsNonFiniteRadius(double radiusMeters)
+    {
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService(),
+            new RecordingLocationProvider(),
+            geofenceMonitor: monitor);
+        var request = new HonuaGeofenceMonitoringRequest
+        {
+            Regions =
+            [
+                new HonuaGeofenceRegion
+                {
+                    Id = "job-site",
+                    Center = new HonuaMapCoordinate(21.3069, -157.8583),
+                    RadiusMeters = radiusMeters,
+                },
+            ],
+        };
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            await coordinator.StartGeofencingAsync(request));
+        Assert.Empty(monitor.Requests);
+    }
+
     [Fact]
     public void AddHonuaDeviceLocation_RegistersCoordinatorWithOptionalProviders()
     {

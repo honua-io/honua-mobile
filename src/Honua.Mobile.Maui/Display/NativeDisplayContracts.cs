@@ -121,6 +121,14 @@ public sealed record HonuaNativeMapViewState
         ArgumentNullException.ThrowIfNull(Extent);
         ArgumentException.ThrowIfNullOrWhiteSpace(DisplayCrs);
 
+        if (!double.IsFinite(Extent.MinX)
+            || !double.IsFinite(Extent.MinY)
+            || !double.IsFinite(Extent.MaxX)
+            || !double.IsFinite(Extent.MaxY))
+        {
+            throw new ArgumentException("View extent coordinates must be finite.", nameof(Extent));
+        }
+
         if (Extent.MaxX < Extent.MinX)
         {
             throw new ArgumentException("View extent MaxX must be greater than or equal to MinX.", nameof(Extent));

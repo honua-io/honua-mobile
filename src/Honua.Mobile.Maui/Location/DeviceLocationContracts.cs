@@ -162,9 +162,9 @@ public sealed record HonuaGeofenceRegion
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
 
-        if (RadiusMeters <= 0)
+        if (RadiusMeters <= 0 || double.IsNaN(RadiusMeters) || double.IsInfinity(RadiusMeters))
         {
-            throw new ArgumentOutOfRangeException(nameof(RadiusMeters), "Geofence radius must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(RadiusMeters), "Geofence radius must be finite and positive.");
         }
 
         if (!NotifyOnEntry && !NotifyOnExit && !NotifyOnDwell)
