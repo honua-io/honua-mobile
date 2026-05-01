@@ -4,6 +4,17 @@ import type {
   Event as CesiumEvent,
   ScreenSpaceEventHandler,
 } from 'cesium';
+import {
+  createHonuaEmbedExtensionHost,
+  type HonuaEmbedExtensionHost,
+} from './extensions';
+import {
+  HonuaScenePackageCacheError,
+  type HonuaScenePackageAssetResolverInput,
+  type HonuaScenePackageAssetKind,
+  type HonuaScenePackageCacheErrorCode,
+  resolveScenePackageAsset,
+} from './scene-package-cache';
 
 export interface HonuaSceneCoordinate {
   latitude: number;
@@ -19,6 +30,10 @@ export interface HonuaSceneOrientation {
 export interface HonuaSceneConfig {
   tilesetUrl: string | null;
   terrainUrl: string | null;
+  packageId: string | null;
+  tilesetAssetPath: string | null;
+  terrainAssetPath: string | null;
+  packageExpiresAtUtc: string | null;
   ionToken: string | null;
   cesiumBaseUrl: string | null;
   center: HonuaSceneCoordinate | null;
@@ -36,7 +51,8 @@ export interface HonuaSceneReadyDetail {
 
 export interface HonuaSceneLoadErrorDetail {
   config: HonuaSceneConfig;
-  source: 'webgl' | 'cesium' | 'terrain' | 'tileset';
+  source: 'webgl' | 'cesium' | 'terrain' | 'tileset' | 'package-cache';
+  code?: HonuaScenePackageCacheErrorCode;
   message: string;
   error?: unknown;
 }
@@ -136,9 +152,39 @@ sceneTemplate.innerHTML = `
     .status[data-hidden="true"] {
       display: none;
     }
+
+    .extension-controls {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      z-index: 1;
+      display: none;
+      gap: 6px;
+      flex-direction: column;
+    }
+
+    .extension-controls[data-honua-extension-active="true"] {
+      display: flex;
+    }
+
+    .extension-controls > button {
+      width: 36px;
+      height: 36px;
+      color: var(--honua-scene-foreground);
+      background: color-mix(in srgb, var(--honua-scene-background) 78%, transparent);
+      border: 1px solid var(--honua-scene-border);
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .extension-controls > button:hover {
+      border-color: var(--honua-scene-accent);
+    }
   </style>
   <section class="scene" role="application" aria-label="Embedded 3D scene">
     <div class="viewport" part="viewport"></div>
+    <div class="extension-controls" part="extension-controls" data-honua-extension-controls></div>
     <output class="status" part="status"></output>
   </section>
 `;
@@ -148,6 +194,10 @@ export class HonuaSceneElement extends HTMLElement {
     return [
       'tileset-url',
       'terrain-url',
+      'package-id',
+      'tileset-asset',
+      'terrain-asset',
+      'package-expires-at',
       'ion-token',
       'cesium-base-url',
       'center',
@@ -166,12 +216,19 @@ export class HonuaSceneElement extends HTMLElement {
   #tileset: Cesium3DTileset | null = null;
   #handler: ScreenSpaceEventHandler | null = null;
   #removeCameraListener: CesiumEvent.RemoveCallback | null = null;
+  #assetResolver: HonuaScenePackageAssetResolverInput | null = null;
+  readonly #extensionHost: HonuaEmbedExtensionHost<'scene'>;
   #loadVersion = 0;
 
   constructor() {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(sceneTemplate.content.cloneNode(true));
+    this.#extensionHost = createHonuaEmbedExtensionHost({
+      target: 'scene',
+      element: this,
+      getConfig: () => this.config,
+    });
   }
 
   get config(): HonuaSceneConfig {
@@ -186,18 +243,29 @@ export class HonuaSceneElement extends HTMLElement {
     return this.#tileset;
   }
 
+  get packageAssetResolver(): HonuaScenePackageAssetResolverInput | null {
+    return this.#assetResolver;
+  }
+
+  set packageAssetResolver(resolver: HonuaScenePackageAssetResolverInput | null) {
+    this.setPackageAssetResolver(resolver);
+  }
+
   connectedCallback(): void {
     this.#upgradeProperty('center');
+    this.#upgradeProperty('packageAssetResolver');
     this.#render();
+    this.#extensionHost.connect();
 
     const config = this.config;
-    if (config.autoload && (config.tilesetUrl || config.terrainUrl)) {
+    if (config.autoload && hasSceneData(config)) {
       void this.load();
     }
   }
 
   disconnectedCallback(): void {
     this.#loadVersion += 1;
+    this.#extensionHost.disconnect();
     this.#destroyCesium();
   }
 
@@ -212,6 +280,7 @@ export class HonuaSceneElement extends HTMLElement {
       composed: true,
       detail: this.config,
     }));
+    this.#extensionHost.configChanged();
 
     if (!this.isConnected) {
       return;
@@ -222,7 +291,20 @@ export class HonuaSceneElement extends HTMLElement {
       return;
     }
 
-    if (this.config.autoload && ['tileset-url', 'terrain-url', 'ion-token', 'cesium-base-url', 'autoload'].includes(name)) {
+    if (
+      this.config.autoload &&
+      [
+        'tileset-url',
+        'terrain-url',
+        'package-id',
+        'tileset-asset',
+        'terrain-asset',
+        'package-expires-at',
+        'ion-token',
+        'cesium-base-url',
+        'autoload',
+      ].includes(name)
+    ) {
       void this.load();
     }
   }
@@ -252,13 +334,31 @@ export class HonuaSceneElement extends HTMLElement {
     await this.load();
   }
 
+  setPackageAssetResolver(resolver: HonuaScenePackageAssetResolverInput | null): void {
+    this.#assetResolver = resolver;
+
+    if (this.isConnected && this.config.autoload && hasSceneData(this.config)) {
+      void this.load();
+    }
+  }
+
   async load(): Promise<void> {
     const version = ++this.#loadVersion;
     const config = this.config;
+    const dataUrls = await this.#resolveSceneDataUrls(config);
 
-    if (!config.tilesetUrl && !config.terrainUrl) {
+    if (version !== this.#loadVersion) {
+      return;
+    }
+
+    if (dataUrls === null) {
       this.#destroyCesium();
-      this.#setStatus('Set a 3D Tiles URL to load a scene.');
+      return;
+    }
+
+    if (!dataUrls.tilesetUrl && !dataUrls.terrainUrl) {
+      this.#destroyCesium();
+      this.#setStatus('Set a 3D Tiles URL or package asset to load a scene.');
       return;
     }
 
@@ -290,8 +390,8 @@ export class HonuaSceneElement extends HTMLElement {
     this.#appendCesiumStyles(config);
 
     try {
-      const terrainProvider = config.terrainUrl
-        ? await cesium.CesiumTerrainProvider.fromUrl(config.terrainUrl)
+      const terrainProvider = dataUrls.terrainUrl
+        ? await cesium.CesiumTerrainProvider.fromUrl(dataUrls.terrainUrl!)
         : undefined;
 
       if (version !== this.#loadVersion) {
@@ -313,8 +413,8 @@ export class HonuaSceneElement extends HTMLElement {
     }
 
     try {
-      if (config.tilesetUrl) {
-        this.#tileset = await cesium.Cesium3DTileset.fromUrl(config.tilesetUrl);
+      if (dataUrls.tilesetUrl) {
+        this.#tileset = await cesium.Cesium3DTileset.fromUrl(dataUrls.tilesetUrl);
 
         if (version !== this.#loadVersion || !this.#widget) {
           return;
@@ -342,6 +442,62 @@ export class HonuaSceneElement extends HTMLElement {
     } catch (error) {
       this.#emitLoadError('tileset', 'Unable to load the 3D Tiles dataset.', error);
     }
+  }
+
+  async #resolveSceneDataUrls(config: HonuaSceneConfig): Promise<{
+    tilesetUrl: string | null;
+    terrainUrl: string | null;
+  } | null> {
+    if (!config.packageId) {
+      return {
+        tilesetUrl: config.tilesetUrl,
+        terrainUrl: config.terrainUrl,
+      };
+    }
+
+    if (isExpired(config.packageExpiresAtUtc)) {
+      this.#emitLoadError(
+        'package-cache',
+        'The offline scene package has expired and must be refreshed before rendering.',
+        undefined,
+        'expired-package',
+      );
+      return null;
+    }
+
+    try {
+      return {
+        tilesetUrl: config.tilesetAssetPath
+          ? await this.#resolvePackageAssetUrl(config, config.tilesetAssetPath, 'tileset')
+          : config.tilesetUrl,
+        terrainUrl: config.terrainAssetPath
+          ? await this.#resolvePackageAssetUrl(config, config.terrainAssetPath, 'terrain')
+          : config.terrainUrl,
+      };
+    } catch (error) {
+      this.#emitPackageCacheError(error);
+      return null;
+    }
+  }
+
+  async #resolvePackageAssetUrl(
+    config: HonuaSceneConfig,
+    path: string,
+    kind: HonuaScenePackageAssetKind,
+  ): Promise<string> {
+    if (!this.#assetResolver) {
+      throw new HonuaScenePackageCacheError(
+        'unsupported-browser-storage',
+        'No scene package asset resolver is configured for this browser or WebView host.',
+      );
+    }
+
+    return await resolveScenePackageAsset(this.#assetResolver, {
+      packageId: config.packageId!,
+      path,
+      kind,
+      config,
+    });
   }
 
   #bindCesiumEvents(cesium: CesiumModule): void {
@@ -462,9 +618,9 @@ export class HonuaSceneElement extends HTMLElement {
       return;
     }
 
-    this.#setStatus(this.config.tilesetUrl || this.config.terrainUrl
+    this.#setStatus(hasSceneData(this.config)
       ? '3D scene ready to load.'
-      : 'Set a 3D Tiles URL to load a scene.');
+      : 'Set a 3D Tiles URL or package asset to load a scene.');
   }
 
   #destroyCesium(): void {
@@ -485,7 +641,26 @@ export class HonuaSceneElement extends HTMLElement {
     this.#widget = null;
   }
 
-  #emitLoadError(source: HonuaSceneLoadErrorDetail['source'], message: string, error?: unknown): void {
+  #emitPackageCacheError(error: unknown): void {
+    if (error instanceof HonuaScenePackageCacheError) {
+      this.#emitLoadError('package-cache', error.message, error, error.code);
+      return;
+    }
+
+    this.#emitLoadError(
+      'package-cache',
+      'Unable to resolve the offline scene package asset.',
+      error,
+      'cache-miss',
+    );
+  }
+
+  #emitLoadError(
+    source: HonuaSceneLoadErrorDetail['source'],
+    message: string,
+    error?: unknown,
+    code?: HonuaScenePackageCacheErrorCode,
+  ): void {
     this.#setStatus(message);
     this.dispatchEvent(new CustomEvent<HonuaSceneLoadErrorDetail>('honua-scene-load-error', {
       bubbles: true,
@@ -493,6 +668,7 @@ export class HonuaSceneElement extends HTMLElement {
       detail: {
         config: this.config,
         source,
+        code,
         message,
         error,
       },
@@ -540,6 +716,10 @@ function readSceneConfig(element: HTMLElement): HonuaSceneConfig {
   return {
     tilesetUrl: emptyToNull(element.getAttribute('tileset-url')),
     terrainUrl: emptyToNull(element.getAttribute('terrain-url')),
+    packageId: emptyToNull(element.getAttribute('package-id')),
+    tilesetAssetPath: emptyToNull(element.getAttribute('tileset-asset')),
+    terrainAssetPath: emptyToNull(element.getAttribute('terrain-asset')),
+    packageExpiresAtUtc: emptyToNull(element.getAttribute('package-expires-at')),
     ionToken: emptyToNull(element.getAttribute('ion-token')),
     cesiumBaseUrl: normalizeBaseUrl(element.getAttribute('cesium-base-url')),
     center: parseCoordinate(element.getAttribute('center')),
@@ -552,6 +732,23 @@ function readSceneConfig(element: HTMLElement): HonuaSceneConfig {
     theme: element.getAttribute('theme') === 'light' ? 'light' : 'dark',
     autoload: parseBooleanAttribute(element, 'autoload', true),
   };
+}
+
+function hasSceneData(config: HonuaSceneConfig): boolean {
+  return Boolean(
+    config.tilesetUrl ||
+    config.terrainUrl ||
+    (config.packageId && (config.tilesetAssetPath || config.terrainAssetPath)),
+  );
+}
+
+function isExpired(expiresAtUtc: string | null): boolean {
+  if (!expiresAtUtc) {
+    return false;
+  }
+
+  const expiresAt = Date.parse(expiresAtUtc);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
 function emptyToNull(value: string | null): string | null {
