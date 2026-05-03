@@ -1,7 +1,15 @@
 version: 2
+registries:
+  github-honua:
+    type: nuget-feed
+    url: https://nuget.pkg.github.com/honua-io/index.json
+    token: ${{secrets.HONUA_PACKAGES_TOKEN}}
+
 updates:
   - package-ecosystem: "nuget"
     directory: "/"
+    registries:
+      - github-honua
     schedule:
       interval: "weekly"
     groups:
