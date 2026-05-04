@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Networking;
+using Microsoft.Extensions.Logging;
 using System.Runtime.InteropServices;
 
 namespace Honua.Mobile.FieldCollection.Services.Diagnostics;
@@ -16,17 +17,20 @@ public class DiagnosticService
     private readonly ISyncService _syncService;
     private readonly IConnectivityService _connectivityService;
     private readonly IAuthenticationService _authService;
+    private readonly ILogger<DiagnosticService>? _logger;
 
     public DiagnosticService(
         DatabaseService databaseService,
         ISyncService syncService,
         IConnectivityService connectivityService,
-        IAuthenticationService authService)
+        IAuthenticationService authService,
+        ILogger<DiagnosticService>? logger = null)
     {
         _databaseService = databaseService;
         _syncService = syncService;
         _connectivityService = connectivityService;
         _authService = authService;
+        _logger = logger;
     }
 
     #region System Diagnostics
@@ -53,8 +57,9 @@ public class DiagnosticService
             diagnostics.MemoryUsageMB = memoryInfo.UsedMemoryMB;
             diagnostics.AvailableMemoryMB = memoryInfo.AvailableMemoryMB;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "Failed to collect memory diagnostics");
             diagnostics.MemoryUsageMB = 0;
             diagnostics.AvailableMemoryMB = 0;
         }
@@ -82,8 +87,9 @@ public class DiagnosticService
                 diagnostics.ServerReachable = await TestServerConnectivityAsync();
                 diagnostics.ServerResponseTimeMs = await MeasureServerResponseTimeAsync();
             }
-            catch
+            catch (Exception ex)
             {
+                _logger?.LogDebug(ex, "Failed to collect server connectivity diagnostics");
                 diagnostics.ServerReachable = false;
                 diagnostics.ServerResponseTimeMs = -1;
             }
@@ -115,8 +121,9 @@ public class DiagnosticService
                 ConflictType = c.Type.ToString()
             }).ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "Failed to collect sync conflict diagnostics");
             diagnostics.ConflictCount = 0;
             diagnostics.ConflictDetails = new List<ConflictSummary>();
         }
@@ -159,8 +166,9 @@ public class DiagnosticService
         {
             return await _databaseService.CompactDatabaseAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Database compaction failed");
             return false;
         }
     }
@@ -171,8 +179,9 @@ public class DiagnosticService
         {
             return await _databaseService.ResetDatabaseAsync();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Database reset failed");
             return false;
         }
     }
@@ -201,6 +210,7 @@ public class DiagnosticService
         try
         {
             var report = await GenerateDiagnosticReportAsync();
+            RedactSensitiveFields(report);
             var json = JsonSerializer.Serialize(report, new JsonSerializerOptions
             {
                 WriteIndented = true
@@ -215,7 +225,7 @@ public class DiagnosticService
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to export diagnostics: {ex.Message}");
+            throw new InvalidOperationException("Failed to export diagnostics.", ex);
         }
     }
 
@@ -223,14 +233,15 @@ public class DiagnosticService
 
     #region Helper Methods
 
-    private static string GetAppVersion()
+    private string GetAppVersion()
     {
         try
         {
             return AppInfo.Current.VersionString;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "Failed to get app version");
             return "Unknown";
         }
     }
@@ -253,24 +264,18 @@ public class DiagnosticService
             var profiles = Connectivity.Current.ConnectionProfiles;
             return profiles.Select(p => p.ToString()).ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "Failed to get connection profiles");
             return new List<string> { "Unknown" };
         }
     }
 
-    private async Task<bool> TestServerConnectivityAsync()
+    private Task<bool> TestServerConnectivityAsync()
     {
-        try
-        {
-            // In a real implementation, would ping the server
-            await Task.Delay(100);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return string.IsNullOrWhiteSpace(_authService.ServerUrl)
+            ? Task.FromResult(false)
+            : _authService.ValidateConnectionAsync(_authService.ServerUrl, _authService.ApiKey);
     }
 
     private async Task<int> MeasureServerResponseTimeAsync()
@@ -282,10 +287,30 @@ public class DiagnosticService
             stopwatch.Stop();
             return (int)stopwatch.ElapsedMilliseconds;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "Failed to measure server response time");
             return -1;
         }
+    }
+
+    private static void RedactSensitiveFields(DiagnosticReport report)
+    {
+        report.System.DeviceName = "Redacted";
+
+        if (report.System.DatabaseInfo != null)
+        {
+            report.System.DatabaseInfo.DatabasePath = RedactPath(report.System.DatabaseInfo.DatabasePath);
+        }
+
+        report.Database.DatabasePath = RedactPath(report.Database.DatabasePath);
+    }
+
+    private static string RedactPath(string path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : Path.GetFileName(path);
     }
 
     #endregion

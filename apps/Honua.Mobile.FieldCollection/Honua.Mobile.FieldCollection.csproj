@@ -29,6 +29,7 @@
         <ApplicationTitle>Honua Field Collection</ApplicationTitle>
         <ApplicationId>io.honua.mobile.fieldcollection</ApplicationId>
         <ApplicationIdGuid>1F57F04D-47F3-4F8B-A5E5-9C89F34E4B3E</ApplicationIdGuid>
+        <WindowsPackageType>None</WindowsPackageType>
 
     </PropertyGroup>
 
@@ -63,6 +64,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
         <PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />

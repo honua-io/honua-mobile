@@ -40,7 +40,7 @@ public partial class RecordsViewModel : BaseViewModel
 
         Title = "Records";
 
-        // Initialize with demo layers
+        // Initialize with default layers until server-provided metadata is available.
         InitializeLayers();
     }
 
@@ -50,7 +50,7 @@ public partial class RecordsViewModel : BaseViewModel
         {
             Id = 1,
             Name = "Points of Interest",
-            Description = "Sample point layer for demonstration",
+            Description = "Point feature layer",
             GeometryType = GeometryType.Point,
             IsVisible = true,
             IsEditable = true
@@ -211,12 +211,6 @@ public partial class RecordsViewModel : BaseViewModel
             return;
         }
 
-        await ExecuteAsync(async () =>
-        {
-            // In a real implementation, this would export to various formats
-            await Task.Delay(2000); // Simulate export process
-            await ShowMessage("Export Complete",
-                $"Exported {Records.Count} records from {SelectedLayer?.Name} layer.");
-        });
+        await ShowError("Export Unavailable", "Record export is not configured yet.");
     }
 }

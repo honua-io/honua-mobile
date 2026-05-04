@@ -31,7 +31,7 @@
 		<ApplicationTitle>Honua.Mobile.App</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.honua.mobile.app</ApplicationId>
+		<ApplicationId>io.honua.mobile.app</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>

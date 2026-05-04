@@ -3,11 +3,10 @@ using Honua.Mobile.FieldCollection.Models;
 using Microsoft.Maui.Devices.Sensors;
 using Microsoft.Maui.Networking;
 using Microsoft.Maui.Storage;
-using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 
 namespace Honua.Mobile.FieldCollection.Services;
 
-// Basic service interfaces with mock implementations for the reference app
+// Basic service interfaces for the reference app
 
 public interface ILocationService
 {
@@ -65,7 +64,7 @@ public interface IConnectivityService : INotifyPropertyChanged
     event EventHandler<bool> ConnectivityChanged;
 }
 
-// Mock implementations
+// Platform-backed/default implementations
 public class LocationService : ILocationService
 {
     public bool IsLocationEnabled => true;
@@ -79,8 +78,7 @@ public class LocationService : ILocationService
         }
         catch
         {
-            // Return demo location for testing
-            return new Location(37.7749, -122.4194); // San Francisco
+            return null;
         }
     }
 
@@ -93,7 +91,7 @@ public class LocationService : ILocationService
         }
         catch
         {
-            return new Location(37.7749, -122.4194);
+            return null;
         }
     }
 
@@ -142,112 +140,51 @@ public class StorageService : IStorageService
 
 public class FeatureService : IFeatureService
 {
-    public async Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null)
+    public Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null)
     {
-        await Task.Delay(500); // Simulate network call
-
-        // Return demo features
-        return new[]
-        {
-            new Feature
-            {
-                Id = "1",
-                LayerId = layerId,
-                Geometry = new FieldPoint(37.7749, -122.4194),
-                CreatedAt = DateTime.UtcNow.AddDays(-1),
-                ModifiedAt = DateTime.UtcNow.AddDays(-1),
-                Attributes = new Dictionary<string, object>
-                {
-                    { "name", "Sample Point 1" },
-                    { "description", "This is a demo feature" },
-                    { "created_at", DateTime.UtcNow.AddDays(-1) }
-                }
-            },
-            new Feature
-            {
-                Id = "2",
-                LayerId = layerId,
-                Geometry = new FieldPoint(37.7849, -122.4094),
-                CreatedAt = DateTime.UtcNow.AddHours(-2),
-                ModifiedAt = DateTime.UtcNow.AddHours(-2),
-                Attributes = new Dictionary<string, object>
-                {
-                    { "name", "Sample Point 2" },
-                    { "description", "Another demo feature" },
-                    { "created_at", DateTime.UtcNow.AddHours(-2) }
-                }
-            }
-        };
+        return Task.FromResult<IEnumerable<Feature>>(Array.Empty<Feature>());
     }
 
-    public async Task<Feature?> GetFeatureAsync(int layerId, string featureId)
+    public Task<Feature?> GetFeatureAsync(int layerId, string featureId)
     {
-        await Task.Delay(200);
-        var features = await GetFeaturesAsync(layerId);
-        return features.FirstOrDefault(f => f.Id == featureId);
+        return Task.FromResult<Feature?>(null);
     }
 
-    public async Task<Feature> CreateFeatureAsync(int layerId, Feature feature)
+    public Task<Feature> CreateFeatureAsync(int layerId, Feature feature)
     {
-        await Task.Delay(300);
-        feature.Id = Guid.NewGuid().ToString();
-        feature.LayerId = layerId;
-        feature.CreatedAt = DateTime.UtcNow;
-        feature.ModifiedAt = DateTime.UtcNow;
-        return feature;
+        throw new InvalidOperationException("Feature storage is not configured.");
     }
 
-    public async Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
+    public Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
     {
-        await Task.Delay(300);
-        feature.LayerId = layerId;
-        feature.ModifiedAt = DateTime.UtcNow;
-        feature.UpdatedAt = feature.ModifiedAt;
-        feature.Version++;
-        return feature;
+        throw new InvalidOperationException("Feature storage is not configured.");
     }
 
-    public async Task DeleteFeatureAsync(int layerId, string featureId)
+    public Task DeleteFeatureAsync(int layerId, string featureId)
     {
-        await Task.Delay(200);
+        throw new InvalidOperationException("Feature storage is not configured.");
     }
 }
 
 public class FormService : IFormService
 {
-    public async Task<FormDefinition?> GetFormDefinitionAsync(int layerId)
+    public Task<FormDefinition?> GetFormDefinitionAsync(int layerId)
     {
-        await Task.Delay(100);
-
-        return new FormDefinition
-        {
-            LayerId = layerId,
-            Name = "Sample Form",
-            Fields = new[]
-            {
-                new FieldDefinition { Name = "name", Type = "text", Label = "Name", Required = true },
-                new FieldDefinition { Name = "description", Type = "textarea", Label = "Description", Required = false },
-                new FieldDefinition { Name = "category", Type = "select", Label = "Category", Options = new[] { "Type A", "Type B", "Type C" } },
-                new FieldDefinition { Name = "priority", Type = "number", Label = "Priority", Min = 1, Max = 10 }
-            }
-        };
+        return Task.FromResult<FormDefinition?>(null);
     }
 
-    public async Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)
+    public Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)
     {
-        await Task.Delay(50);
-
-        // Basic validation
         foreach (var field in definition.Fields.Where(f => f.Required))
         {
             if (!formData.Values.TryGetValue(field.Name, out var value) ||
                 value == null || string.IsNullOrWhiteSpace(value.ToString()))
             {
-                return false;
+                return Task.FromResult(false);
             }
         }
 
-        return true;
+        return Task.FromResult(true);
     }
 
     public async Task<FormData> CreateEmptyFormAsync(int layerId)
@@ -264,27 +201,24 @@ public class FormService : IFormService
 
 public class AttachmentService : IAttachmentService
 {
-    public async Task<string> SaveAttachmentAsync(Stream fileStream, string fileName, string contentType)
+    public Task<string> SaveAttachmentAsync(Stream fileStream, string fileName, string contentType)
     {
-        await Task.Delay(500); // Simulate upload
-        return Guid.NewGuid().ToString();
+        throw new InvalidOperationException("Attachment storage is not configured.");
     }
 
-    public async Task<Stream> GetAttachmentAsync(string attachmentId)
+    public Task<Stream> GetAttachmentAsync(string attachmentId)
     {
-        await Task.Delay(200);
-        return new MemoryStream();
+        throw new InvalidOperationException("Attachment storage is not configured.");
     }
 
-    public async Task DeleteAttachmentAsync(string attachmentId)
+    public Task DeleteAttachmentAsync(string attachmentId)
     {
-        await Task.Delay(100);
+        throw new InvalidOperationException("Attachment storage is not configured.");
     }
 
-    public async Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(string featureId)
+    public Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(string featureId)
     {
-        await Task.Delay(100);
-        return Array.Empty<AttachmentInfo>();
+        return Task.FromResult<IEnumerable<AttachmentInfo>>(Array.Empty<AttachmentInfo>());
     }
 }
 

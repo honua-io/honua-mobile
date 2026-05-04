@@ -5,6 +5,7 @@ using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
+using StorageConflictResolution = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictResolution;
 using StorageSpatialRelationship = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialRelationship;
 using StorageSyncStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncStatus;
 using NtsEnvelope = NetTopologySuite.Geometries.Envelope;
@@ -23,6 +24,7 @@ public class GeoPackageStorageService : IDisposable
     private readonly WKBReader _wkbReader;
     private readonly string _databasePath;
     private readonly SemaphoreSlim _dbLock = new(1, 1);
+    private readonly Lazy<Task> _initializationTask;
 
     public GeoPackageStorageService(string databasePath)
     {
@@ -30,27 +32,23 @@ public class GeoPackageStorageService : IDisposable
         _connection = new SQLiteAsyncConnection(databasePath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
         _wkbWriter = new WKBWriter();
         _wkbReader = new WKBReader();
-
-        InitializeDatabase().Wait();
+        _initializationTask = new Lazy<Task>(InitializeDatabase);
     }
 
     public async Task<bool> InitializeAsync()
     {
-        await _dbLock.WaitAsync();
         try
         {
-            await InitializeDatabase();
+            await EnsureInitializedAsync();
             return true;
         }
         catch (Exception)
         {
             return false;
         }
-        finally
-        {
-            _dbLock.Release();
-        }
     }
+
+    private Task EnsureInitializedAsync() => _initializationTask.Value;
 
     private async Task InitializeDatabase()
     {
@@ -218,6 +216,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<string> StoreFeatureAsync(Feature feature)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -231,6 +230,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<Feature?> GetFeatureAsync(string featureId, int layerId)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -247,6 +247,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<List<Feature>> QueryFeaturesAsync(int layerId, SpatialQuery? spatialQuery = null)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -276,6 +277,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<bool> UpdateFeatureAsync(Feature feature)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -296,6 +298,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<bool> DeleteFeatureAsync(string featureId, int layerId)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -318,6 +321,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<string> ApplyRemoteFeatureAsync(Feature feature)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -331,6 +335,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<bool> ApplyRemoteDeleteAsync(string featureId, int layerId)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -415,6 +420,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<List<ChangeRecord>> GetPendingChangesAsync(int? layerId = null)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -436,6 +442,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task MarkChangesAsSynced(List<string> changeIds)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -445,6 +452,81 @@ public class GeoPackageStorageService : IDisposable
                     "UPDATE change_records SET sync_status = ? WHERE id = ?",
                     StorageSyncStatus.Synced, changeId);
             }
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    #endregion
+
+    #region Conflict Tracking
+
+    public async Task StoreConflictAsync(ConflictRecord conflict)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(conflict);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<List<ConflictRecord>> GetUnresolvedConflictsAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.QueryAsync<ConflictRecord>(
+                "SELECT * FROM conflict_records WHERE resolved_at IS NULL ORDER BY created_at");
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<ConflictRecord?> GetConflictAsync(string conflictId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.Table<ConflictRecord>()
+                .Where(conflict => conflict.Id == conflictId)
+                .FirstOrDefaultAsync();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkConflictResolvedAsync(
+        string conflictId,
+        StorageConflictResolution resolution,
+        string? resolvedData)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE conflict_records
+                SET resolution = ?, resolved_data = ?, resolved_at = ?
+                WHERE id = ?
+                """,
+                resolution,
+                resolvedData,
+                DateTime.UtcNow,
+                conflictId);
         }
         finally
         {
@@ -489,6 +571,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<bool> CreateLayerAsync(LayerInfo layer)
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -529,6 +612,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<List<LayerInfo>> GetLayersAsync()
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -658,6 +742,7 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task<StorageStatistics> GetStorageStatisticsAsync()
     {
+        await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
@@ -675,6 +760,20 @@ public class GeoPackageStorageService : IDisposable
                 DatabaseSizeMb = databaseSizeMb,
                 LastCompaction = DateTime.UtcNow // TODO: Track actual compaction time
             };
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task CompactAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync("VACUUM");
         }
         finally
         {

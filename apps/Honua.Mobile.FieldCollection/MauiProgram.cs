@@ -1,4 +1,5 @@
 using CommunityToolkit.Maui;
+using System.Net.Http;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
@@ -57,33 +58,57 @@ public static class MauiProgram
             var databaseService = provider.GetRequiredService<DatabaseService>();
             var authService = provider.GetRequiredService<IAuthenticationService>();
             var connectivityService = provider.GetRequiredService<IConnectivityService>();
-            return databaseService.GetSyncServiceAsync(authService, connectivityService).Result;
+            var logger = provider.GetRequiredService<ILogger<GeoPackageSyncService>>();
+            return databaseService.GetSyncService(authService, connectivityService, logger: logger);
         });
 
-        // Core services (keeping mock implementations for navigation, location, auth)
+        // Core services
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ILocationService, LocationService>();
-        services.AddSingleton<IAuthenticationService, AuthenticationService>();
+        services.AddHttpClient("HonuaFieldAuthentication");
+        services.AddSingleton<IAuthenticationService>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var logger = provider.GetService<ILogger<AuthenticationService>>();
+            return new AuthenticationService(
+                httpClientFactory.CreateClient("HonuaFieldAuthentication"),
+                logger);
+        });
 
         // Feature services - real GeoPackage implementation
         services.AddSingleton<IFeatureService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
             var syncService = provider.GetRequiredService<ISyncService>();
-            var storageService = databaseService.GetStorageServiceAsync().Result;
-            return new GeoPackageFeatureService(storageService, syncService);
+            var storageService = databaseService.GetStorageService();
+            var logger = provider.GetRequiredService<ILogger<GeoPackageFeatureService>>();
+            return new GeoPackageFeatureService(storageService, syncService, logger);
         });
 
-        // Other feature services (keeping mock implementations for now)
+        // Other feature services
         services.AddSingleton<IFormService, FormService>();
         services.AddSingleton<IAttachmentService, AttachmentService>();
 
-        // Configuration services (keeping mock implementations)
+        // Configuration services
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConnectivityService, ConnectivityService>();
 
         // Diagnostic service for database management and system monitoring
         services.AddSingleton<DiagnosticService>();
+        services.AddSingleton(_ => MobileExceptionReportingOptions.FromPreferences());
+        services.AddHttpClient("HonuaMobileExceptionReporter");
+        services.AddSingleton<IMobileExceptionReporter>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var authService = provider.GetRequiredService<IAuthenticationService>();
+            var options = provider.GetRequiredService<MobileExceptionReportingOptions>();
+            var logger = provider.GetService<ILogger<MobileExceptionReporter>>();
+            return new MobileExceptionReporter(
+                httpClientFactory.CreateClient("HonuaMobileExceptionReporter"),
+                authService,
+                options,
+                logger);
+        });
 
         // Platform-specific services will be registered by platform startup
     }

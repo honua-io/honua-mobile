@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Microsoft.Extensions.Logging;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
 using StorageBoundingBox = Honua.Mobile.FieldCollection.Services.Storage.Models.BoundingBox;
 using StorageSpatialQuery = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialQuery;
@@ -22,13 +23,16 @@ public class GeoPackageFeatureService : IFeatureService
 
     private readonly GeoPackageStorageService _storage;
     private readonly ISyncService _syncService;
+    private readonly ILogger<GeoPackageFeatureService>? _logger;
 
     public GeoPackageFeatureService(
         GeoPackageStorageService storage,
-        ISyncService syncService)
+        ISyncService syncService,
+        ILogger<GeoPackageFeatureService>? logger = null)
     {
         _storage = storage;
         _syncService = syncService;
+        _logger = logger;
     }
 
     #region Feature Retrieval
@@ -47,9 +51,9 @@ public class GeoPackageFeatureService : IFeatureService
 
             return await _storage.QueryFeaturesAsync(layerId);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Return empty list on error rather than throwing
+            _logger?.LogWarning(ex, "Failed to load features for layer {LayerId}", layerId);
             return new List<Feature>();
         }
     }
@@ -60,8 +64,9 @@ public class GeoPackageFeatureService : IFeatureService
         {
             return await _storage.GetFeatureAsync(featureId, layerId);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Failed to load feature {FeatureId} from layer {LayerId}", featureId, layerId);
             return null;
         }
     }
@@ -107,6 +112,7 @@ public class GeoPackageFeatureService : IFeatureService
         }
         catch (Exception ex) when (ex is not NotSupportedException and not ArgumentException)
         {
+            _logger?.LogWarning(ex, "Failed to query features for layer {LayerId}", layerId);
             return new List<Feature>();
         }
     }
@@ -136,9 +142,9 @@ public class GeoPackageFeatureService : IFeatureService
             await _storage.StoreFeatureAsync(feature);
             return feature;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to create feature: {feature.Id}");
+            throw new InvalidOperationException($"Failed to create feature: {feature.Id}", ex);
         }
     }
 
@@ -161,8 +167,9 @@ public class GeoPackageFeatureService : IFeatureService
 
             return feature;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "Failed to update feature {FeatureId} in layer {LayerId}", feature.Id, layerId);
             throw;
         }
     }
@@ -173,8 +180,9 @@ public class GeoPackageFeatureService : IFeatureService
         {
             await _storage.DeleteFeatureAsync(featureId, layerId);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "Failed to delete feature {FeatureId} from layer {LayerId}", featureId, layerId);
             throw;
         }
     }
@@ -298,8 +306,9 @@ public class GeoPackageFeatureService : IFeatureService
                 SizeEstimateMB = EstimateLayerSize(features)
             };
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Failed to load feature statistics for layer {LayerId}", layerId);
             return new FeatureStatistics { LayerId = layerId };
         }
     }
@@ -310,8 +319,9 @@ public class GeoPackageFeatureService : IFeatureService
         {
             return await _storage.GetLayersAsync();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Failed to load layer metadata");
             return new List<LayerInfo>();
         }
     }

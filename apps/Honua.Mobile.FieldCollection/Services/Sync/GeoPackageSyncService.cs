@@ -3,10 +3,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
+using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
+using StorageConflictResolution = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictResolution;
+using StorageConflictType = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictType;
 using StorageSyncSession = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSession;
 using StorageSyncSessionStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSessionStatus;
+using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
+using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection.Services.Sync;
 
@@ -19,15 +25,29 @@ public interface IFieldCollectionChangeUploader
 }
 
 /// <summary>
+/// Downloads remote field collection changes and server sync state.
+/// </summary>
+public interface IFieldCollectionChangePuller
+{
+    Task<IReadOnlyList<ServerChange>> GetChangesAsync(long sinceGeneration, CancellationToken cancellationToken = default);
+    Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default);
+    Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Real implementation of sync service with GeoPackage-based delta sync
 /// Implements last-write-wins conflict resolution with manual merge support
 /// </summary>
 public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDisposable
 {
+    private static readonly JsonSerializerOptions ConflictJsonOptions = CreateConflictJsonOptions();
+
     private readonly GeoPackageStorageService _storage;
     private readonly IAuthenticationService _authService;
     private readonly IConnectivityService _connectivityService;
     private readonly IFieldCollectionChangeUploader _changeUploader;
+    private readonly IFieldCollectionChangePuller _changePuller;
+    private readonly ILogger<GeoPackageSyncService>? _logger;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private readonly CancellationTokenSource _pendingChangesCancellation = new();
     private readonly Task _pendingChangesTask;
@@ -56,12 +76,16 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         GeoPackageStorageService storage,
         IAuthenticationService authService,
         IConnectivityService connectivityService,
-        IFieldCollectionChangeUploader? changeUploader = null)
+        IFieldCollectionChangeUploader? changeUploader = null,
+        IFieldCollectionChangePuller? changePuller = null,
+        ILogger<GeoPackageSyncService>? logger = null)
     {
         _storage = storage;
         _authService = authService;
         _connectivityService = connectivityService;
         _changeUploader = changeUploader ?? new UnconfiguredFieldCollectionChangeUploader();
+        _changePuller = changePuller ?? new UnconfiguredFieldCollectionChangePuller();
+        _logger = logger;
 
         // Update pending changes count periodically
         _pendingChangesTask = Task.Run(() => UpdatePendingChangesAsync(_pendingChangesCancellation.Token));
@@ -86,7 +110,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error updating pending changes count: {ex.Message}");
+                _logger?.LogWarning(ex, "Failed to update pending field collection change count");
             }
 
             try
@@ -125,10 +149,11 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             SyncProgress = 0;
             SyncMessage = "Starting sync session...";
 
-            var session = await CreateSyncSessionAsync(sessionId);
-
+            StorageSyncSession? session = null;
             try
             {
+                session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: true);
+
                 // Phase 1: Pull changes from server
                 Status = SyncStatus.PullingChanges;
                 SyncMessage = "Downloading changes from server...";
@@ -170,7 +195,11 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             catch (OperationCanceledException)
             {
                 Status = SyncStatus.Cancelled;
-                await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Cancelled);
+                if (session != null)
+                {
+                    await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Cancelled);
+                }
+
                 return new SyncResult
                 {
                     IsSuccess = false,
@@ -181,8 +210,13 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "Field collection sync failed");
                 Status = SyncStatus.Error;
-                await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Failed, ex.Message);
+                if (session != null)
+                {
+                    await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Failed, ex.Message);
+                }
+
                 return new SyncResult
                 {
                     IsSuccess = false,
@@ -224,7 +258,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         {
             _syncCancellation = new CancellationTokenSource();
             var sessionId = Guid.NewGuid().ToString();
-            var session = await CreateSyncSessionAsync(sessionId);
+            var session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: true);
 
             IsSyncing = true;
             Status = SyncStatus.PullingChanges;
@@ -243,6 +277,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "Field collection pull failed");
             return new SyncResult
             {
                 IsSuccess = false,
@@ -263,24 +298,21 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     {
         try
         {
-            // In a real implementation, this would:
-            // 1. Get last sync generation from local storage
-            // 2. Call server gRPC API to get changes since that generation
-            // 3. Apply changes to local storage
-            // 4. Handle conflicts by creating conflict records
-
-            // Mock implementation for now - would integrate with actual gRPC client
-            var changesSinceLastSync = await GetServerChangesAsync(session.LocalGeneration);
+            var changesSinceLastSync = await _changePuller.GetChangesAsync(
+                session.LocalGeneration,
+                cancellationToken);
 
             foreach (var serverChange in changesSinceLastSync)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await ApplyServerChangeAsync(serverChange, session);
-                session.ChangesPulled++;
+                if (await ApplyServerChangeAsync(serverChange, session))
+                {
+                    session.ChangesPulled++;
+                }
             }
 
-            session.ServerGeneration = await GetLatestServerGenerationAsync();
+            session.ServerGeneration = await _changePuller.GetLatestServerGenerationAsync(cancellationToken);
             return true;
         }
         catch (OperationCanceledException)
@@ -324,7 +356,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
             _syncCancellation = new CancellationTokenSource();
             var sessionId = Guid.NewGuid().ToString();
-            var session = await CreateSyncSessionAsync(sessionId);
+            var session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: false);
 
             IsSyncing = true;
             Status = SyncStatus.PushingChanges;
@@ -341,6 +373,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "Field collection push failed");
             return new SyncResult
             {
                 IsSuccess = false,
@@ -363,6 +396,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         {
             var pendingChanges = await _storage.GetPendingChangesAsync();
             var successfulChanges = new List<string>();
+            var failedChanges = new List<string>();
 
             foreach (var change in pendingChanges)
             {
@@ -375,12 +409,22 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                     successfulChanges.Add(change.Id);
                     session.ChangesPushed++;
                 }
+                else
+                {
+                    failedChanges.Add(change.Id);
+                }
             }
 
             // Mark successful changes as synced
             if (successfulChanges.Any())
             {
                 await _storage.MarkChangesAsSynced(successfulChanges);
+            }
+
+            if (failedChanges.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"{failedChanges.Count} pending change(s) failed to upload and remain unsynced.");
             }
 
             return true;
@@ -399,45 +443,75 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     #region Conflict Resolution
 
-    public Task<IEnumerable<ConflictInfo>> GetConflictsAsync()
+    public async Task<IEnumerable<ConflictInfo>> GetConflictsAsync()
     {
-        // In a real implementation, query ConflictRecord table
-        // For now, return empty list
-        return Task.FromResult<IEnumerable<ConflictInfo>>(new List<ConflictInfo>());
+        var conflicts = await _storage.GetUnresolvedConflictsAsync();
+        return conflicts.Select(conflict => new ConflictInfo
+        {
+            Id = conflict.Id,
+            FeatureId = conflict.FeatureId,
+            LayerName = $"Layer {conflict.LayerId}",
+            Type = MapConflictType(conflict.ConflictType),
+            DetectedAt = conflict.CreatedAt,
+            LocalVersion = conflict.LocalData,
+            ServerVersion = conflict.ServerData
+        });
     }
 
     public async Task<bool> ResolveConflictAsync(string conflictId, ConflictResolution resolution)
     {
-        try
-        {
-            // In a real implementation:
-            // 1. Get conflict record from storage
-            // 2. Apply resolution strategy (AcceptLocal, AcceptServer, Manual)
-            // 3. Update feature with resolved data
-            // 4. Mark conflict as resolved
-            // 5. Queue change for sync if needed
-
-            await Task.Delay(500); // Simulate processing time
-            return true;
-        }
-        catch
+        var conflict = await _storage.GetConflictAsync(conflictId);
+        if (conflict == null || conflict.ResolvedAt != null)
         {
             return false;
         }
-    }
 
-    private async Task AutoResolveConflictsAsync(StorageSyncSession session)
-    {
-        var conflicts = await GetConflictsAsync();
-
-        foreach (var conflict in conflicts)
+        switch (resolution)
         {
-            // Default: last-write-wins (accept server)
-            await ResolveConflictAsync(conflict.Id, ConflictResolution.AcceptServer);
+            case ConflictResolution.AcceptLocal:
+                await _storage.MarkConflictResolvedAsync(
+                    conflictId,
+                    StorageConflictResolution.AcceptLocal,
+                    conflict.LocalData);
+                return true;
+
+            case ConflictResolution.AcceptServer:
+                var serverChange = JsonSerializer.Deserialize<ServerChange>(
+                    conflict.ServerData,
+                    ConflictJsonOptions);
+                if (serverChange == null)
+                {
+                    return false;
+                }
+
+                await ApplyResolvedServerChangeAsync(serverChange);
+                await _storage.MarkConflictResolvedAsync(
+                    conflictId,
+                    StorageConflictResolution.AcceptServer,
+                    conflict.ServerData);
+                return true;
+
+            case ConflictResolution.Merge:
+            case ConflictResolution.Manual:
+                _logger?.LogWarning(
+                    "Manual conflict resolution for {ConflictId} requires resolved feature data",
+                    conflictId);
+                return false;
+
+            default:
+                return false;
         }
     }
 
-    private async Task ApplyServerChangeAsync(ServerChange serverChange, StorageSyncSession session)
+    private Task AutoResolveConflictsAsync(StorageSyncSession session)
+    {
+        _logger?.LogInformation(
+            "{ConflictCount} sync conflict(s) require manual review",
+            session.ConflictsDetected);
+        return Task.CompletedTask;
+    }
+
+    private async Task<bool> ApplyServerChangeAsync(ServerChange serverChange, StorageSyncSession session)
     {
         try
         {
@@ -449,47 +523,277 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 // Conflict detected - local is newer
                 await CreateConflictRecordAsync(serverChange, localFeature, session);
                 session.ConflictsDetected++;
-                return;
+                return false;
             }
 
-            // Apply server change
-            switch (serverChange.Operation)
-            {
-                case StorageChangeOperation.Insert:
-                case StorageChangeOperation.Update:
-                    await _storage.ApplyRemoteFeatureAsync(serverChange.Feature);
-                    break;
-                case StorageChangeOperation.Delete:
-                    await _storage.ApplyRemoteDeleteAsync(serverChange.FeatureId, serverChange.LayerId);
-                    break;
-            }
+            await ApplyResolvedServerChangeAsync(serverChange);
+            return true;
         }
         catch (Exception ex)
         {
-            // Log error but continue with other changes
-            System.Diagnostics.Debug.WriteLine($"Error applying server change: {ex.Message}");
+            _logger?.LogError(
+                ex,
+                "Failed to apply server change {Operation} for feature {FeatureId} in layer {LayerId}",
+                serverChange.Operation,
+                serverChange.FeatureId,
+                serverChange.LayerId);
+            throw;
+        }
+    }
+
+    private async Task ApplyResolvedServerChangeAsync(ServerChange serverChange)
+    {
+        switch (serverChange.Operation)
+        {
+            case StorageChangeOperation.Insert:
+            case StorageChangeOperation.Update:
+                serverChange.Feature.Id = string.IsNullOrWhiteSpace(serverChange.Feature.Id)
+                    ? serverChange.FeatureId
+                    : serverChange.Feature.Id;
+                serverChange.Feature.LayerId = serverChange.LayerId;
+                await _storage.ApplyRemoteFeatureAsync(serverChange.Feature);
+                break;
+            case StorageChangeOperation.Delete:
+                await _storage.ApplyRemoteDeleteAsync(serverChange.FeatureId, serverChange.LayerId);
+                break;
         }
     }
 
     private Task CreateConflictRecordAsync(ServerChange serverChange, Feature localFeature, StorageSyncSession session)
     {
-        // Implementation would create a ConflictRecord in storage
-        return Task.CompletedTask;
+        var conflict = new StorageConflictRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            FeatureId = serverChange.FeatureId,
+            LayerId = serverChange.LayerId,
+            ConflictType = serverChange.Operation == StorageChangeOperation.Delete
+                ? StorageConflictType.UpdateDelete
+                : StorageConflictType.UpdateUpdate,
+            LocalVersion = localFeature.Version,
+            ServerVersion = serverChange.Version,
+            LocalData = JsonSerializer.Serialize(localFeature, ConflictJsonOptions),
+            ServerData = JsonSerializer.Serialize(serverChange, ConflictJsonOptions),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        return _storage.StoreConflictAsync(conflict);
+    }
+
+    private static ConflictType MapConflictType(StorageConflictType conflictType)
+    {
+        return conflictType switch
+        {
+            StorageConflictType.UpdateDelete => ConflictType.UpdateDelete,
+            StorageConflictType.DeleteUpdate => ConflictType.DeleteUpdate,
+            _ => ConflictType.UpdateUpdate
+        };
+    }
+
+    private static JsonSerializerOptions CreateConflictJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new GeometryJsonConverter());
+        return options;
+    }
+
+    private sealed class GeometryJsonConverter : JsonConverter<Geometry>
+    {
+        public override Geometry? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            if (!TryGetString(document.RootElement, "type", out var geometryType))
+            {
+                return null;
+            }
+
+            return geometryType switch
+            {
+                "Point" => new FieldPoint(
+                    GetDouble(document.RootElement, "latitude"),
+                    GetDouble(document.RootElement, "longitude"),
+                    TryGetDouble(document.RootElement, "altitude", out var altitude) ? altitude : null)
+                {
+                    SRID = GetInt(document.RootElement, "srid", 4326)
+                },
+                "LineString" => new LineString
+                {
+                    SRID = GetInt(document.RootElement, "srid", 4326),
+                    Coordinates = ReadPointArray(document.RootElement, "coordinates")
+                },
+                "Polygon" => new Polygon
+                {
+                    SRID = GetInt(document.RootElement, "srid", 4326),
+                    Coordinates = ReadPointRings(document.RootElement, "coordinates")
+                },
+                _ => null
+            };
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            Geometry value,
+            JsonSerializerOptions options)
+        {
+            switch (value)
+            {
+                case FieldPoint point:
+                    WritePoint(writer, point);
+                    break;
+                case LineString line:
+                    writer.WriteStartObject();
+                    writer.WriteString("type", line.Type);
+                    writer.WriteNumber("srid", line.SRID);
+                    writer.WritePropertyName("coordinates");
+                    writer.WriteStartArray();
+                    foreach (var point in line.Coordinates)
+                    {
+                        WritePoint(writer, point);
+                    }
+
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                    break;
+                case Polygon polygon:
+                    writer.WriteStartObject();
+                    writer.WriteString("type", polygon.Type);
+                    writer.WriteNumber("srid", polygon.SRID);
+                    writer.WritePropertyName("coordinates");
+                    writer.WriteStartArray();
+                    foreach (var ring in polygon.Coordinates)
+                    {
+                        writer.WriteStartArray();
+                        foreach (var point in ring)
+                        {
+                            WritePoint(writer, point);
+                        }
+
+                        writer.WriteEndArray();
+                    }
+
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                    break;
+                default:
+                    writer.WriteNullValue();
+                    break;
+            }
+        }
+
+        private static void WritePoint(Utf8JsonWriter writer, FieldPoint point)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", point.Type);
+            writer.WriteNumber("srid", point.SRID);
+            writer.WriteNumber("latitude", point.Latitude);
+            writer.WriteNumber("longitude", point.Longitude);
+            if (point.Altitude.HasValue)
+            {
+                writer.WriteNumber("altitude", point.Altitude.Value);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        private static List<FieldPoint> ReadPointArray(JsonElement element, string propertyName)
+        {
+            if (!TryGetProperty(element, propertyName, out var coordinates) ||
+                coordinates.ValueKind != JsonValueKind.Array)
+            {
+                return new List<FieldPoint>();
+            }
+
+            return coordinates.EnumerateArray()
+                .Select(ReadPoint)
+                .ToList();
+        }
+
+        private static List<List<FieldPoint>> ReadPointRings(JsonElement element, string propertyName)
+        {
+            if (!TryGetProperty(element, propertyName, out var rings) ||
+                rings.ValueKind != JsonValueKind.Array)
+            {
+                return new List<List<FieldPoint>>();
+            }
+
+            return rings.EnumerateArray()
+                .Where(ring => ring.ValueKind == JsonValueKind.Array)
+                .Select(ring => ring.EnumerateArray().Select(ReadPoint).ToList())
+                .ToList();
+        }
+
+        private static FieldPoint ReadPoint(JsonElement element)
+        {
+            return new FieldPoint(
+                GetDouble(element, "latitude"),
+                GetDouble(element, "longitude"),
+                TryGetDouble(element, "altitude", out var altitude) ? altitude : null)
+            {
+                SRID = GetInt(element, "srid", 4326)
+            };
+        }
+
+        private static bool TryGetString(JsonElement element, string propertyName, out string value)
+        {
+            value = string.Empty;
+            if (!TryGetProperty(element, propertyName, out var property) ||
+                property.ValueKind != JsonValueKind.String)
+            {
+                return false;
+            }
+
+            value = property.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private static double GetDouble(JsonElement element, string propertyName)
+        {
+            return TryGetDouble(element, propertyName, out var value) ? value : 0;
+        }
+
+        private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+        {
+            value = 0;
+            return TryGetProperty(element, propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.Number &&
+                property.TryGetDouble(out value);
+        }
+
+        private static int GetInt(JsonElement element, string propertyName, int defaultValue)
+        {
+            return TryGetProperty(element, propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.Number &&
+                property.TryGetInt32(out var value)
+                ? value
+                : defaultValue;
+        }
+
+        private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement property)
+        {
+            return element.TryGetProperty(propertyName, out property) ||
+                element.TryGetProperty(char.ToUpperInvariant(propertyName[0]) + propertyName[1..], out property);
+        }
     }
 
     #endregion
 
     #region Sync Session Management
 
-    private async Task<StorageSyncSession> CreateSyncSessionAsync(string sessionId)
+    private async Task<StorageSyncSession> CreateSyncSessionAsync(string sessionId, bool includeRemoteGeneration)
     {
         var session = new StorageSyncSession
         {
             Id = sessionId,
             StartTime = DateTime.UtcNow,
             Status = StorageSyncSessionStatus.Active,
-            ServerGeneration = await GetLatestServerGenerationAsync(),
-            LocalGeneration = await GetLastSyncGenerationAsync()
+            ServerGeneration = includeRemoteGeneration
+                ? await _changePuller.GetLatestServerGenerationAsync()
+                : 0,
+            LocalGeneration = includeRemoteGeneration
+                ? await _changePuller.GetLastSyncedGenerationAsync()
+                : 0
         };
 
         // Store in database
@@ -523,27 +827,6 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         _syncCancellation?.Cancel();
         Status = SyncStatus.Cancelled;
         return Task.CompletedTask;
-    }
-
-    private async Task<List<ServerChange>> GetServerChangesAsync(long sinceGeneration)
-    {
-        // Mock implementation - would call actual gRPC service
-        await Task.Delay(100);
-        return new List<ServerChange>();
-    }
-
-    private async Task<long> GetLatestServerGenerationAsync()
-    {
-        // Mock implementation - would call actual gRPC service
-        await Task.Delay(50);
-        return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-    }
-
-    private async Task<long> GetLastSyncGenerationAsync()
-    {
-        // Mock implementation - would query local storage
-        await Task.Delay(10);
-        return 0;
     }
 
     #endregion
@@ -587,6 +870,29 @@ internal sealed class UnconfiguredFieldCollectionChangeUploader : IFieldCollecti
     {
         throw new InvalidOperationException(
             "Field collection change upload is not configured. Pending local changes were left unsynced.");
+    }
+}
+
+internal sealed class UnconfiguredFieldCollectionChangePuller : IFieldCollectionChangePuller
+{
+    public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
+        long sinceGeneration,
+        CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException(
+            "Field collection server pull is not configured. Remote changes were not downloaded.");
+    }
+
+    public Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException(
+            "Field collection server generation lookup is not configured.");
+    }
+
+    public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException(
+            "Field collection local sync generation lookup is not configured.");
     }
 }
 

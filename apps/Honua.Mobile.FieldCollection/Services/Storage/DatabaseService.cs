@@ -1,5 +1,6 @@
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection.Services.Storage;
 
@@ -10,13 +11,16 @@ namespace Honua.Mobile.FieldCollection.Services.Storage;
 public class DatabaseService : IDisposable
 {
     private readonly string _databasePath;
+    private readonly ILogger<DatabaseService>? _logger;
     private GeoPackageStorageService? _storageService;
     private GeoPackageSyncService? _syncService;
+    private readonly object _serviceLock = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private bool _initialized;
 
-    public DatabaseService()
+    public DatabaseService(ILogger<DatabaseService>? logger = null)
     {
+        _logger = logger;
         _databasePath = GetDatabasePath();
     }
 
@@ -25,11 +29,26 @@ public class DatabaseService : IDisposable
         await _initLock.WaitAsync();
         try
         {
-            return await GetOrCreateStorageServiceAsync();
+            var storageService = GetStorageService();
+            if (!await storageService.InitializeAsync())
+            {
+                throw new InvalidOperationException("Failed to initialize the GeoPackage database.");
+            }
+
+            _initialized = true;
+            return storageService;
         }
         finally
         {
             _initLock.Release();
+        }
+    }
+
+    public GeoPackageStorageService GetStorageService()
+    {
+        lock (_serviceLock)
+        {
+            return GetOrCreateStorageService();
         }
     }
 
@@ -40,13 +59,14 @@ public class DatabaseService : IDisposable
         await _initLock.WaitAsync();
         try
         {
-            if (_syncService == null)
+            var syncService = GetSyncService(authService, connectivityService);
+            if (_storageService != null && !await _storageService.InitializeAsync())
             {
-                var storageService = await GetOrCreateStorageServiceAsync();
-                _syncService = new GeoPackageSyncService(storageService, authService, connectivityService);
+                throw new InvalidOperationException("Failed to initialize the GeoPackage database.");
             }
 
-            return _syncService;
+            _initialized = true;
+            return syncService;
         }
         finally
         {
@@ -54,15 +74,34 @@ public class DatabaseService : IDisposable
         }
     }
 
-    private async Task<GeoPackageStorageService> GetOrCreateStorageServiceAsync()
+    public GeoPackageSyncService GetSyncService(
+        IAuthenticationService authService,
+        IConnectivityService connectivityService,
+        IFieldCollectionChangeUploader? changeUploader = null,
+        IFieldCollectionChangePuller? changePuller = null,
+        ILogger<GeoPackageSyncService>? logger = null)
     {
-        if (_storageService == null)
+        lock (_serviceLock)
         {
-            _storageService = new GeoPackageStorageService(_databasePath);
-            await _storageService.InitializeAsync();
-            _initialized = true;
-        }
+            if (_syncService == null)
+            {
+                var storageService = GetOrCreateStorageService();
+                _syncService = new GeoPackageSyncService(
+                    storageService,
+                    authService,
+                    connectivityService,
+                    changeUploader,
+                    changePuller,
+                    logger);
+            }
 
+            return _syncService;
+        }
+    }
+
+    private GeoPackageStorageService GetOrCreateStorageService()
+    {
+        _storageService ??= new GeoPackageStorageService(_databasePath);
         return _storageService;
     }
 
@@ -71,6 +110,11 @@ public class DatabaseService : IDisposable
         await _initLock.WaitAsync();
         try
         {
+            if (!_initialized && _storageService != null)
+            {
+                _initialized = await _storageService.InitializeAsync();
+            }
+
             return _initialized;
         }
         finally
@@ -112,20 +156,27 @@ public class DatabaseService : IDisposable
 
     public async Task<bool> CompactDatabaseAsync()
     {
+        await _initLock.WaitAsync();
         try
         {
-            if (_storageService != null)
+            if (!File.Exists(_databasePath) && _storageService == null)
             {
-                // SQLite VACUUM operation to compact database
-                // This would be implemented in the storage service
-                await Task.Delay(1000); // Simulate compaction
-                return true;
+                return false;
             }
+
+            var storageService = GetStorageService();
+            await storageService.CompactAsync();
+            _initialized = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Database compaction failed");
             return false;
         }
-        catch
+        finally
         {
-            return false;
+            _initLock.Release();
         }
     }
 
@@ -149,8 +200,9 @@ public class DatabaseService : IDisposable
             _initialized = false;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogWarning(ex, "Database reset failed");
             return false;
         }
         finally

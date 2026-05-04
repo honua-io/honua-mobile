@@ -255,24 +255,14 @@ public partial class SettingsViewModel : BaseViewModel
 
         if (confirmed)
         {
-            await ExecuteAsync(async () =>
-            {
-                // In a real implementation, this would clear various caches
-                await Task.Delay(1000); // Simulate cache clearing
-                await ShowMessage("Cache Cleared", "All cached data has been cleared.");
-            });
+            await ShowError("Cache Clear Unavailable", "Cache clearing is not configured yet.");
         }
     }
 
     [RelayCommand]
     private async Task ExportData()
     {
-        await ExecuteAsync(async () =>
-        {
-            // In a real implementation, this would export user data
-            await Task.Delay(2000); // Simulate export process
-            await ShowMessage("Export Complete", "Data has been exported to your device storage.");
-        });
+        await ShowError("Export Unavailable", "Data export is not configured yet.");
     }
 
     [RelayCommand]
