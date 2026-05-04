@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using System.Collections.ObjectModel;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
@@ -11,6 +12,7 @@ public partial class SyncCenterViewModel : BaseViewModel
     private readonly ISyncService _syncService;
     private readonly IConnectivityService _connectivityService;
     private readonly IAuthenticationService _authService;
+    private readonly DiagnosticService _diagnosticService;
 
     [ObservableProperty]
     private bool isSyncing;
@@ -36,19 +38,26 @@ public partial class SyncCenterViewModel : BaseViewModel
     [ObservableProperty]
     private double syncProgress;
 
+    [ObservableProperty]
+    private OfflineCacheDiagnostics? offlineCacheDiagnostics;
+
     public ObservableCollection<ConflictInfo> ActiveConflicts { get; } = new();
+    public ObservableCollection<OfflineSourceDiagnostics> OfflineSources { get; } = new();
+    public ObservableCollection<OfflineConflictReviewItem> ConflictReviewItems { get; } = new();
     public ObservableCollection<SyncHistoryItem> SyncHistory { get; } = new();
 
     public SyncCenterViewModel(
         INavigationService navigationService,
         ISyncService syncService,
         IConnectivityService connectivityService,
-        IAuthenticationService authService)
+        IAuthenticationService authService,
+        DiagnosticService diagnosticService)
         : base(navigationService)
     {
         _syncService = syncService;
         _connectivityService = connectivityService;
         _authService = authService;
+        _diagnosticService = diagnosticService;
 
         Title = "Sync Center";
 
@@ -111,6 +120,7 @@ public partial class SyncCenterViewModel : BaseViewModel
 
     protected override async Task OnRefresh()
     {
+        await LoadOfflineDiagnostics();
         await LoadConflicts();
         await LoadSyncHistory();
     }
@@ -175,6 +185,8 @@ public partial class SyncCenterViewModel : BaseViewModel
                 {
                     await LoadConflicts();
                 }
+
+                await LoadOfflineDiagnostics();
             }
             else
             {
@@ -263,6 +275,31 @@ public partial class SyncCenterViewModel : BaseViewModel
     }
 
     [RelayCommand]
+    private async Task LoadOfflineDiagnostics()
+    {
+        await ExecuteAsync(async () =>
+        {
+            OfflineCacheDiagnostics = await _diagnosticService.GetOfflineCacheDiagnosticsAsync();
+
+            OfflineSources.Clear();
+            foreach (var source in OfflineCacheDiagnostics.MetadataCache.Sources
+                         .Concat(OfflineCacheDiagnostics.FeatureCache.Sources)
+                         .GroupBy(source => source.SourceId)
+                         .Select(group => group.First())
+                         .OrderBy(source => source.SourceId))
+            {
+                OfflineSources.Add(source);
+            }
+
+            ConflictReviewItems.Clear();
+            foreach (var conflict in OfflineCacheDiagnostics.ConflictReview)
+            {
+                ConflictReviewItems.Add(conflict);
+            }
+        });
+    }
+
+    [RelayCommand]
     private async Task LoadConflicts()
     {
         await ExecuteAsync(async () =>
@@ -313,6 +350,7 @@ public partial class SyncCenterViewModel : BaseViewModel
                 if (success)
                 {
                     ActiveConflicts.Remove(conflict);
+                    await LoadOfflineDiagnostics();
                     await ShowMessage("Conflict Resolved", "The conflict has been resolved successfully.");
                 }
                 else

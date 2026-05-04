@@ -279,10 +279,10 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
             }
             """));
 
-        app.MapPost("/rest/services/offline/FeatureServer/createReplica", () => Json("""
+        app.MapPost("/rest/services/{serviceId}/FeatureServer/createReplica", () => Json("""
             { "replicaID": "replica-abc-123", "serverGen": 42 }
             """));
-        app.MapPost("/rest/services/offline/FeatureServer/extractChanges", () => Json("""
+        app.MapPost("/rest/services/{serviceId}/FeatureServer/extractChanges", () => Json("""
             {
               "serverGen": 55,
               "layerChanges": [
@@ -295,10 +295,10 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
               ]
             }
             """));
-        app.MapPost("/rest/services/offline/FeatureServer/synchronizeReplica", () => Json("""
+        app.MapPost("/rest/services/{serviceId}/FeatureServer/synchronizeReplica", () => Json("""
             { "serverGen": 100 }
             """));
-        app.MapPost("/rest/services/offline/FeatureServer/unRegisterReplica", () => Json("""
+        app.MapPost("/rest/services/{serviceId}/FeatureServer/unRegisterReplica", () => Json("""
             { "success": true }
             """));
 

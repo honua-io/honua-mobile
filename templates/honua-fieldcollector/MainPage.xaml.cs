@@ -45,7 +45,7 @@ public partial class MainPage : ContentPage
             RecentActivityList.ItemsSource = _recentActivity;
 
             // Load initial form
-            await DataForm.LoadFormSchemaAsync("site_inspection");
+            await DataForm.LoadFormSchemaAsync("field-site-inspection");
 
             // Add welcome activity
             AddActivity("🚀", "App Started", "Ready for field data collection");

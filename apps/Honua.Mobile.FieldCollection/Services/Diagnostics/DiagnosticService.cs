@@ -131,6 +131,26 @@ public class DiagnosticService
         return diagnostics;
     }
 
+    public async Task<OfflineCacheDiagnostics> GetOfflineCacheDiagnosticsAsync()
+    {
+        try
+        {
+            var storage = await _databaseService.GetStorageServiceAsync();
+            return await storage.GetOfflineCacheDiagnosticsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Failed to collect offline cache diagnostics");
+            return new OfflineCacheDiagnostics
+            {
+                PackageId = "unavailable",
+                MetadataCache = new MetadataCacheDiagnostics { Status = "Unavailable" },
+                FeatureCache = new FeatureCacheDiagnostics { Status = "Unavailable" },
+                Timestamp = DateTime.UtcNow
+            };
+        }
+    }
+
     #endregion
 
     #region Database Management
@@ -199,7 +219,8 @@ public class DiagnosticService
             System = await GetSystemDiagnosticsAsync(),
             Connectivity = await GetConnectivityDiagnosticsAsync(),
             Sync = await GetSyncDiagnosticsAsync(),
-            Database = await GetDatabaseDiagnosticsAsync()
+            Database = await GetDatabaseDiagnosticsAsync(),
+            OfflineCache = await GetOfflineCacheDiagnosticsAsync()
         };
 
         return report;
@@ -300,17 +321,11 @@ public class DiagnosticService
 
         if (report.System.DatabaseInfo != null)
         {
-            report.System.DatabaseInfo.DatabasePath = RedactPath(report.System.DatabaseInfo.DatabasePath);
+            report.System.DatabaseInfo.DatabasePath = DiagnosticRedactor.RedactPath(report.System.DatabaseInfo.DatabasePath);
         }
 
-        report.Database.DatabasePath = RedactPath(report.Database.DatabasePath);
-    }
-
-    private static string RedactPath(string path)
-    {
-        return string.IsNullOrWhiteSpace(path)
-            ? string.Empty
-            : Path.GetFileName(path);
+        report.Database.DatabasePath = DiagnosticRedactor.RedactPath(report.Database.DatabasePath);
+        report.OfflineCache.PackageFileName = DiagnosticRedactor.RedactPath(report.OfflineCache.PackageFileName);
     }
 
     #endregion
@@ -389,6 +404,7 @@ public class DiagnosticReport
     public ConnectivityDiagnostics Connectivity { get; set; } = new();
     public SyncDiagnostics Sync { get; set; } = new();
     public DatabaseDiagnostics Database { get; set; } = new();
+    public OfflineCacheDiagnostics OfflineCache { get; set; } = new();
 }
 
 #endregion

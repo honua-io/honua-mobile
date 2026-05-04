@@ -11,7 +11,11 @@ using Microsoft.Extensions.DependencyInjection;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
 using SdkRoutingClient = Honua.Sdk.GeoServices.Routing.HonuaRoutingClient;
 using MobileOfflineSyncRunner = Honua.Mobile.Offline.Sync.IOfflineSyncRunner;
+using SdkOfflineChangeJournal = Honua.Sdk.Offline.Abstractions.IOfflineChangeJournal;
+using SdkOfflineCheckpointStore = Honua.Sdk.Offline.Abstractions.IOfflineSyncCheckpointStore;
 using SdkOfflineFeatureStore = Honua.Sdk.Offline.Abstractions.IOfflineFeatureStore;
+using SdkOfflineStateStore = Honua.Sdk.Offline.Abstractions.IOfflineSyncStateStore;
+using SdkOfflineSyncEngine = Honua.Sdk.Offline.OfflineSyncEngine;
 
 namespace Honua.Mobile.Maui.Tests;
 
@@ -52,13 +56,23 @@ public sealed class SdkOfflineRegistrationTests
                 .BuildServiceProvider();
 
             var runner = provider.GetRequiredService<MobileOfflineSyncRunner>();
+            var adapter = provider.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>();
+            var manifest = provider.GetRequiredService<OfflinePackageManifest>();
 
             Assert.IsType<SdkOfflineSyncRunner>(runner);
-            Assert.IsType<GeoPackageSdkOfflineStoreAdapter>(provider.GetRequiredService<SdkOfflineFeatureStore>());
+            Assert.NotNull(provider.GetRequiredService<SdkOfflineSyncEngine>());
+            Assert.Same(adapter, provider.GetRequiredService<SdkOfflineFeatureStore>());
+            Assert.Same(adapter, provider.GetRequiredService<SdkOfflineChangeJournal>());
+            Assert.Same(adapter, provider.GetRequiredService<SdkOfflineCheckpointStore>());
+            Assert.Same(adapter, provider.GetRequiredService<SdkOfflineStateStore>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureQueryClient>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureEditClient>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureAttachmentClient>());
             Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<HonuaMobileSdkFeatureClient>());
+            Assert.Equal("mobile-offline-field-ops-v1", manifest.PackageId);
+            Assert.Equal(
+                ["mobile_offline_demo/FeatureServer/68910", "mobile_offline_demo/FeatureServer/68920"],
+                manifest.Sources.Select(source => source.SourceId).ToArray());
         }
         finally
         {
@@ -83,19 +97,46 @@ public sealed class SdkOfflineRegistrationTests
     private static OfflinePackageManifest CreateManifest()
         => new()
         {
-            PackageId = "area-1",
+            PackageId = "mobile-offline-field-ops-v1",
+            DisplayName = "Mobile Offline Field Operations",
+            Version = "2026.05",
             Sources =
             [
                 new OfflineSourceDescriptor
                 {
-                    SourceId = "parks",
+                    SourceId = "mobile_offline_demo/FeatureServer/68910",
                     Source = new SourceDescriptor
                     {
-                        Id = "parks",
-                        Protocol = FeatureProtocolIds.OgcFeatures,
-                        Locator = new SourceLocator { CollectionId = "parks" },
+                        Id = "mobile-offline-field-sites",
+                        Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                        Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
                     },
+                    Where = "1=1",
+                    OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+                    ReturnGeometry = true,
+                    PageSize = 100,
+                },
+                new OfflineSourceDescriptor
+                {
+                    SourceId = "mobile_offline_demo/FeatureServer/68920",
+                    Source = new SourceDescriptor
+                    {
+                        Id = "mobile-offline-work-zones",
+                        Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                        Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68920 },
+                    },
+                    Where = "1=1",
+                    OutFields = ["objectid", "globalid", "zone_name", "zone_status", "sync_version", "notes"],
+                    ReturnGeometry = true,
+                    PageSize = 100,
                 },
             ],
+            Metadata = new Dictionary<string, string>
+            {
+                ["fixture"] = "mobile-offline-field-ops-v1",
+                ["serviceId"] = "mobile_offline_demo",
+                ["editableLayerId"] = "68910",
+                ["contextLayerId"] = "68920",
+            },
         };
 }
