@@ -1,0 +1,125 @@
+{
+  "schema": "honua-scene-metadata/v1",
+  "id": "construction-demo",
+  "name": "Construction World Model Demo",
+  "description": "Sample scene that exercises Honua scene controls against public CesiumGS 3D Tiles.",
+  "center": {
+    "latitude": 39.95215,
+    "longitude": -75.16356,
+    "height": 1500
+  },
+  "bounds": {
+    "west": -75.18,
+    "south": 39.93,
+    "east": -75.14,
+    "north": 39.97
+  },
+  "tileset": {
+    "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/main/1.0/TilesetWithDiscreteLOD/tileset.json",
+    "format": "3d-tiles"
+  },
+  "capabilities": {
+    "3d-tiles": true,
+    "terrain": false
+  },
+  "layers": [
+    {
+      "id": "primary",
+      "title": "As-built capture",
+      "kind": "3d-tiles",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/main/1.0/TilesetWithDiscreteLOD/tileset.json",
+      "description": "Latest reality capture for the active phase.",
+      "visible": true,
+      "opacity": 1
+    },
+    {
+      "id": "design-overlay",
+      "title": "Design overlay",
+      "kind": "3d-tiles",
+      "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/main/1.0/TilesetWithRequestVolume/tileset.json",
+      "description": "BIM-derived design tileset overlaid on the site.",
+      "visible": false,
+      "opacity": 0.85
+    }
+  ],
+  "bookmarks": [
+    {
+      "id": "site-overview",
+      "title": "Site overview",
+      "description": "Wide camera that frames the entire site.",
+      "view": {
+        "center": { "latitude": 39.952, "longitude": -75.163 },
+        "height": 2400,
+        "orientation": { "heading": 0, "pitch": -45, "roll": 0 }
+      }
+    },
+    {
+      "id": "north-elevation",
+      "title": "North elevation",
+      "description": "North-facing facade inspection vantage.",
+      "view": {
+        "center": { "latitude": 39.954, "longitude": -75.163 },
+        "height": 600,
+        "orientation": { "heading": 180, "pitch": -20, "roll": 0 }
+      }
+    },
+    {
+      "id": "entrance",
+      "title": "Entrance approach",
+      "description": "Pedestrian entrance walk-up.",
+      "view": {
+        "center": { "latitude": 39.9515, "longitude": -75.1632 },
+        "height": 80,
+        "orientation": { "heading": 90, "pitch": -10, "roll": 0 }
+      }
+    }
+  ],
+  "timeline": {
+    "phases": [
+      {
+        "id": "phase-1-foundation",
+        "title": "Phase 1 – Foundation",
+        "startUtc": "2026-01-06T00:00:00Z",
+        "endUtc": "2026-03-30T00:00:00Z",
+        "visibleLayerIds": ["primary"],
+        "description": "Foundation pour and underground utilities."
+      },
+      {
+        "id": "phase-2-superstructure",
+        "title": "Phase 2 – Superstructure",
+        "startUtc": "2026-04-01T00:00:00Z",
+        "endUtc": "2026-08-30T00:00:00Z",
+        "visibleLayerIds": ["primary", "design-overlay"],
+        "description": "Superstructure framing and curtain wall installation."
+      },
+      {
+        "id": "phase-3-fitout",
+        "title": "Phase 3 – Fit-out",
+        "startUtc": "2026-09-01T00:00:00Z",
+        "endUtc": "2026-12-15T00:00:00Z",
+        "visibleLayerIds": ["primary", "design-overlay"],
+        "description": "Interior fit-out and commissioning."
+      }
+    ]
+  },
+  "compare": {
+    "modes": [
+      {
+        "id": "design-vs-asbuilt",
+        "title": "Design vs. as-built",
+        "description": "Toggle between the design intent and the latest capture.",
+        "leftLayerIds": ["design-overlay"],
+        "rightLayerIds": ["primary"]
+      }
+    ]
+  },
+  "inspector": {
+    "fields": [
+      { "key": "id", "title": "Asset ID", "format": "string" },
+      { "key": "elementCategory", "title": "Element category", "format": "string" },
+      { "key": "phase", "title": "Phase", "format": "string" },
+      { "key": "elevation", "title": "Elevation", "format": "number", "unit": "m" },
+      { "key": "lastSurveyUtc", "title": "Last survey", "format": "date" }
+    ]
+  }
+}

@@ -58,7 +58,9 @@ scene.addEventListener('honua-scene-load-error', (event) => {
 });
 
 scene.addEventListener('honua-scene-identify', (event) => {
-  console.log(event.detail.x, event.detail.y, event.detail.picked);
+  // detail.position is { latitude, longitude, height } when the scene
+  // could sample a surface at (x, y); otherwise null.
+  console.log(event.detail.x, event.detail.y, event.detail.picked, event.detail.position);
 });
 ```
 
@@ -117,6 +119,14 @@ share the same `<honua-scene>` surface. When using object URLs for `tileset.json
 ensure nested 3D Tiles references are also rewritten or served through a stable
 package-local URL prefix. Call `resolver.dispose?.()` when a host tears down a
 Cache Storage resolver that created object URLs.
+
+## Scene Controls
+
+For multi-layer demos with bookmarks, timeline phases, compare modes, feature
+inspection, and measurement, see [Scene Controls](scene-controls.md). Those
+controls compose with `<honua-scene>`, accept a typed
+`HonuaSceneMetadata` document, and emit stable `honua-scene-*` events that
+app shells (and the JS SDK) can subscribe to without importing CesiumJS.
 
 ## Current Scope
 
