@@ -664,6 +664,71 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('discards a metadata-layer tileset that resolves after the scene reconnects', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+
+    type StaleTileset = {
+      url: string;
+      show: boolean;
+      style: undefined;
+      destroy: ReturnType<typeof vi.fn>;
+      isDestroyed: () => boolean;
+    };
+    let staleDestroyed = false;
+    let resolveStale: (value: StaleTileset) => void = () => {};
+    cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(
+      () =>
+        new Promise<StaleTileset>((resolve) => {
+          resolveStale = resolve;
+        }),
+    );
+
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-load-error', errorListener);
+
+    const stalePromise = element.addLayer({
+      id: 'overlay',
+      title: 'Overlay',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/overlay.json',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    element.remove();
+    document.body.append(element);
+    await element.load();
+    const widgetV2 = cesium.__mock.widgets[cesium.__mock.widgets.length - 1];
+
+    resolveStale({
+      url: 'https://data.example.test/overlay.json',
+      show: true,
+      style: undefined,
+      destroy: vi.fn(() => {
+        staleDestroyed = true;
+      }),
+      isDestroyed: () => staleDestroyed,
+    });
+    await stalePromise;
+
+    expect(staleDestroyed).toBe(true);
+    expect(
+      widgetV2.scene.primitives.add.mock.calls.some(
+        (call) => typeof (call[0] as { destroy?: unknown } | undefined)?.destroy === 'function',
+      ),
+    ).toBe(false);
+    expect(element.getLayer('overlay')?.tileset).not.toBeNull();
+    expect(errorListener).not.toHaveBeenCalled();
+
+    webgl.mockRestore();
+  });
+
   it('does not emit a load-error when a primary tileset load fails after disconnect', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');

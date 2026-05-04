@@ -124,6 +124,12 @@ scene.addEventListener('honua-scene-metadata-error', (event) => {
 A `metadata-fetch-failed` code is emitted when the network request fails or
 returns a non-2xx status.
 
+When `inspector.fields` is omitted, `<honua-scene-inspector>` derives the
+attribute list from the picked feature itself: it prefers Cesium feature
+accessors (`getPropertyIds()` + `getProperty(key)`), then falls back to
+`picked.properties`, and finally renders no attributes. The
+`honua-scene-feature-select` event surface is identical in both cases.
+
 ## Imperative scene API
 
 `HonuaSceneElement` exposes a small layer API the controls (and host code) can
@@ -142,6 +148,16 @@ call directly:
 Layers declared in `metadata.layers` are tracked under their declared `id`.
 The implicit `tileset-url` becomes the `id: "primary"` layer when no metadata
 overrides it, so timelines and compare modes can refer to it by name.
+
+Layer-id references inside `timeline.phases[*].visibleLayerIds`,
+`compare.modes[*].leftLayerIds`, and `compare.modes[*].rightLayerIds` must
+resolve to either `"primary"` or a layer declared in `metadata.layers`;
+fetched metadata that references any other id is rejected with
+`metadata-invalid` on `honua-scene-metadata-error`. Hosts can override or
+substitute a declared layer's tileset at runtime by calling
+`scene.addLayer({ id, kind, url })` with a matching id — phase/mode
+visibility then drives the host-supplied tileset the same way it drives the
+metadata-declared one.
 
 ## Typed events
 

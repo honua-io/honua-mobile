@@ -35,3 +35,8 @@ To swap in your own scene, point `metadata-url` at any document that conforms
 to `honua-scene-metadata/v1`. See
 [`docs/guides/scene-controls.md`](../../docs/guides/scene-controls.md) for the
 full schema and event reference.
+
+The demo's inline script mirrors `metadata.tileset.url` onto the `tileset-url`
+attribute after `honua-scene-metadata-change` fires. This is a small wiring
+workaround until `<honua-scene>` consumes the metadata document's `tileset.url`
+directly; remove the mirror once that lands.

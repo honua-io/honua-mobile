@@ -705,12 +705,15 @@ export class HonuaSceneElement extends HTMLElement {
     const targetUrl = handle.metadata.url;
     const targetKind = handle.metadata.kind;
     const captured = this.#layerLoadVersions.get(layerId) ?? 0;
+    const capturedSceneVersion = this.#loadVersion;
+    const capturedWidget = this.#widget;
 
     let tileset: Cesium3DTileset;
     try {
       tileset = await cesium.Cesium3DTileset.fromUrl(targetUrl);
     } catch (error) {
       if (
+        capturedSceneVersion === this.#loadVersion &&
         this.#layers.get(layerId) === handle &&
         (this.#layerLoadVersions.get(layerId) ?? 0) === captured
       ) {
@@ -720,11 +723,13 @@ export class HonuaSceneElement extends HTMLElement {
     }
 
     if (
+      capturedSceneVersion !== this.#loadVersion ||
       this.#layers.get(layerId) !== handle ||
       (this.#layerLoadVersions.get(layerId) ?? 0) !== captured ||
       handle.metadata.kind !== targetKind ||
       handle.metadata.url !== targetUrl ||
-      !this.#widget
+      !this.#widget ||
+      this.#widget !== capturedWidget
     ) {
       destroyTilesetSafely(tileset);
       return;
