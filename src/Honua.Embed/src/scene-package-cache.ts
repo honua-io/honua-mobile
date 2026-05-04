@@ -8,6 +8,8 @@ export type HonuaScenePackageCacheErrorCode =
   | 'expired-package'
   | 'invalid-package';
 
+export type HonuaScenePackageCacheStorageResponseMode = 'cache-url' | 'object-url';
+
 export interface HonuaScenePackageAssetResolverRequest {
   packageId: string;
   path: string;
@@ -26,11 +28,28 @@ export type HonuaScenePackageAssetResolverInput =
   | HonuaScenePackageAssetResolver
   | ((request: HonuaScenePackageAssetResolverRequest) => Promise<string | URL> | string | URL);
 
+export interface CacheStorageScenePackageAssetUrlOptions {
+  packageId: string;
+  path: string;
+  urlPrefix?: string;
+  baseUrl?: string | URL;
+}
+
 export interface CacheStorageScenePackageResolverOptions {
   cacheName: string;
   urlPrefix?: string;
+  baseUrl?: string | URL;
+  responseMode?: HonuaScenePackageCacheStorageResponseMode;
   createObjectUrls?: boolean;
 }
+
+export interface CacheStorageScenePackageRequestOptions {
+  cacheName: string;
+  urlPrefix?: string;
+  baseUrl?: string | URL;
+}
+
+const DEFAULT_CACHE_STORAGE_URL_PREFIX = '/honua-scene-packages/';
 
 export class HonuaScenePackageCacheError extends Error {
   readonly code: HonuaScenePackageCacheErrorCode;
@@ -64,45 +83,37 @@ export async function resolveScenePackageAsset(
 export function createCacheStorageScenePackageResolver(
   options: CacheStorageScenePackageResolverOptions,
 ): HonuaScenePackageAssetResolver {
-  if (!options.cacheName.trim()) {
-    throw new HonuaScenePackageCacheError(
-      'invalid-package',
-      'A Cache Storage cache name is required.',
-    );
-  }
+  const cacheName = normalizeRequiredText(
+    options.cacheName,
+    'A Cache Storage cache name is required.',
+  );
+  const responseMode = normalizeCacheStorageResponseMode(options);
 
   const objectUrls = new Set<string>();
-  const createObjectUrls = options.createObjectUrls ?? true;
 
   return {
     async resolveAsset(request) {
-      if (!('caches' in globalThis)) {
-        throw new HonuaScenePackageCacheError(
-          'unsupported-browser-storage',
-          'Cache Storage is not available in this browser or WebView.',
-        );
-      }
-
       const path = normalizeScenePackageAssetPath(request.path);
-      const cache = await globalThis.caches.open(options.cacheName);
-      const cacheUrl = buildCacheStorageAssetUrl(
-        options.urlPrefix ?? '/honua-scene-packages/',
-        request.packageId,
+      const cacheUrl = createCacheStorageScenePackageAssetUrl({
+        packageId: request.packageId,
         path,
-      );
+        urlPrefix: options.urlPrefix,
+        baseUrl: options.baseUrl,
+      });
+      const cache = await getCacheStorage().open(cacheName);
       const response = await cache.match(cacheUrl);
       if (!response) {
         throw new HonuaScenePackageCacheError(
           'cache-miss',
-          `Scene package asset '${path}' was not found in cache '${options.cacheName}'.`,
+          `Scene package asset '${path}' was not found in cache '${cacheName}'.`,
         );
       }
 
-      if (!createObjectUrls) {
+      if (responseMode === 'cache-url') {
         return cacheUrl;
       }
 
-      if (!URL.createObjectURL) {
+      if (typeof URL.createObjectURL !== 'function') {
         throw new HonuaScenePackageCacheError(
           'unsupported-browser-storage',
           'Object URLs are not available in this browser or WebView.',
@@ -121,6 +132,47 @@ export function createCacheStorageScenePackageResolver(
       objectUrls.clear();
     },
   };
+}
+
+export function createCacheStorageScenePackageAssetUrl(
+  options: CacheStorageScenePackageAssetUrlOptions,
+): string {
+  const packageId = normalizeRequiredText(
+    options.packageId,
+    'A scene package ID is required.',
+  );
+  const path = normalizeScenePackageAssetPath(options.path);
+  const prefix = createCacheStorageScenePackageUrlPrefix(options.urlPrefix, options.baseUrl);
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+
+  return new URL(`${encodeURIComponent(packageId)}/${encodedPath}`, prefix).toString();
+}
+
+export function isCacheStorageScenePackageRequest(
+  request: RequestInfo | URL,
+  options: Omit<CacheStorageScenePackageRequestOptions, 'cacheName'> = {},
+): boolean {
+  const requestUrl = requestInfoToUrl(request, options.baseUrl);
+  const prefix = createCacheStorageScenePackageUrlPrefix(options.urlPrefix, options.baseUrl);
+
+  return requestUrl.startsWith(prefix);
+}
+
+export async function matchCacheStorageScenePackageRequest(
+  request: RequestInfo | URL,
+  options: CacheStorageScenePackageRequestOptions,
+): Promise<Response | null> {
+  const cacheName = normalizeRequiredText(
+    options.cacheName,
+    'A Cache Storage cache name is required.',
+  );
+
+  if (!isCacheStorageScenePackageRequest(request, options)) {
+    return null;
+  }
+
+  const cache = await getCacheStorage().open(cacheName);
+  return await cache.match(requestInfoToCacheMatchInput(request, options.baseUrl)) ?? null;
 }
 
 export function normalizeScenePackageAssetPath(path: string): string {
@@ -151,12 +203,90 @@ export function normalizeScenePackageAssetPath(path: string): string {
   return segments.join('/');
 }
 
-function buildCacheStorageAssetUrl(
-  urlPrefix: string,
-  packageId: string,
-  path: string,
+function normalizeCacheStorageResponseMode(
+  options: CacheStorageScenePackageResolverOptions,
+): HonuaScenePackageCacheStorageResponseMode {
+  const mode = options.responseMode
+    ?? (options.createObjectUrls === false ? 'cache-url' : 'object-url');
+  if (mode !== 'cache-url' && mode !== 'object-url') {
+    throw new HonuaScenePackageCacheError(
+      'invalid-package',
+      `Unsupported Cache Storage response mode '${mode}'.`,
+    );
+  }
+
+  return mode;
+}
+
+function createCacheStorageScenePackageUrlPrefix(
+  urlPrefix = DEFAULT_CACHE_STORAGE_URL_PREFIX,
+  baseUrl?: string | URL,
 ): string {
-  const origin = typeof location === 'undefined' ? 'http://localhost' : location.origin;
-  const prefix = urlPrefix.trim().replace(/^\/?/, '/').replace(/\/?$/, '/');
-  return new URL(`${prefix}${encodeURIComponent(packageId)}/${path}`, origin).toString();
+  const rawPrefix = urlPrefix.trim() || DEFAULT_CACHE_STORAGE_URL_PREFIX;
+  const slashTerminated = rawPrefix.endsWith('/') ? rawPrefix : `${rawPrefix}/`;
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(slashTerminated)) {
+    return new URL(slashTerminated).toString();
+  }
+
+  const rootRelativePrefix = slashTerminated.startsWith('/')
+    ? slashTerminated
+    : `/${slashTerminated}`;
+
+  return new URL(rootRelativePrefix, defaultBaseUrl(baseUrl)).toString();
+}
+
+function requestInfoToUrl(request: RequestInfo | URL, baseUrl?: string | URL): string {
+  if (request instanceof URL) {
+    return request.toString();
+  }
+
+  if (typeof request === 'string') {
+    return new URL(request, defaultBaseUrl(baseUrl)).toString();
+  }
+
+  return request.url;
+}
+
+function requestInfoToCacheMatchInput(
+  request: RequestInfo | URL,
+  baseUrl?: string | URL,
+): RequestInfo {
+  if (request instanceof URL || typeof request === 'string') {
+    return requestInfoToUrl(request, baseUrl);
+  }
+
+  return request;
+}
+
+function defaultBaseUrl(baseUrl?: string | URL): string {
+  if (baseUrl) {
+    return baseUrl.toString();
+  }
+
+  if (typeof location !== 'undefined') {
+    return location.href;
+  }
+
+  return 'http://localhost/';
+}
+
+function getCacheStorage(): CacheStorage {
+  if (!('caches' in globalThis) || !globalThis.caches) {
+    throw new HonuaScenePackageCacheError(
+      'unsupported-browser-storage',
+      'Cache Storage is not available in this browser or WebView.',
+    );
+  }
+
+  return globalThis.caches;
+}
+
+function normalizeRequiredText(value: string, message: string): string {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new HonuaScenePackageCacheError('invalid-package', message);
+  }
+
+  return normalized;
 }

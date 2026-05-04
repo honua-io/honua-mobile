@@ -79,6 +79,7 @@ date.
 ```js
 import {
   createCacheStorageScenePackageResolver,
+  matchCacheStorageScenePackageRequest,
   HonuaScenePackageCacheError,
 } from '@honua-io/embed';
 
@@ -86,6 +87,7 @@ const scene = document.querySelector('honua-scene');
 const resolver = createCacheStorageScenePackageResolver({
   cacheName: 'honua-scene-packages',
   urlPrefix: '/honua-scene-packages/',
+  responseMode: 'cache-url',
 });
 
 scene.packageAssetResolver = resolver;
@@ -115,10 +117,29 @@ scene.addEventListener('honua-scene-load-error', (event) => {
 
 The resolver API is intentionally host-controlled so MAUI WebView bridges,
 service workers, Cache Storage, IndexedDB, and caller-provided object URLs can
-share the same `<honua-scene>` surface. When using object URLs for `tileset.json`,
-ensure nested 3D Tiles references are also rewritten or served through a stable
-package-local URL prefix. Call `resolver.dispose?.()` when a host tears down a
-Cache Storage resolver that created object URLs.
+share the same `<honua-scene>` surface. `responseMode: 'cache-url'` is the
+recommended browser mode for 3D Tiles and terrain because Cesium keeps nested
+relative references under the package-local URL prefix. A service worker or
+WebView route should serve that prefix from Cache Storage:
+
+```js
+self.addEventListener('fetch', (event) => {
+  if (!event.request.url.includes('/honua-scene-packages/')) {
+    return;
+  }
+
+  event.respondWith(
+    matchCacheStorageScenePackageRequest(event.request, {
+      cacheName: 'honua-scene-packages',
+      urlPrefix: '/honua-scene-packages/',
+    }).then((response) => response ?? Response.error()),
+  );
+});
+```
+
+Object URL mode remains available for standalone assets or hosts that rewrite
+nested references themselves. Call `resolver.dispose?.()` when a host tears down
+a Cache Storage resolver that created object URLs.
 
 ## Scene Controls
 
