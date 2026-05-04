@@ -101,6 +101,7 @@ export class HonuaSceneMeasureElement extends HTMLElement {
     super();
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
+    this.#wireControls();
     this.#link = new HonuaSceneLink({
       host: this,
       controlId: CONTROL_ID,
@@ -113,7 +114,6 @@ export class HonuaSceneMeasureElement extends HTMLElement {
   connectedCallback(): void {
     upgradeProperty(this, 'sceneSelector');
     this.#applyHeading();
-    this.#wireControls();
     this.#link.connect();
     this.#renderActiveState();
   }

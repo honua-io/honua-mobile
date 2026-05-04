@@ -237,6 +237,37 @@ describe('honua-scene-measure', () => {
       measurementId: 'all',
     });
   });
+
+  it('does not duplicate mode-button click handlers across reconnects', () => {
+    const control = createMeasureControl(setup);
+
+    control.remove();
+    document.body.append(control);
+    control.remove();
+    document.body.append(control);
+
+    const listener = vi.fn();
+    control.addEventListener('honua-scene-measurement-add', listener);
+
+    const pointButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-kind="point"]',
+    )!;
+    pointButton.click();
+
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          x: 1,
+          y: 1,
+          picked: { position: { latitude: 39.95, longitude: -75.16, height: 0 } },
+        },
+      }),
+    );
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
 });
 
 function createMeasureControl(setup: SceneSetup): HTMLElement {
