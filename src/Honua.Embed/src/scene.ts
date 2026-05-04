@@ -612,7 +612,7 @@ export class HonuaSceneElement extends HTMLElement {
       return;
     }
 
-    const metadataDeclaresPrimary =
+    let metadataDeclaresPrimary =
       this.#metadata?.layers?.some((layer) => layer.id === 'primary') ?? false;
 
     try {
@@ -624,15 +624,22 @@ export class HonuaSceneElement extends HTMLElement {
           return;
         }
 
-        this.#tileset = loaded;
-        this.#widget.scene.primitives.add(loaded);
-        this.#registerPrimaryLayer(dataUrls.tilesetUrl, loaded);
-        if (!config.center) {
-          await this.#widget.zoomTo(loaded);
-        }
+        metadataDeclaresPrimary =
+          this.#metadata?.layers?.some((layer) => layer.id === 'primary') ?? false;
 
-        if (version !== this.#loadVersion) {
-          return;
+        if (metadataDeclaresPrimary) {
+          destroyTilesetSafely(loaded);
+        } else {
+          this.#tileset = loaded;
+          this.#widget.scene.primitives.add(loaded);
+          this.#registerPrimaryLayer(dataUrls.tilesetUrl, loaded);
+          if (!config.center) {
+            await this.#widget.zoomTo(loaded);
+          }
+
+          if (version !== this.#loadVersion) {
+            return;
+          }
         }
       }
 

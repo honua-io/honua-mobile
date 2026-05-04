@@ -638,6 +638,91 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('lets metadata-declared primary win when metadata arrives during the implicit tileset load', async () => {
+    const webgl = mockWebGl();
+
+    let resolveImplicit!: (value: { url: string; show: boolean; style: undefined }) => void;
+    const implicitStarted = new Promise<void>((resolve) => {
+      cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(async (url: string) => {
+        resolve();
+        return await new Promise((tilesetResolve) => {
+          resolveImplicit = tilesetResolve as typeof resolveImplicit;
+        }).then(() => ({ url, show: true, style: undefined }));
+      });
+    });
+
+    let resolveFetch!: (value: Response) => void;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+      () =>
+        new Promise<Response>((fetchResolve) => {
+          resolveFetch = fetchResolve;
+        }),
+    );
+
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('metadata-url', 'https://example.test/metadata.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    const ready = vi.fn();
+    element.addEventListener('honua-scene-ready', ready);
+
+    const loading = element.load();
+    await implicitStarted;
+
+    expect(element.metadata).toBeNull();
+
+    resolveFetch(
+      new Response(
+        JSON.stringify({
+          schema: 'honua-scene-metadata/v1',
+          id: 'demo',
+          name: 'Demo',
+          layers: [
+            {
+              id: 'primary',
+              title: 'Metadata primary',
+              kind: '3d-tiles',
+              url: 'https://data.example.test/metadata-primary.json',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    for (let i = 0; i < 8; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(element.metadata?.layers?.[0]?.id).toBe('primary');
+
+    resolveImplicit({
+      url: 'https://data.example.test/attribute-primary.json',
+      show: true,
+      style: undefined,
+    });
+    await loading;
+
+    const fromUrlCalls = cesium.Cesium3DTileset.fromUrl.mock.calls.map((call) => call[0]);
+    expect(fromUrlCalls).toContain('https://data.example.test/metadata-primary.json');
+
+    const handle = element.getLayer('primary');
+    expect(handle?.metadata.url).toBe('https://data.example.test/metadata-primary.json');
+    expect(handle?.metadata.title).toBe('Metadata primary');
+    expect(element.tileset).toBe(handle?.tileset);
+    expect((element.tileset as unknown as { url: string } | null)?.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+
+    expect(ready).toHaveBeenCalledOnce();
+    expect(ready.mock.calls[0][0].detail.tileset).toBe(handle?.tileset);
+
+    fetchSpy.mockRestore();
+    webgl.mockRestore();
+  });
+
   it('cancels in-flight loads when disconnected', async () => {
     const webgl = mockWebGl();
     let resolveTerrain!: (value: unknown) => void;
