@@ -36,39 +36,78 @@ For new offline workflows, register the SDK sync core with the mobile GeoPackage
 ```csharp
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
+using SdkOfflineSyncEngineOptions = Honua.Sdk.Offline.OfflineSyncEngineOptions;
 
 var manifest = new OfflinePackageManifest
 {
-    PackageId = "inspection-area-1",
+    PackageId = "mobile-offline-field-ops-v1",
+    DisplayName = "Mobile Offline Field Operations",
+    Version = "2026.05",
     Sources =
     [
         new OfflineSourceDescriptor
         {
-            SourceId = "parks",
+            SourceId = "mobile_offline_demo/FeatureServer/68910",
             Source = new SourceDescriptor
             {
-                Id = "parks",
-                Protocol = FeatureProtocolIds.OgcFeatures,
-                Locator = new SourceLocator { CollectionId = "parks" },
+                Id = "mobile-offline-field-sites",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
             },
-            OutFields = ["name", "status"],
-            PageSize = 500,
+            Where = "1=1",
+            OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+            ReturnGeometry = true,
+            PageSize = 100,
+        },
+        new OfflineSourceDescriptor
+        {
+            SourceId = "mobile_offline_demo/FeatureServer/68920",
+            Source = new SourceDescriptor
+            {
+                Id = "mobile-offline-work-zones",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68920 },
+            },
+            Where = "1=1",
+            OutFields = ["objectid", "globalid", "zone_name", "zone_status", "sync_version", "notes"],
+            ReturnGeometry = true,
+            PageSize = 100,
         },
     ],
+    Metadata = new Dictionary<string, string>
+    {
+        ["fixture"] = "mobile-offline-field-ops-v1",
+        ["serviceId"] = "mobile_offline_demo",
+        ["editableLayerId"] = "68910",
+        ["contextLayerId"] = "68920",
+    },
 };
 
 builder.Services
     .AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
-        BaseUri = new Uri("https://api.example.com"),
+        BaseUri = new Uri("https://api.honua.io"),
     })
     .AddHonuaSdkGeoPackageOfflineSync(
-        new GeoPackageSyncStoreOptions { DatabasePath = "fielddata.gpkg" },
-        manifest)
-    .AddHonuaBackgroundSync();
+        new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "fielddata.gpkg"),
+            DefaultFeatureCacheTtl = TimeSpan.FromDays(7),
+        },
+        manifest,
+        new SdkOfflineSyncEngineOptions
+        {
+            BatchSize = 50,
+            ConflictStrategy = OfflineConflictStrategy.ManualReview,
+        })
+    .AddHonuaBackgroundSync(new BackgroundSyncOrchestratorOptions
+    {
+        SyncInterval = TimeSpan.FromMinutes(5),
+    });
 ```
 
 `AddHonuaSdkGeoPackageOfflineSync` wires `Honua.Sdk.Offline.OfflineSyncEngine` to:
@@ -78,6 +117,8 @@ builder.Services
 - `SdkOfflineSyncRunner` for the existing mobile `IOfflineSyncRunner` used by foreground and background sync scheduling.
 
 The adapter partitions cached features and queued edits by SDK package ID and source ID, so multiple offline packages can safely include the same source without overwriting feature rows or claiming each other's pending edits.
+
+`AddHonuaGeoPackageOfflineSync(...)` remains available as lower-level mobile runtime plumbing for existing apps that already use the mobile-owned sync engine and uploader. New apps should prefer `AddHonuaSdkGeoPackageOfflineSync(...)` so portable package manifests, feature query/edit clients, journal, checkpoint, sync state, and `Honua.Sdk.Offline.OfflineSyncEngine` stay aligned with `honua-sdk-dotnet`, while this repo continues to own GeoPackage/SQLite storage, native file placement, connectivity, background scheduling, and permissions.
 
 ## Cache Policy And Spatial Indexing
 
@@ -105,6 +146,69 @@ SpatiaLite is not bundled for the baseline mobile cache path. Current feature-ca
 `BackgroundPrefetchScheduler` runs optional cache-warming work with bounded concurrency. Call `CancelForLifecycleEventAsync(PrefetchLifecycleEvent.Suspend)` from app suspend handlers and `PrefetchLifecycleEvent.LowMemory` from platform memory-pressure hooks so downloads and cache fills observe cancellation before the OS reclaims resources.
 
 ## Configuration
+
+## Disconnected Field Workflow Acceptance Harness
+
+`tests/Honua.Mobile.ServerIntegration.Tests/DisconnectedFieldWorkflowAcceptanceTests.cs`
+defines the acceptance scaffold for the cloud Honua disconnected field workflow:
+
+1. `online-download`: create or reuse a replica and download server changes into the local GeoPackage cache.
+2. `offline-edit`: queue a deterministic offline feature edit while the harness is logically disconnected.
+3. `reconnect-sync`: run the mobile sync engine and upload queued edits.
+4. `verify`: assert local cache/cursor state, drained queue state, and cloud fixture evidence.
+
+The loopback test runs by default against the in-process integration server. The cloud/staging path is gated and only runs when explicitly enabled:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `HONUA_MOBILE_CLOUD_ACCEPTANCE` | Yes | Set to `1` or `true` to run cloud acceptance. Otherwise the cloud test emits skipped evidence and returns. |
+| `HONUA_MOBILE_CLOUD_BASE_URL` | Yes when enabled | Cloud Honua base URL. |
+| `HONUA_MOBILE_CLOUD_SERVICE_ID` | Yes when enabled | FeatureServer service id supplied by the honua-server#895 fixture. |
+| `HONUA_MOBILE_CLOUD_LAYER_IDS` | No | Comma-separated FeatureServer layer IDs. Defaults to `0`. |
+| `HONUA_MOBILE_CLOUD_API_KEY` | No | API key sent as `X-API-Key`. |
+| `HONUA_MOBILE_CLOUD_BEARER_TOKEN` | No | Bearer token for authenticated staging fixtures. |
+| `HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR` | No | Directory for evidence JSON artifacts. Defaults to a temp evidence directory for cloud runs. |
+| `HONUA_MOBILE_ACCEPTANCE_RUN_ID` | No | Stable run id used in artifact names and operation metadata. |
+| `HONUA_MOBILE_ACCEPTANCE_PACKAGE_ID` | No | Offline package id recorded in evidence. Defaults to `pkg_acceptance_field_workflow`. |
+| `HONUA_MOBILE_ACCEPTANCE_DATABASE_PATH` | No | GeoPackage path for the cloud acceptance run. |
+
+Evidence artifacts are written as `<run-id>.evidence.json` and use schema
+`honua.mobile.disconnected-field-workflow.evidence.v1`:
+
+```json
+{
+  "schemaVersion": "honua.mobile.disconnected-field-workflow.evidence.v1",
+  "workflowName": "disconnected-field-workflow",
+  "runId": "cloud-disconnected-field-workflow-20260504120000",
+  "status": "passed",
+  "packageId": "pkg_acceptance_field_workflow",
+  "serviceId": "assets",
+  "sourceIds": ["0"],
+  "operationIds": ["op-acceptance-add-001"],
+  "cursorState": {
+    "replica:assets": "replica-abc-123",
+    "servergen:assets": "100"
+  },
+  "phases": [
+    { "name": "online-download", "status": "passed" },
+    { "name": "offline-edit", "status": "passed" },
+    { "name": "reconnect-sync", "status": "passed" },
+    { "name": "verify", "status": "passed" }
+  ],
+  "finalState": {
+    "localFeatureCount": 1,
+    "pendingOperationCount": 0,
+    "localVerification": "downloaded features retained and sync queue drained",
+    "cloudVerification": "fixture-specific verification result"
+  }
+}
+```
+
+Until honua-server#895 is available, the cloud test intentionally does not
+assume server-side readback endpoints beyond the replica and `applyEdits`
+contract. The loopback harness verifies request-level behavior locally; the
+cloud harness records the fixture assumption in the queued operation metadata
+and evidence artifact.
 
 ### Basic Setup
 

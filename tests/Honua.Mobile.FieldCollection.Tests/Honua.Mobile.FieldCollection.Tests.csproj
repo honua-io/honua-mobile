@@ -30,6 +30,7 @@
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\CoreServices.cs" Link="App\Services\CoreServices.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\IAuthenticationService.cs" Link="App\Services\IAuthenticationService.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\ISyncService.cs" Link="App\Services\ISyncService.cs" />
+    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\OfflineCacheDiagnostics.cs" Link="App\Services\Diagnostics\OfflineCacheDiagnostics.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\MobileExceptionReporter.cs" Link="App\Services\Diagnostics\MobileExceptionReporter.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\GeoPackageStorageService.cs" Link="App\Services\Storage\GeoPackageStorageService.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\Models\StorageModels.cs" Link="App\Services\Storage\Models\StorageModels.cs" />

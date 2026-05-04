@@ -56,12 +56,23 @@ public class SyncResult
 public class ConflictInfo
 {
     public string Id { get; set; } = string.Empty;
+    public string OperationId { get; set; } = string.Empty;
     public string FeatureId { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
     public string LayerName { get; set; } = string.Empty;
     public ConflictType Type { get; set; }
     public DateTime DetectedAt { get; set; }
     public object? LocalVersion { get; set; }
     public object? ServerVersion { get; set; }
+    public string? FailureReason { get; set; }
+    public string? RedactedLocalVersion { get; set; }
+    public string? RedactedServerVersion { get; set; }
+    public IReadOnlyList<ConflictResolution> AvailableResolutions { get; set; } =
+    [
+        ConflictResolution.AcceptLocal,
+        ConflictResolution.AcceptServer,
+        ConflictResolution.Manual
+    ];
 
     public string ConflictDescription => Type switch
     {

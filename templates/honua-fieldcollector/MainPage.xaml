@@ -58,7 +58,7 @@
 
                             <!-- Dynamic Form -->
                             <honua:HonuaFeatureForm x:Name="DataForm"
-                                                   FormId="site_inspection"
+                                                   FormId="field-site-inspection"
                                                    AllowDrafts="true"
                                                    ShowProgress="true"
                                                    FormSubmitted="OnDataCollected"

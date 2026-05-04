@@ -31,26 +31,54 @@ cd MyFieldApp
 Open `MauiProgram.cs` and configure your server connection:
 
 ```csharp
+using Honua.Mobile.Maui;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
+        var offlineDb = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-fieldcollector.gpkg");
 
         builder
             .UseMauiApp<App>()
-            .UseHonuaMobileSDK(config =>
+            .ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+
+        builder.Services
+            .AddHonuaMobileSdk(new HonuaMobileClientOptions
             {
-                // 🔥 Replace with your Honua server
-                config.ServerEndpoint = "https://demo.honua.com";
-
-                // 🔑 Get your free API key at demo.honua.com
-                config.ApiKey = "your-api-key-here";
-
-                // ✅ Enable powerful features
-                config.EnableOfflineStorage = true;
-                config.EnableIoTSensors = false; // Start simple
-            });
+                BaseUri = new Uri("https://api.honua.io"),
+                ApiKey = "your-api-key-here",
+            })
+            .AddHonuaMobileFieldCollection()
+            .AddHonuaSdkGeoPackageOfflineSync(
+                new GeoPackageSyncStoreOptions { DatabasePath = offlineDb },
+                new OfflinePackageManifest
+                {
+                    PackageId = "mobile-offline-field-ops-v1",
+                    DisplayName = "Mobile Offline Field Operations",
+                    Sources =
+                    [
+                        new OfflineSourceDescriptor
+                        {
+                            SourceId = "mobile_offline_demo/FeatureServer/68910",
+                            Source = new SourceDescriptor
+                            {
+                                Id = "mobile-offline-field-sites",
+                                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+                            },
+                            Where = "1=1",
+                            OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+                            ReturnGeometry = true,
+                            PageSize = 100,
+                        },
+                    ],
+                });
 
         return builder.Build();
     }
@@ -58,9 +86,10 @@ public static class MauiProgram
 ```
 
 **💡 No Server Yet?** Use our demo server:
-- **Endpoint**: `https://demo.honua.com`
+- **Endpoint**: `https://api.honua.io`
 - **API Key**: `demo_key_field_collection_2026`
-- **Form ID**: `site_inspection` (pre-configured demo form)
+- **Service**: `mobile_offline_demo` (pre-configured offline field operations fixture)
+- **Editable layer**: `68910`
 
 ## Step 3: Build the Data Collection UI (90 seconds)
 
@@ -86,7 +115,7 @@ Replace `MainPage.xaml` content:
         <!-- 📝 Dynamic Data Collection Form -->
         <ScrollView Grid.Row="1">
             <honua:HonuaFeatureForm x:Name="DataForm"
-                                   FormId="site_inspection"
+                                   FormId="field-site-inspection"
                                    AllowDrafts="true"
                                    ShowProgress="true"
                                    FormSubmitted="OnDataCollected"
@@ -265,7 +294,7 @@ Add to MainPage.xaml above the form:
 
 # Or query via API:
 curl -H "X-API-Key: your-api-key" \
-     https://demo.honua.com/api/v1/features/site_inspection
+     "https://api.honua.io/rest/services/mobile_offline_demo/FeatureServer/68910/query?where=1%3D1&outFields=*&f=json"
 ```
 
 ## Compare to Competition

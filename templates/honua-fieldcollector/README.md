@@ -62,16 +62,36 @@ This template creates a complete field data collection application with:
 
 ### 1. Configure Your Server
 
-Update the server connection in `MauiProgram.cs`:
+Update the server connection and offline package manifest in `MauiProgram.cs`:
 
 ```csharp
-config.ServerEndpoint = "https://your-honua-server.com";
-config.ApiKey = "your-api-key-here";
+builder.Services
+    .AddHonuaMobileSdk(new HonuaMobileClientOptions
+    {
+        BaseUri = new Uri("https://api.honua.io"),
+        ApiKey = "your-api-key-here",
+    })
+    .AddHonuaSdkGeoPackageOfflineSync(
+        new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-fieldcollector.gpkg"),
+            DefaultFeatureCacheTtl = TimeSpan.FromDays(7),
+        },
+        CreateOfflinePackageManifest());
 ```
+
+The template uses the SDK-backed offline path by default. `Honua.Sdk.Offline`
+owns the portable package manifest and sync engine; the mobile app still owns
+GeoPackage storage, native file placement, connectivity, permissions, and
+background scheduling.
+
+The checked-in manifest targets the cloud/staging fixture from
+`honua-server#895`: service `mobile_offline_demo`, editable layer `68910`, and
+readonly context layer `68920`.
 
 ### 2. Customize Your Form
 
-The app is configured to use form ID `"site_inspection"`. To use your own form:
+The app is configured to use form ID `"field-site-inspection"`. To use your own form:
 
 1. Create a form schema on your Honua server
 2. Update the `FormId` in `MainPage.xaml`:

@@ -18,6 +18,7 @@ public partial class SyncCenterPage : ContentPage
         base.OnAppearing();
 
         // Load current sync state and history
+        await _viewModel.LoadOfflineDiagnosticsCommand.ExecuteAsync(null);
         await _viewModel.LoadConflictsCommand.ExecuteAsync(null);
         await _viewModel.LoadSyncHistoryCommand.ExecuteAsync(null);
     }

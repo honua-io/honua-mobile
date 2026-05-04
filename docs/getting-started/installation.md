@@ -105,39 +105,55 @@ Install-Package Honua.Mobile.Maui
 ### 1. Update MauiProgram.cs
 
 ```csharp
-using Honua.Mobile.Core;
-using Honua.Mobile.Storage;
-using Honua.Mobile.IoT;
 using Honua.Mobile.Maui;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
 
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
+        var offlineDb = Path.Combine(FileSystem.Current.AppDataDirectory, "fielddata.gpkg");
 
-        builder
-            .UseMauiApp<App>()
-            .UseHonuaMobileSDK(config =>
+        builder.UseMauiApp<App>();
+
+        builder.Services
+            .AddHonuaMobileSdk(new HonuaMobileClientOptions
             {
-                // Required: Your Honua server endpoint
-                config.ServerEndpoint = "https://your-honua-server.com";
-
-                // Required: API key for authentication
-                config.ApiKey = "your-api-key-here";
-
-                // Optional: Enable offline storage (recommended)
-                config.EnableOfflineStorage = true;
-
-                // Optional: Enable IoT sensor support
-                config.EnableIoTSensors = true;
-
-                // Optional: Configure logging
-                config.LogLevel = LogLevel.Information;
-
-                // Optional: Sync settings
-                config.AutoSyncInterval = TimeSpan.FromMinutes(5);
-                config.MaxRetryAttempts = 3;
+                BaseUri = new Uri("https://your-honua-server.com"),
+                ApiKey = "your-api-key-here",
+            })
+            .AddHonuaMobileFieldCollection()
+            .AddHonuaSdkGeoPackageOfflineSync(
+                new GeoPackageSyncStoreOptions { DatabasePath = offlineDb },
+                new OfflinePackageManifest
+                {
+                    PackageId = "mobile-offline-field-ops-v1",
+                    Sources =
+                    [
+                        new OfflineSourceDescriptor
+                        {
+                            SourceId = "mobile_offline_demo/FeatureServer/68910",
+                            Source = new SourceDescriptor
+                            {
+                                Id = "mobile-offline-field-sites",
+                                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+                            },
+                            Where = "1=1",
+                            OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+                            ReturnGeometry = true,
+                            PageSize = 100,
+                        },
+                    ],
+                })
+            .AddHonuaBackgroundSync(new BackgroundSyncOrchestratorOptions
+            {
+                SyncInterval = TimeSpan.FromMinutes(5),
             });
 
         // Register additional services if needed
