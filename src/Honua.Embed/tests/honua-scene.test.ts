@@ -608,6 +608,134 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('destroys a primary tileset that resolves after the element disconnects', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/v1.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    type StaleTileset = {
+      url: string;
+      show: boolean;
+      style: undefined;
+      destroy: ReturnType<typeof vi.fn>;
+      isDestroyed: () => boolean;
+    };
+    let staleDestroyed = false;
+    let resolveStale: (value: StaleTileset) => void = () => {};
+    cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(
+      () =>
+        new Promise<StaleTileset>((resolve) => {
+          resolveStale = resolve;
+        }),
+    );
+
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-load-error', errorListener);
+
+    const stalePromise = element.load();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const widget = cesium.__mock.widgets[cesium.__mock.widgets.length - 1];
+
+    element.remove();
+
+    resolveStale({
+      url: 'https://data.example.test/v1.json',
+      show: true,
+      style: undefined,
+      destroy: vi.fn(() => {
+        staleDestroyed = true;
+      }),
+      isDestroyed: () => staleDestroyed,
+    });
+    await stalePromise;
+
+    expect(staleDestroyed).toBe(true);
+    expect(element.tileset).toBeNull();
+    expect(
+      widget.scene.primitives.add.mock.calls.some(
+        (call) => (call[0] as { url?: string } | undefined)?.url === 'https://data.example.test/v1.json',
+      ),
+    ).toBe(false);
+    expect(errorListener).not.toHaveBeenCalled();
+
+    webgl.mockRestore();
+  });
+
+  it('does not emit a load-error when a primary tileset load fails after disconnect', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/v1.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    let rejectStale: (reason: unknown) => void = () => {};
+    cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectStale = reject;
+        }),
+    );
+
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-load-error', errorListener);
+
+    const stalePromise = element.load();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    element.remove();
+
+    rejectStale(new Error('stale tileset failed'));
+    await stalePromise;
+
+    expect(errorListener).not.toHaveBeenCalled();
+
+    webgl.mockRestore();
+  });
+
+  it('does not emit metadata-fetch-failed when a stale JSON parse rejects after a newer source wins', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    let rejectStaleJson: (reason: unknown) => void = () => {};
+    const stalePending = new Promise((_, reject) => {
+      rejectStaleJson = reject;
+    });
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => stalePending,
+    } as unknown as Response);
+
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    const errorListener = vi.fn();
+    const changeListener = vi.fn();
+    element.addEventListener('honua-scene-metadata-error', errorListener);
+    element.addEventListener('honua-scene-metadata-change', changeListener);
+
+    element.setAttribute('metadata-url', 'https://example.test/stale.json');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'fresh',
+      name: 'Fresh',
+    };
+
+    rejectStaleJson(new SyntaxError('Unexpected token'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(errorListener).not.toHaveBeenCalled();
+    expect(changeListener).toHaveBeenCalled();
+    expect(element.metadata?.id).toBe('fresh');
+
+    fetchSpy.mockRestore();
+  });
+
   it('samplePoint returns null without a widget and a cartographic point when the widget is loaded', async () => {
     const element = document.createElement('honua-scene');
     element.setAttribute('autoload', 'false');

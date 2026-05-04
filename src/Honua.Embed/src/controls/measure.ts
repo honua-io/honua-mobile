@@ -31,6 +31,12 @@ export interface HonuaSceneMeasurementClearDetail {
 const ELEMENT_NAME = 'honua-scene-measure';
 const CONTROL_ID = 'measure';
 
+const MINIMUM_POINTS: Record<HonuaSceneMeasurementKind, number> = {
+  point: 1,
+  line: 2,
+  polygon: 3,
+};
+
 const template = controlTemplate(`
   ${CONTROL_BASE_STYLES}
   <style>
@@ -143,7 +149,16 @@ export class HonuaSceneMeasureElement extends HTMLElement {
   }
 
   finalize(): boolean {
-    if (!this.#activeKind || this.#points.length === 0) {
+    if (!this.#activeKind) {
+      return false;
+    }
+
+    const required = MINIMUM_POINTS[this.#activeKind];
+    if (this.#points.length < required) {
+      this.#link.emitError(
+        'insufficient-points',
+        `${this.#activeKind} measurement requires at least ${required} point${required === 1 ? '' : 's'}.`,
+      );
       return false;
     }
 
@@ -154,11 +169,11 @@ export class HonuaSceneMeasureElement extends HTMLElement {
       controlId: CONTROL_ID,
     };
 
-    if (this.#activeKind === 'line' && this.#points.length >= 2) {
+    if (this.#activeKind === 'line') {
       detail.distance = computeDistance(this.#points);
     }
 
-    if (this.#activeKind === 'polygon' && this.#points.length >= 3) {
+    if (this.#activeKind === 'polygon') {
       detail.area = computeArea(this.#points);
     }
 

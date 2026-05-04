@@ -4,6 +4,7 @@ import { HonuaSceneLink } from './scene-link';
 import {
   CONTROL_BASE_STYLES,
   controlTemplate,
+  resolveControlLayerIds,
   upgradeProperty,
 } from './shared';
 
@@ -206,9 +207,8 @@ export class HonuaSceneTimelineElement extends HTMLElement {
 
   #syncLayerVisibility(scene: HonuaSceneElement, phase: HonuaSceneTimelinePhase): void {
     const visible = new Set(phase.visibleLayerIds);
-    const layers = scene.metadata?.layers ?? [];
-    for (const layer of layers) {
-      scene.setLayerVisibility(layer.id, visible.has(layer.id));
+    for (const id of resolveControlLayerIds(scene)) {
+      scene.setLayerVisibility(id, visible.has(id));
     }
   }
 }

@@ -120,8 +120,12 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 
 `HonuaSceneElement` also exposes an imperative API: `metadata` (property),
 `applyView(view)`, `addLayer(metadata)`, `removeLayer(id)`,
-`setLayerVisibility(id, visible)`, `setLayerOpacity(id, opacity)`, and
-`getLayer(id)`. See the [Scene Controls guide](../../docs/guides/scene-controls.md)
+`setLayerVisibility(id, visible)`, `setLayerOpacity(id, opacity)`,
+`getLayer(id)`, and `samplePoint(x, y)` (returns
+`{ latitude, longitude, height } | null` for the surface picked at canvas-space
+`x`/`y`). `addLayer` is also re-entrant — calling it again with the same `id`
+but a different `kind` or `url` detaches the previous tileset and reloads from
+the new source. See the [Scene Controls guide](../../docs/guides/scene-controls.md)
 for the metadata shape and the full event reference.
 
 ## Events
@@ -136,7 +140,7 @@ for the metadata shape and the full event reference.
 | `honua-scene-config-change` | Current `HonuaSceneConfig`. |
 | `honua-scene-load-error` | `{ source, code, message, config, error }`. |
 | `honua-scene-camera-change` | `{ center, height, orientation, config }`. |
-| `honua-scene-identify` | `{ x, y, picked, config }`. |
+| `honua-scene-identify` | `{ x, y, picked, position, config }` where `position` is `{ latitude, longitude, height } \| null`. |
 | `honua-scene-metadata-change` | `{ metadata, source }`. |
 | `honua-scene-metadata-error` | `{ url, code, message, path?, error? }`. |
 | `honua-scene-layer-change` | `{ layerId, reason, layer, visible, opacity }`. |

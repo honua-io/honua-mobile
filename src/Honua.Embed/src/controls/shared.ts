@@ -94,3 +94,19 @@ export function upgradeProperty(element: HTMLElement, propertyName: string): voi
   delete (element as unknown as Record<string, unknown>)[propertyName];
   (element as unknown as Record<string, unknown>)[propertyName] = value;
 }
+
+interface SceneLayerSurface {
+  metadata?: { layers?: { id: string }[] | null } | null;
+  layers?: ReadonlyArray<{ metadata: { id: string } }>;
+}
+
+export function resolveControlLayerIds(scene: SceneLayerSurface): string[] {
+  const ids = new Set<string>();
+  for (const layer of scene.metadata?.layers ?? []) {
+    ids.add(layer.id);
+  }
+  for (const handle of scene.layers ?? []) {
+    ids.add(handle.metadata.id);
+  }
+  return [...ids];
+}

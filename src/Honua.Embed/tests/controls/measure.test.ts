@@ -157,6 +157,72 @@ describe('honua-scene-measure', () => {
     sampleSpy.mockRestore();
   });
 
+  it('refuses to finalize a line measurement before two points are picked', () => {
+    const control = createMeasureControl(setup);
+    const addListener = vi.fn();
+    const errorListener = vi.fn();
+    control.addEventListener('honua-scene-measurement-add', addListener);
+    control.addEventListener('honua-scene-control-error', errorListener);
+
+    const lineButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-kind="line"]',
+    )!;
+    lineButton.click();
+    lineButton.click();
+
+    expect(addListener).not.toHaveBeenCalled();
+    expect(errorListener).toHaveBeenCalledOnce();
+    expect(errorListener.mock.calls[0][0].detail).toMatchObject({
+      controlId: 'measure',
+      kind: 'insufficient-points',
+    });
+  });
+
+  it('refuses to finalize a polygon measurement before three points are picked', () => {
+    const control = createMeasureControl(setup);
+    const addListener = vi.fn();
+    const errorListener = vi.fn();
+    control.addEventListener('honua-scene-measurement-add', addListener);
+    control.addEventListener('honua-scene-control-error', errorListener);
+
+    const polygonButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-kind="polygon"]',
+    )!;
+    polygonButton.click();
+
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          x: 1,
+          y: 1,
+          picked: { position: { latitude: 39.95, longitude: -75.16, height: 0 } },
+        },
+      }),
+    );
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          x: 2,
+          y: 2,
+          picked: { position: { latitude: 39.951, longitude: -75.161, height: 0 } },
+        },
+      }),
+    );
+
+    polygonButton.click();
+
+    expect(addListener).not.toHaveBeenCalled();
+    expect(errorListener).toHaveBeenCalledOnce();
+    expect(errorListener.mock.calls[0][0].detail).toMatchObject({
+      controlId: 'measure',
+      kind: 'insufficient-points',
+    });
+  });
+
   it('emits honua-scene-measurement-clear on Clear', () => {
     const control = createMeasureControl(setup);
     const listener = vi.fn();

@@ -198,10 +198,38 @@ function readPickedAttributes(
   }
 
   const accessor = (picked as { getProperty?: (key: string) => unknown }).getProperty;
+  const idsAccessor = (picked as { getPropertyIds?: () => string[] }).getPropertyIds;
   const properties = (picked as { properties?: Record<string, unknown> }).properties;
   const direct = picked as Record<string, unknown>;
 
   if (fields.length === 0) {
+    if (typeof accessor === 'function' && typeof idsAccessor === 'function') {
+      let ids: string[] | undefined;
+      try {
+        ids = idsAccessor.call(picked);
+      } catch {
+        ids = undefined;
+      }
+      if (Array.isArray(ids)) {
+        for (const key of ids) {
+          if (typeof key !== 'string') {
+            continue;
+          }
+          try {
+            const value = accessor.call(picked, key);
+            if (value !== undefined) {
+              result[key] = value;
+            }
+          } catch {
+            /* getProperty may throw for missing keys on some renderers */
+          }
+        }
+        if (Object.keys(result).length > 0) {
+          return result;
+        }
+      }
+    }
+
     if (properties && typeof properties === 'object') {
       for (const [key, value] of Object.entries(properties)) {
         result[key] = value;

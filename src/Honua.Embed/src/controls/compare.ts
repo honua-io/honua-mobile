@@ -4,6 +4,7 @@ import { HonuaSceneLink } from './scene-link';
 import {
   CONTROL_BASE_STYLES,
   controlTemplate,
+  resolveControlLayerIds,
   upgradeProperty,
 } from './shared';
 
@@ -253,9 +254,8 @@ export class HonuaSceneCompareElement extends HTMLElement {
       mode.rightLayerIds.forEach((id) => visible.add(id));
     }
 
-    const layers = scene.metadata?.layers ?? [];
-    for (const layer of layers) {
-      scene.setLayerVisibility(layer.id, visible.has(layer.id));
+    for (const id of resolveControlLayerIds(scene)) {
+      scene.setLayerVisibility(id, visible.has(id));
     }
   }
 }

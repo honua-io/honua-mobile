@@ -81,6 +81,57 @@ describe('honua-scene-inspector', () => {
     const titles = [...fields].map((node) => node.textContent);
     expect(titles).toEqual(['Asset ID', 'Phase', 'Elevation']);
   });
+
+  it('falls back to Cesium getPropertyIds/getProperty when metadata has no inspector fields', async () => {
+    setup.cleanup();
+    setup = await setupScene({
+      schema: 'honua-scene-metadata/v1',
+      id: 'sample-no-inspector',
+      name: 'Sample Scene Without Inspector',
+    });
+
+    const control = createInspectorControl(setup);
+    const listener = vi.fn();
+    control.addEventListener('honua-scene-feature-select', listener);
+
+    const properties: Record<string, unknown> = {
+      id: 'cesium-feature-7',
+      phase: 'phase-3',
+      elevation: 42,
+    };
+    const cesiumLikeFeature = {
+      featureId: 7,
+      getPropertyIds: () => Object.keys(properties),
+      getProperty: (key: string) => properties[key],
+    };
+
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          x: 0,
+          y: 0,
+          picked: cesiumLikeFeature,
+        },
+      }),
+    );
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      featureId: '7',
+      attributes: {
+        id: 'cesium-feature-7',
+        phase: 'phase-3',
+        elevation: 42,
+      },
+      controlId: 'inspector',
+    });
+
+    const fields = control.shadowRoot!.querySelectorAll('dt');
+    const titles = [...fields].map((node) => node.textContent);
+    expect(titles).toEqual(['id', 'phase', 'elevation']);
+  });
 });
 
 function createInspectorControl(setup: SceneSetup): HTMLElement {

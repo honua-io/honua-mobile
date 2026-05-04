@@ -132,11 +132,12 @@ call directly:
 | Method | Description |
 | --- | --- |
 | `applyView(view)` | Wraps `setView` for a `HonuaSceneViewSpec`. |
-| `addLayer(metadata)` | Registers a metadata-shaped layer; loads the tileset when the scene is live. |
+| `addLayer(metadata)` | Registers a metadata-shaped layer; loads the tileset when the scene is live. Re-calling with the same `id` but a new `kind`/`url` detaches the previous tileset and reloads from the new source. |
 | `removeLayer(id)` | Removes a registered layer and any backing tileset. |
 | `setLayerVisibility(id, visible)` | Toggles visibility; emits `honua-scene-layer-change`. |
 | `setLayerOpacity(id, opacity)` | Sets the layer opacity (0–1); emits `honua-scene-layer-change`. |
 | `getLayer(id)` | Returns the live layer handle (metadata + visibility/opacity + tileset). |
+| `samplePoint(x, y)` | Converts canvas-space pick coordinates into `{ latitude, longitude, height } \| null` using the active scene; returns `null` when the scene has not loaded or no surface was sampled. Used by `<honua-scene-measure>` and exposed for hosts that need to derive cartographic coordinates from custom pointer events. |
 
 Layers declared in `metadata.layers` are tracked under their declared `id`.
 The implicit `tileset-url` becomes the `id: "primary"` layer when no metadata
@@ -158,13 +159,17 @@ JS SDK can model them without importing Cesium.
 | `honua-scene-timeline-change` | `{ phaseId, startUtc, endUtc, visibleLayerIds, controlId: 'timeline' }` |
 | `honua-scene-compare-set` | `{ modeId, side, leftLayerIds, rightLayerIds, controlId: 'compare' }` |
 | `honua-scene-feature-select` | `{ featureId, attributes, controlId: 'inspector' }` |
-| `honua-scene-measurement-add` | `{ measurementId, kind, points, distance?, area?, controlId: 'measure' }` |
+| `honua-scene-measurement-add` | `{ measurementId, kind, points, distance?, area?, controlId: 'measure' }` — emitted only when the measurement meets the per-kind minimum: `point` ≥ 1, `line` ≥ 2, `polygon` ≥ 3 points. Earlier finalize attempts emit `honua-scene-control-error` with `kind: 'insufficient-points'`. |
 | `honua-scene-measurement-clear` | `{ measurementId, controlId: 'measure' }` |
 | `honua-scene-control-error` | `{ controlId, kind, message, error? }` |
 
 Existing scene events (`honua-scene-ready`, `honua-scene-config-change`,
 `honua-scene-load-error`, `honua-scene-camera-change`,
-`honua-scene-identify`) keep their current contract.
+`honua-scene-identify`) keep their previous contract; the only change is
+additive — `honua-scene-identify` now also carries
+`position: { latitude, longitude, height } | null`, computed via
+`samplePoint(x, y)`. Hosts that previously read only `x`, `y`, `picked`, and
+`config` continue to work unchanged.
 
 ## Running the demo
 

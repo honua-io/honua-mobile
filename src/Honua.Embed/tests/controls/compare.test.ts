@@ -51,6 +51,58 @@ describe('honua-scene-compare', () => {
     expect(setup.scene.getLayer('design-overlay')?.visible).toBe(true);
     expect(setup.scene.getLayer('as-built')?.visible).toBe(true);
   });
+
+  it('toggles the implicit primary layer when modes reference it', async () => {
+    setup.cleanup();
+    setup = await setupScene({
+      schema: 'honua-scene-metadata/v1',
+      id: 'with-primary',
+      name: 'Scene with implicit primary',
+      layers: [
+        {
+          id: 'as-built',
+          title: 'As-built',
+          kind: '3d-tiles',
+          url: 'https://example.test/as-built/tileset.json',
+          visible: true,
+          opacity: 1,
+        },
+      ],
+      compare: {
+        modes: [
+          {
+            id: 'primary-vs-asbuilt',
+            title: 'Primary vs As-built',
+            leftLayerIds: ['primary'],
+            rightLayerIds: ['as-built'],
+          },
+        ],
+      },
+    });
+    await setup.scene.addLayer({
+      id: 'primary',
+      title: 'Primary',
+      kind: '3d-tiles',
+      url: 'https://example.test/primary/tileset.json',
+      visible: true,
+      opacity: 1,
+    });
+
+    const control = createCompareControl(setup);
+    const leftButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-mode-id="primary-vs-asbuilt"][data-side="left"]',
+    )!;
+    leftButton.click();
+    expect(setup.scene.getLayer('primary')?.visible).toBe(true);
+    expect(setup.scene.getLayer('as-built')?.visible).toBe(false);
+
+    const rightButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-mode-id="primary-vs-asbuilt"][data-side="right"]',
+    )!;
+    rightButton.click();
+    expect(setup.scene.getLayer('primary')?.visible).toBe(false);
+    expect(setup.scene.getLayer('as-built')?.visible).toBe(true);
+  });
 });
 
 function createCompareControl(setup: SceneSetup): HTMLElement {

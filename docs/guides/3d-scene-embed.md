@@ -58,7 +58,9 @@ scene.addEventListener('honua-scene-load-error', (event) => {
 });
 
 scene.addEventListener('honua-scene-identify', (event) => {
-  console.log(event.detail.x, event.detail.y, event.detail.picked);
+  // detail.position is { latitude, longitude, height } when the scene
+  // could sample a surface at (x, y); otherwise null.
+  console.log(event.detail.x, event.detail.y, event.detail.picked, event.detail.position);
 });
 ```
 

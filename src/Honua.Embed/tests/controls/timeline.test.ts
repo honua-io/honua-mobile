@@ -47,6 +47,66 @@ describe('honua-scene-timeline', () => {
     expect(setup.scene.getLayer('design-overlay')?.visible).toBe(false);
     expect(setup.scene.getLayer('as-built')?.visible).toBe(true);
   });
+
+  it('toggles the implicit primary layer when phases reference it', async () => {
+    setup.cleanup();
+    setup = await setupScene({
+      schema: 'honua-scene-metadata/v1',
+      id: 'with-primary',
+      name: 'Scene with implicit primary',
+      layers: [
+        {
+          id: 'as-built',
+          title: 'As-built',
+          kind: '3d-tiles',
+          url: 'https://example.test/as-built/tileset.json',
+          visible: true,
+          opacity: 1,
+        },
+      ],
+      timeline: {
+        phases: [
+          {
+            id: 'primary-only',
+            title: 'Primary only',
+            startUtc: '2026-01-01T00:00:00Z',
+            endUtc: '2026-01-31T00:00:00Z',
+            visibleLayerIds: ['primary'],
+          },
+          {
+            id: 'as-built-only',
+            title: 'As-built only',
+            startUtc: '2026-02-01T00:00:00Z',
+            endUtc: '2026-02-28T00:00:00Z',
+            visibleLayerIds: ['as-built'],
+          },
+        ],
+      },
+    });
+    await setup.scene.addLayer({
+      id: 'primary',
+      title: 'Primary',
+      kind: '3d-tiles',
+      url: 'https://example.test/primary/tileset.json',
+      visible: true,
+      opacity: 1,
+    });
+
+    const control = createTimelineControl(setup);
+    const primaryOnly = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-phase-id="primary-only"]',
+    )!;
+    primaryOnly.click();
+    expect(setup.scene.getLayer('primary')?.visible).toBe(true);
+    expect(setup.scene.getLayer('as-built')?.visible).toBe(false);
+
+    const asBuiltOnly = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-phase-id="as-built-only"]',
+    )!;
+    asBuiltOnly.click();
+    expect(setup.scene.getLayer('primary')?.visible).toBe(false);
+    expect(setup.scene.getLayer('as-built')?.visible).toBe(true);
+  });
 });
 
 function createTimelineControl(setup: SceneSetup): HTMLElement {

@@ -604,27 +604,40 @@ export class HonuaSceneElement extends HTMLElement {
         showRenderLoopErrors: false,
       });
     } catch (error) {
-      this.#emitLoadError('terrain', 'Unable to initialize the terrain provider or scene widget.', error);
+      if (version === this.#loadVersion) {
+        this.#emitLoadError('terrain', 'Unable to initialize the terrain provider or scene widget.', error);
+      }
       return;
     }
 
     try {
       if (dataUrls.tilesetUrl) {
-        this.#tileset = await cesium.Cesium3DTileset.fromUrl(dataUrls.tilesetUrl);
+        const loaded = await cesium.Cesium3DTileset.fromUrl(dataUrls.tilesetUrl);
 
         if (version !== this.#loadVersion || !this.#widget) {
+          destroyTilesetSafely(loaded);
           return;
         }
 
-        this.#widget.scene.primitives.add(this.#tileset);
-        this.#registerPrimaryLayer(dataUrls.tilesetUrl, this.#tileset);
+        this.#tileset = loaded;
+        this.#widget.scene.primitives.add(loaded);
+        this.#registerPrimaryLayer(dataUrls.tilesetUrl, loaded);
         if (!config.center) {
-          await this.#widget.zoomTo(this.#tileset);
+          await this.#widget.zoomTo(loaded);
+        }
+
+        if (version !== this.#loadVersion) {
+          return;
         }
       }
 
       this.#bindCesiumEvents(cesium);
       await this.#hydrateLayersFromMetadata();
+
+      if (version !== this.#loadVersion || !this.#widget) {
+        return;
+      }
+
       this.#applyCamera();
       this.#widget.scene.requestRender();
       this.#setStatus('', true);
@@ -638,7 +651,9 @@ export class HonuaSceneElement extends HTMLElement {
         },
       }));
     } catch (error) {
-      this.#emitLoadError('tileset', 'Unable to load the 3D Tiles dataset.', error);
+      if (version === this.#loadVersion) {
+        this.#emitLoadError('tileset', 'Unable to load the 3D Tiles dataset.', error);
+      }
     }
   }
 
@@ -711,6 +726,7 @@ export class HonuaSceneElement extends HTMLElement {
       handle.metadata.url !== targetUrl ||
       !this.#widget
     ) {
+      destroyTilesetSafely(tileset);
       return;
     }
 
@@ -1018,12 +1034,14 @@ export class HonuaSceneElement extends HTMLElement {
     try {
       payload = await response.json();
     } catch (error) {
-      this.#emitMetadataError({
-        url,
-        code: 'metadata-fetch-failed',
-        message: 'Scene metadata response was not valid JSON.',
-        error,
-      });
+      if (version === this.#metadataFetchVersion) {
+        this.#emitMetadataError({
+          url,
+          code: 'metadata-fetch-failed',
+          message: 'Scene metadata response was not valid JSON.',
+          error,
+        });
+      }
       return;
     }
 
@@ -1033,8 +1051,14 @@ export class HonuaSceneElement extends HTMLElement {
 
     try {
       const metadata = parseHonuaSceneMetadata(payload);
+      if (version !== this.#metadataFetchVersion) {
+        return;
+      }
       this.#applyMetadata(metadata, 'fetch');
     } catch (error) {
+      if (version !== this.#metadataFetchVersion) {
+        return;
+      }
       if (error instanceof HonuaSceneMetadataError) {
         this.#emitMetadataError({
           url,
@@ -1302,6 +1326,20 @@ function clampOpacity(value: number): number {
   }
 
   return Math.max(0, Math.min(1, value));
+}
+
+function destroyTilesetSafely(tileset: Cesium3DTileset | null): void {
+  if (!tileset) {
+    return;
+  }
+  const candidate = tileset as { isDestroyed?: () => boolean; destroy?: () => void };
+  try {
+    if (candidate.isDestroyed?.() === false) {
+      candidate.destroy?.();
+    }
+  } catch {
+    /* tilesets may already be torn down by Cesium */
+  }
 }
 
 function canUseWebGl(): boolean {
