@@ -101,6 +101,11 @@ When moving to a newer Microsoft iOS workload, update `DOTNET_VERSION`,
 hosted image includes the complete Xcode toolchain before TestFlight uploads
 are enabled.
 
+The workflow checks for `actool` before importing signing secrets. If the
+selected GitHub-hosted image cannot expose Apple's asset compiler through
+`xcodebuild`, the run fails before any App Store Connect or certificate material
+is decoded.
+
 ## Troubleshooting
 
 Missing protected environment approval:

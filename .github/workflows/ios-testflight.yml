@@ -111,6 +111,18 @@ jobs:
       - name: Install MAUI iOS workload
         run: dotnet workload install maui-ios --skip-manifest-update
 
+      - name: Verify iOS asset compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          if ! xcodebuild -sdk "${macos_sdk}" -find actool; then
+            echo "::error::The selected GitHub-hosted Xcode image does not expose actool through xcodebuild."
+            echo "::error::TestFlight uploads require a runner image with a complete Apple asset compiler toolchain."
+            exit 1
+          fi
+
       - name: Resolve build metadata
         id: metadata
         shell: bash
