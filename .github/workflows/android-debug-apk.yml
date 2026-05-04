@@ -1,0 +1,286 @@
+# yamllint disable rule:line-length rule:truthy
+---
+name: Android Debug APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Non-production environment recorded for this debug artifact."
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - custom-nonprod
+      api_base_url:
+        description: "HTTPS non-production Honua API base URL for tester install notes."
+        required: true
+        type: string
+      tester_notes:
+        description: "Optional notes to include in the install notes artifact."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  PROJECT_PATH: apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj
+  TARGET_FRAMEWORK: net10.0-android
+  CONFIGURATION: Debug
+  APK_OUTPUT_DIR: artifacts/android-debug
+
+jobs:
+  build-debug-apk:
+    name: Build FieldCollection Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ github.repository }}-${{ runner.os }}-nuget-
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: microsoft
+          java-version: "17"
+
+      - name: Install MAUI Android workload
+        run: dotnet workload install maui-android
+
+      - name: Resolve build metadata
+        id: metadata
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT_INPUT: ${{ inputs.target_environment }}
+          API_BASE_URL_INPUT: ${{ inputs.api_base_url }}
+        run: |
+          set -euo pipefail
+
+          target_environment="${TARGET_ENVIRONMENT_INPUT}"
+          api_base_url="${API_BASE_URL_INPUT}"
+
+          case "${target_environment}" in
+            dev|staging|custom-nonprod)
+              ;;
+            *)
+              echo "::error::Debug APK artifacts must use dev, staging, or custom-nonprod metadata."
+              exit 1
+              ;;
+          esac
+
+          if [[ -z "${api_base_url// }" ]]; then
+            echo "::error::api_base_url is required so debug APK artifacts cannot fall back to production metadata."
+            exit 1
+          fi
+
+          normalized_url="$(printf '%s' "${api_base_url}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "${normalized_url}" != https://* ]]; then
+            echo "::error::api_base_url must be an HTTPS non-production URL."
+            exit 1
+          fi
+
+          url_without_scheme="${normalized_url#https://}"
+          url_host="${url_without_scheme%%/*}"
+          url_host="${url_host%%:*}"
+
+          case "${url_host}" in
+            api.honua.io|honua.io|www.honua.io|prod.*|production.*)
+              echo "::error::Refusing to stamp a debug phone artifact with production-looking endpoint metadata: ${url_host}"
+              exit 1
+              ;;
+          esac
+
+          branch_slug="$(printf '%s' "${GITHUB_REF_NAME:-detached}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-60)"
+          if [[ -z "${branch_slug}" ]]; then
+            branch_slug="detached"
+          fi
+
+          short_sha="${GITHUB_SHA:0:12}"
+          application_version="${GITHUB_RUN_NUMBER}"
+          application_display_version="0.0.0-debug.${GITHUB_RUN_NUMBER}"
+          artifact_name="honua-fieldcollection-android-debug-${branch_slug}-${short_sha}-run-${GITHUB_RUN_NUMBER}-attempt-${GITHUB_RUN_ATTEMPT}"
+
+          {
+            echo "artifact_name=${artifact_name}"
+            echo "application_display_version=${application_display_version}"
+            echo "application_version=${application_version}"
+            echo "branch_slug=${branch_slug}"
+            echo "short_sha=${short_sha}"
+            echo "target_environment=${target_environment}"
+            echo "api_base_url=${api_base_url}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Restore Android app
+        run: dotnet restore "${PROJECT_PATH}" -p:TargetFramework="${TARGET_FRAMEWORK}"
+
+      - name: Build debug APK
+        env:
+          APPLICATION_DISPLAY_VERSION: ${{ steps.metadata.outputs.application_display_version }}
+          APPLICATION_VERSION: ${{ steps.metadata.outputs.application_version }}
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.target_environment }}
+        run: |
+          dotnet publish "${PROJECT_PATH}" \
+            --configuration "${CONFIGURATION}" \
+            --framework "${TARGET_FRAMEWORK}" \
+            /p:AndroidPackageFormat=apk \
+            /p:EmbedAssembliesIntoApk=true \
+            /p:ApplicationDisplayVersion="${APPLICATION_DISPLAY_VERSION}" \
+            /p:ApplicationVersion="${APPLICATION_VERSION}" \
+            /p:ContinuousIntegrationBuild=true \
+            /p:HonuaMobileBuildEnvironment="${TARGET_ENVIRONMENT}" \
+            /p:HonuaMobileBuildRepository="${GITHUB_REPOSITORY}" \
+            /p:HonuaMobileBuildBranch="${GITHUB_REF_NAME}" \
+            /p:HonuaMobileBuildSha="${GITHUB_SHA}" \
+            /p:HonuaMobileBuildRunNumber="${GITHUB_RUN_NUMBER}" \
+            /p:HonuaMobileBuildRunId="${GITHUB_RUN_ID}"
+
+      - name: Collect APK and write install notes
+        id: collect
+        shell: bash
+        env:
+          APPLICATION_DISPLAY_VERSION: ${{ steps.metadata.outputs.application_display_version }}
+          APPLICATION_VERSION: ${{ steps.metadata.outputs.application_version }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+          API_BASE_URL: ${{ steps.metadata.outputs.api_base_url }}
+          BRANCH_SLUG: ${{ steps.metadata.outputs.branch_slug }}
+          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.target_environment }}
+          TESTER_NOTES_INPUT: ${{ inputs.tester_notes }}
+        run: |
+          set -euo pipefail
+
+          rm -rf "${APK_OUTPUT_DIR}"
+          mkdir -p "${APK_OUTPUT_DIR}"
+
+          apk_search_root="$(dirname "${PROJECT_PATH}")/bin/${CONFIGURATION}"
+          mapfile -t apks < <(find "${apk_search_root}" -type f -name '*.apk' | sort)
+
+          if [[ "${#apks[@]}" -eq 0 ]]; then
+            echo "::error::No APK was produced under ${apk_search_root}."
+            exit 1
+          fi
+
+          selected_apk=""
+          for apk in "${apks[@]}"; do
+            if [[ "$(basename "${apk}")" == *-Signed.apk ]]; then
+              selected_apk="${apk}"
+              break
+            fi
+          done
+          selected_apk="${selected_apk:-${apks[0]}}"
+
+          apk_name="${ARTIFACT_NAME}.apk"
+          metadata_name="${ARTIFACT_NAME}-metadata.json"
+          notes_name="${ARTIFACT_NAME}-install-notes.md"
+
+          cp "${selected_apk}" "${APK_OUTPUT_DIR}/${apk_name}"
+
+          jq -n \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg workflow "${GITHUB_WORKFLOW}" \
+            --arg run_id "${GITHUB_RUN_ID}" \
+            --arg run_number "${GITHUB_RUN_NUMBER}" \
+            --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg ref_name "${GITHUB_REF_NAME}" \
+            --arg branch_slug "${BRANCH_SLUG}" \
+            --arg sha "${GITHUB_SHA}" \
+            --arg short_sha "${SHORT_SHA}" \
+            --arg target_environment "${TARGET_ENVIRONMENT}" \
+            --arg api_base_url "${API_BASE_URL}" \
+            --arg configuration "${CONFIGURATION}" \
+            --arg target_framework "${TARGET_FRAMEWORK}" \
+            --arg application_display_version "${APPLICATION_DISPLAY_VERSION}" \
+            --arg application_version "${APPLICATION_VERSION}" \
+            --arg artifact_name "${ARTIFACT_NAME}" \
+            --arg apk_name "${apk_name}" \
+            '{
+              repository: $repository,
+              workflow: $workflow,
+              run_id: $run_id,
+              run_number: $run_number,
+              run_attempt: $run_attempt,
+              ref_name: $ref_name,
+              branch_slug: $branch_slug,
+              sha: $sha,
+              short_sha: $short_sha,
+              target_environment: $target_environment,
+              api_base_url: $api_base_url,
+              configuration: $configuration,
+              target_framework: $target_framework,
+              application_display_version: $application_display_version,
+              application_version: $application_version,
+              artifact_name: $artifact_name,
+              apk_name: $apk_name,
+              production_defaulting: "blocked for debug phone artifacts"
+            }' > "${APK_OUTPUT_DIR}/${metadata_name}"
+
+          {
+            printf '# Honua FieldCollection Android Debug APK\n\n'
+            printf 'Artifact: `%s`\n' "${ARTIFACT_NAME}"
+            printf 'APK: `%s`\n' "${apk_name}"
+            printf 'Repository: `%s`\n' "${GITHUB_REPOSITORY}"
+            printf 'Ref: `%s`\n' "${GITHUB_REF_NAME}"
+            printf 'Commit: `%s`\n' "${GITHUB_SHA}"
+            printf 'Run: `%s` attempt `%s`\n' "${GITHUB_RUN_NUMBER}" "${GITHUB_RUN_ATTEMPT}"
+            printf 'Version: `%s` (`%s`)\n' "${APPLICATION_DISPLAY_VERSION}" "${APPLICATION_VERSION}"
+            printf 'Environment: `%s`\n' "${TARGET_ENVIRONMENT}"
+            printf 'Tester API base URL: `%s`\n\n' "${API_BASE_URL}"
+            printf '## Install\n\n'
+            printf '1. Download this workflow artifact from the Actions run.\n'
+            printf '2. Unzip the artifact and install `%s` on an Android device with sideloading enabled.\n' "${apk_name}"
+            printf '3. Or install with adb: `adb install -r %s`.\n' "${apk_name}"
+            printf '4. In the app sign-in/settings flow, use the tester API base URL above with a matching non-production API key.\n\n'
+            printf 'This APK is a Debug build signed for sideload testing. It is not a Google Play or production release artifact.\n'
+          } > "${APK_OUTPUT_DIR}/${notes_name}"
+
+          if [[ -n "${TESTER_NOTES_INPUT}" ]]; then
+            {
+              echo
+              echo "## Tester Notes"
+              echo
+              printf '%s\n' "${TESTER_NOTES_INPUT}"
+            } >> "${APK_OUTPUT_DIR}/${notes_name}"
+          fi
+
+          {
+            echo "Selected APK: ${selected_apk}"
+            echo
+            echo "Artifact contents:"
+            find "${APK_OUTPUT_DIR}" -maxdepth 1 -type f -printf '%f\n' | sort
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "apk_path=${APK_OUTPUT_DIR}/${apk_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: ${{ env.APK_OUTPUT_DIR }}/
+          if-no-files-found: error
+          retention-days: 14
