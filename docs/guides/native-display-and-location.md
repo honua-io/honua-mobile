@@ -64,6 +64,12 @@ the boundary above: data providers feed layers, layers are ordered and styled
 independently, and projection can stay in the renderer adapter instead of the
 SDK packages.
 
+The focused decision spike is
+[`docs/spikes/mapsui-native-display-adapter.md`](../spikes/mapsui-native-display-adapter.md).
+It records the native adapter shape, Mapsui dependency boundary, shared
+SDK-contract flow with the MapLibre/deck.gl web adapter, raster CRS limits, and
+related SDK/server dependencies.
+
 The repo does not add Mapsui directly yet. Pulling it into
 `Honua.Mobile.Maui` would commit every consumer to the display dependency,
 platform handler lifecycle, renderer asset packaging, and projection stack
@@ -71,9 +77,11 @@ before the SDK geometry contracts have graduated. The safer shape is:
 
 - keep `Honua.Mobile.Maui` dependency-free and source-descriptor based;
 - implement `MapsuiHonuaMapAdapter` in an app or future renderer package;
-- translate SDK `FeatureQueryResult` records into Mapsui provider features at
-  the adapter edge;
+- translate SDK `FeatureQueryResult` pages and SDK-owned NTS geometry into
+  Mapsui provider features at the adapter edge;
 - use Mapsui projection support only inside that adapter;
+- reject raster tile reprojection unless the server or offline package emits
+  tiles in the viewer target CRS;
 - benchmark pan/zoom refresh, offline GeoPackage layer loading, and annotation
   redraw before making Mapsui the default renderer.
 
