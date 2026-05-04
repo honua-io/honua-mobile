@@ -7,6 +7,7 @@ dynamic forms, and background sync.
 Current mobile SDK roadmap coordination is tracked from
 [honua-server#811](https://github.com/honua-io/honua-server/issues/811) and the
 [mobile SDK roadmap](https://github.com/honua-io/honua-server/blob/trunk/docs/developer/mobile-sdk-roadmap.md).
+The current source-backed mobile feature map is in [docs/features/README.md](docs/features/README.md).
 
 ## Packages
 
