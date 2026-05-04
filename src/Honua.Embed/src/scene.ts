@@ -547,6 +547,8 @@ export class HonuaSceneElement extends HTMLElement {
       return;
     }
 
+    this.#dropStaleImplicitPrimary(dataUrls?.tilesetUrl ?? null);
+
     if (dataUrls === null) {
       this.#destroyCesium();
       return;
@@ -672,6 +674,25 @@ export class HonuaSceneElement extends HTMLElement {
       tileset,
     };
     this.#layers.set('primary', handle);
+  }
+
+  #dropStaleImplicitPrimary(targetTilesetUrl: string | null): void {
+    const primary = this.#layers.get('primary');
+    if (!primary) {
+      return;
+    }
+
+    if (this.#metadata?.layers?.some((layer) => layer.id === 'primary')) {
+      return;
+    }
+
+    if (primary.metadata.url === targetTilesetUrl) {
+      return;
+    }
+
+    this.#detachLayerTileset(primary);
+    this.#layers.delete('primary');
+    this.#layerLoadVersions.delete('primary');
   }
 
   async #hydrateLayersFromMetadata(): Promise<void> {

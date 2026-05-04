@@ -358,6 +358,90 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('does not reload the implicit primary layer after tileset-url is removed', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/primary.json',
+    );
+
+    element.removeAttribute('tileset-url');
+    await element.load();
+    expect(element.getLayer('primary')).toBeNull();
+
+    cesium.Cesium3DTileset.fromUrl.mockClear();
+    element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    await element.load();
+
+    const reloadedFromStale = cesium.Cesium3DTileset.fromUrl.mock.calls.some(
+      (call) => call[0] === 'https://data.example.test/primary.json',
+    );
+    expect(reloadedFromStale).toBe(false);
+    expect(element.getLayer('primary')).toBeNull();
+
+    webgl.mockRestore();
+  });
+
+  it('replaces the implicit primary handle when tileset-url is repointed', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/v1.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/v1.json',
+    );
+
+    element.setAttribute('tileset-url', 'https://data.example.test/v2.json');
+    await element.load();
+
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/v2.json',
+    );
+
+    webgl.mockRestore();
+  });
+
+  it('preserves a metadata-declared primary layer when tileset-url is removed', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/override.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Primary from metadata',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+        },
+      ],
+    };
+
+    await element.load();
+
+    element.removeAttribute('tileset-url');
+    await element.load();
+
+    expect(element.getLayer('primary')).not.toBeNull();
+    webgl.mockRestore();
+  });
+
   it('tears down the existing scene when package resolution fails', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');
