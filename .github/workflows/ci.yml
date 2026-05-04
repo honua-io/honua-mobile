@@ -368,6 +368,19 @@ jobs:
       - name: Verify iOS 17+ simulator runtime
         run: xcrun simctl list runtimes | grep -E "iOS (1[7-9]|2[0-9])"
 
+      - name: Check iOS asset compiler availability
+        id: ios_tools
+        run: |
+          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          if xcodebuild -sdk "${macos_sdk}" -find actool > /tmp/actool-path 2> /tmp/actool-error; then
+            cat /tmp/actool-path
+            echo "actool_available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning::actool is unavailable on this GitHub-hosted Xcode image; skipping iOS app asset and publish smoke."
+            cat /tmp/actool-error
+            echo "actool_available=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Restore
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-ios
@@ -380,6 +393,7 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
       - name: Build iOS Apps
+        if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
@@ -394,6 +408,7 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
       - name: iOS trim and NativeAOT smoke
+        if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           # Keep direct mobile-code trim/AOT warnings blocking, but do not fail on assembly-level
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
