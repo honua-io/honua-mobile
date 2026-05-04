@@ -519,6 +519,50 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('does not emit honua-scene-ready when the metadata-declared primary fails to load', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Primary from metadata',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+        },
+      ],
+    };
+
+    cesium.Cesium3DTileset.fromUrl.mockRejectedValueOnce(new Error('metadata primary failed'));
+    const ready = vi.fn();
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-ready', ready);
+    element.addEventListener('honua-scene-load-error', errorListener);
+
+    await element.load();
+
+    const status = element.shadowRoot!.querySelector('.status') as HTMLOutputElement;
+    expect(errorListener).toHaveBeenCalledOnce();
+    expect(errorListener.mock.calls[0][0].detail).toMatchObject({
+      source: 'tileset',
+      message: 'Unable to load layer "primary".',
+    });
+    expect(ready).not.toHaveBeenCalled();
+    expect(element.tileset).toBeNull();
+    expect(status.textContent).toBe('Unable to load layer "primary".');
+    expect(status.dataset.hidden).toBe('false');
+
+    webgl.mockRestore();
+  });
+
   it('hydrates the metadata-declared primary URL on a terrain-only reload after tileset-url is removed', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');
@@ -702,6 +746,78 @@ describe('honua-scene', () => {
 
     expect(ready).toHaveBeenCalledOnce();
     expect(ready.mock.calls[0][0].detail.tileset).toBe(handle?.tileset);
+
+    fetchSpy.mockRestore();
+    webgl.mockRestore();
+  });
+
+  it('does not emit a stale metadata-primary load-error after reload hydration wins', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+
+    let resolveFetch!: (value: Response) => void;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    let rejectStale!: (reason: unknown) => void;
+    cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectStale = reject;
+        }),
+    );
+
+    const ready = vi.fn();
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-ready', ready);
+    element.addEventListener('honua-scene-load-error', errorListener);
+    element.setAttribute('metadata-url', 'https://example.test/metadata.json');
+
+    const loading = element.load();
+    resolveFetch(
+      new Response(
+        JSON.stringify({
+          schema: 'honua-scene-metadata/v1',
+          id: 'demo',
+          name: 'Demo',
+          layers: [
+            {
+              id: 'primary',
+              title: 'Metadata primary',
+              kind: '3d-tiles',
+              url: 'https://data.example.test/metadata-primary.json',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    await loading;
+
+    expect(ready).toHaveBeenCalledOnce();
+    expect(errorListener).not.toHaveBeenCalled();
+    expect((element.tileset as unknown as { url: string } | null)?.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+
+    rejectStale(new Error('stale metadata primary failed'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(errorListener).not.toHaveBeenCalled();
+    expect((element.tileset as unknown as { url: string } | null)?.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
 
     fetchSpy.mockRestore();
     webgl.mockRestore();

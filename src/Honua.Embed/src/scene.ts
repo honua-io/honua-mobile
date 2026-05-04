@@ -124,6 +124,7 @@ type CesiumModule = typeof import('cesium');
 type BuildModuleUrl = ((relativeUrl: string) => string) & {
   setBaseUrl?: (baseUrl: string) => void;
 };
+type LayerTilesetLoadResult = 'loaded' | 'failed' | 'stale' | 'skipped';
 
 const DEFAULT_HEIGHT = 1200;
 const DEFAULT_PITCH = -45;
@@ -677,15 +678,20 @@ export class HonuaSceneElement extends HTMLElement {
         return;
       }
 
+      metadataDeclaresPrimary =
+        this.#metadata?.layers?.some((layer) => layer.id === 'primary') ?? false;
+
       if (metadataDeclaresPrimary) {
         const primaryHandle = this.#layers.get('primary');
-        if (primaryHandle?.tileset) {
-          this.#tileset = primaryHandle.tileset;
-          if (!config.center) {
-            await this.#widget.zoomTo(primaryHandle.tileset);
-            if (version !== this.#loadVersion || !this.#widget) {
-              return;
-            }
+        if (!primaryHandle?.tileset) {
+          return;
+        }
+
+        this.#tileset = primaryHandle.tileset;
+        if (!config.center) {
+          await this.#widget.zoomTo(primaryHandle.tileset);
+          if (version !== this.#loadVersion || !this.#widget) {
+            return;
           }
         }
       }
@@ -768,10 +774,10 @@ export class HonuaSceneElement extends HTMLElement {
     );
   }
 
-  async #loadLayerTileset(handle: HonuaSceneLayerHandle): Promise<void> {
+  async #loadLayerTileset(handle: HonuaSceneLayerHandle): Promise<LayerTilesetLoadResult> {
     const cesium = this.#cesium;
     if (!this.#canLoadLayerTileset(handle) || !cesium) {
-      return;
+      return 'skipped';
     }
 
     const layerId = handle.metadata.id;
@@ -786,37 +792,68 @@ export class HonuaSceneElement extends HTMLElement {
       tileset = await cesium.Cesium3DTileset.fromUrl(targetUrl);
     } catch (error) {
       if (
-        capturedSceneVersion === this.#loadVersion &&
-        this.#layers.get(layerId) === handle &&
-        (this.#layerLoadVersions.get(layerId) ?? 0) === captured
+        this.#isCurrentLayerTilesetLoad(
+          layerId,
+          handle,
+          captured,
+          capturedSceneVersion,
+          capturedWidget,
+        )
       ) {
         this.#emitLoadError('tileset', `Unable to load layer "${layerId}".`, error);
+        return 'failed';
       }
-      return;
+      return 'stale';
     }
 
     if (
-      capturedSceneVersion !== this.#loadVersion ||
-      this.#layers.get(layerId) !== handle ||
-      (this.#layerLoadVersions.get(layerId) ?? 0) !== captured ||
+      !this.#isCurrentLayerTilesetLoad(
+        layerId,
+        handle,
+        captured,
+        capturedSceneVersion,
+        capturedWidget,
+      ) ||
       handle.metadata.kind !== targetKind ||
-      handle.metadata.url !== targetUrl ||
-      !this.#widget ||
-      this.#widget !== capturedWidget
+      handle.metadata.url !== targetUrl
     ) {
       destroyTilesetSafely(tileset);
-      return;
+      return 'stale';
+    }
+
+    const widget = this.#widget;
+    if (!widget) {
+      destroyTilesetSafely(tileset);
+      return 'stale';
     }
 
     this.#detachLayerTileset(handle);
     handle.tileset = tileset;
-    this.#widget.scene.primitives.add(tileset);
+    widget.scene.primitives.add(tileset);
     this.#applyLayerVisibility(handle, handle.visible);
     this.#applyLayerOpacity(handle, handle.opacity);
     if (handle.metadata.id === 'primary') {
       this.#tileset = tileset;
     }
-    this.#widget.scene.requestRender();
+    widget.scene.requestRender();
+    return 'loaded';
+  }
+
+  #isCurrentLayerTilesetLoad(
+    layerId: string,
+    handle: HonuaSceneLayerHandle,
+    captured: number,
+    capturedSceneVersion: number,
+    capturedWidget: CesiumWidget | null,
+  ): boolean {
+    return (
+      capturedSceneVersion === this.#loadVersion &&
+      this.#layers.get(layerId) === handle &&
+      (this.#layerLoadVersions.get(layerId) ?? 0) === captured &&
+      capturedWidget !== null &&
+      this.#widget === capturedWidget &&
+      !capturedWidget.isDestroyed()
+    );
   }
 
   #detachLayerTileset(handle: HonuaSceneLayerHandle): void {
