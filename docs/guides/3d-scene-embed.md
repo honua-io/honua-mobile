@@ -118,6 +118,14 @@ ensure nested 3D Tiles references are also rewritten or served through a stable
 package-local URL prefix. Call `resolver.dispose?.()` when a host tears down a
 Cache Storage resolver that created object URLs.
 
+## Scene Controls
+
+For multi-layer demos with bookmarks, timeline phases, compare modes, feature
+inspection, and measurement, see [Scene Controls](scene-controls.md). Those
+controls compose with `<honua-scene>`, accept a typed
+`HonuaSceneMetadata` document, and emit stable `honua-scene-*` events that
+app shells (and the JS SDK) can subscribe to without importing CesiumJS.
+
 ## Current Scope
 
 This first slice proves client-side 3D Tiles loading, scene events, and typed SDK scene discovery. Honua-hosted scene registry, terrain tiles, elevation APIs, 3D Tiles generation, and I3S compatibility are tracked in the linked server backlog.

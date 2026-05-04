@@ -41,8 +41,10 @@ vi.mock('cesium', () => {
     readonly scene = {
       primitives: {
         add: vi.fn(),
+        remove: vi.fn(),
       },
       pick: vi.fn(),
+      pickPosition: vi.fn(),
       requestRender: vi.fn(),
     };
     readonly destroy = vi.fn(() => {
@@ -79,8 +81,11 @@ vi.mock('cesium', () => {
       })),
     },
     Cesium3DTileset: {
-      fromUrl: vi.fn(async (url: string) => ({ url })),
+      fromUrl: vi.fn(async (url: string) => ({ url, show: true, style: undefined })),
     },
+    Cesium3DTileStyle: vi.fn(function MockTileStyle(this: { color?: string }, opts: { color?: string }) {
+      this.color = opts?.color;
+    }),
     CesiumTerrainProvider: {
       fromUrl: vi.fn(async (url: string) => ({ url })),
     },
@@ -385,6 +390,119 @@ describe('honua-scene', () => {
 
     expect(cesium.__mock.widgets).toHaveLength(0);
     webgl.mockRestore();
+  });
+
+  it('parses metadata-url and emits honua-scene-metadata-change', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [{ id: 'as-built', title: 'As-built', kind: '3d-tiles', url: 'https://example.test/a.json' }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-metadata-change', listener);
+    element.setAttribute('metadata-url', 'https://example.test/metadata.json');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchSpy).toHaveBeenCalledWith('https://example.test/metadata.json', expect.objectContaining({ credentials: 'same-origin' }));
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      source: 'fetch',
+      metadata: expect.objectContaining({
+        id: 'demo',
+        layers: [expect.objectContaining({ id: 'as-built' })],
+      }),
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('emits honua-scene-metadata-error when the document is invalid', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      schema: 'unsupported',
+      id: 'demo',
+      name: 'Demo',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    element.setAttribute('metadata-url', 'https://example.test/bad-metadata.json');
+    document.body.append(element);
+    const errorListener = vi.fn();
+    element.addEventListener('honua-scene-metadata-error', errorListener);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(errorListener).toHaveBeenCalledOnce();
+    expect(errorListener.mock.calls[0][0].detail).toMatchObject({
+      code: 'metadata-invalid',
+      url: 'https://example.test/bad-metadata.json',
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('exposes metadata via a property setter without fetching', () => {
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-metadata-change', listener);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        { id: 'a', title: 'A', kind: '3d-tiles', url: 'https://example.test/a.json' },
+        { id: 'b', title: 'B', kind: '3d-tiles', url: 'https://example.test/b.json' },
+      ],
+    };
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail.source).toBe('property');
+    expect(element.metadata?.layers).toHaveLength(2);
+  });
+
+  it('addLayer / setLayerVisibility / removeLayer emit honua-scene-layer-change', () => {
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-layer-change', listener);
+
+    void element.addLayer({
+      id: 'drone-orthomosaic',
+      title: 'Drone orthomosaic',
+      kind: '3d-tiles',
+      url: 'https://example.test/ortho.json',
+    });
+    element.setLayerVisibility('drone-orthomosaic', false);
+    element.removeLayer('drone-orthomosaic');
+
+    const reasons = listener.mock.calls.map((call) => call[0].detail.reason);
+    expect(reasons).toEqual(['added', 'visibility', 'removed']);
+  });
+
+  it('applyView writes camera attributes from a typed view spec', () => {
+    const element = document.createElement('honua-scene');
+    document.body.append(element);
+    element.applyView({
+      center: { latitude: 21.31, longitude: -157.86 },
+      height: 800,
+      orientation: { heading: 45, pitch: -30, roll: 0 },
+    });
+
+    expect(element.getAttribute('center')).toBe('21.31,-157.86');
+    expect(element.getAttribute('height')).toBe('800');
+    expect(element.getAttribute('heading')).toBe('45');
   });
 
   it('clears the Cesium Ion token when the attribute is removed', async () => {

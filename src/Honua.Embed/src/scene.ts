@@ -15,6 +15,13 @@ import {
   type HonuaScenePackageCacheErrorCode,
   resolveScenePackageAsset,
 } from './scene-package-cache';
+import {
+  HonuaSceneMetadataError,
+  parseHonuaSceneMetadata,
+  type HonuaSceneLayerMetadata,
+  type HonuaSceneMetadata,
+  type HonuaSceneViewSpec,
+} from './scene-metadata';
 
 export interface HonuaSceneCoordinate {
   latitude: number;
@@ -69,6 +76,41 @@ export interface HonuaSceneIdentifyDetail {
   x: number;
   y: number;
   picked: unknown;
+}
+
+export interface HonuaSceneMetadataChangeDetail {
+  metadata: HonuaSceneMetadata | null;
+  source: 'attribute' | 'property' | 'fetch' | 'cleared';
+}
+
+export interface HonuaSceneMetadataErrorDetail {
+  url: string | null;
+  code: 'metadata-invalid' | 'metadata-fetch-failed';
+  message: string;
+  path?: string;
+  error?: unknown;
+}
+
+export type HonuaSceneLayerChangeReason =
+  | 'added'
+  | 'removed'
+  | 'visibility'
+  | 'opacity'
+  | 'metadata';
+
+export interface HonuaSceneLayerChangeDetail {
+  layerId: string;
+  reason: HonuaSceneLayerChangeReason;
+  layer: HonuaSceneLayerMetadata | null;
+  visible: boolean;
+  opacity: number;
+}
+
+export interface HonuaSceneLayerHandle {
+  metadata: HonuaSceneLayerMetadata;
+  visible: boolean;
+  opacity: number;
+  tileset: Cesium3DTileset | null;
 }
 
 type CesiumModule = typeof import('cesium');
@@ -207,6 +249,7 @@ export class HonuaSceneElement extends HTMLElement {
       'roll',
       'theme',
       'autoload',
+      'metadata-url',
     ];
   }
 
@@ -219,6 +262,10 @@ export class HonuaSceneElement extends HTMLElement {
   #assetResolver: HonuaScenePackageAssetResolverInput | null = null;
   readonly #extensionHost: HonuaEmbedExtensionHost<'scene'>;
   #loadVersion = 0;
+  #metadata: HonuaSceneMetadata | null = null;
+  #metadataUrl: string | null = null;
+  #metadataFetchVersion = 0;
+  readonly #layers = new Map<string, HonuaSceneLayerHandle>();
 
   constructor() {
     super();
@@ -251,11 +298,32 @@ export class HonuaSceneElement extends HTMLElement {
     this.setPackageAssetResolver(resolver);
   }
 
+  get metadata(): HonuaSceneMetadata | null {
+    return this.#metadata;
+  }
+
+  set metadata(value: HonuaSceneMetadata | null) {
+    this.#metadataUrl = null;
+    this.#metadataFetchVersion += 1;
+    this.#applyMetadata(value, 'property');
+  }
+
+  get layers(): readonly HonuaSceneLayerHandle[] {
+    return [...this.#layers.values()];
+  }
+
   connectedCallback(): void {
     this.#upgradeProperty('center');
     this.#upgradeProperty('packageAssetResolver');
+    this.#upgradeProperty('metadata');
     this.#render();
     this.#extensionHost.connect();
+
+    const metadataUrl = this.getAttribute('metadata-url');
+    if (metadataUrl && metadataUrl !== this.#metadataUrl) {
+      this.#metadataUrl = metadataUrl;
+      void this.#fetchMetadata(metadataUrl);
+    }
 
     const config = this.config;
     if (config.autoload && hasSceneData(config)) {
@@ -288,6 +356,18 @@ export class HonuaSceneElement extends HTMLElement {
 
     if (['center', 'height', 'heading', 'pitch', 'roll'].includes(name)) {
       this.#applyCamera();
+      return;
+    }
+
+    if (name === 'metadata-url') {
+      const next = emptyToNull(newValue);
+      this.#metadataUrl = next;
+      this.#metadataFetchVersion += 1;
+      if (next) {
+        void this.#fetchMetadata(next);
+      } else {
+        this.#applyMetadata(null, 'cleared');
+      }
       return;
     }
 
@@ -328,6 +408,113 @@ export class HonuaSceneElement extends HTMLElement {
     if (orientation.roll !== undefined) {
       this.setAttribute('roll', String(orientation.roll));
     }
+  }
+
+  applyView(view: HonuaSceneViewSpec): void {
+    this.setView(view.center, view.height, view.orientation);
+  }
+
+  getLayer(layerId: string): HonuaSceneLayerHandle | null {
+    return this.#layers.get(layerId) ?? null;
+  }
+
+  async addLayer(metadata: HonuaSceneLayerMetadata): Promise<HonuaSceneLayerHandle> {
+    const existing = this.#layers.get(metadata.id);
+    if (existing) {
+      existing.metadata = metadata;
+      this.#applyLayerVisibility(existing, metadata.visible ?? existing.visible);
+      this.#applyLayerOpacity(existing, metadata.opacity ?? existing.opacity);
+      this.#emitLayerChange(existing, 'metadata');
+      return existing;
+    }
+
+    const handle: HonuaSceneLayerHandle = {
+      metadata,
+      visible: metadata.visible ?? true,
+      opacity: metadata.opacity ?? 1,
+      tileset: null,
+    };
+    this.#layers.set(metadata.id, handle);
+
+    if (metadata.kind === '3d-tiles' && this.#widget && this.#cesium) {
+      try {
+        handle.tileset = await this.#cesium.Cesium3DTileset.fromUrl(metadata.url);
+        if (!this.#layers.has(metadata.id) || !this.#widget) {
+          return handle;
+        }
+        this.#widget.scene.primitives.add(handle.tileset);
+        this.#applyLayerVisibility(handle, handle.visible);
+        this.#applyLayerOpacity(handle, handle.opacity);
+        this.#widget.scene.requestRender();
+      } catch (error) {
+        this.#emitLoadError('tileset', `Unable to load layer "${metadata.id}".`, error);
+      }
+    }
+
+    this.#emitLayerChange(handle, 'added');
+    return handle;
+  }
+
+  removeLayer(layerId: string): boolean {
+    const handle = this.#layers.get(layerId);
+    if (!handle) {
+      return false;
+    }
+
+    this.#layers.delete(layerId);
+
+    if (handle.tileset && this.#widget) {
+      try {
+        this.#widget.scene.primitives.remove(handle.tileset);
+      } catch {
+        /* primitives may already be torn down */
+      }
+      this.#widget.scene.requestRender();
+    }
+
+    this.dispatchEvent(new CustomEvent<HonuaSceneLayerChangeDetail>('honua-scene-layer-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        layerId,
+        reason: 'removed',
+        layer: null,
+        visible: false,
+        opacity: handle.opacity,
+      },
+    }));
+    return true;
+  }
+
+  setLayerVisibility(layerId: string, visible: boolean): boolean {
+    const handle = this.#layers.get(layerId);
+    if (!handle) {
+      return false;
+    }
+
+    if (handle.visible === visible) {
+      return true;
+    }
+
+    this.#applyLayerVisibility(handle, visible);
+    this.#emitLayerChange(handle, 'visibility');
+    return true;
+  }
+
+  setLayerOpacity(layerId: string, opacity: number): boolean {
+    const handle = this.#layers.get(layerId);
+    if (!handle) {
+      return false;
+    }
+
+    const clamped = clampOpacity(opacity);
+    if (handle.opacity === clamped) {
+      return true;
+    }
+
+    this.#applyLayerOpacity(handle, clamped);
+    this.#emitLayerChange(handle, 'opacity');
+    return true;
   }
 
   async refresh(): Promise<void> {
@@ -421,12 +608,14 @@ export class HonuaSceneElement extends HTMLElement {
         }
 
         this.#widget.scene.primitives.add(this.#tileset);
+        this.#registerPrimaryLayer(dataUrls.tilesetUrl, this.#tileset);
         if (!config.center) {
           await this.#widget.zoomTo(this.#tileset);
         }
       }
 
       this.#bindCesiumEvents(cesium);
+      await this.#hydrateLayersFromMetadata();
       this.#applyCamera();
       this.#widget.scene.requestRender();
       this.#setStatus('', true);
@@ -441,6 +630,51 @@ export class HonuaSceneElement extends HTMLElement {
       }));
     } catch (error) {
       this.#emitLoadError('tileset', 'Unable to load the 3D Tiles dataset.', error);
+    }
+  }
+
+  #registerPrimaryLayer(url: string, tileset: Cesium3DTileset): void {
+    const handle: HonuaSceneLayerHandle = {
+      metadata: {
+        id: 'primary',
+        title: 'Primary tileset',
+        kind: '3d-tiles',
+        url,
+        visible: true,
+        opacity: 1,
+      },
+      visible: true,
+      opacity: 1,
+      tileset,
+    };
+    this.#layers.set('primary', handle);
+  }
+
+  async #hydrateLayersFromMetadata(): Promise<void> {
+    const metadata = this.#metadata;
+    if (!metadata?.layers || !this.#widget || !this.#cesium) {
+      return;
+    }
+
+    for (const layer of metadata.layers) {
+      if (layer.kind !== '3d-tiles') {
+        continue;
+      }
+      const handle = this.#layers.get(layer.id);
+      if (!handle || handle.tileset) {
+        continue;
+      }
+      try {
+        handle.tileset = await this.#cesium.Cesium3DTileset.fromUrl(layer.url);
+        if (!this.#widget) {
+          return;
+        }
+        this.#widget.scene.primitives.add(handle.tileset);
+        this.#applyLayerVisibility(handle, handle.visible);
+        this.#applyLayerOpacity(handle, handle.opacity);
+      } catch (error) {
+        this.#emitLoadError('tileset', `Unable to load layer "${layer.id}".`, error);
+      }
     }
   }
 
@@ -634,11 +868,169 @@ export class HonuaSceneElement extends HTMLElement {
     this.#handler = null;
     this.#tileset = null;
 
+    for (const handle of this.#layers.values()) {
+      handle.tileset = null;
+    }
+
     if (this.#widget && !this.#widget.isDestroyed()) {
       this.#widget.destroy();
     }
 
     this.#widget = null;
+  }
+
+  async #fetchMetadata(url: string): Promise<void> {
+    const version = ++this.#metadataFetchVersion;
+    let response: Response;
+    try {
+      response = await fetch(url, { credentials: 'same-origin' });
+    } catch (error) {
+      if (version === this.#metadataFetchVersion) {
+        this.#emitMetadataError({
+          url,
+          code: 'metadata-fetch-failed',
+          message: 'Unable to fetch scene metadata.',
+          error,
+        });
+      }
+      return;
+    }
+
+    if (version !== this.#metadataFetchVersion) {
+      return;
+    }
+
+    if (!response.ok) {
+      this.#emitMetadataError({
+        url,
+        code: 'metadata-fetch-failed',
+        message: `Scene metadata request failed (${response.status}).`,
+      });
+      return;
+    }
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      this.#emitMetadataError({
+        url,
+        code: 'metadata-fetch-failed',
+        message: 'Scene metadata response was not valid JSON.',
+        error,
+      });
+      return;
+    }
+
+    if (version !== this.#metadataFetchVersion) {
+      return;
+    }
+
+    try {
+      const metadata = parseHonuaSceneMetadata(payload);
+      this.#applyMetadata(metadata, 'fetch');
+    } catch (error) {
+      if (error instanceof HonuaSceneMetadataError) {
+        this.#emitMetadataError({
+          url,
+          code: error.code,
+          message: error.message,
+          path: error.path,
+          error,
+        });
+        return;
+      }
+      this.#emitMetadataError({
+        url,
+        code: 'metadata-invalid',
+        message: 'Scene metadata could not be parsed.',
+        error,
+      });
+    }
+  }
+
+  #applyMetadata(
+    metadata: HonuaSceneMetadata | null,
+    source: HonuaSceneMetadataChangeDetail['source'],
+  ): void {
+    this.#metadata = metadata;
+    this.#syncLayersFromMetadata(metadata);
+
+    this.dispatchEvent(new CustomEvent<HonuaSceneMetadataChangeDetail>('honua-scene-metadata-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        metadata,
+        source,
+      },
+    }));
+  }
+
+  #syncLayersFromMetadata(metadata: HonuaSceneMetadata | null): void {
+    const declaredIds = new Set<string>();
+    if (metadata?.layers) {
+      for (const layer of metadata.layers) {
+        declaredIds.add(layer.id);
+        void this.addLayer(layer);
+      }
+    }
+
+    for (const id of [...this.#layers.keys()]) {
+      if (declaredIds.has(id)) {
+        continue;
+      }
+      if (id === 'primary') {
+        continue;
+      }
+      this.removeLayer(id);
+    }
+  }
+
+  #emitMetadataError(detail: HonuaSceneMetadataErrorDetail): void {
+    this.dispatchEvent(new CustomEvent<HonuaSceneMetadataErrorDetail>('honua-scene-metadata-error', {
+      bubbles: true,
+      composed: true,
+      detail,
+    }));
+  }
+
+  #applyLayerVisibility(handle: HonuaSceneLayerHandle, visible: boolean): void {
+    handle.visible = visible;
+    if (handle.tileset) {
+      handle.tileset.show = visible;
+    }
+    this.#widget?.scene.requestRender();
+  }
+
+  #applyLayerOpacity(handle: HonuaSceneLayerHandle, opacity: number): void {
+    handle.opacity = opacity;
+    if (handle.tileset && this.#cesium) {
+      try {
+        handle.tileset.style = new this.#cesium.Cesium3DTileStyle({
+          color: `color('white', ${opacity})`,
+        });
+      } catch {
+        /* style construction is best-effort and may fail in mocks */
+      }
+    }
+    this.#widget?.scene.requestRender();
+  }
+
+  #emitLayerChange(
+    handle: HonuaSceneLayerHandle,
+    reason: HonuaSceneLayerChangeReason,
+  ): void {
+    this.dispatchEvent(new CustomEvent<HonuaSceneLayerChangeDetail>('honua-scene-layer-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        layerId: handle.metadata.id,
+        reason,
+        layer: handle.metadata,
+        visible: handle.visible,
+        opacity: handle.opacity,
+      },
+    }));
   }
 
   #emitPackageCacheError(error: unknown): void {
@@ -797,6 +1189,14 @@ function parseBooleanAttribute(element: HTMLElement, name: string, defaultValue 
 
   const value = element.getAttribute(name);
   return value === '' || value === null || !['false', '0', 'no'].includes(value.toLowerCase());
+}
+
+function clampOpacity(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.max(0, Math.min(1, value));
 }
 
 function canUseWebGl(): boolean {

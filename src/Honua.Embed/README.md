@@ -109,6 +109,7 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 | `package-expires-at` | Offline-use expiry timestamp. Expired packages emit `expired-package`. |
 | `ion-token` | Optional Cesium ion token. It is not rendered. |
 | `cesium-base-url` | Optional URL for hosted Cesium `Assets`, `Workers`, `ThirdParty`, and `Widgets`. |
+| `metadata-url` | URL of a `honua-scene-metadata/v1` document. The scene fetches and parses it, then emits `honua-scene-metadata-change`. |
 | `center` | Initial latitude/longitude pair, for example `21.3069,-157.8583`. |
 | `height` | Initial camera height in meters. |
 | `heading` | Initial camera heading in degrees. |
@@ -116,6 +117,12 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 | `roll` | Initial camera roll in degrees. |
 | `autoload` | Set to `false`, `0`, or `no` to disable automatic loading. |
 | `theme` | `light` or `dark`. |
+
+`HonuaSceneElement` also exposes an imperative API: `metadata` (property),
+`applyView(view)`, `addLayer(metadata)`, `removeLayer(id)`,
+`setLayerVisibility(id, visible)`, `setLayerOpacity(id, opacity)`, and
+`getLayer(id)`. See the [Scene Controls guide](../../docs/guides/scene-controls.md)
+for the metadata shape and the full event reference.
 
 ## Events
 
@@ -130,7 +137,43 @@ scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 | `honua-scene-load-error` | `{ source, code, message, config, error }`. |
 | `honua-scene-camera-change` | `{ center, height, orientation, config }`. |
 | `honua-scene-identify` | `{ x, y, picked, config }`. |
+| `honua-scene-metadata-change` | `{ metadata, source }`. |
+| `honua-scene-metadata-error` | `{ url, code, message, path?, error? }`. |
+| `honua-scene-layer-change` | `{ layerId, reason, layer, visible, opacity }`. |
+| `honua-scene-layer-toggle` | `{ layerId, visible, controlId }` (from `<honua-scene-layers>`). |
+| `honua-scene-layer-opacity` | `{ layerId, opacity, controlId }`. |
+| `honua-scene-bookmark-apply` | `{ bookmarkId, view, controlId }`. |
+| `honua-scene-timeline-change` | `{ phaseId, startUtc, endUtc, visibleLayerIds, controlId }`. |
+| `honua-scene-compare-set` | `{ modeId, side, leftLayerIds, rightLayerIds, controlId }`. |
+| `honua-scene-feature-select` | `{ featureId, attributes, controlId }`. |
+| `honua-scene-measurement-add` | `{ measurementId, kind, points, distance?, area?, controlId }`. |
+| `honua-scene-measurement-clear` | `{ measurementId, controlId }`. |
+| `honua-scene-control-error` | `{ controlId, kind, message, error? }`. |
 | `honua-embed-extension-error` | `{ extensionId, target, lifecycle, error }`. |
+
+## Scene Controls
+
+`<honua-scene-layers>`, `<honua-scene-bookmarks>`, `<honua-scene-timeline>`,
+`<honua-scene-compare>`, `<honua-scene-inspector>`, and
+`<honua-scene-measure>` compose with `<honua-scene>` and consume a typed
+`HonuaSceneMetadata` document instead of hard-coded URLs. Bind a control to a
+scene with `for="<css-selector>"` (or place it as a sibling and let it resolve
+the nearest preceding `<honua-scene>`).
+
+```html
+<honua-scene id="scene" metadata-url="/scenes/site.json"></honua-scene>
+<honua-scene-layers for="#scene"></honua-scene-layers>
+<honua-scene-bookmarks for="#scene"></honua-scene-bookmarks>
+<honua-scene-timeline for="#scene"></honua-scene-timeline>
+<honua-scene-compare for="#scene"></honua-scene-compare>
+<honua-scene-inspector for="#scene"></honua-scene-inspector>
+<honua-scene-measure for="#scene"></honua-scene-measure>
+```
+
+See the [Scene Controls guide](../../docs/guides/scene-controls.md) for the
+metadata schema, control composition recipes, and the full typed event
+surface. The local `examples/scene-construction/` demo wires all six controls
+together against a public CesiumGS sample tileset.
 
 ## Generated Map Snippets
 
