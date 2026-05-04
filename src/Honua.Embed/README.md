@@ -165,7 +165,11 @@ scene with `for="<css-selector>"` (or place it as a sibling and let it resolve
 the nearest preceding `<honua-scene>`).
 
 ```html
-<honua-scene id="scene" metadata-url="/scenes/site.json"></honua-scene>
+<honua-scene
+  id="scene"
+  metadata-url="/scenes/site.json"
+  tileset-url="https://example.test/site/primary/tileset.json">
+</honua-scene>
 <honua-scene-layers for="#scene"></honua-scene-layers>
 <honua-scene-bookmarks for="#scene"></honua-scene-bookmarks>
 <honua-scene-timeline for="#scene"></honua-scene-timeline>
@@ -173,6 +177,10 @@ the nearest preceding `<honua-scene>`).
 <honua-scene-inspector for="#scene"></honua-scene-inspector>
 <honua-scene-measure for="#scene"></honua-scene-measure>
 ```
+
+`metadata-url` carries the control content (layers/bookmarks/timeline/
+compare/inspector); `tileset-url`, `terrain-url`, or a configured offline
+package still has to be set for the primary 3D Tiles dataset to load.
 
 See the [Scene Controls guide](../../docs/guides/scene-controls.md) for the
 metadata schema, control composition recipes, and the full typed event

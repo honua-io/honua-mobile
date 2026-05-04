@@ -777,12 +777,18 @@ export class HonuaSceneElement extends HTMLElement {
     this.#widget.scene.primitives.add(tileset);
     this.#applyLayerVisibility(handle, handle.visible);
     this.#applyLayerOpacity(handle, handle.opacity);
+    if (handle.metadata.id === 'primary') {
+      this.#tileset = tileset;
+    }
     this.#widget.scene.requestRender();
   }
 
   #detachLayerTileset(handle: HonuaSceneLayerHandle): void {
     if (!handle.tileset) {
       return;
+    }
+    if (this.#tileset === handle.tileset) {
+      this.#tileset = null;
     }
     if (this.#widget) {
       try {

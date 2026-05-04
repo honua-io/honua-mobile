@@ -29,7 +29,11 @@ are free to lay out controls outside the scene viewport — sidebars, panels,
 floating cards.
 
 ```html
-<honua-scene id="scene" metadata-url="/scenes/site-42.json"></honua-scene>
+<honua-scene
+  id="scene"
+  metadata-url="/scenes/site-42.json"
+  tileset-url="https://example.test/site-42/primary/tileset.json">
+</honua-scene>
 <aside>
   <honua-scene-layers for="#scene"></honua-scene-layers>
   <honua-scene-bookmarks for="#scene"></honua-scene-bookmarks>
@@ -39,6 +43,16 @@ floating cards.
   <honua-scene-measure for="#scene"></honua-scene-measure>
 </aside>
 ```
+
+`metadata-url` (or the `metadata` property) provides the layer/bookmark/
+timeline/compare/inspector content. `<honua-scene>` still loads the primary
+3D Tiles dataset from `tileset-url`, `terrain-url`, or a configured offline
+package — at least one of those must be set for the scene to load (the same
+`hasSceneData` rule that drives autoload). The
+`examples/scene-construction/` demo declares the primary URL inline in
+`metadata.tileset.url` and mirrors it onto the `tileset-url` attribute when
+`honua-scene-metadata-change` fires; either pattern works as long as
+`tileset-url` is set by the time the scene loads.
 
 The local `examples/scene-construction/` demo wires all six controls with a
 construction-themed metadata fixture and runs without AWS, Azure, or a Cesium

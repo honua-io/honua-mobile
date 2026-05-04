@@ -591,6 +591,53 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('keeps scene.tileset in sync when addLayer replaces the primary tileset source', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    const initialPrimary = element.tileset;
+    expect(initialPrimary).not.toBeNull();
+    expect(element.getLayer('primary')?.tileset).toBe(initialPrimary);
+
+    await element.addLayer({
+      id: 'primary',
+      title: 'Replacement primary',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/replacement-primary.json',
+    });
+
+    const replacement = element.getLayer('primary')?.tileset;
+    expect(replacement).not.toBeNull();
+    expect(replacement).not.toBe(initialPrimary);
+    expect(element.tileset).toBe(replacement);
+
+    webgl.mockRestore();
+  });
+
+  it('clears scene.tileset when removeLayer detaches the primary handle', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    expect(element.tileset).not.toBeNull();
+
+    element.removeLayer('primary');
+
+    expect(element.getLayer('primary')).toBeNull();
+    expect(element.tileset).toBeNull();
+
+    webgl.mockRestore();
+  });
+
   it('cancels in-flight loads when disconnected', async () => {
     const webgl = mockWebGl();
     let resolveTerrain!: (value: unknown) => void;
