@@ -536,6 +536,28 @@ public class GeoPackageStorageService : IDisposable
         }
     }
 
+    public async Task MarkConflictDeferredAsync(string conflictId, string? reason)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE conflict_records
+                SET resolution = ?, resolved_data = ?, resolved_at = NULL
+                WHERE id = ? AND resolved_at IS NULL
+                """,
+                StorageConflictResolution.Manual,
+                reason,
+                conflictId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     #endregion
 
     #region Spatial Queries
@@ -888,6 +910,9 @@ public class GeoPackageStorageService : IDisposable
             SourceId = conflict.LayerId.ToString(CultureInfo.InvariantCulture),
             FeatureId = conflict.FeatureId,
             ConflictType = conflict.ConflictType.ToString(),
+            Status = conflict.Resolution == StorageConflictResolution.Manual && conflict.ResolvedAt == null
+                ? "Deferred"
+                : "Needs review",
             Reason = $"Local v{conflict.LocalVersion} conflicts with server v{conflict.ServerVersion}.",
             LocalState = DiagnosticRedactor.RedactJson(conflict.LocalData),
             ServerState = DiagnosticRedactor.RedactJson(conflict.ServerData),

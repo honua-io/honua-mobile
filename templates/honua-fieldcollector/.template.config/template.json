@@ -29,7 +29,7 @@
     "serverEndpoint": {
       "type": "parameter",
       "datatype": "text",
-      "defaultValue": "https://demo.honua.com",
+      "defaultValue": "https://api.honua.io",
       "replaces": "HONUA_SERVER_ENDPOINT",
       "description": "Your Honua server endpoint URL"
     },

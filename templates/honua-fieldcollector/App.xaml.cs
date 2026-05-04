@@ -1,17 +1,19 @@
 using Microsoft.Extensions.Logging;
+using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
 
-namespace namespace;
+namespace HonuaFieldCollector;
 
 public partial class App : Application
 {
     private readonly ILogger<App> _logger;
 
-    public App(ILogger<App> logger)
+    public App(ILogger<App> logger, MainPage mainPage)
     {
         InitializeComponent();
         _logger = logger;
 
-        MainPage = new AppShell();
+        MainPage = mainPage;
 
         // Handle global exceptions
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
@@ -69,8 +71,11 @@ public partial class App : Application
                 var services = Handler?.MauiContext?.Services;
                 if (services != null)
                 {
-                    var client = services.GetService<Honua.Mobile.Core.IHonuaClient>();
-                    await client?.SavePendingChangesAsync()!;
+                    var syncRunner = services.GetService<IOfflineSyncRunner>();
+                    if (syncRunner != null)
+                    {
+                        await syncRunner.SyncAsync();
+                    }
                 }
             }
             catch (Exception ex)
@@ -104,22 +109,11 @@ public partial class App : Application
             var services = Handler?.MauiContext?.Services;
             if (services == null) return;
 
-            // Warm up Honua client
-            var honuaClient = services.GetService<Honua.Mobile.Core.IHonuaClient>();
+            // Warm up Honua client registration
+            var honuaClient = services.GetService<HonuaMobileClient>();
             if (honuaClient != null)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await honuaClient.TestConnectionAsync();
-                        _logger.LogInformation("Honua client connection verified");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Honua client connection failed - will work offline");
-                    }
-                });
+                _logger.LogInformation("Honua mobile client registered for online sync");
             }
 
 <!--#if (enableIoT)-->
@@ -158,19 +152,19 @@ public partial class App : Application
             if (services == null) return;
 
             // Check for pending sync
-            var syncService = services.GetService<Honua.Mobile.Storage.ISyncManager>();
-            if (syncService != null)
+            var syncRunner = services.GetService<IOfflineSyncRunner>();
+            if (syncRunner != null)
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        var pendingCount = await syncService.GetPendingChangesCountAsync();
-                        if (pendingCount > 0)
-                        {
-                            _logger.LogInformation("Resuming sync for {PendingCount} changes", pendingCount);
-                            await syncService.SyncAsync();
-                        }
+                        var result = await syncRunner.SyncAsync();
+                        _logger.LogInformation(
+                            "Resume sync inspected {Loaded} queued edit(s), succeeded {Succeeded}, failed {Failed}",
+                            result.Loaded,
+                            result.Succeeded,
+                            result.Failed);
                     }
                     catch (Exception ex)
                     {

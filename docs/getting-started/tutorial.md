@@ -140,8 +140,6 @@ Replace `MainPage.xaml` content:
 Update `MainPage.xaml.cs` with event handlers:
 
 ```csharp
-using Honua.Mobile.Core.Events;
-
 namespace MyFieldApp;
 
 public partial class MainPage : ContentPage
@@ -153,12 +151,12 @@ public partial class MainPage : ContentPage
         InitializeComponent();
     }
 
-    private async void OnDataCollected(object sender, FormSubmittedEventArgs e)
+    private async void OnDataCollected(object sender, EventArgs e)
     {
         _recordsCollected++;
 
         // 🎉 Data automatically includes GPS, photos, sensor readings!
-        var formData = e.FormData;
+        var formData = ReadFormData(e);
 
         // Show success message
         await DisplayAlert("Success! 🎉",
@@ -171,10 +169,10 @@ public partial class MainPage : ContentPage
         // 🔄 Form automatically syncs to server and clears for next record
     }
 
-    private void OnValidationChanged(object sender, FormValidationEventArgs e)
+    private void OnValidationChanged(object sender, EventArgs e)
     {
         // Real-time validation feedback
-        if (!e.IsValid)
+        if (!ReadProperty<bool>(e, "IsValid"))
         {
             // Form automatically shows validation errors
         }
@@ -187,6 +185,17 @@ public partial class MainPage : ContentPage
             .SelectMany(x => x)
             .Count(x => x.ToString().Contains("photo"));
     }
+
+    private static Dictionary<string, object> ReadFormData(EventArgs args)
+    {
+        return ReadProperty<Dictionary<string, object>>(args, "FormData") ?? [];
+    }
+
+    private static T? ReadProperty<T>(object source, string propertyName)
+    {
+        var value = source.GetType().GetProperty(propertyName)?.GetValue(source);
+        return value is T typed ? typed : default;
+    }
 }
 ```
 
@@ -197,9 +206,9 @@ public partial class MainPage : ContentPage
 dotnet build
 
 # Run on your preferred platform
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS (Mac only)
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS (Mac only)
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 **🎉 Congratulations!** You now have a professional field data collection app!
@@ -290,7 +299,7 @@ Add to MainPage.xaml above the form:
 
 ```bash
 # Check your server dashboard at:
-# https://demo.honua.com/dashboard
+# https://api.honua.io/dashboard
 
 # Or query via API:
 curl -H "X-API-Key: your-api-key" \

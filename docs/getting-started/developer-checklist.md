@@ -72,17 +72,20 @@ Build succeeded.
 Edit `MauiProgram.cs` to use demo server:
 
 ```csharp
-config.ServerEndpoint = "https://demo.honua.com";
-config.ApiKey = "demo_key_field_collection_2026";
+builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
+{
+    BaseUri = new Uri("https://api.honua.io"),
+    ApiKey = "demo_key_field_collection_2026",
+});
 ```
 
 ### ✅ Step 5: Test Your Setup
 
 ```bash
 # Run on your preferred platform
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS (macOS only)
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS (macOS only)
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 **Success Indicators:**
@@ -271,14 +274,16 @@ MyFieldApp/
 public async Task QueryFeatures_WithValidQuery_ReturnsFeatures()
 {
     // Arrange
-    var client = new Mock<IHonuaClient>();
-    var query = new FeatureQueryBuilder().Build();
+    var runner = new Mock<IOfflineSyncRunner>();
+    runner
+        .Setup(service => service.SyncAsync(It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new SyncRunResult { Loaded = 0 });
 
     // Act
-    var result = await client.Object.QueryFeaturesAsync("service", 1, query);
+    var result = await runner.Object.SyncAsync();
 
     // Assert
-    Assert.IsNotNull(result);
+    Assert.AreEqual(0, result.Loaded);
 }
 ```
 
