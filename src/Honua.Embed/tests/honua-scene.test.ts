@@ -638,18 +638,8 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
-  it('lets metadata-declared primary win when metadata arrives during the implicit tileset load', async () => {
+  it('defers honua-scene-ready until a slow metadata fetch settles so the metadata-declared primary wins', async () => {
     const webgl = mockWebGl();
-
-    let resolveImplicit!: (value: { url: string; show: boolean; style: undefined }) => void;
-    const implicitStarted = new Promise<void>((resolve) => {
-      cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(async (url: string) => {
-        resolve();
-        return await new Promise((tilesetResolve) => {
-          resolveImplicit = tilesetResolve as typeof resolveImplicit;
-        }).then(() => ({ url, show: true, style: undefined }));
-      });
-    });
 
     let resolveFetch!: (value: Response) => void;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
@@ -670,8 +660,11 @@ describe('honua-scene', () => {
     element.addEventListener('honua-scene-ready', ready);
 
     const loading = element.load();
-    await implicitStarted;
 
+    for (let i = 0; i < 8; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(ready).not.toHaveBeenCalled();
     expect(element.metadata).toBeNull();
 
     resolveFetch(
@@ -693,20 +686,11 @@ describe('honua-scene', () => {
       ),
     );
 
-    for (let i = 0; i < 8; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    expect(element.metadata?.layers?.[0]?.id).toBe('primary');
-
-    resolveImplicit({
-      url: 'https://data.example.test/attribute-primary.json',
-      show: true,
-      style: undefined,
-    });
     await loading;
 
     const fromUrlCalls = cesium.Cesium3DTileset.fromUrl.mock.calls.map((call) => call[0]);
     expect(fromUrlCalls).toContain('https://data.example.test/metadata-primary.json');
+    expect(fromUrlCalls).not.toContain('https://data.example.test/attribute-primary.json');
 
     const handle = element.getLayer('primary');
     expect(handle?.metadata.url).toBe('https://data.example.test/metadata-primary.json');
@@ -720,6 +704,89 @@ describe('honua-scene', () => {
     expect(ready.mock.calls[0][0].detail.tileset).toBe(handle?.tileset);
 
     fetchSpy.mockRestore();
+    webgl.mockRestore();
+  });
+
+  it('drops a metadata-owned primary when metadata is cleared and rebuilds it from tileset-url', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Metadata primary',
+          description: 'From metadata document.',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+          opacity: 0.5,
+          visible: false,
+        },
+      ],
+    };
+
+    await element.load();
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+    expect(element.getLayer('primary')?.metadata.title).toBe('Metadata primary');
+    expect(element.getLayer('primary')?.metadata.opacity).toBe(0.5);
+    expect(element.getLayer('primary')?.metadata.visible).toBe(false);
+
+    element.metadata = null;
+    expect(element.getLayer('primary')).toBeNull();
+
+    await element.load();
+
+    const handle = element.getLayer('primary');
+    expect(handle).not.toBeNull();
+    expect(handle?.metadata.url).toBe('https://data.example.test/attribute-primary.json');
+    expect(handle?.metadata.title).toBe('Primary tileset');
+    expect(handle?.metadata.opacity).toBe(1);
+    expect(handle?.metadata.visible).toBe(true);
+
+    webgl.mockRestore();
+  });
+
+  it('removes a metadata-owned primary when metadata is cleared and tileset-url is unset', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Metadata primary',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+        },
+      ],
+    };
+
+    await element.load();
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+
+    element.metadata = null;
+
+    expect(element.getLayer('primary')).toBeNull();
+    expect(element.tileset).toBeNull();
+
     webgl.mockRestore();
   });
 

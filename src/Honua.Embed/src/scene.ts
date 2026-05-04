@@ -272,6 +272,8 @@ export class HonuaSceneElement extends HTMLElement {
   #metadata: HonuaSceneMetadata | null = null;
   #metadataUrl: string | null = null;
   #metadataFetchVersion = 0;
+  #pendingMetadataFetch: Promise<void> | null = null;
+  #primaryOwner: 'implicit' | 'metadata' | null = null;
   readonly #layers = new Map<string, HonuaSceneLayerHandle>();
   readonly #layerLoadVersions = new Map<string, number>();
 
@@ -313,6 +315,7 @@ export class HonuaSceneElement extends HTMLElement {
   set metadata(value: HonuaSceneMetadata | null) {
     this.#metadataUrl = null;
     this.#metadataFetchVersion += 1;
+    this.#pendingMetadataFetch = null;
     this.#applyMetadata(value, 'property');
   }
 
@@ -330,7 +333,7 @@ export class HonuaSceneElement extends HTMLElement {
     const metadataUrl = this.getAttribute('metadata-url');
     if (metadataUrl && metadataUrl !== this.#metadataUrl) {
       this.#metadataUrl = metadataUrl;
-      void this.#fetchMetadata(metadataUrl);
+      this.#pendingMetadataFetch = this.#fetchMetadata(metadataUrl);
     }
 
     const config = this.config;
@@ -372,8 +375,9 @@ export class HonuaSceneElement extends HTMLElement {
       this.#metadataUrl = next;
       this.#metadataFetchVersion += 1;
       if (next) {
-        void this.#fetchMetadata(next);
+        this.#pendingMetadataFetch = this.#fetchMetadata(next);
       } else {
+        this.#pendingMetadataFetch = null;
         this.#applyMetadata(null, 'cleared');
       }
       return;
@@ -446,6 +450,10 @@ export class HonuaSceneElement extends HTMLElement {
       this.#applyLayerVisibility(existing, metadata.visible ?? existing.visible);
       this.#applyLayerOpacity(existing, metadata.opacity ?? existing.opacity);
 
+      if (metadata.id === 'primary') {
+        this.#primaryOwner = 'implicit';
+      }
+
       if (sourceChanged && this.#canLoadLayerTileset(existing)) {
         await this.#loadLayerTileset(existing);
       }
@@ -463,6 +471,10 @@ export class HonuaSceneElement extends HTMLElement {
     this.#layers.set(metadata.id, handle);
     this.#layerLoadVersions.set(metadata.id, (this.#layerLoadVersions.get(metadata.id) ?? 0) + 1);
 
+    if (metadata.id === 'primary') {
+      this.#primaryOwner = 'implicit';
+    }
+
     if (this.#canLoadLayerTileset(handle)) {
       await this.#loadLayerTileset(handle);
     }
@@ -479,6 +491,9 @@ export class HonuaSceneElement extends HTMLElement {
 
     this.#layers.delete(layerId);
     this.#layerLoadVersions.delete(layerId);
+    if (layerId === 'primary') {
+      this.#primaryOwner = null;
+    }
     this.#detachLayerTileset(handle);
 
     this.dispatchEvent(new CustomEvent<HonuaSceneLayerChangeDetail>('honua-scene-layer-change', {
@@ -578,6 +593,18 @@ export class HonuaSceneElement extends HTMLElement {
 
     if (version !== this.#loadVersion) {
       return;
+    }
+
+    const pendingMetadataFetch = this.#pendingMetadataFetch;
+    if (pendingMetadataFetch) {
+      try {
+        await pendingMetadataFetch;
+      } catch {
+        /* #fetchMetadata surfaces errors via honua-scene-metadata-error */
+      }
+      if (version !== this.#loadVersion) {
+        return;
+      }
     }
 
     this.#configureCesiumAssets(cesium, config);
@@ -697,6 +724,7 @@ export class HonuaSceneElement extends HTMLElement {
       tileset,
     };
     this.#layers.set('primary', handle);
+    this.#primaryOwner = 'implicit';
   }
 
   #dropStaleImplicitPrimary(targetTilesetUrl: string | null): void {
@@ -716,6 +744,7 @@ export class HonuaSceneElement extends HTMLElement {
     this.#detachLayerTileset(primary);
     this.#layers.delete('primary');
     this.#layerLoadVersions.delete('primary');
+    this.#primaryOwner = null;
   }
 
   async #hydrateLayersFromMetadata(): Promise<void> {
@@ -1156,7 +1185,22 @@ export class HonuaSceneElement extends HTMLElement {
       for (const layer of metadata.layers) {
         declaredIds.add(layer.id);
         void this.addLayer(layer);
+        if (layer.id === 'primary') {
+          this.#primaryOwner = 'metadata';
+        }
       }
+    }
+
+    let metadataPrimaryDropped = false;
+    if (!declaredIds.has('primary') && this.#primaryOwner === 'metadata') {
+      const primary = this.#layers.get('primary');
+      if (primary) {
+        this.#detachLayerTileset(primary);
+        this.#layers.delete('primary');
+        this.#layerLoadVersions.delete('primary');
+      }
+      this.#primaryOwner = null;
+      metadataPrimaryDropped = true;
     }
 
     for (const id of [...this.#layers.keys()]) {
@@ -1167,6 +1211,13 @@ export class HonuaSceneElement extends HTMLElement {
         continue;
       }
       this.removeLayer(id);
+    }
+
+    if (metadataPrimaryDropped) {
+      const config = this.config;
+      if (this.isConnected && config.autoload && hasSceneData(config)) {
+        void this.load();
+      }
     }
   }
 
