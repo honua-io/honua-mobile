@@ -442,6 +442,83 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('lets metadata-declared primary win over tileset-url for both URL and fields', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Site capture (metadata)',
+          description: 'As-built primary tileset from the scene document.',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+          opacity: 0.6,
+          visible: false,
+        },
+      ],
+    };
+
+    await element.load();
+
+    const fromUrlCalls = cesium.Cesium3DTileset.fromUrl.mock.calls.map((call) => call[0]);
+    expect(fromUrlCalls).toContain('https://data.example.test/metadata-primary.json');
+    expect(fromUrlCalls).not.toContain('https://data.example.test/attribute-primary.json');
+
+    const handle = element.getLayer('primary');
+    expect(handle?.metadata.url).toBe('https://data.example.test/metadata-primary.json');
+    expect(handle?.metadata.title).toBe('Site capture (metadata)');
+    expect(handle?.metadata.description).toBe('As-built primary tileset from the scene document.');
+    expect(handle?.metadata.opacity).toBe(0.6);
+    expect(handle?.metadata.visible).toBe(false);
+
+    webgl.mockRestore();
+  });
+
+  it('uses the metadata-declared primary tileset for the public tileset getter and ready event', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Primary from metadata',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+        },
+      ],
+    };
+
+    const ready = vi.fn();
+    element.addEventListener('honua-scene-ready', ready);
+
+    await element.load();
+
+    const handle = element.getLayer('primary');
+    expect(handle?.tileset).not.toBeNull();
+    expect(element.tileset).toBe(handle?.tileset);
+    expect(ready).toHaveBeenCalledOnce();
+    expect(ready.mock.calls[0][0].detail.tileset).toBe(handle?.tileset);
+
+    webgl.mockRestore();
+  });
+
   it('tears down the existing scene when package resolution fails', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');

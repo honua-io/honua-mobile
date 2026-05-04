@@ -612,8 +612,11 @@ export class HonuaSceneElement extends HTMLElement {
       return;
     }
 
+    const metadataDeclaresPrimary =
+      this.#metadata?.layers?.some((layer) => layer.id === 'primary') ?? false;
+
     try {
-      if (dataUrls.tilesetUrl) {
+      if (dataUrls.tilesetUrl && !metadataDeclaresPrimary) {
         const loaded = await cesium.Cesium3DTileset.fromUrl(dataUrls.tilesetUrl);
 
         if (version !== this.#loadVersion || !this.#widget) {
@@ -638,6 +641,19 @@ export class HonuaSceneElement extends HTMLElement {
 
       if (version !== this.#loadVersion || !this.#widget) {
         return;
+      }
+
+      if (metadataDeclaresPrimary) {
+        const primaryHandle = this.#layers.get('primary');
+        if (primaryHandle?.tileset) {
+          this.#tileset = primaryHandle.tileset;
+          if (!config.center) {
+            await this.#widget.zoomTo(primaryHandle.tileset);
+            if (version !== this.#loadVersion || !this.#widget) {
+              return;
+            }
+          }
+        }
       }
 
       this.#applyCamera();

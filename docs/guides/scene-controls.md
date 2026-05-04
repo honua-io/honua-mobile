@@ -147,7 +147,11 @@ call directly:
 
 Layers declared in `metadata.layers` are tracked under their declared `id`.
 The implicit `tileset-url` becomes the `id: "primary"` layer when no metadata
-overrides it, so timelines and compare modes can refer to it by name.
+overrides it, so timelines and compare modes can refer to it by name. When
+`metadata.layers` declares its own `id: "primary"` entry, the metadata layer
+wins: its `url`, `title`, `description`, `visible`, and `opacity` are
+authoritative, and the `tileset-url` attribute is ignored for the primary
+slot.
 
 Layer-id references inside `timeline.phases[*].visibleLayerIds`,
 `compare.modes[*].leftLayerIds`, and `compare.modes[*].rightLayerIds` must
