@@ -1,8 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   HonuaSceneMetadataError,
   parseHonuaSceneMetadata,
 } from '../src/scene-metadata';
+
+const SDK_FIXTURE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../..',
+  'tests/Honua.Mobile.Sdk.Tests/Fixtures/Scenes/scene-metadata.json',
+);
 
 const VALID_DOCUMENT = {
   schema: 'honua-scene-metadata/v1',
@@ -219,6 +228,24 @@ describe('parseHonuaSceneMetadata', () => {
           center: { latitude: NaN, longitude: 10 },
         }),
       { path: '$.center.latitude' },
+    );
+  });
+
+  it('parses the SDK scene-metadata fixture without a schema field', () => {
+    const raw = readFileSync(SDK_FIXTURE_PATH, 'utf-8');
+    const document = JSON.parse(raw) as Record<string, unknown>;
+
+    expect(document.schema).toBeUndefined();
+
+    const metadata = parseHonuaSceneMetadata(document);
+
+    expect(metadata.schema).toBe('honua-scene-metadata/v1');
+    expect(metadata.id).toBe('downtown-honolulu');
+    expect(metadata.tileset?.url).toBe(
+      'https://api.honua.test/api/scenes/downtown-honolulu/tileset.json',
+    );
+    expect(metadata.terrain?.url).toBe(
+      'https://api.honua.test/api/scenes/downtown-honolulu/terrain',
     );
   });
 

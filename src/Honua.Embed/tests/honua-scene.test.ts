@@ -5,7 +5,22 @@ import {
   HonuaScenePackageCacheError,
 } from '../src/index';
 
+interface MockCesiumWidgetSnapshot {
+  destroy: ReturnType<typeof vi.fn>;
+  scene: {
+    primitives: {
+      add: ReturnType<typeof vi.fn>;
+      remove: ReturnType<typeof vi.fn>;
+    };
+    pickPosition: ReturnType<typeof vi.fn>;
+    requestRender: ReturnType<typeof vi.fn>;
+  };
+}
+
 interface MockCesiumModule {
+  Cesium3DTileset: {
+    fromUrl: ReturnType<typeof vi.fn>;
+  };
   CesiumTerrainProvider: {
     fromUrl: ReturnType<typeof vi.fn>;
   };
@@ -13,9 +28,7 @@ interface MockCesiumModule {
     defaultAccessToken: string;
   };
   __mock: {
-    widgets: Array<{
-      destroy: ReturnType<typeof vi.fn>;
-    }>;
+    widgets: MockCesiumWidgetSnapshot[];
   };
 }
 
@@ -78,6 +91,13 @@ vi.mock('cesium', () => {
         longitude,
         latitude,
         height,
+      })),
+    },
+    Cartographic: {
+      fromCartesian: vi.fn((cartesian: { x?: number; y?: number; z?: number }) => ({
+        latitude: (cartesian?.y ?? 0) / 100,
+        longitude: (cartesian?.x ?? 0) / 100,
+        height: cartesian?.z ?? 0,
       })),
     },
     Cesium3DTileset: {
@@ -503,6 +523,114 @@ describe('honua-scene', () => {
     expect(element.getAttribute('center')).toBe('21.31,-157.86');
     expect(element.getAttribute('height')).toBe('800');
     expect(element.getAttribute('heading')).toBe('45');
+  });
+
+  it('detaches an existing layer tileset when re-added with a different URL', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    const widget = cesium.__mock.widgets[0];
+
+    await element.addLayer({
+      id: 'design-overlay',
+      title: 'Design overlay',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/first.json',
+    });
+    const original = element.getLayer('design-overlay')?.tileset;
+    expect(original).toBeDefined();
+
+    await element.addLayer({
+      id: 'design-overlay',
+      title: 'Design overlay',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/second.json',
+    });
+
+    expect(widget.scene.primitives.remove).toHaveBeenCalledWith(original);
+    expect((element.getLayer('design-overlay')?.tileset as { url?: string } | null)?.url).toBe(
+      'https://data.example.test/second.json',
+    );
+
+    webgl.mockRestore();
+  });
+
+  it('drops stale layer-tileset loads after a URL change', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    const widget = cesium.__mock.widgets[0];
+
+    type StaleTileset = { url: string; show: boolean; style: undefined };
+    let resolveStale: (value: StaleTileset) => void = () => {};
+    cesium.Cesium3DTileset.fromUrl.mockImplementationOnce(
+      () =>
+        new Promise<StaleTileset>((resolve) => {
+          resolveStale = resolve;
+        }),
+    );
+
+    const stalePromise = element.addLayer({
+      id: 'design-overlay',
+      title: 'Design overlay',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/v1.json',
+    });
+
+    await element.addLayer({
+      id: 'design-overlay',
+      title: 'Design overlay',
+      kind: '3d-tiles',
+      url: 'https://data.example.test/v2.json',
+    });
+
+    resolveStale({ url: 'https://data.example.test/v1.json', show: true, style: undefined });
+    await stalePromise;
+
+    const tileset = element.getLayer('design-overlay')?.tileset as { url?: string } | null;
+    expect(tileset?.url).toBe('https://data.example.test/v2.json');
+    expect(
+      widget.scene.primitives.add.mock.calls.some(
+        (call) => (call[0] as { url?: string } | undefined)?.url === 'https://data.example.test/v1.json',
+      ),
+    ).toBe(false);
+
+    webgl.mockRestore();
+  });
+
+  it('samplePoint returns null without a widget and a cartographic point when the widget is loaded', async () => {
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+    expect(element.samplePoint(10, 20)).toBeNull();
+
+    const webgl = mockWebGl();
+    element.setAttribute('tileset-url', 'https://data.example.test/primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    await element.load();
+    const widget = cesium.__mock.widgets[0];
+    widget.scene.pickPosition.mockReturnValueOnce({ x: 100, y: 200, z: 300 });
+
+    const sampled = element.samplePoint(50, 60);
+    expect(widget.scene.pickPosition).toHaveBeenCalledWith({ x: 50, y: 60 });
+    expect(sampled).not.toBeNull();
+    expect(sampled?.height).toBe(300);
+    expect(typeof sampled?.latitude).toBe('number');
+    expect(typeof sampled?.longitude).toBe('number');
+    expect(Number.isFinite(sampled?.latitude)).toBe(true);
+    expect(Number.isFinite(sampled?.longitude)).toBe(true);
+
+    webgl.mockRestore();
   });
 
   it('clears the Cesium Ion token when the attribute is removed', async () => {

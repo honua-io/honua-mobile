@@ -162,7 +162,7 @@
         'honua-scene-control-error',
       ];
       for (const type of recorded) {
-        scene.addEventListener(type, (event) => {
+        document.body.addEventListener(type, (event) => {
           const entry = document.createElement('li');
           const detail = event.detail ?? null;
           entry.textContent = `${type}: ${JSON.stringify(detail)}`;

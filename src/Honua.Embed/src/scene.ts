@@ -71,11 +71,18 @@ export interface HonuaSceneCameraChangeDetail {
   orientation: HonuaSceneOrientation;
 }
 
+export interface HonuaSceneSampledPoint {
+  latitude: number;
+  longitude: number;
+  height: number;
+}
+
 export interface HonuaSceneIdentifyDetail {
   config: HonuaSceneConfig;
   x: number;
   y: number;
   picked: unknown;
+  position: HonuaSceneSampledPoint | null;
 }
 
 export interface HonuaSceneMetadataChangeDetail {
@@ -266,6 +273,7 @@ export class HonuaSceneElement extends HTMLElement {
   #metadataUrl: string | null = null;
   #metadataFetchVersion = 0;
   readonly #layers = new Map<string, HonuaSceneLayerHandle>();
+  readonly #layerLoadVersions = new Map<string, number>();
 
   constructor() {
     super();
@@ -421,9 +429,27 @@ export class HonuaSceneElement extends HTMLElement {
   async addLayer(metadata: HonuaSceneLayerMetadata): Promise<HonuaSceneLayerHandle> {
     const existing = this.#layers.get(metadata.id);
     if (existing) {
+      const sourceChanged =
+        existing.metadata.kind !== metadata.kind ||
+        existing.metadata.url !== metadata.url;
+
       existing.metadata = metadata;
+
+      if (sourceChanged) {
+        this.#detachLayerTileset(existing);
+        this.#layerLoadVersions.set(
+          metadata.id,
+          (this.#layerLoadVersions.get(metadata.id) ?? 0) + 1,
+        );
+      }
+
       this.#applyLayerVisibility(existing, metadata.visible ?? existing.visible);
       this.#applyLayerOpacity(existing, metadata.opacity ?? existing.opacity);
+
+      if (sourceChanged && this.#canLoadLayerTileset(existing)) {
+        await this.#loadLayerTileset(existing);
+      }
+
       this.#emitLayerChange(existing, 'metadata');
       return existing;
     }
@@ -435,20 +461,10 @@ export class HonuaSceneElement extends HTMLElement {
       tileset: null,
     };
     this.#layers.set(metadata.id, handle);
+    this.#layerLoadVersions.set(metadata.id, (this.#layerLoadVersions.get(metadata.id) ?? 0) + 1);
 
-    if (metadata.kind === '3d-tiles' && this.#widget && this.#cesium) {
-      try {
-        handle.tileset = await this.#cesium.Cesium3DTileset.fromUrl(metadata.url);
-        if (!this.#layers.has(metadata.id) || !this.#widget) {
-          return handle;
-        }
-        this.#widget.scene.primitives.add(handle.tileset);
-        this.#applyLayerVisibility(handle, handle.visible);
-        this.#applyLayerOpacity(handle, handle.opacity);
-        this.#widget.scene.requestRender();
-      } catch (error) {
-        this.#emitLoadError('tileset', `Unable to load layer "${metadata.id}".`, error);
-      }
+    if (this.#canLoadLayerTileset(handle)) {
+      await this.#loadLayerTileset(handle);
     }
 
     this.#emitLayerChange(handle, 'added');
@@ -462,15 +478,8 @@ export class HonuaSceneElement extends HTMLElement {
     }
 
     this.#layers.delete(layerId);
-
-    if (handle.tileset && this.#widget) {
-      try {
-        this.#widget.scene.primitives.remove(handle.tileset);
-      } catch {
-        /* primitives may already be torn down */
-      }
-      this.#widget.scene.requestRender();
-    }
+    this.#layerLoadVersions.delete(layerId);
+    this.#detachLayerTileset(handle);
 
     this.dispatchEvent(new CustomEvent<HonuaSceneLayerChangeDetail>('honua-scene-layer-change', {
       bubbles: true,
@@ -651,31 +660,81 @@ export class HonuaSceneElement extends HTMLElement {
   }
 
   async #hydrateLayersFromMetadata(): Promise<void> {
-    const metadata = this.#metadata;
-    if (!metadata?.layers || !this.#widget || !this.#cesium) {
+    if (!this.#widget || !this.#cesium) {
       return;
     }
 
-    for (const layer of metadata.layers) {
-      if (layer.kind !== '3d-tiles') {
+    for (const handle of [...this.#layers.values()]) {
+      if (handle.tileset) {
         continue;
       }
-      const handle = this.#layers.get(layer.id);
-      if (!handle || handle.tileset) {
-        continue;
-      }
-      try {
-        handle.tileset = await this.#cesium.Cesium3DTileset.fromUrl(layer.url);
-        if (!this.#widget) {
-          return;
-        }
-        this.#widget.scene.primitives.add(handle.tileset);
-        this.#applyLayerVisibility(handle, handle.visible);
-        this.#applyLayerOpacity(handle, handle.opacity);
-      } catch (error) {
-        this.#emitLoadError('tileset', `Unable to load layer "${layer.id}".`, error);
-      }
+      await this.#loadLayerTileset(handle);
     }
+  }
+
+  #canLoadLayerTileset(handle: HonuaSceneLayerHandle): boolean {
+    return (
+      handle.metadata.kind === '3d-tiles' &&
+      this.#widget !== null &&
+      this.#cesium !== null
+    );
+  }
+
+  async #loadLayerTileset(handle: HonuaSceneLayerHandle): Promise<void> {
+    const cesium = this.#cesium;
+    if (!this.#canLoadLayerTileset(handle) || !cesium) {
+      return;
+    }
+
+    const layerId = handle.metadata.id;
+    const targetUrl = handle.metadata.url;
+    const targetKind = handle.metadata.kind;
+    const captured = this.#layerLoadVersions.get(layerId) ?? 0;
+
+    let tileset: Cesium3DTileset;
+    try {
+      tileset = await cesium.Cesium3DTileset.fromUrl(targetUrl);
+    } catch (error) {
+      if (
+        this.#layers.get(layerId) === handle &&
+        (this.#layerLoadVersions.get(layerId) ?? 0) === captured
+      ) {
+        this.#emitLoadError('tileset', `Unable to load layer "${layerId}".`, error);
+      }
+      return;
+    }
+
+    if (
+      this.#layers.get(layerId) !== handle ||
+      (this.#layerLoadVersions.get(layerId) ?? 0) !== captured ||
+      handle.metadata.kind !== targetKind ||
+      handle.metadata.url !== targetUrl ||
+      !this.#widget
+    ) {
+      return;
+    }
+
+    this.#detachLayerTileset(handle);
+    handle.tileset = tileset;
+    this.#widget.scene.primitives.add(tileset);
+    this.#applyLayerVisibility(handle, handle.visible);
+    this.#applyLayerOpacity(handle, handle.opacity);
+    this.#widget.scene.requestRender();
+  }
+
+  #detachLayerTileset(handle: HonuaSceneLayerHandle): void {
+    if (!handle.tileset) {
+      return;
+    }
+    if (this.#widget) {
+      try {
+        this.#widget.scene.primitives.remove(handle.tileset);
+      } catch {
+        /* primitives may already be torn down */
+      }
+      this.#widget.scene.requestRender();
+    }
+    handle.tileset = null;
   }
 
   async #resolveSceneDataUrls(config: HonuaSceneConfig): Promise<{
@@ -754,6 +813,7 @@ export class HonuaSceneElement extends HTMLElement {
       }
 
       const picked = this.#widget.scene.pick(event.position);
+      const position = this.samplePoint(event.position.x, event.position.y);
       this.dispatchEvent(new CustomEvent<HonuaSceneIdentifyDetail>('honua-scene-identify', {
         bubbles: true,
         composed: true,
@@ -762,9 +822,54 @@ export class HonuaSceneElement extends HTMLElement {
           x: event.position.x,
           y: event.position.y,
           picked,
+          position,
         },
       }));
     }, cesium.ScreenSpaceEventType.LEFT_CLICK);
+  }
+
+  samplePoint(x: number, y: number): HonuaSceneSampledPoint | null {
+    if (!this.#widget || !this.#cesium) {
+      return null;
+    }
+
+    const scene = this.#widget.scene as unknown as {
+      pickPosition?: (position: { x: number; y: number }) => unknown;
+    };
+    if (typeof scene.pickPosition !== 'function') {
+      return null;
+    }
+
+    let cartesian: unknown;
+    try {
+      cartesian = scene.pickPosition({ x, y });
+    } catch {
+      return null;
+    }
+
+    if (!cartesian) {
+      return null;
+    }
+
+    const { Cartographic, Math: CesiumMath } = this.#cesium;
+    let cartographic: { latitude: number; longitude: number; height: number } | null;
+    try {
+      cartographic = Cartographic.fromCartesian(
+        cartesian as Parameters<typeof Cartographic.fromCartesian>[0],
+      );
+    } catch {
+      return null;
+    }
+
+    if (!cartographic) {
+      return null;
+    }
+
+    return {
+      latitude: CesiumMath.toDegrees(cartographic.latitude),
+      longitude: CesiumMath.toDegrees(cartographic.longitude),
+      height: cartographic.height,
+    };
   }
 
   #applyCamera(): void {

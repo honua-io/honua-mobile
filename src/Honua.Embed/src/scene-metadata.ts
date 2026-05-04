@@ -126,8 +126,8 @@ export function parseHonuaSceneMetadata(input: unknown): HonuaSceneMetadata {
     );
   }
 
-  const schema = readString(input, 'schema', '$.schema', { required: true });
-  if (schema !== HONUA_SCENE_METADATA_SCHEMA) {
+  const schema = readString(input, 'schema', '$.schema');
+  if (schema !== undefined && schema !== HONUA_SCENE_METADATA_SCHEMA) {
     throw new HonuaSceneMetadataError(
       `Unsupported scene metadata schema: ${schema}. Expected ${HONUA_SCENE_METADATA_SCHEMA}.`,
       '$.schema',

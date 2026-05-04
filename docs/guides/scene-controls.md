@@ -55,8 +55,11 @@ The metadata shape is `honua-scene-metadata/v1`. It is a forward-compatible
 superset of the SDK fixture at
 `tests/Honua.Mobile.Sdk.Tests/Fixtures/Scenes/scene-metadata.json` — the
 familiar `id`, `name`, `description`, `center`, `bounds`, `tileset`, `terrain`,
-`capabilities`, and `links` fields stay where they are. The new optional
-fields drive the controls:
+`capabilities`, and `links` fields stay where they are, so an existing SDK
+scene metadata document parses without modification. The `schema` field is
+optional and defaults to `honua-scene-metadata/v1`; supplying a different
+schema string still emits `metadata-invalid`. The new optional fields drive
+the controls:
 
 ```jsonc
 {

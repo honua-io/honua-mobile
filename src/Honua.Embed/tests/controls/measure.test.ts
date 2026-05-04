@@ -97,6 +97,66 @@ describe('honua-scene-measure', () => {
     expect(detail.distance).toBeGreaterThan(0);
   });
 
+  it('reads cartographic position from honua-scene-identify detail', () => {
+    const control = createMeasureControl(setup);
+    const listener = vi.fn();
+    control.addEventListener('honua-scene-measurement-add', listener);
+
+    const pointButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-kind="point"]',
+    )!;
+    pointButton.click();
+
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          x: 1,
+          y: 2,
+          picked: { id: 'feature-1' },
+          position: { latitude: 21.31, longitude: -157.86, height: 12 },
+        },
+      }),
+    );
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail.points).toEqual([
+      { latitude: 21.31, longitude: -157.86, height: 12 },
+    ]);
+  });
+
+  it('falls back to scene.samplePoint when identify detail lacks a position', () => {
+    const control = createMeasureControl(setup);
+    const listener = vi.fn();
+    control.addEventListener('honua-scene-measurement-add', listener);
+
+    const sampleSpy = vi
+      .spyOn(setup.scene, 'samplePoint')
+      .mockReturnValue({ latitude: 39.95, longitude: -75.16, height: 0 });
+
+    const pointButton = control.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button[data-kind="point"]',
+    )!;
+    pointButton.click();
+
+    setup.scene.dispatchEvent(
+      new CustomEvent('honua-scene-identify', {
+        bubbles: true,
+        composed: true,
+        detail: { x: 4, y: 8, picked: null, position: null },
+      }),
+    );
+
+    expect(sampleSpy).toHaveBeenCalledWith(4, 8);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail.points).toEqual([
+      { latitude: 39.95, longitude: -75.16, height: 0 },
+    ]);
+
+    sampleSpy.mockRestore();
+  });
+
   it('emits honua-scene-measurement-clear on Clear', () => {
     const control = createMeasureControl(setup);
     const listener = vi.fn();

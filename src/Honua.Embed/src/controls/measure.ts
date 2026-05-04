@@ -276,79 +276,57 @@ function readMeasurementPoint(
   scene: HonuaSceneElement | null,
   event: CustomEvent,
 ): HonuaSceneMeasurementPoint | null {
-  const detail = event.detail as { picked?: unknown; x?: number; y?: number } | undefined;
+  const detail = event.detail as
+    | {
+        picked?: unknown;
+        x?: number;
+        y?: number;
+        position?: { latitude?: number; longitude?: number; height?: number } | null;
+      }
+    | undefined;
   if (!detail) {
     return null;
   }
 
-  const widget = scene?.cesiumWidget as
-    | {
-        scene: {
-          pickPosition?: (position: { x: number; y: number }) => unknown;
-        };
-      }
-    | null
-    | undefined;
-
-  const cesium = (globalThis as { Cesium?: unknown }).Cesium;
-
-  if (widget?.scene?.pickPosition && detail.x !== undefined && detail.y !== undefined) {
-    try {
-      const cartesian = widget.scene.pickPosition({ x: detail.x, y: detail.y });
-      const cartographic = cartesianToCartographic(cartesian, cesium);
-      if (cartographic) {
-        return cartographic;
-      }
-    } catch {
-      /* fall through */
-    }
+  const fromDetail = readPointFromCandidate(detail.position);
+  if (fromDetail) {
+    return fromDetail;
   }
 
-  if (detail.picked && typeof detail.picked === 'object') {
-    const position = (detail.picked as { position?: { latitude?: number; longitude?: number; height?: number } }).position;
-    if (
-      position &&
-      typeof position.latitude === 'number' &&
-      typeof position.longitude === 'number'
-    ) {
-      return {
-        latitude: position.latitude,
-        longitude: position.longitude,
-        height: position.height ?? 0,
-      };
+  const fromPicked =
+    detail.picked && typeof detail.picked === 'object'
+      ? readPointFromCandidate(
+          (detail.picked as { position?: unknown }).position,
+        )
+      : null;
+  if (fromPicked) {
+    return fromPicked;
+  }
+
+  if (scene && typeof detail.x === 'number' && typeof detail.y === 'number') {
+    const sampled = scene.samplePoint(detail.x, detail.y);
+    if (sampled) {
+      return sampled;
     }
   }
 
   return null;
 }
 
-function cartesianToCartographic(
-  cartesian: unknown,
-  cesium: unknown,
-): HonuaSceneMeasurementPoint | null {
-  if (!cartesian || !cesium || typeof cesium !== 'object') {
+function readPointFromCandidate(value: unknown): HonuaSceneMeasurementPoint | null {
+  if (!value || typeof value !== 'object') {
     return null;
   }
 
-  const cartographicFactory = (cesium as {
-    Cartographic?: { fromCartesian?: (value: unknown) => { latitude: number; longitude: number; height: number } };
-    Math?: { toDegrees?: (value: number) => number };
-  });
-
-  const cartographic = cartographicFactory.Cartographic?.fromCartesian?.(cartesian);
-  if (!cartographic) {
-    return null;
-  }
-
-  const toDegrees = cartographicFactory.Math?.toDegrees;
-  if (!toDegrees) {
+  const candidate = value as { latitude?: unknown; longitude?: unknown; height?: unknown };
+  if (typeof candidate.latitude !== 'number' || typeof candidate.longitude !== 'number') {
     return null;
   }
 
   return {
-    latitude: toDegrees(cartographic.latitude),
-    longitude: toDegrees(cartographic.longitude),
-    height: cartographic.height,
+    latitude: candidate.latitude,
+    longitude: candidate.longitude,
+    height: typeof candidate.height === 'number' ? candidate.height : 0,
   };
 }
 
