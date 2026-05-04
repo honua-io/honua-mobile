@@ -24,7 +24,7 @@
   },
   "layers": [
     {
-      "id": "as-built",
+      "id": "primary",
       "title": "As-built capture",
       "kind": "3d-tiles",
       "url": "https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/main/1.0/TilesetWithDiscreteLOD/tileset.json",
@@ -81,7 +81,7 @@
         "title": "Phase 1 – Foundation",
         "startUtc": "2026-01-06T00:00:00Z",
         "endUtc": "2026-03-30T00:00:00Z",
-        "visibleLayerIds": ["as-built"],
+        "visibleLayerIds": ["primary"],
         "description": "Foundation pour and underground utilities."
       },
       {
@@ -89,7 +89,7 @@
         "title": "Phase 2 – Superstructure",
         "startUtc": "2026-04-01T00:00:00Z",
         "endUtc": "2026-08-30T00:00:00Z",
-        "visibleLayerIds": ["as-built", "design-overlay"],
+        "visibleLayerIds": ["primary", "design-overlay"],
         "description": "Superstructure framing and curtain wall installation."
       },
       {
@@ -97,7 +97,7 @@
         "title": "Phase 3 – Fit-out",
         "startUtc": "2026-09-01T00:00:00Z",
         "endUtc": "2026-12-15T00:00:00Z",
-        "visibleLayerIds": ["as-built", "design-overlay"],
+        "visibleLayerIds": ["primary", "design-overlay"],
         "description": "Interior fit-out and commissioning."
       }
     ]
@@ -109,7 +109,7 @@
         "title": "Design vs. as-built",
         "description": "Toggle between the design intent and the latest capture.",
         "leftLayerIds": ["design-overlay"],
-        "rightLayerIds": ["as-built"]
+        "rightLayerIds": ["primary"]
       }
     ]
   },
