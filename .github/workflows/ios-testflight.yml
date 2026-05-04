@@ -116,8 +116,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! xcrun --find actool; then
-            echo "::error::The selected GitHub-hosted Xcode image does not expose actool through xcrun."
+          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          if ! /usr/bin/xcrun xcodebuild -sdk "${macos_sdk}" -find actool; then
+            echo "::error::The selected GitHub-hosted Xcode image does not expose actool through the .NET/Xcode asset-tool lookup."
             echo "::error::TestFlight uploads require a runner image with a complete Apple asset compiler toolchain."
             exit 1
           fi

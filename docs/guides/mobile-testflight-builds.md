@@ -102,9 +102,9 @@ hosted image includes the complete Xcode toolchain before TestFlight uploads
 are enabled.
 
 The workflow checks for `actool` before importing signing secrets. If the
-selected GitHub-hosted image cannot expose Apple's asset compiler through
-`xcrun`, the run fails before any App Store Connect or certificate material
-is decoded.
+selected GitHub-hosted image cannot expose Apple's asset compiler through the
+.NET/Xcode asset-tool lookup, the run fails before any App Store Connect or
+certificate material is decoded.
 
 ## Troubleshooting
 
