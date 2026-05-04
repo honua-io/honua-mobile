@@ -519,6 +519,51 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
+  it('hydrates the metadata-declared primary URL on a terrain-only reload after tileset-url is removed', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/attribute-primary.json');
+    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    element.metadata = {
+      schema: 'honua-scene-metadata/v1',
+      id: 'demo',
+      name: 'Demo',
+      layers: [
+        {
+          id: 'primary',
+          title: 'Primary from metadata',
+          kind: '3d-tiles',
+          url: 'https://data.example.test/metadata-primary.json',
+        },
+      ],
+    };
+
+    await element.load();
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+
+    element.removeAttribute('tileset-url');
+    await element.load();
+
+    expect(element.getLayer('primary')?.metadata.url).toBe(
+      'https://data.example.test/metadata-primary.json',
+    );
+
+    cesium.Cesium3DTileset.fromUrl.mockClear();
+    element.setAttribute('terrain-url', 'https://data.example.test/terrain');
+    await element.load();
+
+    const fromUrlCalls = cesium.Cesium3DTileset.fromUrl.mock.calls.map((call) => call[0]);
+    expect(fromUrlCalls).toContain('https://data.example.test/metadata-primary.json');
+    expect(fromUrlCalls).not.toContain('https://data.example.test/attribute-primary.json');
+
+    webgl.mockRestore();
+  });
+
   it('tears down the existing scene when package resolution fails', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');
