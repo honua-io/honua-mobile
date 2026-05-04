@@ -29,6 +29,7 @@
         <ApplicationTitle>Honua Field Collection</ApplicationTitle>
         <ApplicationId>io.honua.mobile.fieldcollection</ApplicationId>
         <ApplicationIdGuid>1F57F04D-47F3-4F8B-A5E5-9C89F34E4B3E</ApplicationIdGuid>
+        <WindowsPackageType>None</WindowsPackageType>
 
     </PropertyGroup>
 

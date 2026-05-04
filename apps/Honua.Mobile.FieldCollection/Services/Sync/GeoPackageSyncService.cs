@@ -11,6 +11,7 @@ using StorageConflictResolution = Honua.Mobile.FieldCollection.Services.Storage.
 using StorageConflictType = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictType;
 using StorageSyncSession = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSession;
 using StorageSyncSessionStatus = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSessionStatus;
+using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection.Services.Sync;
@@ -610,7 +611,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
             return geometryType switch
             {
-                "Point" => new Point(
+                "Point" => new FieldPoint(
                     GetDouble(document.RootElement, "latitude"),
                     GetDouble(document.RootElement, "longitude"),
                     TryGetDouble(document.RootElement, "altitude", out var altitude) ? altitude : null)
@@ -638,7 +639,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         {
             switch (value)
             {
-                case Point point:
+                case FieldPoint point:
                     WritePoint(writer, point);
                     break;
                 case LineString line:
@@ -681,7 +682,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             }
         }
 
-        private static void WritePoint(Utf8JsonWriter writer, Point point)
+        private static void WritePoint(Utf8JsonWriter writer, FieldPoint point)
         {
             writer.WriteStartObject();
             writer.WriteString("type", point.Type);
@@ -696,12 +697,12 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             writer.WriteEndObject();
         }
 
-        private static List<Point> ReadPointArray(JsonElement element, string propertyName)
+        private static List<FieldPoint> ReadPointArray(JsonElement element, string propertyName)
         {
             if (!TryGetProperty(element, propertyName, out var coordinates) ||
                 coordinates.ValueKind != JsonValueKind.Array)
             {
-                return new List<Point>();
+                return new List<FieldPoint>();
             }
 
             return coordinates.EnumerateArray()
@@ -709,12 +710,12 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 .ToList();
         }
 
-        private static List<List<Point>> ReadPointRings(JsonElement element, string propertyName)
+        private static List<List<FieldPoint>> ReadPointRings(JsonElement element, string propertyName)
         {
             if (!TryGetProperty(element, propertyName, out var rings) ||
                 rings.ValueKind != JsonValueKind.Array)
             {
-                return new List<List<Point>>();
+                return new List<List<FieldPoint>>();
             }
 
             return rings.EnumerateArray()
@@ -723,9 +724,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 .ToList();
         }
 
-        private static Point ReadPoint(JsonElement element)
+        private static FieldPoint ReadPoint(JsonElement element)
         {
-            return new Point(
+            return new FieldPoint(
                 GetDouble(element, "latitude"),
                 GetDouble(element, "longitude"),
                 TryGetDouble(element, "altitude", out var altitude) ? altitude : null)
