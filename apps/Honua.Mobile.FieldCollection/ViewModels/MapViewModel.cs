@@ -48,7 +48,7 @@ public partial class MapViewModel : BaseViewModel
         Title = "Map";
         IsLocationEnabled = _locationService.IsLocationEnabled;
 
-        // Initialize with demo layers
+        // Initialize with default layers until server-provided metadata is available.
         InitializeLayers();
     }
 
@@ -58,7 +58,7 @@ public partial class MapViewModel : BaseViewModel
         {
             Id = 1,
             Name = "Points of Interest",
-            Description = "Sample point layer for demonstration",
+            Description = "Point feature layer",
             GeometryType = GeometryType.Point,
             IsVisible = true,
             IsEditable = true,

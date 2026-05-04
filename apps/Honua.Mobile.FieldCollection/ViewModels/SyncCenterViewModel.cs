@@ -332,27 +332,7 @@ public partial class SyncCenterViewModel : BaseViewModel
     [RelayCommand]
     private async Task LoadSyncHistory()
     {
-        await ExecuteAsync(async () =>
-        {
-            // In a real implementation, this would load from local storage
-            await Task.Delay(200);
-
-            if (SyncHistory.Count == 0)
-            {
-                // Add some demo history items
-                SyncHistory.Add(new SyncHistoryItem
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Type = SyncType.Full,
-                    StartTime = DateTime.Now.AddHours(-2),
-                    EndTime = DateTime.Now.AddHours(-2).AddMinutes(2),
-                    Status = SyncHistoryStatus.Completed,
-                    ChangesPulled = 5,
-                    ChangesPushed = 3,
-                    ConflictsCount = 0
-                });
-            }
-        });
+        await Task.CompletedTask;
     }
 }
 

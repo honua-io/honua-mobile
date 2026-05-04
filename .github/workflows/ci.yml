@@ -159,6 +159,8 @@ jobs:
           dotnet restore tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj
           dotnet restore tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj
           dotnet restore tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj
+          dotnet restore tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj
+          dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
           dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
           npm ci --prefix src/Honua.Embed
 
@@ -172,6 +174,10 @@ jobs:
           dotnet build tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj \
+            --no-restore --configuration Release
+          dotnet build tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj \
+            --no-restore --configuration Release
+          dotnet build tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj \
             --no-restore --configuration Release
@@ -194,11 +200,29 @@ jobs:
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
 
-      - name: Run Field Collection Tests
+      - name: Run Field Tests
         run: |
           dotnet test tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj \
             --no-build --no-restore --configuration Release \
             --logger "trx;LogFileName=field-tests.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults \
+            --collect:"XPlat Code Coverage"
+
+      - name: Run FieldCollection App Tests
+        run: |
+          dotnet test tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --logger "trx;LogFileName=fieldcollection-tests.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults \
+            --collect:"XPlat Code Coverage"
+
+      - name: Run Server Integration Tests
+        run: |
+          dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --logger "trx;LogFileName=server-integration-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
@@ -419,7 +443,9 @@ jobs:
         run: dotnet workload install maui
 
       - name: Restore
-        run: dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
+        run: |
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
 
       - name: Build MAUI Components (Windows)
         run: |
@@ -429,6 +455,12 @@ jobs:
       - name: Build Reference App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
+            --configuration Release `
+            --framework net10.0-windows10.0.19041.0
+
+      - name: Build Field Collection App (Windows)
+        run: |
+          dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0
 

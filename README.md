@@ -153,11 +153,13 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (36 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (79 tests)
   Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (59 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location (24 tests)
-  Honua.Mobile.Smoke.Tests/   End-to-end smoke paths (6 tests)
+  Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
+  Honua.Mobile.ServerIntegration.Tests/ Loopback Honua server integration surface (8 tests)
+  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location (32 tests)
+  Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query (7 tests)
 proto/
   honua/v1/                   gRPC protocol definitions
 ```
@@ -177,11 +179,20 @@ Building Android targets requires a configured Android SDK. The library projects
 (`Sdk`, `Field`, `Offline`, `Maui`) target `net10.0` and build on any platform
 without the MAUI workload.
 
+The server integration project starts a real ASP.NET Core loopback server and
+exercises the implemented SDK, offline, FieldCollection auth, and mobile
+exception-reporting HTTP paths without requiring external infrastructure.
+The smoke test project can also run an optional live Honua query when
+`HONUA_MOBILE_SMOKE_BASE_URL`, `HONUA_MOBILE_SMOKE_SERVICE_ID`,
+`HONUA_MOBILE_SMOKE_LAYER_ID`, and optionally `HONUA_MOBILE_SMOKE_API_KEY` are
+set. This repository does not currently include Testcontainers or a devcontainer
+for provisioning Honua locally.
+
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
-.NET test coverage across SDK, Field, Offline, MAUI, and Smoke projects, plus
-DOM tests for the embeddable map package.
+.NET test coverage across SDK, Field, FieldCollection, server integration,
+Offline, MAUI, and Smoke projects, plus DOM tests for the embeddable map package.
 
 The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
 no implementation yet.

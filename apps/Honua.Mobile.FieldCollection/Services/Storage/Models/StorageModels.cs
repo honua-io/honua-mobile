@@ -291,6 +291,17 @@ public enum ConflictType
 }
 
 /// <summary>
+/// Stored conflict resolution decisions.
+/// </summary>
+public enum ConflictResolution
+{
+    AcceptLocal = 1,
+    AcceptServer = 2,
+    Merge = 3,
+    Manual = 4
+}
+
+/// <summary>
 /// Spatial query parameters
 /// </summary>
 public class SpatialQuery
