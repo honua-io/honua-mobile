@@ -371,12 +371,11 @@ jobs:
       - name: Check iOS asset compiler availability
         id: ios_tools
         run: |
-          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
-          if xcodebuild -sdk "${macos_sdk}" -find actool > /tmp/actool-path 2> /tmp/actool-error; then
+          if xcrun --find actool > /tmp/actool-path 2> /tmp/actool-error; then
             cat /tmp/actool-path
             echo "actool_available=true" >> "${GITHUB_OUTPUT}"
           else
-            echo "::warning::actool is unavailable on this GitHub-hosted Xcode image; skipping iOS app asset and publish smoke."
+            echo "::warning::actool is unavailable through xcrun on this GitHub-hosted Xcode image; skipping iOS app asset and publish smoke."
             cat /tmp/actool-error
             echo "actool_available=false" >> "${GITHUB_OUTPUT}"
           fi
