@@ -91,8 +91,8 @@ tester membership in App Store Connect.
 ## Runner and Xcode Notes
 
 The workflow uses `macos-latest`, pins .NET SDK `10.0.100`, installs the iOS
-workload with `--skip-manifest-update`, and explicitly selects Xcode 26.3 from
-`/Applications/Xcode_26.3.app`. Keep those values aligned because newer .NET
+workload with `--skip-manifest-update`, and explicitly selects Xcode 26.0 from
+`/Applications/Xcode_26.0.app`. Keep those values aligned because newer .NET
 iOS workload manifests can require newer Xcode toolchains than the selected
 hosted runner provides.
 
