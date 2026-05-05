@@ -50,6 +50,8 @@ export interface CacheStorageScenePackageRequestOptions {
 }
 
 const DEFAULT_CACHE_STORAGE_URL_PREFIX = '/honua-scene-packages/';
+const UNSAFE_CACHE_STORAGE_URL_PATH_CHARACTER_PATTERN =
+  /[\u0000-\u0020"#<>?`{}^\u007f-\u{10ffff}]/gu;
 
 export class HonuaScenePackageCacheError extends Error {
   readonly code: HonuaScenePackageCacheErrorCode;
@@ -143,9 +145,10 @@ export function createCacheStorageScenePackageAssetUrl(
   );
   const path = normalizeScenePackageAssetPath(options.path);
   const prefix = createCacheStorageScenePackageUrlPrefix(options.urlPrefix, options.baseUrl);
-  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  validateCacheStorageUrlPathSegment(packageId, 'scene package ID');
+  const packageUrl = new URL(`${encodeURIComponent(packageId)}/`, prefix).toString();
 
-  return new URL(`${encodeURIComponent(packageId)}/${encodedPath}`, prefix).toString();
+  return `${packageUrl}${encodeCacheStorageAssetPath(path)}`;
 }
 
 export function isCacheStorageScenePackageRequest(
@@ -193,7 +196,7 @@ export function normalizeScenePackageAssetPath(path: string): string {
     .split('/')
     .filter((segment) => segment.length > 0);
 
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
+  if (segments.some((segment) => isCacheStorageUrlDotSegment(segment))) {
     throw new HonuaScenePackageCacheError(
       'invalid-package',
       `Scene package asset path '${path}' must stay under the package root.`,
@@ -201,6 +204,29 @@ export function normalizeScenePackageAssetPath(path: string): string {
   }
 
   return segments.join('/');
+}
+
+function encodeCacheStorageAssetPath(path: string): string {
+  return path.replace(
+    UNSAFE_CACHE_STORAGE_URL_PATH_CHARACTER_PATTERN,
+    (character) => encodeURIComponent(character),
+  );
+}
+
+function validateCacheStorageUrlPathSegment(segment: string, label: string): void {
+  if (!isCacheStorageUrlDotSegment(segment)) {
+    return;
+  }
+
+  throw new HonuaScenePackageCacheError(
+    'invalid-package',
+    `The ${label} '${segment}' must not be a URL dot segment.`,
+  );
+}
+
+function isCacheStorageUrlDotSegment(segment: string): boolean {
+  const urlNormalizedSegment = segment.replace(/%2e/gi, '.');
+  return urlNormalizedSegment === '.' || urlNormalizedSegment === '..';
 }
 
 function normalizeCacheStorageResponseMode(

@@ -33,6 +33,8 @@ describe('scene package cache adapter', () => {
       .toThrow(HonuaScenePackageCacheError);
     expect(() => normalizeScenePackageAssetPath('/tileset.json'))
       .toThrow(HonuaScenePackageCacheError);
+    expect(() => normalizeScenePackageAssetPath('%2e%2e/tileset.json'))
+      .toThrow(HonuaScenePackageCacheError);
   });
 
   it('builds stable package cache URLs for service workers and WebView routes', () => {
@@ -50,6 +52,30 @@ describe('scene package cache adapter', () => {
       path: 'terrain/layer.json',
       urlPrefix: 'https://cache.example.test/scenes/',
     })).toBe('https://cache.example.test/scenes/pkg-downtown/terrain/layer.json');
+  });
+
+  it('preserves literal package asset path characters in cache URLs', () => {
+    expect(createCacheStorageScenePackageAssetUrl({
+      baseUrl: 'https://app.example.test/viewer/index.html',
+      packageId: 'pkg-downtown',
+      path: 'tilesets/a+b.b3dm',
+    })).toBe('https://app.example.test/honua-scene-packages/pkg-downtown/tilesets/a+b.b3dm');
+
+    expect(createCacheStorageScenePackageAssetUrl({
+      baseUrl: 'https://app.example.test/viewer/index.html',
+      packageId: 'pkg-downtown',
+      path: 'tilesets/already%20encoded%2Ftile.b3dm',
+    })).toBe(
+      'https://app.example.test/honua-scene-packages/pkg-downtown/tilesets/already%20encoded%2Ftile.b3dm',
+    );
+
+    expect(createCacheStorageScenePackageAssetUrl({
+      baseUrl: 'https://app.example.test/viewer/index.html',
+      packageId: 'pkg-downtown',
+      path: 'tilesets/query?and#fragment.b3dm',
+    })).toBe(
+      'https://app.example.test/honua-scene-packages/pkg-downtown/tilesets/query%3Fand%23fragment.b3dm',
+    );
   });
 
   it('resolves cached assets as stable cache URLs when requested', async () => {
