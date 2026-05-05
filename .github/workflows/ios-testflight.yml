@@ -1,0 +1,557 @@
+# yamllint disable rule:line-length rule:truthy
+---
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Branch, tag, or commit SHA to build. Leave empty to use the selected workflow ref."
+        required: false
+        type: string
+      target_environment:
+        description: "Protected GitHub Environment that owns iOS signing and App Store Connect secrets."
+        required: true
+        default: "ios-testflight"
+        type: choice
+        options:
+          - ios-testflight
+          - ios-production
+      app_target:
+        description: "MAUI app target to archive and upload."
+        required: true
+        default: "field-collection"
+        type: choice
+        options:
+          - field-collection
+          - mobile-app
+      build_number:
+        description: "Optional CFBundleVersion/ApplicationVersion. Defaults to the GitHub run number."
+        required: false
+        type: string
+      release_notes:
+        description: "Optional TestFlight tester notes captured in the run summary and artifact."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ios-testflight-${{ inputs.target_environment }}-${{ inputs.app_target }}-${{ inputs.source_ref || github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: "10.0.100"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  TARGET_FRAMEWORK: net10.0-ios
+  RUNTIME_IDENTIFIER: ios-arm64
+  CONFIGURATION: Release
+  ARTIFACT_OUTPUT_DIR: artifacts/ios-testflight
+  REQUIRED_XCODE_VERSION: "26.0"
+
+jobs:
+  build-sign-upload:
+    name: Build, Sign, and Upload iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 90
+    environment:
+      name: ${{ inputs.target_environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Resolve checked out commit
+        id: checkout_ref
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit_sha="$(git rev-parse HEAD)"
+          {
+            echo "commit_sha=${commit_sha}"
+            echo "short_sha=${commit_sha:0:12}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ github.repository }}-${{ runner.os }}-nuget-
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Select Xcode 26.0
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcode_path="/Applications/Xcode_${REQUIRED_XCODE_VERSION}.app/Contents/Developer"
+          if [[ ! -d "${xcode_path}" ]]; then
+            echo "::error::Xcode ${REQUIRED_XCODE_VERSION} is required by the pinned .NET iOS workload manifest, but ${xcode_path} is not installed on this runner."
+            echo "::error::Update DOTNET_VERSION, REQUIRED_XCODE_VERSION, and the runner image together when moving iOS workload manifests forward."
+            exit 1
+          fi
+
+          sudo xcode-select -s "${xcode_path}"
+          xcodebuild -version
+
+      - name: Install MAUI iOS workload
+        run: dotnet workload install maui-ios --skip-manifest-update
+
+      - name: Verify iOS asset compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          if ! /usr/bin/xcrun xcodebuild -sdk "${macos_sdk}" -find actool; then
+            echo "::error::The selected GitHub-hosted Xcode image does not expose actool through the .NET/Xcode asset-tool lookup."
+            echo "::error::TestFlight uploads require a runner image with a complete Apple asset compiler toolchain."
+            exit 1
+          fi
+
+      - name: Resolve build metadata
+        id: metadata
+        shell: bash
+        env:
+          APP_TARGET_INPUT: ${{ inputs.app_target }}
+          BUILD_NUMBER_INPUT: ${{ inputs.build_number }}
+          CHECKOUT_SHA: ${{ steps.checkout_ref.outputs.commit_sha }}
+          RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
+          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+          TARGET_ENVIRONMENT_INPUT: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+
+          case "${APP_TARGET_INPUT}" in
+            field-collection)
+              project_path="apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj"
+              app_name="Honua Field Collection"
+              bundle_id="io.honua.mobile.fieldcollection"
+              profile_secret_name="IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64"
+              ;;
+            mobile-app)
+              project_path="apps/Honua.Mobile.App/Honua.Mobile.App.csproj"
+              app_name="Honua Mobile App"
+              bundle_id="io.honua.mobile.app"
+              profile_secret_name="IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64"
+              ;;
+            *)
+              echo "::error::Unsupported app_target: ${APP_TARGET_INPUT}"
+              exit 1
+              ;;
+          esac
+
+          build_number="${BUILD_NUMBER_INPUT:-${GITHUB_RUN_NUMBER}}"
+          if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_number must be a positive integer because iOS CFBundleVersion/ApplicationVersion must be numeric."
+            exit 1
+          fi
+
+          short_sha="${CHECKOUT_SHA:0:12}"
+          source_name="${SOURCE_REF_INPUT:-${GITHUB_REF_NAME:-detached}}"
+          if [[ -n "${GITHUB_HEAD_REF:-}" ]]; then
+            source_name="${GITHUB_HEAD_REF}"
+          fi
+          source_slug="$(printf '%s' "${source_name}" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//' \
+            | cut -c1-60)"
+          source_slug="${source_slug:-detached}"
+          application_display_version="1.0.${build_number}"
+          artifact_name="honua-${APP_TARGET_INPUT}-ios-testflight-${source_slug}-${short_sha}-build-${build_number}-run-${GITHUB_RUN_NUMBER}-attempt-${GITHUB_RUN_ATTEMPT}"
+
+          {
+            echo "app_name=${app_name}"
+            echo "application_display_version=${application_display_version}"
+            echo "application_version=${build_number}"
+            echo "artifact_name=${artifact_name}"
+            echo "bundle_id=${bundle_id}"
+            echo "project_path=${project_path}"
+            echo "profile_secret_name=${profile_secret_name}"
+            echo "short_sha=${short_sha}"
+            echo "source_slug=${source_slug}"
+            echo "target_environment=${TARGET_ENVIRONMENT_INPUT}"
+            {
+              echo "release_notes<<EOF"
+              printf '%s\n' "${RELEASE_NOTES_INPUT}"
+              echo "EOF"
+            }
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets[steps.metadata.outputs.profile_secret_name] }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in \
+            APPLE_TEAM_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_KEY_ID \
+            APP_STORE_CONNECT_API_KEY_P8 \
+            IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 \
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            IOS_PROVISIONING_PROFILE_BASE64; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("${name}")
+            fi
+          done
+
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            printf '::error::Missing required protected environment secret(s): %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Import Apple signing assets
+        id: signing
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets[steps.metadata.outputs.profile_secret_name] }}
+        run: |
+          set -euo pipefail
+
+          keychain_path="${RUNNER_TEMP}/honua-ios-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          certificate_path="${RUNNER_TEMP}/ios-distribution.p12"
+          profile_path="${RUNNER_TEMP}/ios-profile.mobileprovision"
+          profile_plist="${RUNNER_TEMP}/ios-profile.plist"
+          profiles_dir="${HOME}/Library/MobileDevice/Provisioning Profiles"
+
+          echo "::add-mask::${keychain_password}"
+          echo "::add-mask::${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD}"
+
+          printf '%s' "${IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64}" | base64 --decode > "${certificate_path}"
+          printf '%s' "${IOS_PROVISIONING_PROFILE_BASE64}" | base64 --decode > "${profile_path}"
+
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" \
+            -P "${IOS_DISTRIBUTION_CERTIFICATE_PASSWORD}" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
+
+          mkdir -p "${profiles_dir}"
+          security cms -D -i "${profile_path}" > "${profile_plist}"
+          profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print UUID' "${profile_plist}")"
+          profile_name="$(/usr/libexec/PlistBuddy -c 'Print Name' "${profile_plist}")"
+          profile_team="$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "${profile_plist}")"
+          profile_type="$(/usr/libexec/PlistBuddy -c 'Print ProvisionsAllDevices' "${profile_plist}" 2>/dev/null || true)"
+          provisioned_devices="$(/usr/libexec/PlistBuddy -c 'Print ProvisionedDevices' "${profile_plist}" 2>/dev/null || true)"
+          get_task_allow="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:get-task-allow' "${profile_plist}" 2>/dev/null || true)"
+          app_id_prefix="$(/usr/libexec/PlistBuddy -c 'Print ApplicationIdentifierPrefix:0' "${profile_plist}")"
+          application_identifier="$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "${profile_plist}")"
+
+          if [[ "${profile_team}" != "${APPLE_TEAM_ID}" ]]; then
+            echo "::error::Provisioning profile team does not match APPLE_TEAM_ID."
+            exit 1
+          fi
+
+          if [[ "${application_identifier}" != "${app_id_prefix}.${{ steps.metadata.outputs.bundle_id }}" ]]; then
+            echo "::error::Provisioning profile does not match bundle ID ${{ steps.metadata.outputs.bundle_id }}."
+            exit 1
+          fi
+
+          if [[ "${profile_type}" == "true" ]]; then
+            echo "::error::Use an App Store provisioning profile for TestFlight, not an enterprise profile."
+            exit 1
+          fi
+
+          if [[ -n "${provisioned_devices}" || "${get_task_allow}" == "true" ]]; then
+            echo "::error::Use an App Store provisioning profile for TestFlight, not a development or ad hoc profile."
+            exit 1
+          fi
+
+          cp "${profile_path}" "${profiles_dir}/${profile_uuid}.mobileprovision"
+
+          signing_identity="$(security find-identity -v -p codesigning "${keychain_path}" \
+            | awk -F '"' '/Apple Distribution/ { print $2; exit }')"
+          if [[ -z "${signing_identity}" ]]; then
+            echo "::error::No Apple Distribution signing identity was found in the imported certificate."
+            exit 1
+          fi
+
+          {
+            echo "keychain_path=${keychain_path}"
+            echo "profile_name=${profile_name}"
+            echo "profile_path=${profiles_dir}/${profile_uuid}.mobileprovision"
+            echo "profile_uuid=${profile_uuid}"
+            echo "signing_identity=${signing_identity}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Restore iOS app
+        run: dotnet restore "${{ steps.metadata.outputs.project_path }}" -p:TargetFramework="${TARGET_FRAMEWORK}"
+
+      - name: Publish signed iOS IPA
+        shell: bash
+        env:
+          APPLICATION_DISPLAY_VERSION: ${{ steps.metadata.outputs.application_display_version }}
+          APPLICATION_VERSION: ${{ steps.metadata.outputs.application_version }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CHECKOUT_SHA: ${{ steps.checkout_ref.outputs.commit_sha }}
+          PROJECT_PATH: ${{ steps.metadata.outputs.project_path }}
+          PROVISIONING_PROFILE_UUID: ${{ steps.signing.outputs.profile_uuid }}
+          SIGNING_IDENTITY: ${{ steps.signing.outputs.signing_identity }}
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.target_environment }}
+        run: |
+          set -euo pipefail
+
+          dotnet publish "${PROJECT_PATH}" \
+            --configuration "${CONFIGURATION}" \
+            --framework "${TARGET_FRAMEWORK}" \
+            /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
+            /p:ArchiveOnBuild=true \
+            /p:BuildIpa=true \
+            /p:ApplicationDisplayVersion="${APPLICATION_DISPLAY_VERSION}" \
+            /p:ApplicationVersion="${APPLICATION_VERSION}" \
+            /p:CodesignKey="${SIGNING_IDENTITY}" \
+            /p:CodesignProvision="${PROVISIONING_PROFILE_UUID}" \
+            /p:CodesignTeamId="${APPLE_TEAM_ID}" \
+            /p:ContinuousIntegrationBuild=true \
+            /p:HonuaMobileBuildEnvironment="${TARGET_ENVIRONMENT}" \
+            /p:HonuaMobileBuildRepository="${GITHUB_REPOSITORY}" \
+            /p:HonuaMobileBuildBranch="${GITHUB_REF_NAME}" \
+            /p:HonuaMobileBuildSha="${CHECKOUT_SHA}" \
+            /p:HonuaMobileBuildRunNumber="${GITHUB_RUN_NUMBER}" \
+            /p:HonuaMobileBuildRunId="${GITHUB_RUN_ID}"
+
+      - name: Collect signed artifacts and notes
+        id: collect
+        shell: bash
+        env:
+          APP_NAME: ${{ steps.metadata.outputs.app_name }}
+          APPLICATION_DISPLAY_VERSION: ${{ steps.metadata.outputs.application_display_version }}
+          APPLICATION_VERSION: ${{ steps.metadata.outputs.application_version }}
+          ARTIFACT_NAME: ${{ steps.metadata.outputs.artifact_name }}
+          BUNDLE_ID: ${{ steps.metadata.outputs.bundle_id }}
+          CHECKOUT_SHA: ${{ steps.checkout_ref.outputs.commit_sha }}
+          PROJECT_PATH: ${{ steps.metadata.outputs.project_path }}
+          RELEASE_NOTES: ${{ steps.metadata.outputs.release_notes }}
+          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.target_environment }}
+        run: |
+          set -euo pipefail
+
+          rm -rf "${ARTIFACT_OUTPUT_DIR}"
+          mkdir -p "${ARTIFACT_OUTPUT_DIR}"
+
+          publish_root="$(dirname "${PROJECT_PATH}")/bin/${CONFIGURATION}/${TARGET_FRAMEWORK}/${RUNTIME_IDENTIFIER}"
+          mapfile -t ipas < <(find "${publish_root}" -type f -name '*.ipa' | sort)
+          mapfile -t archives < <(find "${publish_root}" -type d -name '*.xcarchive' | sort)
+
+          if [[ "${#ipas[@]}" -eq 0 ]]; then
+            echo "::error::No IPA was produced under ${publish_root}."
+            exit 1
+          fi
+
+          ipa_path="${ipas[0]}"
+          ipa_name="${ARTIFACT_NAME}.ipa"
+          cp "${ipa_path}" "${ARTIFACT_OUTPUT_DIR}/${ipa_name}"
+
+          archive_zip_name=""
+          if [[ "${#archives[@]}" -gt 0 ]]; then
+            archive_zip_name="${ARTIFACT_NAME}.xcarchive.zip"
+            ditto -c -k --keepParent "${archives[0]}" "${ARTIFACT_OUTPUT_DIR}/${archive_zip_name}"
+          fi
+
+          notes_file="${ARTIFACT_OUTPUT_DIR}/${ARTIFACT_NAME}-tester-notes.md"
+          metadata_file="${ARTIFACT_OUTPUT_DIR}/${ARTIFACT_NAME}-metadata.json"
+
+          {
+            echo "# ${APP_NAME} TestFlight Build"
+            echo
+            echo "- Environment: ${TARGET_ENVIRONMENT}"
+            echo "- Bundle ID: ${BUNDLE_ID}"
+            echo "- Version: ${APPLICATION_DISPLAY_VERSION} (${APPLICATION_VERSION})"
+            echo "- Commit: ${CHECKOUT_SHA}"
+            echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "## Tester Instructions"
+            echo
+            echo "1. Open the TestFlight app on an invited iPhone."
+            echo "2. Select ${APP_NAME}."
+            echo "3. Install version ${APPLICATION_DISPLAY_VERSION} build ${APPLICATION_VERSION}."
+            echo "4. Confirm the build commit is ${SHORT_SHA} before testing."
+            echo
+            echo "## Release Notes"
+            echo
+            if [[ -n "${RELEASE_NOTES// }" ]]; then
+              printf '%s\n' "${RELEASE_NOTES}"
+            else
+              echo "No release notes were provided at dispatch time."
+            fi
+          } > "${notes_file}"
+
+          jq -n \
+            --arg app_name "${APP_NAME}" \
+            --arg artifact_name "${ARTIFACT_NAME}" \
+            --arg bundle_id "${BUNDLE_ID}" \
+            --arg commit_sha "${CHECKOUT_SHA}" \
+            --arg environment "${TARGET_ENVIRONMENT}" \
+            --arg ipa_name "${ipa_name}" \
+            --arg archive_zip_name "${archive_zip_name}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg run_id "${GITHUB_RUN_ID}" \
+            --arg run_number "${GITHUB_RUN_NUMBER}" \
+            --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg version "${APPLICATION_DISPLAY_VERSION}" \
+            --arg build_number "${APPLICATION_VERSION}" \
+            '{
+              app_name: $app_name,
+              artifact_name: $artifact_name,
+              bundle_id: $bundle_id,
+              commit_sha: $commit_sha,
+              environment: $environment,
+              ipa_name: $ipa_name,
+              archive_zip_name: $archive_zip_name,
+              repository: $repository,
+              run_id: $run_id,
+              run_number: $run_number,
+              run_attempt: $run_attempt,
+              version: $version,
+              build_number: $build_number
+            }' > "${metadata_file}"
+
+          {
+            echo "ipa_path=${ARTIFACT_OUTPUT_DIR}/${ipa_name}"
+            echo "ipa_name=${ipa_name}"
+            echo "notes_file=${notes_file}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload signed IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: ${{ env.ARTIFACT_OUTPUT_DIR }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload IPA to App Store Connect
+        id: upload
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          IPA_PATH: ${{ steps.collect.outputs.ipa_path }}
+        run: |
+          set -euo pipefail
+
+          key_dir="${HOME}/.appstoreconnect/private_keys"
+          key_path="${key_dir}/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          mkdir -p "${key_dir}"
+          chmod 700 "${HOME}/.appstoreconnect" "${key_dir}"
+          printf '%s' "${APP_STORE_CONNECT_API_KEY_P8}" > "${key_path}"
+          chmod 600 "${key_path}"
+
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "${IPA_PATH}" \
+            --apiKey "${APP_STORE_CONNECT_KEY_ID}" \
+            --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}" \
+            --output-format xml
+
+          echo "status=uploaded" >> "${GITHUB_OUTPUT}"
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        env:
+          APP_NAME: ${{ steps.metadata.outputs.app_name }}
+          APPLICATION_DISPLAY_VERSION: ${{ steps.metadata.outputs.application_display_version }}
+          APPLICATION_VERSION: ${{ steps.metadata.outputs.application_version }}
+          BUNDLE_ID: ${{ steps.metadata.outputs.bundle_id }}
+          CHECKOUT_SHA: ${{ steps.checkout_ref.outputs.commit_sha }}
+          IPA_NAME: ${{ steps.collect.outputs.ipa_name }}
+          RELEASE_NOTES: ${{ steps.metadata.outputs.release_notes }}
+          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
+          TARGET_ENVIRONMENT: ${{ steps.metadata.outputs.target_environment }}
+          UPLOAD_STATUS: ${{ steps.upload.outputs.status || 'not-uploaded' }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "# iOS TestFlight"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| App | ${APP_NAME:-unknown} |"
+            echo "| Bundle ID | ${BUNDLE_ID:-unknown} |"
+            echo "| Version | ${APPLICATION_DISPLAY_VERSION:-unknown} (${APPLICATION_VERSION:-unknown}) |"
+            echo "| Commit | ${CHECKOUT_SHA:-unknown} |"
+            echo "| Short SHA | ${SHORT_SHA:-unknown} |"
+            echo "| Environment | ${TARGET_ENVIRONMENT:-unknown} |"
+            echo "| Upload status | ${UPLOAD_STATUS} |"
+            echo "| Artifact | ${IPA_NAME:-not-produced} |"
+            echo
+            echo "## Tester Instructions"
+            echo
+            echo "1. Wait for App Store Connect to finish processing the uploaded build."
+            echo "2. Open TestFlight on an invited iPhone."
+            echo "3. Install ${APP_NAME:-the app} version ${APPLICATION_DISPLAY_VERSION:-unknown} build ${APPLICATION_VERSION:-unknown}."
+            echo "4. Verify the expected commit starts with ${SHORT_SHA:-unknown}."
+            echo
+            echo "## Release Notes"
+            echo
+            if [[ -n "${RELEASE_NOTES// }" ]]; then
+              printf '%s\n' "${RELEASE_NOTES}"
+            else
+              echo "No release notes were provided at dispatch time."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Clean up signing assets
+        if: always()
+        shell: bash
+        env:
+          KEYCHAIN_PATH: ${{ steps.signing.outputs.keychain_path }}
+          PROFILE_PATH: ${{ steps.signing.outputs.profile_path }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${PROFILE_PATH:-}" && -f "${PROFILE_PATH}" ]]; then
+            rm -f "${PROFILE_PATH}"
+          fi
+
+          if [[ -n "${APP_STORE_CONNECT_KEY_ID:-}" ]]; then
+            rm -f "${HOME}/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          fi
+
+          if [[ -n "${KEYCHAIN_PATH:-}" && -f "${KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "${KEYCHAIN_PATH}" || true
+          fi
+
+          rm -f "${RUNNER_TEMP}/ios-distribution.p12" \
+            "${RUNNER_TEMP}/ios-profile.mobileprovision" \
+            "${RUNNER_TEMP}/ios-profile.plist"
