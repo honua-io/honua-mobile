@@ -35,6 +35,23 @@ experiments after #42, but browser `immersive-ar` support is not consistent
 enough across iOS, Android, WebView, and managed enterprise devices to be the
 primary mobile field path.
 
+## Mobile Adapter Boundary
+
+The initial mobile-owned implementation slice is
+`Honua.Mobile.Maui.SceneAnchoring`. It provides an ARKit/ARCore adapter
+interface, app lifecycle controller, and readiness policy for field UX gates.
+It intentionally accepts scene id, scene revision, package id, control-point
+ids, package quality, and accuracy telemetry only; authoritative scene
+metadata, package manifests, geometry, and vertical datum transforms remain in
+`Honua.Sdk.*` packages or server-backed contracts.
+
+Use `HonuaNativeArSceneAnchoringController` to start the native adapter after
+the app resolves scene/package inputs, then bind `HonuaNativeArReadiness` to the
+field UI. `CoarsePreview` may render uncertainty-aware overlays, `SiteReview`
+may capture evidence, and `PrecisionInspection` requires survey-quality source
+data, enough confirmed control points, and a calibration residual under the
+configured threshold.
+
 ## Target Prototype
 
 | Decision | Requirement |
