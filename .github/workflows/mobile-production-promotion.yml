@@ -1,0 +1,597 @@
+# yamllint disable rule:line-length rule:truthy
+---
+name: Mobile Production Promotion
+
+run-name: Promote ${{ inputs.release_tag }} from ${{ inputs.source_ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Production tag: mobile-prod-vX.Y.Z-android.N-ios.M"
+        required: true
+        type: string
+      release_version:
+        description: "Production display version, for example 1.4.0"
+        required: true
+        type: string
+      android_build_number:
+        description: "Google Play versionCode / MAUI ApplicationVersion"
+        required: true
+        type: string
+      ios_build_number:
+        description: "App Store CFBundleVersion / MAUI ApplicationVersion"
+        required: true
+        type: string
+      source_ref:
+        description: "Branch, tag, or commit SHA to promote"
+        required: true
+        default: "main"
+        type: string
+      release_notes_url:
+        description: "HTTPS URL for approved release notes or release ticket"
+        required: true
+        type: string
+      approval_issue:
+        description: "GitHub issue or PR tracking the release, for example #89"
+        required: true
+        type: string
+      release_notes_summary:
+        description: "Short production release summary for the GitHub Release"
+        required: false
+        type: string
+      acknowledge_production:
+        description: "Confirm this is production promotion, not beta/internal distribution"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: mobile-production-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Production Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_tag: ${{ steps.promotion.outputs.release_tag }}
+      release_version: ${{ steps.promotion.outputs.release_version }}
+      android_build_number: ${{ steps.promotion.outputs.android_build_number }}
+      ios_build_number: ${{ steps.promotion.outputs.ios_build_number }}
+      source_ref: ${{ steps.promotion.outputs.source_ref }}
+      source_sha: ${{ steps.promotion.outputs.source_sha }}
+      release_notes_url: ${{ steps.promotion.outputs.release_notes_url }}
+      approval_issue: ${{ steps.promotion.outputs.approval_issue }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate production promotion metadata
+        id: promotion
+        shell: bash
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_VERSION_INPUT: ${{ inputs.release_version }}
+          ANDROID_BUILD_NUMBER_INPUT: ${{ inputs.android_build_number }}
+          IOS_BUILD_NUMBER_INPUT: ${{ inputs.ios_build_number }}
+          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
+          RELEASE_NOTES_URL_INPUT: ${{ inputs.release_notes_url }}
+          APPROVAL_ISSUE_INPUT: ${{ inputs.approval_issue }}
+          ACKNOWLEDGE_PRODUCTION_INPUT: ${{ inputs.acknowledge_production }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          trim() {
+            local value="$1"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            printf '%s' "${value}"
+          }
+
+          valid_semver_part() {
+            [[ "$1" == "0" || "$1" =~ ^[1-9][0-9]*$ ]]
+          }
+
+          valid_positive_integer() {
+            [[ "$1" =~ ^[1-9][0-9]*$ ]]
+          }
+
+          semver_greater_than() {
+            local a_major="$1" a_minor="$2" a_patch="$3"
+            local b_major="$4" b_minor="$5" b_patch="$6"
+
+            if (( a_major > b_major )); then return 0; fi
+            if (( a_major < b_major )); then return 1; fi
+            if (( a_minor > b_minor )); then return 0; fi
+            if (( a_minor < b_minor )); then return 1; fi
+            if (( a_patch > b_patch )); then return 0; fi
+            return 1
+          }
+
+          semver_less_than() {
+            local a_major="$1" a_minor="$2" a_patch="$3"
+            local b_major="$4" b_minor="$5" b_patch="$6"
+
+            if (( a_major < b_major )); then return 0; fi
+            if (( a_major > b_major )); then return 1; fi
+            if (( a_minor < b_minor )); then return 0; fi
+            if (( a_minor > b_minor )); then return 1; fi
+            if (( a_patch < b_patch )); then return 0; fi
+            return 1
+          }
+
+          resolve_source_sha() {
+            local source_ref="$1"
+            local candidate="${source_ref}"
+
+            case "${source_ref}" in
+              refs/heads/*)
+                candidate="refs/remotes/origin/${source_ref#refs/heads/}"
+                ;;
+              refs/tags/*)
+                candidate="${source_ref}"
+                ;;
+              *)
+                if git show-ref --verify --quiet "refs/remotes/origin/${source_ref}"; then
+                  candidate="refs/remotes/origin/${source_ref}"
+                fi
+                ;;
+            esac
+
+            git rev-parse --verify "${candidate}^{commit}"
+          }
+
+          validate_release_history() {
+            local release_tag="$1"
+            local expected_source_sha="$2"
+            local major="$3" minor="$4" patch="$5"
+            local android_build="$6" ios_build="$7"
+            local has_previous=false
+            local latest_major=0 latest_minor=0 latest_patch=0
+            local max_android=0 max_ios=0
+            local existing existing_tag_sha e_major e_minor e_patch e_android e_ios
+
+            if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${release_tag}^{commit}")"; then
+              if [[ "${existing_tag_sha}" != "${expected_source_sha}" ]]; then
+                fail "Production tag ${release_tag} already exists at ${existing_tag_sha}, not ${expected_source_sha}. Do not retag production releases."
+              fi
+
+              echo "::notice::Production tag ${release_tag} already exists at the requested source; continuing retry validation."
+            fi
+
+            while IFS= read -r existing; do
+              if [[ "${existing}" == "${release_tag}" ]]; then
+                continue
+              fi
+
+              if [[ "${existing}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
+                has_previous=true
+                e_major="${BASH_REMATCH[1]}"
+                e_minor="${BASH_REMATCH[2]}"
+                e_patch="${BASH_REMATCH[3]}"
+                e_android="${BASH_REMATCH[4]}"
+                e_ios="${BASH_REMATCH[5]}"
+
+                if semver_greater_than "${e_major}" "${e_minor}" "${e_patch}" "${latest_major}" "${latest_minor}" "${latest_patch}"; then
+                  latest_major="${e_major}"
+                  latest_minor="${e_minor}"
+                  latest_patch="${e_patch}"
+                fi
+
+                if (( e_android > max_android )); then max_android="${e_android}"; fi
+                if (( e_ios > max_ios )); then max_ios="${e_ios}"; fi
+              fi
+            done < <(git tag --list 'mobile-prod-v*' | sort)
+
+            if [[ "${has_previous}" == "true" ]]; then
+              if semver_less_than "${major}" "${minor}" "${patch}" "${latest_major}" "${latest_minor}" "${latest_patch}"; then
+                fail "Release version ${major}.${minor}.${patch} is older than the latest production version ${latest_major}.${latest_minor}.${latest_patch}."
+              fi
+
+              if (( android_build <= max_android )); then
+                fail "Android build number ${android_build} must be greater than previous production max ${max_android}."
+              fi
+
+              if (( ios_build <= max_ios )); then
+                fail "iOS build number ${ios_build} must be greater than previous production max ${max_ios}."
+              fi
+            fi
+          }
+
+          release_tag="$(trim "${RELEASE_TAG_INPUT}")"
+          release_version="$(trim "${RELEASE_VERSION_INPUT}")"
+          android_build_number="$(trim "${ANDROID_BUILD_NUMBER_INPUT}")"
+          ios_build_number="$(trim "${IOS_BUILD_NUMBER_INPUT}")"
+          source_ref="$(trim "${SOURCE_REF_INPUT}")"
+          release_notes_url="$(trim "${RELEASE_NOTES_URL_INPUT}")"
+          approval_issue="$(trim "${APPROVAL_ISSUE_INPUT}")"
+
+          if [[ "${ACKNOWLEDGE_PRODUCTION_INPUT}" != "true" ]]; then
+            fail "acknowledge_production must be true for production promotion."
+          fi
+
+          if [[ ! "${release_tag}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
+            fail "release_tag must match mobile-prod-vX.Y.Z-android.N-ios.M."
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          tag_android_build="${BASH_REMATCH[4]}"
+          tag_ios_build="${BASH_REMATCH[5]}"
+          tag_version="${major}.${minor}.${patch}"
+
+          for segment in "${major}" "${minor}" "${patch}"; do
+            if ! valid_semver_part "${segment}"; then
+              fail "release_tag version segments must be SemVer integers without leading zeroes."
+            fi
+          done
+
+          if [[ "${release_version}" != "${tag_version}" ]]; then
+            fail "release_version ${release_version} must match release_tag version ${tag_version}."
+          fi
+
+          if ! valid_positive_integer "${android_build_number}"; then
+            fail "android_build_number must be a positive integer."
+          fi
+
+          if ! valid_positive_integer "${ios_build_number}"; then
+            fail "ios_build_number must be a positive integer."
+          fi
+
+          if (( ${#android_build_number} > 10 )); then
+            fail "android_build_number is too large for the production build number policy."
+          fi
+
+          if (( ${#ios_build_number} > 10 )); then
+            fail "ios_build_number is too large for the production build number policy."
+          fi
+
+          if [[ "${android_build_number}" != "${tag_android_build}" ]]; then
+            fail "android_build_number must match the android.N segment in release_tag."
+          fi
+
+          if [[ "${ios_build_number}" != "${tag_ios_build}" ]]; then
+            fail "ios_build_number must match the ios.M segment in release_tag."
+          fi
+
+          if (( android_build_number > 2100000000 )); then
+            fail "android_build_number must be 2100000000 or lower for Google Play."
+          fi
+
+          if (( ios_build_number > 2100000000 )); then
+            fail "ios_build_number must be 2100000000 or lower by Honua release policy."
+          fi
+
+          if [[ -z "${source_ref}" || "${source_ref}" =~ [[:space:]] || "${source_ref}" == -* || "${source_ref}" == *..* ]]; then
+            fail "source_ref must be a branch, tag, or SHA without whitespace, leading dashes, or '..'."
+          fi
+
+          if [[ "${release_notes_url}" != https://* || "${release_notes_url}" =~ [[:space:]] ]]; then
+            fail "release_notes_url must be a single HTTPS URL."
+          fi
+
+          if [[ ! "${approval_issue}" =~ ^#[0-9]+$ ]] && [[ ! "${approval_issue}" =~ ^https://github[.]com/[^[:space:]/]+/[^[:space:]/]+/(issues|pull)/[0-9]+$ ]]; then
+            fail "approval_issue must be a GitHub issue/PR reference such as #89 or an HTTPS GitHub issue/PR URL."
+          fi
+
+          git fetch --force --tags origin
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*'
+
+          if ! source_sha="$(resolve_source_sha "${source_ref}")"; then
+            fail "Could not resolve source_ref ${source_ref} to a commit."
+          fi
+
+          validate_release_history "${release_tag}" "${source_sha}" "${major}" "${minor}" "${patch}" "${android_build_number}" "${ios_build_number}"
+
+          {
+            echo "release_tag=${release_tag}"
+            echo "release_version=${release_version}"
+            echo "android_build_number=${android_build_number}"
+            echo "ios_build_number=${ios_build_number}"
+            echo "source_ref=${source_ref}"
+            echo "source_sha=${source_sha}"
+            echo "release_notes_url=${release_notes_url}"
+            echo "approval_issue=${approval_issue}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "## Production promotion validation"
+            echo
+            echo "- Tag: \`${release_tag}\`"
+            echo "- Version: \`${release_version}\`"
+            echo "- Android build: \`${android_build_number}\`"
+            echo "- iOS build: \`${ios_build_number}\`"
+            echo "- Source: \`${source_ref}\` at \`${source_sha}\`"
+            echo "- Release notes: ${release_notes_url}"
+            echo "- Approval record: ${approval_issue}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  promote:
+    name: Promote Production Release
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: mobile-production
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create approved production tag and release
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+          ANDROID_BUILD_NUMBER: ${{ needs.validate.outputs.android_build_number }}
+          IOS_BUILD_NUMBER: ${{ needs.validate.outputs.ios_build_number }}
+          SOURCE_REF: ${{ needs.validate.outputs.source_ref }}
+          EXPECTED_SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          RELEASE_NOTES_URL: ${{ needs.validate.outputs.release_notes_url }}
+          APPROVAL_ISSUE: ${{ needs.validate.outputs.approval_issue }}
+          RELEASE_NOTES_SUMMARY: ${{ inputs.release_notes_summary }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          semver_greater_than() {
+            local a_major="$1" a_minor="$2" a_patch="$3"
+            local b_major="$4" b_minor="$5" b_patch="$6"
+
+            if (( a_major > b_major )); then return 0; fi
+            if (( a_major < b_major )); then return 1; fi
+            if (( a_minor > b_minor )); then return 0; fi
+            if (( a_minor < b_minor )); then return 1; fi
+            if (( a_patch > b_patch )); then return 0; fi
+            return 1
+          }
+
+          semver_less_than() {
+            local a_major="$1" a_minor="$2" a_patch="$3"
+            local b_major="$4" b_minor="$5" b_patch="$6"
+
+            if (( a_major < b_major )); then return 0; fi
+            if (( a_major > b_major )); then return 1; fi
+            if (( a_minor < b_minor )); then return 0; fi
+            if (( a_minor > b_minor )); then return 1; fi
+            if (( a_patch < b_patch )); then return 0; fi
+            return 1
+          }
+
+          resolve_source_sha() {
+            local source_ref="$1"
+            local candidate="${source_ref}"
+
+            case "${source_ref}" in
+              refs/heads/*)
+                candidate="refs/remotes/origin/${source_ref#refs/heads/}"
+                ;;
+              refs/tags/*)
+                candidate="${source_ref}"
+                ;;
+              *)
+                if git show-ref --verify --quiet "refs/remotes/origin/${source_ref}"; then
+                  candidate="refs/remotes/origin/${source_ref}"
+                fi
+                ;;
+            esac
+
+            git rev-parse --verify "${candidate}^{commit}"
+          }
+
+          validate_release_history() {
+            local release_tag="$1"
+            local expected_source_sha="$2"
+            local major="$3" minor="$4" patch="$5"
+            local android_build="$6" ios_build="$7"
+            local has_previous=false
+            local latest_major=0 latest_minor=0 latest_patch=0
+            local max_android=0 max_ios=0
+            local existing existing_tag_sha e_major e_minor e_patch e_android e_ios
+
+            if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${release_tag}^{commit}")"; then
+              if [[ "${existing_tag_sha}" != "${expected_source_sha}" ]]; then
+                fail "Production tag ${release_tag} already exists at ${existing_tag_sha}, not ${expected_source_sha}. Do not retag production releases."
+              fi
+
+              echo "::notice::Production tag ${release_tag} already exists at the requested source; continuing release retry."
+            fi
+
+            while IFS= read -r existing; do
+              if [[ "${existing}" == "${release_tag}" ]]; then
+                continue
+              fi
+
+              if [[ "${existing}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
+                has_previous=true
+                e_major="${BASH_REMATCH[1]}"
+                e_minor="${BASH_REMATCH[2]}"
+                e_patch="${BASH_REMATCH[3]}"
+                e_android="${BASH_REMATCH[4]}"
+                e_ios="${BASH_REMATCH[5]}"
+
+                if semver_greater_than "${e_major}" "${e_minor}" "${e_patch}" "${latest_major}" "${latest_minor}" "${latest_patch}"; then
+                  latest_major="${e_major}"
+                  latest_minor="${e_minor}"
+                  latest_patch="${e_patch}"
+                fi
+
+                if (( e_android > max_android )); then max_android="${e_android}"; fi
+                if (( e_ios > max_ios )); then max_ios="${e_ios}"; fi
+              fi
+            done < <(git tag --list 'mobile-prod-v*' | sort)
+
+            if [[ "${has_previous}" == "true" ]]; then
+              if semver_less_than "${major}" "${minor}" "${patch}" "${latest_major}" "${latest_minor}" "${latest_patch}"; then
+                fail "Release version ${major}.${minor}.${patch} is older than the latest production version ${latest_major}.${latest_minor}.${latest_patch}."
+              fi
+
+              if (( android_build <= max_android )); then
+                fail "Android build number ${android_build} must be greater than previous production max ${max_android}."
+              fi
+
+              if (( ios_build <= max_ios )); then
+                fail "iOS build number ${ios_build} must be greater than previous production max ${max_ios}."
+              fi
+            fi
+          }
+
+          git fetch --force --tags origin
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*'
+
+          if [[ ! "${RELEASE_TAG}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
+            fail "release_tag must match mobile-prod-vX.Y.Z-android.N-ios.M."
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          if ! source_sha="$(resolve_source_sha "${SOURCE_REF}")"; then
+            fail "Could not resolve source_ref ${SOURCE_REF} to a commit."
+          fi
+
+          if [[ "${source_sha}" != "${EXPECTED_SOURCE_SHA}" ]]; then
+            fail "source_ref moved from ${EXPECTED_SOURCE_SHA} to ${source_sha}; rerun validation before promotion."
+          fi
+
+          validate_release_history "${RELEASE_TAG}" "${source_sha}" "${major}" "${minor}" "${patch}" "${ANDROID_BUILD_NUMBER}" "${IOS_BUILD_NUMBER}"
+
+          mkdir -p promotion-metadata
+
+          release_body="promotion-metadata/github-release-notes.md"
+          metadata_file="promotion-metadata/mobile-production-promotion.json"
+          workflow_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+
+          jq -n \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg workflow "${GITHUB_WORKFLOW}" \
+            --arg workflow_url "${workflow_url}" \
+            --arg run_id "${GITHUB_RUN_ID}" \
+            --arg run_number "${GITHUB_RUN_NUMBER}" \
+            --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+            --arg promoted_by "${GITHUB_ACTOR}" \
+            --arg release_tag "${RELEASE_TAG}" \
+            --arg release_version "${RELEASE_VERSION}" \
+            --arg android_build_number "${ANDROID_BUILD_NUMBER}" \
+            --arg ios_build_number "${IOS_BUILD_NUMBER}" \
+            --arg source_ref "${SOURCE_REF}" \
+            --arg source_sha "${source_sha}" \
+            --arg release_notes_url "${RELEASE_NOTES_URL}" \
+            --arg approval_issue "${APPROVAL_ISSUE}" \
+            --arg release_notes_summary "${RELEASE_NOTES_SUMMARY}" \
+            '{
+              repository: $repository,
+              workflow: $workflow,
+              workflow_url: $workflow_url,
+              run_id: $run_id,
+              run_number: $run_number,
+              run_attempt: $run_attempt,
+              promoted_by: $promoted_by,
+              release_tag: $release_tag,
+              release_version: $release_version,
+              android_build_number: $android_build_number,
+              ios_build_number: $ios_build_number,
+              source_ref: $source_ref,
+              source_sha: $source_sha,
+              release_notes_url: $release_notes_url,
+              approval_issue: $approval_issue,
+              release_notes_summary: $release_notes_summary,
+              release_lane: "production",
+              beta_or_internal_distribution: "separate workflows only"
+            }' > "${metadata_file}"
+
+          {
+            printf '# Honua Mobile %s Production Promotion\n\n' "${RELEASE_VERSION}"
+            printf 'Production tag: `%s`\n' "${RELEASE_TAG}"
+            printf 'Source commit: `%s`\n' "${source_sha}"
+            printf 'Android build number: `%s`\n' "${ANDROID_BUILD_NUMBER}"
+            printf 'iOS build number: `%s`\n' "${IOS_BUILD_NUMBER}"
+            printf 'Release notes: %s\n' "${RELEASE_NOTES_URL}"
+            printf 'Approval record: %s\n' "${APPROVAL_ISSUE}"
+            printf 'Promotion workflow: %s\n' "${workflow_url}"
+            printf 'Promoted by: `%s`\n\n' "${GITHUB_ACTOR}"
+            if [[ -n "${RELEASE_NOTES_SUMMARY// }" ]]; then
+              printf '## Summary\n\n%s\n\n' "${RELEASE_NOTES_SUMMARY}"
+            fi
+            printf 'This GitHub Release records the approved production promotion only. Beta and internal distribution stay on separate lanes and must not use `mobile-prod-*` tags.\n'
+          } > "${release_body}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${RELEASE_TAG}^{commit}")"; then
+            if [[ "${existing_tag_sha}" != "${source_sha}" ]]; then
+              fail "Production tag ${RELEASE_TAG} already exists at ${existing_tag_sha}, not ${source_sha}. Do not retag production releases."
+            fi
+
+            echo "::notice::Production tag ${RELEASE_TAG} already exists at ${source_sha}; reusing it for release retry."
+          else
+            tag_message="$(mktemp)"
+            {
+              printf 'Honua Mobile %s production promotion\n\n' "${RELEASE_VERSION}"
+              printf 'Release tag: %s\n' "${RELEASE_TAG}"
+              printf 'Source commit: %s\n' "${source_sha}"
+              printf 'Android build number: %s\n' "${ANDROID_BUILD_NUMBER}"
+              printf 'iOS build number: %s\n' "${IOS_BUILD_NUMBER}"
+              printf 'Release notes: %s\n' "${RELEASE_NOTES_URL}"
+              printf 'Approval record: %s\n' "${APPROVAL_ISSUE}"
+              printf 'Workflow: %s\n' "${workflow_url}"
+            } > "${tag_message}"
+
+            git tag -a "${RELEASE_TAG}" "${source_sha}" -F "${tag_message}"
+            git push origin "refs/tags/${RELEASE_TAG}"
+          fi
+
+          release_title="Honua Mobile ${RELEASE_VERSION} Production"
+          if existing_release_url="$(gh release view "${RELEASE_TAG}" --json url --jq .url 2>/dev/null)"; then
+            release_url="${existing_release_url}"
+            echo "::notice::GitHub Release for ${RELEASE_TAG} already exists; skipping creation."
+          else
+            gh release create "${RELEASE_TAG}" \
+              --title "${release_title}" \
+              --notes-file "${release_body}" \
+              --verify-tag
+          fi
+
+          {
+            echo "release_url=${release_url}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "## Production promotion complete"
+            echo
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- GitHub Release: ${release_url}"
+            echo "- Metadata: \`${metadata_file}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload promotion metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-production-promotion-${{ needs.validate.outputs.release_tag }}
+          path: promotion-metadata/*
+          if-no-files-found: error
+          retention-days: 90
