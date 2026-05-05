@@ -129,6 +129,30 @@ const layer = createHonuaGeoJsonLayer(featureCollection, {
 });
 ```
 
+Streaming feature feeds can use the same renderer-neutral source descriptor and
+apply upsert/delete events into the adapter's GeoJSON layer state:
+
+```js
+display.setFeatureStreamEvent({
+  type: 'upsert',
+  sequence: event.sequence,
+  source: sourceDescriptor,
+  feature: event.feature,
+});
+
+display.setFeatureStreamEvent({
+  type: 'delete',
+  source: sourceDescriptor,
+  objectIds: [event.objectId],
+});
+```
+
+Converted features keep Honua picking metadata in `properties.__honua`,
+including the source id, source descriptor, feature id, object id, and stream
+sequence when present. Host apps can read that metadata from deck.gl picking
+callbacks without binding renderer-neutral source descriptors to MapLibre or
+deck.gl-specific contracts.
+
 ## Host Extensions
 
 Host applications can register lightweight runtime extensions that mount
