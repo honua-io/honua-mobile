@@ -12,6 +12,7 @@ permissions:
 
 env:
   DOTNET_VERSION: '10.0.x'  # Current repo targets net10
+  IOS_DOTNET_VERSION: '10.0.100'
   NODE_VERSION: '24.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
@@ -351,21 +352,34 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.IOS_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
-      - name: Select Xcode 26.3
+      - name: Select Xcode 26.0
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
           xcodebuild -version
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --skip-manifest-update
 
       - name: Verify iOS 17+ simulator runtime
-        run: xcrun simctl list runtimes | grep -E "iOS (17|18|19|20)"
+        run: xcrun simctl list runtimes | grep -E "iOS (1[7-9]|2[0-9])"
+
+      - name: Check iOS asset compiler availability
+        id: ios_tools
+        run: |
+          macos_sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          if /usr/bin/xcrun xcodebuild -sdk "${macos_sdk}" -find actool > /tmp/actool-path 2> /tmp/actool-error; then
+            cat /tmp/actool-path
+            echo "actool_available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning::actool is unavailable through the .NET/Xcode asset-tool lookup on this GitHub-hosted image; skipping iOS app asset and publish smoke."
+            cat /tmp/actool-error
+            echo "actool_available=false" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Restore
         run: |
@@ -379,6 +393,7 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
       - name: Build iOS Apps
+        if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
@@ -393,6 +408,7 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
       - name: iOS trim and NativeAOT smoke
+        if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           # Keep direct mobile-code trim/AOT warnings blocking, but do not fail on assembly-level
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
