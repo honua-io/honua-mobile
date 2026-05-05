@@ -169,6 +169,9 @@ leaving platform APIs behind app-provided adapters:
   OS geofencing facilities.
 - `HonuaDeviceLocationCoordinator` enforces permission order and validates
   request options before invoking the platform adapters.
+- `HonuaBackgroundLocationLifecycleController` owns the active background
+  session/geofence lifecycle, including suspend shutdown and battery-saver
+  deferral.
 
 ```csharp
 builder.Services
@@ -207,6 +210,29 @@ await using var session = await locations.StartBackgroundUpdatesAsync(
     ct);
 ```
 
+Lifecycle-managed background runtime:
+
+```csharp
+await backgroundLocation.StartAsync(
+    new HonuaBackgroundLocationLifecycleRequest
+    {
+        BackgroundUpdates = new HonuaBackgroundLocationOptions
+        {
+            Accuracy = HonuaLocationAccuracy.Balanced,
+            MinimumInterval = TimeSpan.FromMinutes(5),
+            MinimumDistanceMeters = 25,
+            AllowBatterySaverDeferral = true,
+            Purpose = "offline field workflow updates",
+        },
+        Geofences = jobSiteGeofences,
+    },
+    ct);
+
+await backgroundLocation.HandleLifecycleEventAsync(
+    HonuaLocationLifecycleEvent.BatterySaverEnabled,
+    ct);
+```
+
 Geofence registration:
 
 ```csharp
@@ -230,6 +256,12 @@ await locations.StartGeofencingAsync(
     ct);
 ```
 
+Native geofence transitions are forwarded through
+`HonuaDeviceLocationCoordinator.GeofenceTransitioned`. Enter, exit, dwell, and
+proximity signals remain mobile acquisition events; map them into SDK geofence
+evaluation/event contracts at the adapter edge once those contracts are present
+in the consumed `Honua.Sdk.*` packages.
+
 ### Lifecycle Rules
 
 - Request foreground permission before one-shot foreground capture.
@@ -238,8 +270,24 @@ await locations.StartGeofencingAsync(
   access.
 - Keep platform-specific permission copy, manifest entries, foreground service
   notifications, and background mode declarations in the app layer.
+- Route app suspend, foreground/background, battery-saver, and shutdown signals
+  into `HonuaBackgroundLocationLifecycleController` when the workflow needs a
+  managed background runtime.
+- Let `AllowBatterySaverDeferral` pause active background updates/geofences and
+  restart them when battery saver is disabled. Set it to `false` only for
+  workflows with an explicit product requirement to keep native monitoring
+  active through power-saver mode.
 - Use OS geofencing APIs for enter, exit, and dwell detection. This package does
   not implement geometry predicates or distance checks.
 - Dispose the background session when the workflow no longer needs updates.
 - Map `HonuaDeviceLocation` into SDK field, routing, or future geometry
   contracts at the adapter edge when those SDK contracts are available.
+
+### SDK Versus Native Ownership
+
+| Behavior | Owner |
+|----------|-------|
+| Geofence rule models, geometry predicates, buffers, CRS transforms, and portable event evaluation | `honua-sdk-dotnet` packages |
+| iOS/Android permission prompts, manifest/background mode declarations, foreground services, and native sensor acquisition | Mobile app/platform adapters |
+| Background session lifecycle, suspend/shutdown behavior, battery-saver deferral, and OS geofence start/stop | `Honua.Mobile.Maui.Location` |
+| Mapping native enter/exit/dwell/proximity events into SDK event contracts | Mobile adapter edge after the SDK contracts are available |

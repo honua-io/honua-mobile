@@ -99,6 +99,52 @@ public sealed class HonuaDeviceLocationTests
         Assert.Empty(permissions.RequestedAccesses);
     }
 
+    [Fact]
+    public async Task StopGeofencingAsync_DelegatesRegionIdsToMonitor()
+    {
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService(),
+            new RecordingLocationProvider(),
+            geofenceMonitor: monitor);
+
+        await coordinator.StopGeofencingAsync(["job-site", "yard"]);
+
+        Assert.Equal(["job-site", "yard"], monitor.StoppedRegionIds.Single());
+    }
+
+    [Theory]
+    [MemberData(nameof(NativeGeofenceTransitionFixture))]
+    public void GeofenceTransitioned_ForwardsNativeEnterExitAndProximityEvents(HonuaGeofenceTransitionKind kind)
+    {
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService(),
+            new RecordingLocationProvider(),
+            geofenceMonitor: monitor);
+        var forwarded = new List<HonuaGeofenceTransition>();
+
+        coordinator.GeofenceTransitioned += (_, transition) => forwarded.Add(transition);
+
+        monitor.Emit(new HonuaGeofenceTransition
+        {
+            RegionId = "job-site",
+            Kind = kind,
+            Location = new HonuaDeviceLocation
+            {
+                Coordinate = new HonuaMapCoordinate(21.3069, -157.8583),
+                AccuracyMeters = 6,
+                IsBackground = true,
+            },
+            OccurredAt = DateTimeOffset.Parse("2026-04-28T19:46:34Z"),
+        });
+
+        var transition = Assert.Single(forwarded);
+        Assert.Equal(kind, transition.Kind);
+        Assert.Equal("job-site", transition.RegionId);
+        Assert.True(transition.Location?.IsBackground);
+    }
+
     [Theory]
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
@@ -128,6 +174,146 @@ public sealed class HonuaDeviceLocationTests
     }
 
     [Fact]
+    public async Task BackgroundLocationLifecycleController_StartAsync_StartsUpdatesAndGeofences()
+    {
+        var permissions = new RecordingPermissionService
+        {
+            CheckStatus = HonuaLocationPermissionStatus.Background,
+        };
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            permissions,
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaBackgroundLocationLifecycleController(coordinator);
+        var geofenceRequest = CreateGeofenceRequest();
+
+        await controller.StartAsync(new HonuaBackgroundLocationLifecycleRequest
+        {
+            BackgroundUpdates = new HonuaBackgroundLocationOptions
+            {
+                MinimumInterval = TimeSpan.FromMinutes(15),
+                MinimumDistanceMeters = 75,
+                Purpose = "field crew route continuity",
+            },
+            Geofences = geofenceRequest,
+        });
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Running, controller.State);
+        Assert.Equal(TimeSpan.FromMinutes(15), backgroundProvider.Options.Single().MinimumInterval);
+        Assert.Same(geofenceRequest, monitor.Requests.Single());
+    }
+
+    [Fact]
+    public async Task BackgroundLocationLifecycleController_BatterySaverEnabled_DefersAndRestarts()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaBackgroundLocationLifecycleController(coordinator);
+
+        await controller.StartAsync(new HonuaBackgroundLocationLifecycleRequest
+        {
+            BackgroundUpdates = new HonuaBackgroundLocationOptions
+            {
+                AllowBatterySaverDeferral = true,
+            },
+            Geofences = CreateGeofenceRequest(),
+        });
+        var firstSession = backgroundProvider.Sessions.Single();
+
+        await controller.HandleLifecycleEventAsync(HonuaLocationLifecycleEvent.BatterySaverEnabled);
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.DeferredForBatterySaver, controller.State);
+        Assert.True(firstSession.IsDisposed);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Single());
+
+        await controller.HandleLifecycleEventAsync(HonuaLocationLifecycleEvent.BatterySaverDisabled);
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Running, controller.State);
+        Assert.Equal(2, backgroundProvider.Options.Count);
+        Assert.Equal(2, monitor.Requests.Count);
+        Assert.False(backgroundProvider.Sessions.Last().IsDisposed);
+    }
+
+    [Fact]
+    public async Task BackgroundLocationLifecycleController_StopAsync_WhenGeofenceStopFails_RetainsActiveRuntimeForRetry()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaBackgroundLocationLifecycleController(coordinator);
+
+        await controller.StartAsync(new HonuaBackgroundLocationLifecycleRequest
+        {
+            Geofences = CreateGeofenceRequest(),
+        });
+        var session = backgroundProvider.Sessions.Single();
+        monitor.StopException = new InvalidOperationException("native geofence stop failed");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await controller.StopAsync());
+
+        Assert.Equal("native geofence stop failed", ex.Message);
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Running, controller.State);
+        Assert.False(session.IsDisposed);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Single());
+
+        await controller.StopAsync();
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Stopped, controller.State);
+        Assert.True(session.IsDisposed);
+        Assert.Equal(2, monitor.StoppedRegionIds.Count);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Last());
+    }
+
+    [Fact]
+    public async Task BackgroundLocationLifecycleController_Suspended_StopsAndClearsRequestedRuntime()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaBackgroundLocationLifecycleController(coordinator);
+
+        await controller.StartAsync(new HonuaBackgroundLocationLifecycleRequest
+        {
+            Geofences = CreateGeofenceRequest(),
+        });
+
+        await controller.HandleLifecycleEventAsync(HonuaLocationLifecycleEvent.Suspended);
+        await controller.HandleLifecycleEventAsync(HonuaLocationLifecycleEvent.EnteredForeground);
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Stopped, controller.State);
+        Assert.True(backgroundProvider.Sessions.Single().IsDisposed);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Single());
+        Assert.Single(backgroundProvider.Options);
+        Assert.Single(monitor.Requests);
+    }
+
+    [Fact]
     public void AddHonuaDeviceLocation_RegistersCoordinatorWithOptionalProviders()
     {
         using var provider = new ServiceCollection()
@@ -139,6 +325,7 @@ public sealed class HonuaDeviceLocationTests
             .BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<HonuaDeviceLocationCoordinator>());
+        Assert.NotNull(provider.GetRequiredService<HonuaBackgroundLocationLifecycleController>());
     }
 
     [Fact]
@@ -155,6 +342,30 @@ public sealed class HonuaDeviceLocationTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
             await coordinator.AcquireCurrentLocationAsync());
     }
+
+    public static TheoryData<HonuaGeofenceTransitionKind> NativeGeofenceTransitionFixture()
+        => new()
+        {
+            HonuaGeofenceTransitionKind.Enter,
+            HonuaGeofenceTransitionKind.Exit,
+            HonuaGeofenceTransitionKind.Proximity,
+        };
+
+    private static HonuaGeofenceMonitoringRequest CreateGeofenceRequest()
+        => new()
+        {
+            Regions =
+            [
+                new HonuaGeofenceRegion
+                {
+                    Id = "job-site",
+                    Center = new HonuaMapCoordinate(21.3069, -157.8583),
+                    RadiusMeters = 100,
+                    NotifyOnEntry = true,
+                    NotifyOnExit = true,
+                },
+            ],
+        };
 
     private sealed class RecordingPermissionService : IHonuaDeviceLocationPermissionService
     {
@@ -205,12 +416,16 @@ public sealed class HonuaDeviceLocationTests
     {
         public List<HonuaBackgroundLocationOptions> Options { get; } = [];
 
+        public List<RecordingSession> Sessions { get; } = [];
+
         public ValueTask<IHonuaBackgroundLocationSession> StartUpdatesAsync(
             HonuaBackgroundLocationOptions options,
             CancellationToken ct = default)
         {
             Options.Add(options);
-            return ValueTask.FromResult<IHonuaBackgroundLocationSession>(new RecordingSession("session-1"));
+            var session = new RecordingSession($"session-{Sessions.Count + 1}");
+            Sessions.Add(session);
+            return ValueTask.FromResult<IHonuaBackgroundLocationSession>(session);
         }
     }
 
@@ -223,18 +438,27 @@ public sealed class HonuaDeviceLocationTests
 
         public string SessionId { get; }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public bool IsDisposed { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            IsDisposed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class RecordingGeofenceMonitor : IHonuaGeofenceMonitor
     {
-        public event EventHandler<HonuaGeofenceTransition>? Transitioned
-        {
-            add { }
-            remove { }
-        }
+        public event EventHandler<HonuaGeofenceTransition>? Transitioned;
 
         public List<HonuaGeofenceMonitoringRequest> Requests { get; } = [];
+
+        public List<IReadOnlyList<string>> StoppedRegionIds { get; } = [];
+
+        public Exception? StopException { get; set; }
+
+        public void Emit(HonuaGeofenceTransition transition)
+            => Transitioned?.Invoke(this, transition);
 
         public ValueTask StartMonitoringAsync(
             HonuaGeofenceMonitoringRequest request,
@@ -247,6 +471,17 @@ public sealed class HonuaDeviceLocationTests
         public ValueTask StopMonitoringAsync(
             IReadOnlyList<string> regionIds,
             CancellationToken ct = default)
-            => ValueTask.CompletedTask;
+        {
+            StoppedRegionIds.Add(regionIds);
+
+            if (StopException is not null)
+            {
+                var exception = StopException;
+                StopException = null;
+                throw exception;
+            }
+
+            return ValueTask.CompletedTask;
+        }
     }
 }
