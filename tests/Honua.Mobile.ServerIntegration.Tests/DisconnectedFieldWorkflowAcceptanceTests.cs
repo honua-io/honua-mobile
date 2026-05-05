@@ -13,6 +13,12 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     private const string WorkflowName = "disconnected-field-workflow";
     private const string DefaultPackageId = "pkg_acceptance_field_workflow";
     private const string DefaultServiceId = "assets";
+    private const string FailureCategoryConfiguration = "configuration";
+    private const string FailureCategoryPackage = "package";
+    private const string FailureCategoryLocalCache = "local-cache";
+    private const string FailureCategoryEditQueue = "edit-queue";
+    private const string FailureCategoryTransport = "transport";
+    private const string FailureCategoryConflict = "conflict";
     private static readonly DateTimeOffset FixedOperationTime = new(2026, 5, 4, 10, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -39,26 +45,57 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             config,
             createReplicaClient: () => CreateReplicaClient(config),
             createUploader: () => CreateUploader(config),
-            verifyCloudStateAsync: async evidence =>
+            verifyPreSyncCloudStateAsync: evidence =>
+            {
+                Assert.DoesNotContain(server.Requests, request =>
+                    request.Method == "POST" &&
+                    request.Path == "/rest/services/assets/FeatureServer/0/applyEdits");
+                evidence.FinalState.PreSyncCloudVerification = "loopback cloud state unchanged before reconnect";
+                return Task.CompletedTask;
+            },
+            verifyPostSyncCloudStateAsync: evidence =>
             {
                 Assert.True(server.Received("POST", "/rest/services/assets/FeatureServer/createReplica"));
                 Assert.True(server.Received("POST", "/rest/services/assets/FeatureServer/extractChanges"));
                 Assert.True(server.Received("POST", "/rest/services/assets/FeatureServer/synchronizeReplica"));
                 Assert.True(server.Received("POST", "/rest/services/assets/FeatureServer/0/applyEdits"));
 
-                var applyEdits = server.SingleRequest("POST", "/rest/services/assets/FeatureServer/0/applyEdits");
-                Assert.Contains("Offline Pump Acceptance", WebUtility.UrlDecode(applyEdits.Body));
-                evidence.FinalState.CloudVerification = "loopback applyEdits observed";
-                await Task.CompletedTask;
+                var applyEdits = server.Requests
+                    .Where(request =>
+                        request.Method == "POST" &&
+                        request.Path == "/rest/services/assets/FeatureServer/0/applyEdits")
+                    .Select(request => WebUtility.UrlDecode(request.Body))
+                    .ToArray();
+                Assert.Equal(3, applyEdits.Length);
+                Assert.Contains(applyEdits, body => body.Contains("adds=", StringComparison.OrdinalIgnoreCase) &&
+                                                     body.Contains("Offline Pump Acceptance", StringComparison.Ordinal));
+                Assert.Contains(applyEdits, body => body.Contains("updates=", StringComparison.OrdinalIgnoreCase) &&
+                                                     body.Contains("inspection-complete", StringComparison.Ordinal));
+                Assert.Contains(applyEdits, body => body.Contains("deletes=", StringComparison.OrdinalIgnoreCase) &&
+                                                     body.Contains("3", StringComparison.Ordinal));
+                evidence.FinalState.CloudVerification = "loopback applyEdits observed for create/update/delete";
+                return Task.CompletedTask;
             });
 
         Assert.Equal("passed", result.Evidence.Status);
         Assert.True(File.Exists(result.EvidencePath));
+        Assert.Equal(3, result.Evidence.FinalState.PendingOperationCountBeforeReconnect);
         Assert.Equal(0, result.Evidence.FinalState.PendingOperationCount);
         Assert.True(result.Evidence.FinalState.LocalFeatureCount >= 1);
         Assert.Equal("replica-abc-123", result.Evidence.CursorState["replica:assets"]);
         Assert.Equal("100", result.Evidence.CursorState["servergen:assets"]);
-        Assert.Equal(["op-acceptance-add-001"], result.Evidence.OperationIds);
+        Assert.Equal(
+            [
+                "op-acceptance-add-001",
+                "op-acceptance-update-001",
+                "op-acceptance-delete-001",
+                "op-acceptance-media-001",
+            ],
+            result.Evidence.OperationIds);
+        Assert.Contains(result.Evidence.PlannedOperations, operation =>
+            operation.OperationId == "op-acceptance-media-001" &&
+            operation.Kind == "attachment-metadata" &&
+            operation.Metadata["fileName"] == "offline-pump-photo.jpg");
 
         var evidenceJson = await File.ReadAllTextAsync(result.EvidencePath);
         Assert.Contains(SchemaVersion, evidenceJson);
@@ -66,13 +103,29 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         Assert.Contains("\"offline-edit\"", evidenceJson);
         Assert.Contains("\"reconnect-sync\"", evidenceJson);
         Assert.Contains("\"verify\"", evidenceJson);
+        Assert.Contains("\"failureCategories\"", evidenceJson);
+        Assert.Contains("\"attachment-metadata\"", evidenceJson);
     }
 
     [Fact]
     [Trait("Category", "CloudAcceptance")]
     public async Task CloudHarness_RunsOnlyWhenExplicitlyConfigured_AndOtherwiseEmitsSkippedEvidence()
     {
-        var config = AcceptanceHarnessConfiguration.TryLoadCloudFromEnvironment();
+        AcceptanceHarnessConfiguration? config;
+        try
+        {
+            config = AcceptanceHarnessConfiguration.TryLoadCloudFromEnvironment();
+        }
+        catch (Exception ex)
+        {
+            var failed = DisconnectedFieldWorkflowEvidence.FailedCloudGate(
+                Environment.GetEnvironmentVariable("HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR")
+                    ?? Path.Combine(_rootDirectory, "evidence"),
+                ex);
+            await WriteEvidenceAsync(failed);
+            throw;
+        }
+
         if (config is null)
         {
             var skipped = DisconnectedFieldWorkflowEvidence.Skipped(
@@ -86,7 +139,13 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             config,
             createReplicaClient: () => CreateReplicaClient(config),
             createUploader: () => CreateUploader(config),
-            verifyCloudStateAsync: evidence =>
+            verifyPreSyncCloudStateAsync: evidence =>
+            {
+                evidence.FinalState.PreSyncCloudVerification =
+                    "cloud fixture pre-sync verification requires fixture query inputs from honua-server#895";
+                return Task.CompletedTask;
+            },
+            verifyPostSyncCloudStateAsync: evidence =>
             {
                 evidence.FinalState.CloudVerification =
                     "cloud fixture verification delegated to honua-server#895; request-level verification is not available from this process";
@@ -95,6 +154,59 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
         Assert.Equal("passed", result.Evidence.Status);
         Assert.True(File.Exists(result.EvidencePath));
+    }
+
+    [Fact]
+    public void AcceptancePlan_IsDeterministic_AndCoversRequiredOfflineOperations()
+    {
+        var config = AcceptanceHarnessConfiguration.Loopback(
+            new Uri("http://127.0.0.1:5000"),
+            Path.Combine(_rootDirectory, "evidence"));
+
+        var plan = AcceptanceWorkflowPlan.Create(config);
+
+        Assert.Equal(["online-download", "offline-edit", "reconnect-sync", "verify"], plan.Sequence);
+        Assert.Equal(4, plan.Operations.Count);
+        Assert.Equal(3, plan.SyncableOperations.Count);
+        Assert.Contains(plan.Operations, operation => operation.Kind == "feature-create" && operation.OperationType == OfflineOperationType.Add);
+        Assert.Contains(plan.Operations, operation => operation.Kind == "feature-update" && operation.OperationType == OfflineOperationType.Update);
+        Assert.Contains(plan.Operations, operation => operation.Kind == "feature-delete" && operation.OperationType == OfflineOperationType.Delete);
+
+        var media = Assert.Single(plan.Operations, operation => operation.Kind == "attachment-metadata");
+        Assert.False(media.IsSyncable);
+        Assert.Equal("offline-pump-photo.jpg", media.Metadata["fileName"]);
+        Assert.Equal("image/jpeg", media.Metadata["contentType"]);
+        Assert.Equal("sha256:acceptance-photo-placeholder", media.Metadata["contentHash"]);
+
+        var createPayload = JsonSerializer.Deserialize<OfflineOperationPayload>(
+            plan.SyncableOperations[0].SyncOperation!.PayloadJson,
+            JsonOptions);
+        Assert.NotNull(createPayload);
+        Assert.Equal(DefaultPackageId, createPayload.PackageId);
+        Assert.Equal("0", createPayload.SourceId);
+        Assert.Equal("op-acceptance-media-001", createPayload.Metadata!["mediaOperationId"]);
+    }
+
+    [Theory]
+    [InlineData("cloud-fixture-gate", "HONUA_MOBILE_CLOUD_BASE_URL is required", FailureCategoryConfiguration)]
+    [InlineData("online-download", "replica package is missing", FailureCategoryPackage)]
+    [InlineData("reconnect-sync", "conflict requires manual review", FailureCategoryConflict)]
+    [InlineData("reconnect-sync", "Invalid offline payload", FailureCategoryEditQueue)]
+    [InlineData("reconnect-sync", "Connection refused", FailureCategoryTransport)]
+    public void FailureClassifier_MapsHarnessFailuresToActionableCategories(
+        string phaseName,
+        string message,
+        string expectedCategory)
+    {
+        Assert.Equal(expectedCategory, ClassifyFailure(new InvalidOperationException(message), phaseName));
+    }
+
+    [Fact]
+    public void FailureClassifier_MapsGeoPackageFailuresToLocalCache()
+    {
+        Assert.Equal(
+            FailureCategoryLocalCache,
+            ClassifyFailure(new GeoPackageStorageException("GeoPackage feature cache write failed."), "offline-edit"));
     }
 
     public void Dispose()
@@ -109,14 +221,16 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         AcceptanceHarnessConfiguration config,
         Func<IReplicaSyncClient> createReplicaClient,
         Func<IOfflineOperationUploader> createUploader,
-        Func<DisconnectedFieldWorkflowEvidence, Task> verifyCloudStateAsync)
+        Func<DisconnectedFieldWorkflowEvidence, Task> verifyPreSyncCloudStateAsync,
+        Func<DisconnectedFieldWorkflowEvidence, Task> verifyPostSyncCloudStateAsync)
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
         {
             DatabasePath = config.DatabasePath,
         });
 
-        var evidence = DisconnectedFieldWorkflowEvidence.Started(config);
+        var plan = AcceptanceWorkflowPlan.Create(config);
+        var evidence = DisconnectedFieldWorkflowEvidence.Started(config, plan);
 
         try
         {
@@ -136,17 +250,26 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 phase.Details["updates"] = result.Updates.ToString();
                 phase.Details["deletes"] = result.Deletes.ToString();
                 phase.Details["serverGen"] = result.ServerGen.ToString();
+                phase.Details["packageId"] = config.PackageId;
             });
 
             await RunPhaseAsync(evidence, "offline-edit", async phase =>
             {
                 await store.InitializeAsync();
-                var operation = CreateAcceptanceOperation(config);
-                await store.EnqueueAsync(operation);
-                evidence.OperationIds.Add(operation.OperationId);
-                phase.Details["queuedOperationId"] = operation.OperationId;
-                phase.Details["queuedOperationType"] = operation.OperationType.ToString();
-                phase.Details["pendingAfterEdit"] = (await store.CountPendingAsync()).ToString();
+                foreach (var operation in plan.SyncableOperations)
+                {
+                    await store.EnqueueAsync(operation.SyncOperation!);
+                }
+
+                var pending = await store.CountPendingAsync();
+                evidence.FinalState.PendingOperationCountBeforeReconnect = pending;
+                phase.Details["plannedOperationCount"] = plan.Operations.Count.ToString();
+                phase.Details["queuedOperationCount"] = plan.SyncableOperations.Count.ToString();
+                phase.Details["plannedMediaOperationId"] = plan.Operations.Single(operation => operation.Kind == "attachment-metadata").OperationId;
+                phase.Details["pendingAfterEdit"] = pending.ToString();
+
+                Assert.Equal(plan.SyncableOperations.Count, pending);
+                await verifyPreSyncCloudStateAsync(evidence);
             });
 
             await RunPhaseAsync(evidence, "reconnect-sync", async phase =>
@@ -166,8 +289,13 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 phase.Details["failed"] = result.Failed.ToString();
                 phase.Details["failures"] = string.Join(" | ", result.Failures.Select(failure => $"{failure.OperationId}: {failure.Reason}"));
 
-                Assert.Equal(1, result.Loaded);
-                Assert.True(result.Succeeded == 1, phase.Details["failures"]);
+                if (result.Failed > 0 || result.Succeeded != plan.SyncableOperations.Count)
+                {
+                    throw SyncRunFailedException.FromResult(result);
+                }
+
+                Assert.Equal(plan.SyncableOperations.Count, result.Loaded);
+                Assert.True(result.Succeeded == plan.SyncableOperations.Count, phase.Details["failures"]);
                 Assert.True(result.Failed == 0, phase.Details["failures"]);
             });
 
@@ -193,7 +321,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 Assert.False(string.IsNullOrWhiteSpace(evidence.CursorState[$"replica:{config.ServiceId}"]));
                 Assert.False(string.IsNullOrWhiteSpace(evidence.CursorState[$"servergen:{config.ServiceId}"]));
 
-                await verifyCloudStateAsync(evidence);
+                await verifyPostSyncCloudStateAsync(evidence);
             });
 
             evidence.Status = "passed";
@@ -232,6 +360,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         {
             phase.Status = "failed";
             phase.Details["error"] = ex.Message;
+            phase.Details["failureCategory"] = ClassifyFailure(ex, phaseName);
             throw;
         }
         finally
@@ -240,33 +369,122 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         }
     }
 
-    private static OfflineEditOperation CreateAcceptanceOperation(AcceptanceHarnessConfiguration config)
+    private static string ClassifyFailure(Exception ex, string phaseName)
     {
-        var layerId = config.LayerIds[0];
-        var feature = JsonSerializer.SerializeToElement(new
+        if (ex is SyncRunFailedException syncFailure)
         {
-            attributes = new
+            return syncFailure.FailureCategory;
+        }
+
+        if (ex is GeoPackageStorageException)
+        {
+            return FailureCategoryLocalCache;
+        }
+
+        if (ex is HttpRequestException or TaskCanceledException or HonuaMobileApiException)
+        {
+            return FailureCategoryTransport;
+        }
+
+        var message = ex.Message;
+        if (message.Contains("HONUA_MOBILE_", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("base url", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("api key", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryConfiguration;
+        }
+
+        if (message.Contains("conflict", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("precondition", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryConflict;
+        }
+
+        if (message.Contains("invalid offline payload", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("operation", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryEditQueue;
+        }
+
+        return phaseName switch
+        {
+            "online-download" => FailureCategoryPackage,
+            "offline-edit" => FailureCategoryEditQueue,
+            "reconnect-sync" => FailureCategoryTransport,
+            _ => FailureCategoryConfiguration,
+        };
+    }
+
+    private static string ClassifySyncFailureReason(string reason)
+    {
+        if (reason.Contains("conflict", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("precondition", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryConflict;
+        }
+
+        if (reason.Contains("invalid offline payload", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("unsupported protocol", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("operation", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryEditQueue;
+        }
+
+        if (reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("transport", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryTransport;
+        }
+
+        return FailureCategoryTransport;
+    }
+
+    private static IReadOnlyDictionary<string, string> FailureCategories()
+        => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [FailureCategoryConfiguration] = "Fixture URLs, credentials, package ids, source ids, or run flags are missing or inconsistent.",
+            [FailureCategoryPackage] = "The cloud/staging package or replica fixture cannot be created, downloaded, or decoded.",
+            [FailureCategoryLocalCache] = "The mobile GeoPackage cache could not persist features, cursors, or queued operations.",
+            [FailureCategoryEditQueue] = "A planned offline operation cannot be serialized, queued, claimed, or uploaded as a valid edit.",
+            [FailureCategoryTransport] = "Network transport, authentication, timeout, or server availability prevented an operation.",
+            [FailureCategoryConflict] = "Server state rejected an offline edit because the base sync token or feature version conflicted.",
+        };
+
+    private static OfflineEditOperation CreateFeatureOperation(
+        AcceptanceHarnessConfiguration config,
+        string operationId,
+        string kind,
+        OfflineOperationType operationType,
+        int layerId,
+        int priority,
+        JsonElement? feature = null,
+        IReadOnlyList<long>? deleteObjectIds = null,
+        IReadOnlyDictionary<string, string>? extraMetadata = null)
+    {
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["workflow"] = WorkflowName,
+            ["operationKind"] = kind,
+            ["fixtureAssumption"] = "honua-server#895 provides FeatureServer replica and applyEdits endpoints",
+        };
+        if (extraMetadata is not null)
+        {
+            foreach (var item in extraMetadata)
             {
-                objectid = 2,
-                name = "Offline Pump Acceptance",
-                status = "inspected-offline",
-                honua_acceptance_run = config.RunId,
-            },
-            geometry = new
-            {
-                x = -157.8,
-                y = 21.3,
-            },
-        }, JsonOptions);
+                metadata[item.Key] = item.Value;
+            }
+        }
 
         return new OfflineEditOperation
         {
-            OperationId = "op-acceptance-add-001",
+            OperationId = operationId,
             LayerKey = $"{config.ServiceId}/{layerId}",
             TargetCollection = config.ServiceId,
-            OperationType = OfflineOperationType.Add,
-            CreatedAtUtc = FixedOperationTime,
-            Priority = 1,
+            OperationType = operationType,
+            CreatedAtUtc = FixedOperationTime.AddMinutes(priority - 1),
+            Priority = priority,
             PayloadJson = JsonSerializer.Serialize(new OfflineOperationPayload
             {
                 PackageId = config.PackageId,
@@ -276,11 +494,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 ServiceId = config.ServiceId,
                 LayerId = layerId,
                 Feature = feature,
-                Metadata = new Dictionary<string, string>
-                {
-                    ["workflow"] = WorkflowName,
-                    ["fixtureAssumption"] = "honua-server#895 provides FeatureServer replica and applyEdits endpoints",
-                },
+                DeleteObjectIds = deleteObjectIds,
+                Metadata = metadata,
             }, JsonOptions),
         };
     }
@@ -331,6 +546,216 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     private sealed record AcceptanceHarnessResult(
         DisconnectedFieldWorkflowEvidence Evidence,
         string EvidencePath);
+
+    private sealed class AcceptanceWorkflowPlan
+    {
+        public required IReadOnlyList<string> Sequence { get; init; }
+
+        public required IReadOnlyList<PlannedAcceptanceOperation> Operations { get; init; }
+
+        public IReadOnlyList<PlannedAcceptanceOperation> SyncableOperations
+            => Operations.Where(operation => operation.IsSyncable).ToArray();
+
+        public static AcceptanceWorkflowPlan Create(AcceptanceHarnessConfiguration config)
+        {
+            var layerId = config.LayerIds[0];
+            var sourceId = layerId.ToString();
+            var mediaOperation = new PlannedAcceptanceOperation
+            {
+                OperationId = "op-acceptance-media-001",
+                Kind = "attachment-metadata",
+                SourceId = sourceId,
+                TargetId = "objectid:9001",
+                Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["fileName"] = "offline-pump-photo.jpg",
+                    ["contentType"] = "image/jpeg",
+                    ["contentHash"] = "sha256:acceptance-photo-placeholder",
+                    ["captureUtc"] = FixedOperationTime.AddMinutes(3).ToString("O"),
+                    ["relationship"] = "field-evidence",
+                },
+            };
+
+            var createFeature = JsonSerializer.SerializeToElement(new
+            {
+                attributes = new
+                {
+                    objectid = 9001,
+                    name = "Offline Pump Acceptance",
+                    status = "created-offline",
+                    honua_acceptance_run = config.RunId,
+                    media_operation_id = mediaOperation.OperationId,
+                },
+                geometry = new
+                {
+                    x = -157.8,
+                    y = 21.3,
+                },
+            }, JsonOptions);
+            var updateFeature = JsonSerializer.SerializeToElement(new
+            {
+                attributes = new
+                {
+                    objectid = 1,
+                    name = "Pump Station",
+                    status = "inspection-complete",
+                    honua_acceptance_run = config.RunId,
+                },
+                geometry = new
+                {
+                    x = -157.8001,
+                    y = 21.3001,
+                },
+            }, JsonOptions);
+
+            var createOperation = CreateFeatureOperation(
+                config,
+                "op-acceptance-add-001",
+                "feature-create",
+                OfflineOperationType.Add,
+                layerId,
+                priority: 1,
+                feature: createFeature,
+                extraMetadata: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["mediaOperationId"] = mediaOperation.OperationId,
+                    ["mediaFileName"] = mediaOperation.Metadata["fileName"],
+                    ["mediaContentType"] = mediaOperation.Metadata["contentType"],
+                    ["mediaContentHash"] = mediaOperation.Metadata["contentHash"],
+                });
+            var updateOperation = CreateFeatureOperation(
+                config,
+                "op-acceptance-update-001",
+                "feature-update",
+                OfflineOperationType.Update,
+                layerId,
+                priority: 2,
+                feature: updateFeature);
+            var deleteOperation = CreateFeatureOperation(
+                config,
+                "op-acceptance-delete-001",
+                "feature-delete",
+                OfflineOperationType.Delete,
+                layerId,
+                priority: 3,
+                deleteObjectIds: [3]);
+
+            return new AcceptanceWorkflowPlan
+            {
+                Sequence = ["online-download", "offline-edit", "reconnect-sync", "verify"],
+                Operations =
+                [
+                    new PlannedAcceptanceOperation
+                    {
+                        OperationId = createOperation.OperationId,
+                        Kind = "feature-create",
+                        OperationType = createOperation.OperationType,
+                        SourceId = sourceId,
+                        TargetId = "objectid:9001",
+                        SyncOperation = createOperation,
+                        Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["status"] = "created-offline",
+                            ["mediaOperationId"] = mediaOperation.OperationId,
+                        },
+                    },
+                    new PlannedAcceptanceOperation
+                    {
+                        OperationId = updateOperation.OperationId,
+                        Kind = "feature-update",
+                        OperationType = updateOperation.OperationType,
+                        SourceId = sourceId,
+                        TargetId = "objectid:1",
+                        SyncOperation = updateOperation,
+                        Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["status"] = "inspection-complete",
+                        },
+                    },
+                    new PlannedAcceptanceOperation
+                    {
+                        OperationId = deleteOperation.OperationId,
+                        Kind = "feature-delete",
+                        OperationType = deleteOperation.OperationType,
+                        SourceId = sourceId,
+                        TargetId = "objectid:3",
+                        SyncOperation = deleteOperation,
+                        Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["deleteObjectIds"] = "3",
+                        },
+                    },
+                    mediaOperation,
+                ],
+            };
+        }
+    }
+
+    private sealed class PlannedAcceptanceOperation
+    {
+        public required string OperationId { get; init; }
+
+        public required string Kind { get; init; }
+
+        public OfflineOperationType? OperationType { get; init; }
+
+        public required string SourceId { get; init; }
+
+        public required string TargetId { get; init; }
+
+        public required Dictionary<string, string> Metadata { get; init; }
+
+        public OfflineEditOperation? SyncOperation { get; init; }
+
+        public bool IsSyncable => SyncOperation is not null;
+
+        public PlannedOperationEvidence ToEvidence()
+            => new()
+            {
+                OperationId = OperationId,
+                Kind = Kind,
+                OperationType = OperationType?.ToString(),
+                SourceId = SourceId,
+                TargetId = TargetId,
+                IsSyncable = IsSyncable,
+                Metadata = new Dictionary<string, string>(Metadata, StringComparer.Ordinal),
+            };
+    }
+
+    private sealed class PlannedOperationEvidence
+    {
+        public required string OperationId { get; init; }
+
+        public required string Kind { get; init; }
+
+        public string? OperationType { get; init; }
+
+        public required string SourceId { get; init; }
+
+        public required string TargetId { get; init; }
+
+        public required bool IsSyncable { get; init; }
+
+        public required Dictionary<string, string> Metadata { get; init; }
+    }
+
+    private sealed class SyncRunFailedException : Exception
+    {
+        private SyncRunFailedException(string message, string failureCategory)
+            : base(message)
+        {
+            FailureCategory = failureCategory;
+        }
+
+        public string FailureCategory { get; }
+
+        public static SyncRunFailedException FromResult(SyncRunResult result)
+        {
+            var reason = result.Failures.FirstOrDefault()?.Reason
+                ?? $"Expected all planned operations to sync; loaded={result.Loaded}, succeeded={result.Succeeded}, failed={result.Failed}.";
+            return new SyncRunFailedException(reason, ClassifySyncFailureReason(reason));
+        }
+    }
 
     private sealed class AcceptanceHarnessConfiguration
     {
@@ -449,8 +874,14 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
         public AcceptanceFinalStateEvidence FinalState { get; } = new();
 
-        public static DisconnectedFieldWorkflowEvidence Started(AcceptanceHarnessConfiguration config)
-            => new()
+        public List<PlannedOperationEvidence> PlannedOperations { get; } = [];
+
+        public IReadOnlyDictionary<string, string> FailureCategories { get; init; } =
+            DisconnectedFieldWorkflowAcceptanceTests.FailureCategories();
+
+        public static DisconnectedFieldWorkflowEvidence Started(AcceptanceHarnessConfiguration config, AcceptanceWorkflowPlan plan)
+        {
+            var evidence = new DisconnectedFieldWorkflowEvidence
             {
                 RunId = config.RunId,
                 ArtifactDirectory = config.ArtifactDirectory,
@@ -460,6 +891,10 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 ServiceId = config.ServiceId,
                 SourceIds = config.SourceIds.ToList(),
             };
+            evidence.OperationIds.AddRange(plan.Operations.Select(operation => operation.OperationId));
+            evidence.PlannedOperations.AddRange(plan.Operations.Select(operation => operation.ToEvidence()));
+            return evidence;
+        }
 
         public static DisconnectedFieldWorkflowEvidence Skipped(string artifactDirectory, string reason)
         {
@@ -484,6 +919,34 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             });
             return evidence;
         }
+
+        public static DisconnectedFieldWorkflowEvidence FailedCloudGate(string artifactDirectory, Exception ex)
+        {
+            var evidence = new DisconnectedFieldWorkflowEvidence
+            {
+                RunId = "cloud-disconnected-field-workflow-configuration-failed",
+                ArtifactDirectory = artifactDirectory,
+                Status = "failed",
+                StartedAtUtc = DateTimeOffset.UtcNow,
+                CompletedAtUtc = DateTimeOffset.UtcNow,
+                PackageId = DefaultPackageId,
+                ServiceId = DefaultServiceId,
+                SourceIds = ["0"],
+            };
+            evidence.Phases.Add(new AcceptancePhaseEvidence
+            {
+                Name = "cloud-fixture-gate",
+                Status = "failed",
+                StartedAtUtc = evidence.StartedAtUtc,
+                CompletedAtUtc = evidence.CompletedAtUtc,
+                Details =
+                {
+                    ["error"] = ex.Message,
+                    ["failureCategory"] = ClassifyFailure(ex, "cloud-fixture-gate"),
+                },
+            });
+            return evidence;
+        }
     }
 
     private sealed class AcceptancePhaseEvidence
@@ -503,9 +966,13 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     {
         public int LocalFeatureCount { get; set; }
 
+        public int PendingOperationCountBeforeReconnect { get; set; }
+
         public int PendingOperationCount { get; set; }
 
         public string? LocalVerification { get; set; }
+
+        public string? PreSyncCloudVerification { get; set; }
 
         public string? CloudVerification { get; set; }
     }
