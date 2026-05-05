@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,9 @@ public static class HonuaMapPluginServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddHonuaMapPlugin<TPlugin>(this IServiceCollection services)
+    public static IServiceCollection AddHonuaMapPlugin<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPlugin>(
+        this IServiceCollection services)
         where TPlugin : class, IHonuaMapPlugin
     {
         ArgumentNullException.ThrowIfNull(services);
