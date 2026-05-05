@@ -112,6 +112,8 @@ display.setFeatureQueryResult(page, {
     console.log(object?.properties);
   },
 });
+
+display.fitToSource(sourceDescriptor, { padding: 32, maxZoom: 15 });
 ```
 
 Use MapLibre GL JS for base map, style, camera, vector-tile styles, and normal
@@ -128,6 +130,28 @@ const layer = createHonuaGeoJsonLayer(featureCollection, {
   id: 'honua-work-orders',
 });
 ```
+
+The adapter also exposes a small layer lifecycle surface for host-owned map
+screens:
+
+```js
+display.setView({
+  center: { longitude: -157.8583, latitude: 21.3069 },
+  zoom: 13,
+});
+
+display.setFeatureQueryResults([assetPage, workOrderPage], (_page, index) => ({
+  source: index === 0 ? assetSource : workOrderSource,
+}));
+
+const assets = display.getFeatureCollection('honua-assets');
+display.removeLayer('honua-work-orders');
+display.clearFeatureLayers();
+```
+
+`clearFeatureLayers()` only removes layers created by feature query and stream
+helpers. Host-owned deck.gl layers passed to the adapter constructor remain in
+place.
 
 Streaming feature feeds can use the same renderer-neutral source descriptor and
 apply upsert/delete events into the adapter's GeoJSON layer state:

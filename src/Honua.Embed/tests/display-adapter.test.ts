@@ -259,4 +259,148 @@ describe('display adapter', () => {
     expect(map.removeControl).toHaveBeenCalledWith(adapter.overlay);
     expect(controls).toHaveLength(0);
   });
+
+  it('applies MapLibre camera helpers from SDK extents and centers', () => {
+    const map = {
+      addControl: vi.fn(),
+      fitBounds: vi.fn(),
+      jumpTo: vi.fn(),
+    };
+    const adapter = new HonuaWebDisplayAdapter(map);
+
+    expect(adapter.setView({
+      bounds: fieldAssetSource.extent,
+      fitOptions: {
+        padding: 24,
+        maxZoom: 15,
+      },
+    })).toBe(true);
+    expect(map.fitBounds).toHaveBeenCalledWith(
+      [[-157.9, 21.2], [-157.7, 21.4]],
+      {
+        padding: 24,
+        maxZoom: 15,
+      },
+    );
+
+    expect(adapter.setView({
+      center: { longitude: -157.8583, latitude: 21.3069 },
+      zoom: 13,
+      jumpOptions: {
+        duration: 0,
+      },
+    })).toBe(true);
+    expect(map.jumpTo).toHaveBeenCalledWith({
+      duration: 0,
+      center: [-157.8583, 21.3069],
+      zoom: 13,
+    });
+
+    const noCameraAdapter = new HonuaWebDisplayAdapter({ addControl: vi.fn() });
+
+    expect(noCameraAdapter.setView({
+      bounds: fieldAssetSource.extent,
+      center: [-157.8583, 21.3069],
+      zoom: 13,
+    })).toBe(false);
+  });
+
+  it('fits MapLibre to source descriptors and cached feature collections', () => {
+    const map = {
+      addControl: vi.fn(),
+      fitBounds: vi.fn(),
+    };
+    const adapter = new HonuaWebDisplayAdapter(map);
+    const collection = featureQueryResultToGeoJson({
+      source: fieldAssetSource,
+      features: [],
+    });
+
+    expect(adapter.fitToSource(fieldAssetSource, { padding: 32 })).toBe(true);
+    expect(adapter.fitToSource(collection, { maxZoom: 16 })).toBe(true);
+    expect(map.fitBounds).toHaveBeenNthCalledWith(
+      1,
+      [[-157.9, 21.2], [-157.7, 21.4]],
+      { padding: 32 },
+    );
+    expect(map.fitBounds).toHaveBeenNthCalledWith(
+      2,
+      [[-157.9, 21.2], [-157.7, 21.4]],
+      { maxZoom: 16 },
+    );
+    expect(adapter.fitToSource({
+      ...fieldAssetSource,
+      id: 'missing-extent',
+      extent: null,
+    })).toBe(false);
+  });
+
+  it('manages feature query layer batches without removing host-owned layers', () => {
+    const workOrderSource: HonuaDisplaySourceDescriptor = {
+      ...fieldAssetSource,
+      id: 'work-orders',
+      title: 'Work orders',
+    };
+    const externalLayer = createHonuaGeoJsonLayer([], {
+      id: 'external-overlay',
+    });
+    const adapter = new HonuaWebDisplayAdapter({ addControl: vi.fn() }, {
+      layers: [externalLayer],
+    });
+
+    const layers = adapter.setFeatureQueryResults([
+      {
+        source: fieldAssetSource,
+        features: [
+          {
+            id: 'asset-1',
+            geometry: {
+              type: 'Point',
+              coordinates: [-157.85, 21.3],
+            },
+          },
+        ],
+      },
+      {
+        features: [
+          {
+            id: 'work-order-1',
+            geometry: {
+              type: 'Point',
+              coordinates: [-157.86, 21.31],
+            },
+          },
+        ],
+      },
+    ], (_result, index) => ({
+      source: index === 0 ? fieldAssetSource : workOrderSource,
+    }));
+
+    expect(layers.map((layer) => layer.id)).toEqual([
+      'honua-field-assets',
+      'honua-work-orders',
+    ]);
+    expect(adapter.layers.map((layer) => layer.id)).toEqual([
+      'external-overlay',
+      'honua-field-assets',
+      'honua-work-orders',
+    ]);
+    expect(adapter.getFeatureCollection('honua-field-assets')?.honua).toMatchObject({
+      sourceId: 'field-assets',
+      source: fieldAssetSource,
+    });
+
+    expect(adapter.removeLayer('honua-field-assets')).toBe(true);
+    expect(adapter.getFeatureCollection('honua-field-assets')).toBeUndefined();
+    expect(adapter.removeLayer('missing-layer')).toBe(false);
+    expect(adapter.layers.map((layer) => layer.id)).toEqual([
+      'external-overlay',
+      'honua-work-orders',
+    ]);
+
+    adapter.clearFeatureLayers();
+
+    expect(adapter.layers.map((layer) => layer.id)).toEqual(['external-overlay']);
+    expect(adapter.getFeatureCollection('honua-work-orders')).toBeUndefined();
+  });
 });
