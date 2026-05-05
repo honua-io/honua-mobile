@@ -155,18 +155,27 @@ jobs:
 
           validate_release_history() {
             local release_tag="$1"
-            local major="$2" minor="$3" patch="$4"
-            local android_build="$5" ios_build="$6"
+            local expected_source_sha="$2"
+            local major="$3" minor="$4" patch="$5"
+            local android_build="$6" ios_build="$7"
             local has_previous=false
             local latest_major=0 latest_minor=0 latest_patch=0
             local max_android=0 max_ios=0
-            local existing e_major e_minor e_patch e_android e_ios
+            local existing existing_tag_sha e_major e_minor e_patch e_android e_ios
 
-            if git rev-parse --quiet --verify "refs/tags/${release_tag}" >/dev/null; then
-              fail "Production tag ${release_tag} already exists. Do not retag production releases."
+            if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${release_tag}^{commit}")"; then
+              if [[ "${existing_tag_sha}" != "${expected_source_sha}" ]]; then
+                fail "Production tag ${release_tag} already exists at ${existing_tag_sha}, not ${expected_source_sha}. Do not retag production releases."
+              fi
+
+              echo "::notice::Production tag ${release_tag} already exists at the requested source; continuing retry validation."
             fi
 
             while IFS= read -r existing; do
+              if [[ "${existing}" == "${release_tag}" ]]; then
+                continue
+              fi
+
               if [[ "${existing}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
                 has_previous=true
                 e_major="${BASH_REMATCH[1]}"
@@ -285,7 +294,7 @@ jobs:
             fail "Could not resolve source_ref ${source_ref} to a commit."
           fi
 
-          validate_release_history "${release_tag}" "${major}" "${minor}" "${patch}" "${android_build_number}" "${ios_build_number}"
+          validate_release_history "${release_tag}" "${source_sha}" "${major}" "${minor}" "${patch}" "${android_build_number}" "${ios_build_number}"
 
           {
             echo "release_tag=${release_tag}"
@@ -394,18 +403,27 @@ jobs:
 
           validate_release_history() {
             local release_tag="$1"
-            local major="$2" minor="$3" patch="$4"
-            local android_build="$5" ios_build="$6"
+            local expected_source_sha="$2"
+            local major="$3" minor="$4" patch="$5"
+            local android_build="$6" ios_build="$7"
             local has_previous=false
             local latest_major=0 latest_minor=0 latest_patch=0
             local max_android=0 max_ios=0
-            local existing e_major e_minor e_patch e_android e_ios
+            local existing existing_tag_sha e_major e_minor e_patch e_android e_ios
 
-            if git rev-parse --quiet --verify "refs/tags/${release_tag}" >/dev/null; then
-              fail "Production tag ${release_tag} already exists. Promotion stops before writing anything."
+            if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${release_tag}^{commit}")"; then
+              if [[ "${existing_tag_sha}" != "${expected_source_sha}" ]]; then
+                fail "Production tag ${release_tag} already exists at ${existing_tag_sha}, not ${expected_source_sha}. Do not retag production releases."
+              fi
+
+              echo "::notice::Production tag ${release_tag} already exists at the requested source; continuing release retry."
             fi
 
             while IFS= read -r existing; do
+              if [[ "${existing}" == "${release_tag}" ]]; then
+                continue
+              fi
+
               if [[ "${existing}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
                 has_previous=true
                 e_major="${BASH_REMATCH[1]}"
@@ -446,8 +464,9 @@ jobs:
           if [[ ! "${RELEASE_TAG}" =~ ^mobile-prod-v([0-9]+)\.([0-9]+)\.([0-9]+)-android\.([1-9][0-9]*)-ios\.([1-9][0-9]*)$ ]]; then
             fail "release_tag must match mobile-prod-vX.Y.Z-android.N-ios.M."
           fi
-
-          validate_release_history "${RELEASE_TAG}" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${ANDROID_BUILD_NUMBER}" "${IOS_BUILD_NUMBER}"
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
 
           if ! source_sha="$(resolve_source_sha "${SOURCE_REF}")"; then
             fail "Could not resolve source_ref ${SOURCE_REF} to a commit."
@@ -456,6 +475,8 @@ jobs:
           if [[ "${source_sha}" != "${EXPECTED_SOURCE_SHA}" ]]; then
             fail "source_ref moved from ${EXPECTED_SOURCE_SHA} to ${source_sha}; rerun validation before promotion."
           fi
+
+          validate_release_history "${RELEASE_TAG}" "${source_sha}" "${major}" "${minor}" "${patch}" "${ANDROID_BUILD_NUMBER}" "${IOS_BUILD_NUMBER}"
 
           mkdir -p promotion-metadata
 
@@ -521,25 +542,39 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          tag_message="$(mktemp)"
-          {
-            printf 'Honua Mobile %s production promotion\n\n' "${RELEASE_VERSION}"
-            printf 'Release tag: %s\n' "${RELEASE_TAG}"
-            printf 'Source commit: %s\n' "${source_sha}"
-            printf 'Android build number: %s\n' "${ANDROID_BUILD_NUMBER}"
-            printf 'iOS build number: %s\n' "${IOS_BUILD_NUMBER}"
-            printf 'Release notes: %s\n' "${RELEASE_NOTES_URL}"
-            printf 'Approval record: %s\n' "${APPROVAL_ISSUE}"
-            printf 'Workflow: %s\n' "${workflow_url}"
-          } > "${tag_message}"
+          if existing_tag_sha="$(git rev-parse --quiet --verify "refs/tags/${RELEASE_TAG}^{commit}")"; then
+            if [[ "${existing_tag_sha}" != "${source_sha}" ]]; then
+              fail "Production tag ${RELEASE_TAG} already exists at ${existing_tag_sha}, not ${source_sha}. Do not retag production releases."
+            fi
 
-          git tag -a "${RELEASE_TAG}" "${source_sha}" -F "${tag_message}"
-          git push origin "refs/tags/${RELEASE_TAG}"
+            echo "::notice::Production tag ${RELEASE_TAG} already exists at ${source_sha}; reusing it for release retry."
+          else
+            tag_message="$(mktemp)"
+            {
+              printf 'Honua Mobile %s production promotion\n\n' "${RELEASE_VERSION}"
+              printf 'Release tag: %s\n' "${RELEASE_TAG}"
+              printf 'Source commit: %s\n' "${source_sha}"
+              printf 'Android build number: %s\n' "${ANDROID_BUILD_NUMBER}"
+              printf 'iOS build number: %s\n' "${IOS_BUILD_NUMBER}"
+              printf 'Release notes: %s\n' "${RELEASE_NOTES_URL}"
+              printf 'Approval record: %s\n' "${APPROVAL_ISSUE}"
+              printf 'Workflow: %s\n' "${workflow_url}"
+            } > "${tag_message}"
 
-          gh release create "${RELEASE_TAG}" \
-            --title "Honua Mobile ${RELEASE_VERSION} Production" \
-            --notes-file "${release_body}" \
-            --verify-tag
+            git tag -a "${RELEASE_TAG}" "${source_sha}" -F "${tag_message}"
+            git push origin "refs/tags/${RELEASE_TAG}"
+          fi
+
+          release_title="Honua Mobile ${RELEASE_VERSION} Production"
+          if existing_release_url="$(gh release view "${RELEASE_TAG}" --json url --jq .url 2>/dev/null)"; then
+            release_url="${existing_release_url}"
+            echo "::notice::GitHub Release for ${RELEASE_TAG} already exists; skipping creation."
+          else
+            gh release create "${RELEASE_TAG}" \
+              --title "${release_title}" \
+              --notes-file "${release_body}" \
+              --verify-tag
+          fi
 
           {
             echo "release_url=${release_url}"
