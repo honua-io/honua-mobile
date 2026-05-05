@@ -203,6 +203,41 @@ jobs:
             }
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Validate app bundle ID
+        shell: bash
+        env:
+          APP_TARGET: ${{ inputs.app_target }}
+          EXPECTED_BUNDLE_ID: ${{ steps.metadata.outputs.bundle_id }}
+          PROJECT_PATH: ${{ steps.metadata.outputs.project_path }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f "${PROJECT_PATH}" ]]; then
+            echo "::error::Project file does not exist for app_target ${APP_TARGET}: ${PROJECT_PATH}"
+            exit 1
+          fi
+
+          application_id="$(dotnet msbuild "${PROJECT_PATH}" \
+            -nologo \
+            -getProperty:ApplicationId \
+            -p:TargetFramework="${TARGET_FRAMEWORK}" \
+            | tr -d '\r' \
+            | sed -n '/./p' \
+            | tail -n 1)"
+
+          if [[ -z "${application_id}" ]]; then
+            echo "::error::Could not evaluate ApplicationId for ${PROJECT_PATH} targeting ${TARGET_FRAMEWORK}."
+            exit 1
+          fi
+
+          if [[ "${application_id}" != "${EXPECTED_BUNDLE_ID}" ]]; then
+            echo "::error::${PROJECT_PATH} ApplicationId is ${application_id}, but app_target ${APP_TARGET} expects ${EXPECTED_BUNDLE_ID}."
+            echo "::error::Update the TestFlight target mapping or the MAUI project ApplicationId before importing signing assets."
+            exit 1
+          fi
+
+          echo "Validated ${PROJECT_PATH} ApplicationId ${application_id} for ${APP_TARGET}."
+
       - name: Validate required secrets
         shell: bash
         env:
