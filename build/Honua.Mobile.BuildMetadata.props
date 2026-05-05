@@ -1,0 +1,73 @@
+<Project>
+  <PropertyGroup>
+    <HonuaMobileBuildEnvironment Condition="'$(HonuaMobileBuildEnvironment)' == '' and '$(Configuration)' == 'Debug'">dev-local</HonuaMobileBuildEnvironment>
+    <HonuaMobileBuildEnvironment Condition="'$(HonuaMobileBuildEnvironment)' == ''">unspecified</HonuaMobileBuildEnvironment>
+    <HonuaMobileBuildRepository Condition="'$(HonuaMobileBuildRepository)' == '' and '$(GITHUB_REPOSITORY)' != ''">$(GITHUB_REPOSITORY)</HonuaMobileBuildRepository>
+    <HonuaMobileBuildBranch Condition="'$(HonuaMobileBuildBranch)' == '' and '$(GITHUB_REF_NAME)' != ''">$(GITHUB_REF_NAME)</HonuaMobileBuildBranch>
+    <HonuaMobileBuildSha Condition="'$(HonuaMobileBuildSha)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</HonuaMobileBuildSha>
+    <HonuaMobileBuildRunNumber Condition="'$(HonuaMobileBuildRunNumber)' == '' and '$(GITHUB_RUN_NUMBER)' != ''">$(GITHUB_RUN_NUMBER)</HonuaMobileBuildRunNumber>
+    <HonuaMobileBuildRunId Condition="'$(HonuaMobileBuildRunId)' == '' and '$(GITHUB_RUN_ID)' != ''">$(GITHUB_RUN_ID)</HonuaMobileBuildRunId>
+    <HonuaMobileBuildRunAttempt Condition="'$(HonuaMobileBuildRunAttempt)' == '' and '$(GITHUB_RUN_ATTEMPT)' != ''">$(GITHUB_RUN_ATTEMPT)</HonuaMobileBuildRunAttempt>
+    <HonuaMobileBuildNumber Condition="'$(HonuaMobileBuildNumber)' == ''">$(ApplicationVersion)</HonuaMobileBuildNumber>
+    <HonuaMobileBuildDisplayVersion Condition="'$(HonuaMobileBuildDisplayVersion)' == ''">$(ApplicationDisplayVersion)</HonuaMobileBuildDisplayVersion>
+    <HonuaMobileBuildConfiguration Condition="'$(HonuaMobileBuildConfiguration)' == ''">$(Configuration)</HonuaMobileBuildConfiguration>
+    <HonuaMobileBuildTargetFramework Condition="'$(HonuaMobileBuildTargetFramework)' == ''">$(TargetFramework)</HonuaMobileBuildTargetFramework>
+  </PropertyGroup>
+
+  <Target Name="ValidateHonuaMobileBuildEnvironment" BeforeTargets="GenerateAssemblyInfo">
+    <Error
+      Condition="'$(Configuration)' == 'Debug' and ('$(HonuaMobileBuildEnvironment)' == 'production' or '$(HonuaMobileBuildEnvironment)' == 'Production' or '$(HonuaMobileBuildEnvironment)' == 'prod' or '$(HonuaMobileBuildEnvironment)' == 'Prod' or '$(HonuaMobileBuildEnvironment)' == 'ios-production')"
+      Text="Debug mobile builds cannot be stamped with a production HonuaMobileBuildEnvironment." />
+  </Target>
+
+  <ItemGroup Condition="'$(HonuaMobileStampAssemblyMetadata)' != 'false'">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.BuildEnvironment</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildEnvironment)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.Repository</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildRepository)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.Branch</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildBranch)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.CommitSha</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildSha)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.WorkflowRunNumber</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildRunNumber)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.WorkflowRunId</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildRunId)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.WorkflowRunAttempt</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildRunAttempt)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.BuildNumber</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildNumber)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.ApplicationDisplayVersion</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildDisplayVersion)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.Configuration</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildConfiguration)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.TargetFramework</_Parameter1>
+      <_Parameter2>$(HonuaMobileBuildTargetFramework)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>HonuaMobile.ApiBaseUrl</_Parameter1>
+      <_Parameter2>$(HonuaMobileApiBaseUrl)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

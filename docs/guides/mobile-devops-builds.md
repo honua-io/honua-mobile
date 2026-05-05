@@ -52,9 +52,25 @@ APK workflow emits this metadata beside the APK:
 | `artifact_name` | Deterministic artifact name |
 | `apk_name` | Copied APK filename inside the artifact |
 
-For this CI/docs slice of #84, metadata is attached to the build artifact.
-Future in-app diagnostics work can surface the same fields inside the app
-without changing the artifact naming contract.
+The FieldCollection app also stamps these fields into assembly metadata through
+`build/Honua.Mobile.BuildMetadata.props`. The Settings screen and exported
+diagnostic report surface the version, repository, branch, commit SHA, workflow
+run, environment, and any embedded service endpoint metadata.
+
+Workflows stamp the app with MSBuild properties:
+
+| MSBuild property | Purpose |
+| --- | --- |
+| `ApplicationDisplayVersion` | User-visible version string. |
+| `ApplicationVersion` | Platform build number/version code. |
+| `HonuaMobileBuildEnvironment` | `dev`, `staging`, `production`, or a named protected lane such as `ios-testflight`. |
+| `HonuaMobileBuildRepository` | GitHub repository, usually `github.repository`. |
+| `HonuaMobileBuildBranch` | Source branch/ref name. |
+| `HonuaMobileBuildSha` | Full source commit SHA. |
+| `HonuaMobileBuildRunNumber` | Monotonic workflow run number for the lane. |
+| `HonuaMobileBuildRunId` | GitHub workflow run ID for direct traceability. |
+| `HonuaMobileBuildRunAttempt` | Retry attempt for the run, when available. |
+| `HonuaMobileApiBaseUrl` | Optional embedded service endpoint metadata. Leave blank when testers enter the server URL manually. |
 
 ## Version Numbers
 
@@ -71,15 +87,19 @@ version code.
 
 The debug APK workflow does not offer a production environment option. The
 allowed values are `dev`, `staging`, and `custom-nonprod`; the API base URL is a
-required HTTPS input.
+required HTTPS input for install notes and artifact metadata.
 
 The workflow refuses to build when endpoint metadata is blank, non-HTTPS, or
 matches production-looking Honua hosts such as `api.honua.io`, `honua.io`,
 `www.honua.io`, `prod.*`, or `production.*`. That keeps phone artifacts from
 quietly defaulting to production metadata.
 
-The current FieldCollection app stores the server URL only after the tester
-enters it in the app. Debug artifacts therefore ship with install notes and
-metadata that point testers to the selected non-production endpoint, rather
-than embedding a production default. Production endpoint selection belongs in a
-separate signed release lane with explicit release-owner approval.
+The FieldCollection app stores the server URL only after the tester enters it in
+the app unless `HonuaMobileApiBaseUrl` is explicitly supplied during build.
+Blank endpoint metadata is displayed as "no endpoint embedded" and never falls
+back to production. Debug builds stamped with a production environment fail at
+build time, and the runtime endpoint policy marks production-looking Honua hosts
+invalid for non-production environments.
+
+Production endpoint selection belongs in a separate signed release lane with
+explicit release-owner approval.

@@ -85,6 +85,75 @@ before the SDK geometry contracts have graduated. The safer shape is:
 - benchmark pan/zoom refresh, offline GeoPackage layer loading, and annotation
   redraw before making Mapsui the default renderer.
 
+## Native Scene Anchoring Adapter
+
+`Honua.Mobile.Maui.SceneAnchoring` provides the mobile-owned boundary for #38
+and #23 native AR anchoring work. It does not define scene metadata, package
+manifests, geometry primitives, or server clients. Apps resolve scenes and
+packages through `Honua.Sdk.*`, then pass scene/package IDs and mobile runtime
+state into the platform adapter.
+
+- `IHonuaNativeArSceneAnchorAdapter` is the ARKit/ARCore boundary implemented by
+  app or platform packages.
+- `HonuaNativeArSceneAnchoringController` checks support, starts the native
+  session, handles app background/resume/stop transitions, and evaluates
+  readiness for mobile UX gates.
+- `HonuaNativeArReadiness` gates coarse rendering, evidence capture, and
+  precision tools from runtime status, horizontal/yaw accuracy, package state,
+  control-point count, and calibration residual.
+- `HonuaNativeArSceneAnchorRequest` carries scene id, scene revision, optional
+  offline package id, selected anchoring mode, and control-point IDs. The SDK or
+  app remains responsible for resolving the authoritative scene/package data.
+
+```csharp
+using Honua.Mobile.Maui;
+using Honua.Mobile.Maui.SceneAnchoring;
+
+builder.Services
+    .AddSingleton<IHonuaNativeArSceneAnchorAdapter, AndroidArCoreSceneAnchorAdapter>()
+    .AddHonuaNativeSceneAnchoring(new HonuaNativeArSessionOptions
+    {
+        CoarsePreviewHorizontalAccuracyMeters = 10,
+        SiteReviewHorizontalAccuracyMeters = 2,
+        PrecisionCalibrationResidualMeters = 0.5,
+    });
+```
+
+```csharp
+var readiness = await sceneAnchoring.StartAsync(
+    new HonuaNativeArSceneAnchorRequest
+    {
+        SceneId = sceneId,
+        SceneRevision = sceneRevision,
+        PackageId = packageId,
+        IsOffline = packageId is not null,
+        PreferredAnchoringMode = HonuaNativeArAnchoringMode.PlatformGeospatial,
+        ControlPointIds = selectedControlPointIds,
+    },
+    ct);
+
+if (readiness.CanRenderOverlay)
+{
+    // Render through the app's native AR adapter with the readiness state visible in the UI.
+}
+```
+
+Lifecycle integration:
+
+```csharp
+await sceneAnchoring.HandleAppLifecycleAsync(
+    HonuaNativeArAppLifecycleEvent.EnteringBackground,
+    ct);
+
+await sceneAnchoring.HandleAppLifecycleAsync(
+    HonuaNativeArAppLifecycleEvent.ResumingForeground,
+    ct);
+```
+
+GPS-only readiness never enables precision tools. Offline rendering requires a
+valid package state, and stale, expired, partial, or revoked packages block AR
+overlays until the package is refreshed.
+
 ## Device Location and Geofencing
 
 `Honua.Mobile.Maui.Location` owns mobile runtime acquisition behavior while
@@ -100,6 +169,9 @@ leaving platform APIs behind app-provided adapters:
   OS geofencing facilities.
 - `HonuaDeviceLocationCoordinator` enforces permission order and validates
   request options before invoking the platform adapters.
+- `HonuaBackgroundLocationLifecycleController` owns the active background
+  session/geofence lifecycle, including suspend shutdown and battery-saver
+  deferral.
 
 ```csharp
 builder.Services
@@ -138,6 +210,29 @@ await using var session = await locations.StartBackgroundUpdatesAsync(
     ct);
 ```
 
+Lifecycle-managed background runtime:
+
+```csharp
+await backgroundLocation.StartAsync(
+    new HonuaBackgroundLocationLifecycleRequest
+    {
+        BackgroundUpdates = new HonuaBackgroundLocationOptions
+        {
+            Accuracy = HonuaLocationAccuracy.Balanced,
+            MinimumInterval = TimeSpan.FromMinutes(5),
+            MinimumDistanceMeters = 25,
+            AllowBatterySaverDeferral = true,
+            Purpose = "offline field workflow updates",
+        },
+        Geofences = jobSiteGeofences,
+    },
+    ct);
+
+await backgroundLocation.HandleLifecycleEventAsync(
+    HonuaLocationLifecycleEvent.BatterySaverEnabled,
+    ct);
+```
+
 Geofence registration:
 
 ```csharp
@@ -161,6 +256,12 @@ await locations.StartGeofencingAsync(
     ct);
 ```
 
+Native geofence transitions are forwarded through
+`HonuaDeviceLocationCoordinator.GeofenceTransitioned`. Enter, exit, dwell, and
+proximity signals remain mobile acquisition events; map them into SDK geofence
+evaluation/event contracts at the adapter edge once those contracts are present
+in the consumed `Honua.Sdk.*` packages.
+
 ### Lifecycle Rules
 
 - Request foreground permission before one-shot foreground capture.
@@ -169,8 +270,24 @@ await locations.StartGeofencingAsync(
   access.
 - Keep platform-specific permission copy, manifest entries, foreground service
   notifications, and background mode declarations in the app layer.
+- Route app suspend, foreground/background, battery-saver, and shutdown signals
+  into `HonuaBackgroundLocationLifecycleController` when the workflow needs a
+  managed background runtime.
+- Let `AllowBatterySaverDeferral` pause active background updates/geofences and
+  restart them when battery saver is disabled. Set it to `false` only for
+  workflows with an explicit product requirement to keep native monitoring
+  active through power-saver mode.
 - Use OS geofencing APIs for enter, exit, and dwell detection. This package does
   not implement geometry predicates or distance checks.
 - Dispose the background session when the workflow no longer needs updates.
 - Map `HonuaDeviceLocation` into SDK field, routing, or future geometry
   contracts at the adapter edge when those SDK contracts are available.
+
+### SDK Versus Native Ownership
+
+| Behavior | Owner |
+|----------|-------|
+| Geofence rule models, geometry predicates, buffers, CRS transforms, and portable event evaluation | `honua-sdk-dotnet` packages |
+| iOS/Android permission prompts, manifest/background mode declarations, foreground services, and native sensor acquisition | Mobile app/platform adapters |
+| Background session lifecycle, suspend/shutdown behavior, battery-saver deferral, and OS geofence start/stop | `Honua.Mobile.Maui.Location` |
+| Mapping native enter/exit/dwell/proximity events into SDK event contracts | Mobile adapter edge after the SDK contracts are available |
