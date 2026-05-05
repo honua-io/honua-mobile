@@ -18,19 +18,30 @@ Inputs:
 - `channel`: `internal-testing` for the Play internal testing track, or
   `internal-app-sharing` for a direct Internal App Sharing install link.
 - `artifact_type`: `aab` or `apk`.
-- `app_project`: MAUI app project to publish. The default builds
-  `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj`.
+- `app_target`: known Android app target to publish. The workflow maps this
+  to a MAUI project, Google Play package name, and per-app signing secrets.
+  The default `field-collection` target builds
+  `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj`
+  with package name `io.honua.mobile.fieldcollection`.
 - `version_name`: tester-facing application display version.
 - `version_code`: Android application version code. Leave blank to use the
   GitHub run number. For Play track uploads, this must be higher than any
   version code already active for the package.
 - `release_notes`: short tester-facing release summary.
 
-The workflow checks out the selected ref, installs the Android MAUI workload,
-publishes a signed release artifact, calculates a SHA-256 digest, stores the
-artifact on the workflow run, uploads to the selected internal Play channel, and
-writes a run summary with the version, commit SHA, environment, artifact name,
-and digest.
+The workflow checks out the selected ref, resolves the selected app target,
+installs the Android MAUI workload, validates the project `ApplicationId`
+against the expected Google Play package name, publishes a signed release
+artifact, calculates a SHA-256 digest, stores the artifact on the workflow run,
+uploads to the selected internal Play channel, and writes a run summary with the
+version, commit SHA, environment, package name, artifact name, and digest.
+
+Known Android app targets:
+
+| `app_target` | Project | Package name | Signing secret stem |
+| --- | --- | --- | --- |
+| `field-collection` | `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj` | `io.honua.mobile.fieldcollection` | `ANDROID_FIELD_COLLECTION_UPLOAD` |
+| `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `ANDROID_APP_UPLOAD` |
 
 ## Required Environment
 
@@ -40,13 +51,28 @@ environment before adding upload credentials.
 
 Required environment secrets:
 
-- `ANDROID_KEYSTORE_BASE64`: base64-encoded Android signing keystore.
-- `ANDROID_KEYSTORE_PASSWORD`: keystore password.
-- `ANDROID_KEY_ALIAS`: signing key alias.
-- `ANDROID_KEY_PASSWORD`: signing key password.
-- `ANDROID_PACKAGE_NAME`: Google Play package name, for example
-  `io.honua.mobile.fieldcollection`.
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`: full Google Play service account JSON.
+- `<SIGNING_SECRET_STEM>_KEYSTORE_BASE64`: base64-encoded Android
+  signing keystore for the selected app target.
+- `<SIGNING_SECRET_STEM>_KEYSTORE_PASSWORD`: keystore password.
+- `<SIGNING_SECRET_STEM>_KEY_ALIAS`: signing key alias.
+- `<SIGNING_SECRET_STEM>_KEY_PASSWORD`: signing key password.
+
+For the default `field-collection` target, configure these signing secrets:
+
+- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD`
+- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS`
+- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD`
+
+For the `mobile-app` target, configure the equivalent
+`ANDROID_APP_UPLOAD_*` signing secrets. These names match
+`docs/guides/mobile-store-prereqs.md`.
+
+Do not configure a free-form Android package-name secret for this workflow. The
+package name is derived from `app_target`, and the workflow fails before restore,
+signing, or upload if the selected project's `ApplicationId` differs from that
+expected package name.
 
 Optional environment variable:
 
