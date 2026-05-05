@@ -38,10 +38,10 @@ public sealed class HonuaNativeArSceneAnchoringController
             return CreateReadiness(HonuaNativeArReadinessLevel.Unsupported, supportBlockers, []);
         }
 
+        var status = await _adapter.StartSessionAsync(request, ct).ConfigureAwait(false);
         _activeRequest = request;
         _resumeAfterLifecyclePause = false;
 
-        var status = await _adapter.StartSessionAsync(request, ct).ConfigureAwait(false);
         return EvaluateReadiness(status, request, _options);
     }
 
@@ -308,7 +308,14 @@ public sealed class HonuaNativeArSceneAnchoringController
             return false;
         }
 
-        if (status.Accuracy.YawAccuracyDegrees > options.SiteReviewYawAccuracyDegrees)
+        var yawAccuracy = status.Accuracy.YawAccuracyDegrees;
+        if (yawAccuracy is null)
+        {
+            warnings.Add("Yaw accuracy is not available for site review.");
+            return false;
+        }
+
+        if (yawAccuracy.Value > options.SiteReviewYawAccuracyDegrees)
         {
             warnings.Add("Yaw accuracy is not sufficient for site review.");
             return false;

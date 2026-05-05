@@ -53,6 +53,21 @@ public sealed class HonuaNativeSceneAnchoringTests
     }
 
     [Fact]
+    public async Task StartAsync_WhenAdapterStartFails_DoesNotLeaveActiveSession()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartException = new ApplicationException("Native AR session failed to start."),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await Assert.ThrowsAsync<ApplicationException>(async () => await controller.StartAsync(CreateRequest()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await controller.RefreshReadinessAsync());
+        Assert.Equal(0, adapter.GetStatusCalls);
+    }
+
+    [Fact]
     public void EvaluateReadiness_GpsOnlyAnchoringNeverEnablesPrecisionTools()
     {
         var request = CreateRequest(
@@ -88,6 +103,21 @@ public sealed class HonuaNativeSceneAnchoringTests
         Assert.Equal(HonuaNativeArReadinessLevel.Blocked, readiness.Level);
         Assert.False(readiness.CanRenderOverlay);
         Assert.Contains(readiness.Blockers, blocker => blocker.Contains("Expired", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EvaluateReadiness_MissingYawAccuracyDoesNotEnableSiteReview()
+    {
+        var readiness = HonuaNativeArSceneAnchoringController.EvaluateReadiness(
+            CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.PlatformGeospatial,
+                horizontalAccuracyMeters: 1,
+                yawAccuracyDegrees: null),
+            CreateRequest());
+
+        Assert.Equal(HonuaNativeArReadinessLevel.CoarsePreview, readiness.Level);
+        Assert.False(readiness.CanCaptureEvidence);
+        Assert.Contains(readiness.Warnings, warning => warning.Contains("Yaw accuracy", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -239,6 +269,8 @@ public sealed class HonuaNativeSceneAnchoringTests
 
         public HonuaNativeArSessionStatus StartStatus { get; init; } = CreateStatus();
 
+        public Exception? StartException { get; init; }
+
         public HonuaNativeArSessionStatus PauseStatus { get; init; } = CreateStatus(
             state: HonuaNativeArSessionState.Paused,
             trackingState: HonuaNativeArTrackingState.Paused);
@@ -262,6 +294,11 @@ public sealed class HonuaNativeSceneAnchoringTests
             HonuaNativeArSceneAnchorRequest request,
             CancellationToken ct = default)
         {
+            if (StartException is not null)
+            {
+                throw StartException;
+            }
+
             StartRequests.Add(request);
             return ValueTask.FromResult(StartStatus);
         }
