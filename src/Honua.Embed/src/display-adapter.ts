@@ -144,15 +144,59 @@ export interface HonuaDeckOverlayOptions
   layers?: Layer[];
 }
 
+export type HonuaMapViewCenter =
+  | [number, number]
+  | { longitude: number; latitude: number }
+  | { lng: number; lat: number };
+
+export interface HonuaMapViewOptions {
+  center?: HonuaMapViewCenter | null;
+  zoom?: number | null;
+  bounds?: HonuaDisplayBounds | null;
+  fitOptions?: HonuaMapFitBoundsOptions;
+  jumpOptions?: HonuaMapJumpToOptions;
+}
+
+export interface HonuaMapFitBoundsOptions {
+  padding?: number | {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+  };
+  maxZoom?: number;
+  duration?: number;
+  essential?: boolean;
+  [key: string]: unknown;
+}
+
+export interface HonuaMapJumpToOptions {
+  center?: [number, number];
+  zoom?: number;
+  [key: string]: unknown;
+}
+
 export interface HonuaMapLibreLike {
   addControl(control: unknown, position?: string): unknown;
   removeControl?(control: unknown): unknown;
+  fitBounds?(
+    bounds: [[number, number], [number, number]],
+    options?: HonuaMapFitBoundsOptions,
+  ): unknown;
+  jumpTo?(options: HonuaMapJumpToOptions): unknown;
 }
 
 export interface HonuaWebDisplayAdapterOptions
   extends HonuaDeckOverlayOptions {
   controlPosition?: string;
 }
+
+export type HonuaFeatureQueryLayerOptions =
+  | HonuaGeoJsonLayerOptions
+  | ((
+    result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
+    index: number,
+  ) => HonuaGeoJsonLayerOptions);
 
 export class HonuaWebDisplayAdapter {
   readonly #map: HonuaMapLibreLike;
@@ -181,6 +225,48 @@ export class HonuaWebDisplayAdapter {
     this.#overlay.setProps({ layers: this.#layers });
   }
 
+  setView(view: HonuaMapViewOptions): boolean {
+    if (view.bounds && this.#map.fitBounds) {
+      this.#map.fitBounds(boundsToLngLatBounds(view.bounds), view.fitOptions);
+      return true;
+    }
+
+    const jumpOptions: HonuaMapJumpToOptions = {
+      ...(view.jumpOptions ?? {}),
+    };
+    const center = normalizeCenter(view.center);
+
+    if (center) {
+      jumpOptions.center = center;
+    }
+
+    if (typeof view.zoom === 'number' && Number.isFinite(view.zoom)) {
+      jumpOptions.zoom = view.zoom;
+    }
+
+    if ((jumpOptions.center || jumpOptions.zoom !== undefined) && this.#map.jumpTo) {
+      this.#map.jumpTo(jumpOptions);
+      return true;
+    }
+
+    return false;
+  }
+
+  fitToSource(
+    source: HonuaDisplaySourceDescriptor | HonuaDisplayFeatureCollection,
+    fitOptions?: HonuaMapFitBoundsOptions,
+  ): boolean {
+    const bounds = isFeatureCollection(source)
+      ? (source as HonuaDisplayFeatureCollection).honua?.extent
+      : source.extent;
+
+    if (!bounds) {
+      return false;
+    }
+
+    return this.setView({ bounds, fitOptions });
+  }
+
   setFeatureQueryResult(
     result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
     options: HonuaGeoJsonLayerOptions = {},
@@ -193,6 +279,16 @@ export class HonuaWebDisplayAdapter {
     ]);
 
     return layer;
+  }
+
+  setFeatureQueryResults(
+    results: Array<HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>>,
+    options: HonuaFeatureQueryLayerOptions = {},
+  ): Layer[] {
+    return results.map((result, index) => this.setFeatureQueryResult(
+      result,
+      typeof options === 'function' ? options(result, index) : options,
+    ));
   }
 
   setFeatureStreamEvent(
@@ -215,6 +311,34 @@ export class HonuaWebDisplayAdapter {
     ]);
 
     return layer;
+  }
+
+  getFeatureCollection(id: string): HonuaDisplayFeatureCollection | undefined {
+    return this.#featureCollections.get(id);
+  }
+
+  removeLayer(id: string): boolean {
+    const nextLayers = this.#layers.filter((layer) => layer.id !== id);
+    const removed = nextLayers.length !== this.#layers.length;
+
+    if (!removed) {
+      return false;
+    }
+
+    this.#featureCollections.delete(id);
+    this.setLayers(nextLayers);
+    return true;
+  }
+
+  clearFeatureLayers(): void {
+    const featureLayerIds = new Set(this.#featureCollections.keys());
+
+    if (featureLayerIds.size === 0) {
+      return;
+    }
+
+    this.#featureCollections.clear();
+    this.setLayers(this.#layers.filter((layer) => !featureLayerIds.has(layer.id)));
   }
 
   destroy(): void {
@@ -422,6 +546,36 @@ function buildLayerId(source: HonuaDisplaySourceDescriptor | null | undefined): 
   }
 
   return `honua-${source.id.trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'features'}`;
+}
+
+function boundsToLngLatBounds(bounds: HonuaDisplayBounds): [[number, number], [number, number]] {
+  return [
+    [bounds.minLongitude, bounds.minLatitude],
+    [bounds.maxLongitude, bounds.maxLatitude],
+  ];
+}
+
+function normalizeCenter(center: HonuaMapViewCenter | null | undefined): [number, number] | null {
+  if (!center) {
+    return null;
+  }
+
+  if (Array.isArray(center)) {
+    const [longitude, latitude] = center;
+    return Number.isFinite(longitude) && Number.isFinite(latitude)
+      ? [longitude, latitude]
+      : null;
+  }
+
+  if ('longitude' in center && Number.isFinite(center.longitude) && Number.isFinite(center.latitude)) {
+    return [center.longitude, center.latitude];
+  }
+
+  if ('lng' in center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
+    return [center.lng, center.lat];
+  }
+
+  return null;
 }
 
 function resolveQuerySource(

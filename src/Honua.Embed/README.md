@@ -45,7 +45,14 @@ const display = new HonuaWebDisplayAdapter(map);
 display.setFeatureQueryResult(featureQueryResultPage, {
   source: sourceDescriptor,
 });
+display.fitToSource(sourceDescriptor, { padding: 32 });
 ```
+
+The adapter keeps MapLibre responsible for the base map and camera while deck.gl
+owns Honua feature overlays. Use `setView(...)` for imperative center/zoom or
+bounds changes, `setFeatureQueryResults(...)` for query batches,
+`getFeatureCollection(...)` for cached GeoJSON, and `removeLayer(...)` or
+`clearFeatureLayers()` when a host screen changes active sources.
 
 ## Scene Use
 
