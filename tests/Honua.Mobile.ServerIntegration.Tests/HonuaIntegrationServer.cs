@@ -167,6 +167,18 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
             }
             """));
 
+        app.MapGet("/rest/services/{serviceId}/FeatureServer/{layerId:int}", () => Json("""
+            {
+              "objectIdField": "objectid",
+              "objectIdFieldName": "objectid",
+              "fields": [
+                { "name": "objectid", "type": "esriFieldTypeOID" },
+                { "name": "name", "type": "esriFieldTypeString" },
+                { "name": "status", "type": "esriFieldTypeString" }
+              ]
+            }
+            """));
+
         app.MapGet("/rest/services/{serviceId}/FeatureServer/{layerId:int}/query", (
             string serviceId,
             int layerId) => Json("""
