@@ -205,22 +205,17 @@ public sealed class HonuaBackgroundLocationLifecycleController : IDisposable, IA
     {
         var session = _session;
         var activeRegionIds = _activeRegionIds;
-        _session = null;
-        _activeRegionIds = [];
 
-        try
+        if (activeRegionIds.Count > 0)
         {
-            if (activeRegionIds.Count > 0)
-            {
-                await _locations.StopGeofencingAsync(activeRegionIds, ct).ConfigureAwait(false);
-            }
+            await _locations.StopGeofencingAsync(activeRegionIds, ct).ConfigureAwait(false);
+            _activeRegionIds = [];
         }
-        finally
+
+        if (session is not null)
         {
-            if (session is not null)
-            {
-                await session.DisposeAsync().ConfigureAwait(false);
-            }
+            await session.DisposeAsync().ConfigureAwait(false);
+            _session = null;
         }
 
         if (reason != HonuaBackgroundLocationStopReason.Restarting)

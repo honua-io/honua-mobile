@@ -246,6 +246,44 @@ public sealed class HonuaDeviceLocationTests
     }
 
     [Fact]
+    public async Task BackgroundLocationLifecycleController_StopAsync_WhenGeofenceStopFails_RetainsActiveRuntimeForRetry()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaBackgroundLocationLifecycleController(coordinator);
+
+        await controller.StartAsync(new HonuaBackgroundLocationLifecycleRequest
+        {
+            Geofences = CreateGeofenceRequest(),
+        });
+        var session = backgroundProvider.Sessions.Single();
+        monitor.StopException = new InvalidOperationException("native geofence stop failed");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await controller.StopAsync());
+
+        Assert.Equal("native geofence stop failed", ex.Message);
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Running, controller.State);
+        Assert.False(session.IsDisposed);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Single());
+
+        await controller.StopAsync();
+
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Stopped, controller.State);
+        Assert.True(session.IsDisposed);
+        Assert.Equal(2, monitor.StoppedRegionIds.Count);
+        Assert.Equal(["job-site"], monitor.StoppedRegionIds.Last());
+    }
+
+    [Fact]
     public async Task BackgroundLocationLifecycleController_Suspended_StopsAndClearsRequestedRuntime()
     {
         var backgroundProvider = new RecordingBackgroundLocationProvider();
@@ -417,6 +455,8 @@ public sealed class HonuaDeviceLocationTests
 
         public List<IReadOnlyList<string>> StoppedRegionIds { get; } = [];
 
+        public Exception? StopException { get; set; }
+
         public void Emit(HonuaGeofenceTransition transition)
             => Transitioned?.Invoke(this, transition);
 
@@ -433,6 +473,14 @@ public sealed class HonuaDeviceLocationTests
             CancellationToken ct = default)
         {
             StoppedRegionIds.Add(regionIds);
+
+            if (StopException is not null)
+            {
+                var exception = StopException;
+                StopException = null;
+                throw exception;
+            }
+
             return ValueTask.CompletedTask;
         }
     }
