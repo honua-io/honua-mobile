@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.Maui.Diagnostics;
@@ -9,8 +10,6 @@ namespace Honua.Mobile.Maui.Diagnostics;
 /// </summary>
 public sealed class FileMobileExceptionReportQueue : IMobileExceptionReportQueue
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-
     private readonly MobileExceptionReportingOptions _options;
     private readonly ILogger<FileMobileExceptionReportQueue>? _logger;
 
@@ -31,7 +30,7 @@ public sealed class FileMobileExceptionReportQueue : IMobileExceptionReportQueue
         Directory.CreateDirectory(directory);
 
         var path = Path.Combine(directory, $"{report.OccurredAtUtc:yyyyMMddHHmmssfff}-{report.Id}.json");
-        var json = JsonSerializer.Serialize(report, SerializerOptions);
+        var json = JsonSerializer.Serialize(report, HonuaMobileMauiDiagnosticsJsonContext.Default.MobileExceptionReport);
         await File.WriteAllTextAsync(path, json, cancellationToken);
         TrimQueue(directory);
     }
@@ -53,7 +52,7 @@ public sealed class FileMobileExceptionReportQueue : IMobileExceptionReportQueue
             try
             {
                 var json = await File.ReadAllTextAsync(path, cancellationToken);
-                report = JsonSerializer.Deserialize<MobileExceptionReport>(json, SerializerOptions);
+                report = JsonSerializer.Deserialize(json, HonuaMobileMauiDiagnosticsJsonContext.Default.MobileExceptionReport);
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
             {
@@ -122,3 +121,9 @@ public sealed class FileMobileExceptionReportQueue : IMobileExceptionReportQueue
         }
     }
 }
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(MobileExceptionReport))]
+[JsonSerializable(typeof(MobileExceptionReportMetadata))]
+[JsonSerializable(typeof(Dictionary<string, string?>))]
+internal sealed partial class HonuaMobileMauiDiagnosticsJsonContext : JsonSerializerContext;
