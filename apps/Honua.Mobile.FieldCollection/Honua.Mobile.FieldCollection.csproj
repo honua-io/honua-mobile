@@ -93,4 +93,6 @@
         <PackageReference Include="Honua.Mobile.Maui" Version="1.0.0-preview.1" />
     </ItemGroup>
 
+    <Import Project="../../build/Honua.Mobile.BuildMetadata.props" />
+
 </Project>

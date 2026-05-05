@@ -76,4 +76,6 @@
 	  <ProjectReference Include="..\..\src\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
 	</ItemGroup>
 
+	<Import Project="..\..\build\Honua.Mobile.BuildMetadata.props" />
+
 </Project>

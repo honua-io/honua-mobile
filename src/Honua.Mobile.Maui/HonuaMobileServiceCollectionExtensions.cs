@@ -3,6 +3,7 @@ using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.Display;
 using Honua.Mobile.Maui.Location;
+using Honua.Mobile.Maui.SceneAnchoring;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
@@ -353,6 +354,24 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the native AR scene anchoring controller.
+    /// Applications must also register an <see cref="IHonuaNativeArSceneAnchorAdapter"/> for ARKit or ARCore.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Optional readiness thresholds for the AR workflow.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaNativeSceneAnchoring(
+        this IServiceCollection services,
+        HonuaNativeArSessionOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(options ?? new HonuaNativeArSessionOptions());
+        services.AddSingleton<HonuaNativeArSceneAnchoringController>();
+        return services;
+    }
+
+    /// <summary>
     /// Registers device location orchestration over app-provided native permission and location adapters.
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -366,6 +385,9 @@ public static class HonuaMobileServiceCollectionExtensions
             sp.GetRequiredService<IHonuaDeviceLocationProvider>(),
             sp.GetService<IHonuaBackgroundLocationProvider>(),
             sp.GetService<IHonuaGeofenceMonitor>()));
+        services.AddSingleton(sp => new HonuaBackgroundLocationLifecycleController(
+            sp.GetRequiredService<HonuaDeviceLocationCoordinator>(),
+            sp.GetService<ILogger<HonuaBackgroundLocationLifecycleController>>()));
         return services;
     }
 }

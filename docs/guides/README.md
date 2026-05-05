@@ -14,11 +14,12 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
 | [Mobile Platform Parity Tracks](mobile-platform-parity-tracks.md) | Issue #22 roadmap, parity matrix, priority feature map, and build/release requirements for Flutter and native iOS/Android tracks |
 | [Mobile SDK Backlog Roadmap](mobile-sdk-backlog-roadmap.md) | Epic #1 backlog sequencing, acceptance matrix, dependencies, and closure readiness |
-| [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, Mapsui evaluation, and device location/geofencing lifecycle |
+| [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, scene anchoring adapter, Mapsui evaluation, and device location/geofencing lifecycle |
 | [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
+| [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |
 | [Plugin and Host Extension Boundary](plugin-extension-api.md) | Web embed extension APIs and the SDK/mobile ownership split for plugin work |
 | [Protected 3D Scene Auth](protected-3d-scene-auth.md) | Signed URL, proxy, header, CORS, cache, and revocation policy for protected scene assets |
 | [Scene Controls](scene-controls.md) | `<honua-scene-*>` control surfaces, `HonuaSceneMetadata` schema, and typed scene events |

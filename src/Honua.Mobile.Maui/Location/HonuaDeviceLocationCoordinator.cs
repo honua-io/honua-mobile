@@ -20,7 +20,17 @@ public sealed class HonuaDeviceLocationCoordinator
         _locationProvider = locationProvider ?? throw new ArgumentNullException(nameof(locationProvider));
         _backgroundProvider = backgroundProvider;
         _geofenceMonitor = geofenceMonitor;
+
+        if (_geofenceMonitor is not null)
+        {
+            _geofenceMonitor.Transitioned += OnGeofenceTransitioned;
+        }
     }
+
+    /// <summary>
+    /// Re-emits native geofence transitions after validating the mobile event shape.
+    /// </summary>
+    public event EventHandler<HonuaGeofenceTransition>? GeofenceTransitioned;
 
     /// <summary>
     /// Acquires a single device location after ensuring the requested permission scope is granted.
@@ -87,6 +97,35 @@ public sealed class HonuaDeviceLocationCoordinator
         await _geofenceMonitor.StartMonitoringAsync(request, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Stops native OS geofence monitoring for the supplied region identifiers.
+    /// </summary>
+    /// <param name="regionIds">Region identifiers to stop monitoring.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async ValueTask StopGeofencingAsync(
+        IReadOnlyList<string> regionIds,
+        CancellationToken ct = default)
+    {
+        if (_geofenceMonitor is null)
+        {
+            throw new InvalidOperationException("No geofence monitor is registered.");
+        }
+
+        ArgumentNullException.ThrowIfNull(regionIds);
+
+        if (regionIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var regionId in regionIds)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(regionId);
+        }
+
+        await _geofenceMonitor.StopMonitoringAsync(regionIds, ct).ConfigureAwait(false);
+    }
+
     public static bool PermissionAllows(
         HonuaLocationPermissionStatus status,
         HonuaLocationAccess access)
@@ -98,6 +137,12 @@ public sealed class HonuaDeviceLocationCoordinator
             HonuaLocationAccess.Background => status is HonuaLocationPermissionStatus.Background,
             _ => false,
         };
+    }
+
+    private void OnGeofenceTransitioned(object? sender, HonuaGeofenceTransition transition)
+    {
+        transition.Validate();
+        GeofenceTransitioned?.Invoke(this, transition);
     }
 
     private async ValueTask EnsurePermissionAsync(HonuaLocationAccess access, CancellationToken ct)

@@ -1,4 +1,5 @@
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.FieldCollection.Services.Configuration;
 using System.Text.Json;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Devices;
@@ -17,6 +18,7 @@ public class DiagnosticService
     private readonly ISyncService _syncService;
     private readonly IConnectivityService _connectivityService;
     private readonly IAuthenticationService _authService;
+    private readonly MobileBuildConfiguration _buildConfiguration;
     private readonly ILogger<DiagnosticService>? _logger;
 
     public DiagnosticService(
@@ -24,12 +26,14 @@ public class DiagnosticService
         ISyncService syncService,
         IConnectivityService connectivityService,
         IAuthenticationService authService,
+        MobileBuildConfiguration? buildConfiguration = null,
         ILogger<DiagnosticService>? logger = null)
     {
         _databaseService = databaseService;
         _syncService = syncService;
         _connectivityService = connectivityService;
         _authService = authService;
+        _buildConfiguration = buildConfiguration ?? MobileBuildConfiguration.Empty;
         _logger = logger;
     }
 
@@ -47,6 +51,8 @@ public class DiagnosticService
             Manufacturer = DeviceInfo.Manufacturer,
             DeviceName = DeviceInfo.Name,
             DeviceType = DeviceInfo.DeviceType.ToString(),
+            Build = _buildConfiguration.Metadata,
+            ServiceEndpoint = _buildConfiguration.ServiceEndpoint,
             Timestamp = DateTime.UtcNow
         };
 
@@ -216,6 +222,7 @@ public class DiagnosticService
         {
             GeneratedAt = DateTime.UtcNow,
             AppVersion = GetAppVersion(),
+            Build = _buildConfiguration,
             System = await GetSystemDiagnosticsAsync(),
             Connectivity = await GetConnectivityDiagnosticsAsync(),
             Sync = await GetSyncDiagnosticsAsync(),
@@ -346,6 +353,8 @@ public class SystemDiagnostics
     public double MemoryUsageMB { get; set; }
     public double AvailableMemoryMB { get; set; }
     public DatabaseInfo? DatabaseInfo { get; set; }
+    public MobileBuildMetadata Build { get; set; } = MobileBuildConfiguration.Empty.Metadata;
+    public MobileServiceEndpointConfiguration ServiceEndpoint { get; set; } = MobileBuildConfiguration.Empty.ServiceEndpoint;
     public DateTime Timestamp { get; set; }
 }
 
@@ -400,6 +409,7 @@ public class DiagnosticReport
 {
     public DateTime GeneratedAt { get; set; }
     public string AppVersion { get; set; } = string.Empty;
+    public MobileBuildConfiguration Build { get; set; } = MobileBuildConfiguration.Empty;
     public SystemDiagnostics System { get; set; } = new();
     public ConnectivityDiagnostics Connectivity { get; set; } = new();
     public SyncDiagnostics Sync { get; set; } = new();

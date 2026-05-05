@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Services;
-using Microsoft.Maui.ApplicationModel;
+using Honua.Mobile.FieldCollection.Services.Configuration;
 using Microsoft.Maui.Storage;
 using FieldDeviceInfo = Honua.Mobile.FieldCollection.Models.DeviceInfo;
 
@@ -29,6 +29,9 @@ public partial class SettingsViewModel : BaseViewModel
     private string appVersion = string.Empty;
 
     [ObservableProperty]
+    private MobileBuildConfiguration buildConfiguration = MobileBuildConfiguration.Empty;
+
+    [ObservableProperty]
     private FieldDeviceInfo deviceInfo = new();
 
     [ObservableProperty]
@@ -53,12 +56,14 @@ public partial class SettingsViewModel : BaseViewModel
         INavigationService navigationService,
         IAuthenticationService authService,
         ISettingsService settingsService,
-        IConnectivityService connectivityService)
+        IConnectivityService connectivityService,
+        MobileBuildConfiguration buildConfiguration)
         : base(navigationService)
     {
         _authService = authService;
         _settingsService = settingsService;
         _connectivityService = connectivityService;
+        BuildConfiguration = buildConfiguration;
 
         Title = "Settings";
 
@@ -69,7 +74,7 @@ public partial class SettingsViewModel : BaseViewModel
         // Initialize properties
         UpdateFromAuthService();
         IsOnline = _connectivityService.IsConnected;
-        AppVersion = GetAppVersion();
+        AppVersion = BuildConfiguration.Metadata.VersionDisplay;
         InitializeDeviceInfo();
     }
 
@@ -93,18 +98,6 @@ public partial class SettingsViewModel : BaseViewModel
         IsAuthenticated = _authService.IsAuthenticated;
         UserName = _authService.CurrentUserName ?? "Not signed in";
         ServerUrl = _authService.ServerUrl ?? "Not configured";
-    }
-
-    private string GetAppVersion()
-    {
-        try
-        {
-            return AppInfo.Current.VersionString;
-        }
-        catch
-        {
-            return "1.0.0";
-        }
     }
 
     private void InitializeDeviceInfo()

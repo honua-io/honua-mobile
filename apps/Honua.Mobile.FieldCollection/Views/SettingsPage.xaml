@@ -130,7 +130,7 @@
                     <VerticalStackLayout Spacing="15">
                         <Label Text="Device Information" Style="{StaticResource SectionHeaderStyle}" />
 
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*"
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*"
                               RowSpacing="8" ColumnSpacing="10">
 
                             <Label Grid.Row="0" Grid.Column="0" Text="📱" FontSize="14" />
@@ -152,6 +152,24 @@
                             <Label Grid.Row="4" Grid.Column="0" Text="🆔" FontSize="14" />
                             <Label Grid.Row="4" Grid.Column="1" Text="{Binding DeviceInfo.DeviceId}"
                                    FontSize="10" TextColor="{StaticResource Gray600}" />
+
+                            <Label Grid.Row="5" Grid.Column="0" Text="🏷️" FontSize="14" />
+                            <Label Grid.Row="5" Grid.Column="1"
+                                   Text="{Binding BuildConfiguration.Metadata.SourceDisplay}"
+                                   FontSize="12" TextColor="{StaticResource Gray600}"
+                                   LineBreakMode="TailTruncation" />
+
+                            <Label Grid.Row="6" Grid.Column="0" Text="🏃" FontSize="14" />
+                            <Label Grid.Row="6" Grid.Column="1"
+                                   Text="{Binding BuildConfiguration.Metadata.WorkflowRunDisplay}"
+                                   FontSize="12" TextColor="{StaticResource Gray600}"
+                                   LineBreakMode="TailTruncation" />
+
+                            <Label Grid.Row="7" Grid.Column="0" Text="🌐" FontSize="14" />
+                            <Label Grid.Row="7" Grid.Column="1"
+                                   Text="{Binding BuildConfiguration.ServiceEndpoint.DisplayValue}"
+                                   FontSize="12" TextColor="{StaticResource Gray600}"
+                                   LineBreakMode="TailTruncation" />
                         </Grid>
                     </VerticalStackLayout>
                 </Frame>

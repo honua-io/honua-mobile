@@ -34,6 +34,41 @@ public enum HonuaLocationAccuracy
 }
 
 /// <summary>
+/// Mobile lifecycle or power event that can affect native background location work.
+/// </summary>
+public enum HonuaLocationLifecycleEvent
+{
+    EnteredForeground,
+    EnteredBackground,
+    Suspended,
+    BatterySaverEnabled,
+    BatterySaverDisabled,
+    Shutdown,
+}
+
+/// <summary>
+/// Runtime state for the mobile-owned background location lifecycle controller.
+/// </summary>
+public enum HonuaBackgroundLocationRuntimeState
+{
+    Stopped,
+    Running,
+    DeferredForBatterySaver,
+}
+
+/// <summary>
+/// Reason an active background location runtime was stopped.
+/// </summary>
+public enum HonuaBackgroundLocationStopReason
+{
+    UserStopped,
+    Restarting,
+    LifecycleSuspended,
+    BatterySaver,
+    Shutdown,
+}
+
+/// <summary>
 /// Device location fix acquired from a native platform provider.
 /// </summary>
 public sealed record HonuaDeviceLocation
@@ -221,6 +256,7 @@ public enum HonuaGeofenceTransitionKind
     Enter,
     Exit,
     Dwell,
+    Proximity,
 }
 
 /// <summary>
@@ -235,6 +271,39 @@ public sealed record HonuaGeofenceTransition
     public HonuaDeviceLocation? Location { get; init; }
 
     public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;
+
+    public void Validate()
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(RegionId);
+        Location?.Validate();
+    }
+}
+
+/// <summary>
+/// Desired native background location runtime configuration.
+/// </summary>
+public sealed record HonuaBackgroundLocationLifecycleRequest
+{
+    public HonuaBackgroundLocationOptions? BackgroundUpdates { get; init; } = new();
+
+    public HonuaGeofenceMonitoringRequest? Geofences { get; init; }
+
+    public bool AllowBatterySaverDeferral { get; init; } = true;
+
+    public IReadOnlyDictionary<string, object?> Metadata { get; init; } = new Dictionary<string, object?>();
+
+    public void Validate()
+    {
+        if (BackgroundUpdates is null && Geofences is null)
+        {
+            throw new ArgumentException(
+                "Background location lifecycle requires background updates, geofences, or both.",
+                nameof(HonuaBackgroundLocationLifecycleRequest));
+        }
+
+        BackgroundUpdates?.Validate();
+        Geofences?.Validate();
+    }
 }
 
 /// <summary>
