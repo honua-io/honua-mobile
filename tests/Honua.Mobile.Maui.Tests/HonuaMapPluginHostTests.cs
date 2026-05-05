@@ -44,6 +44,24 @@ public sealed class HonuaMapPluginHostTests
     }
 
     [Fact]
+    public async Task ActivateAsync_TreatsNullPluginRegistrationAsActivationFailure()
+    {
+        var services = new ServiceCollection()
+            .AddHonuaMapPluginHost();
+        services.AddSingleton<IHonuaMapPlugin>(_ => null!);
+        services.AddSingleton<IHonuaMapPlugin>(new RecordingMapPlugin("healthy"));
+        using var provider = services.BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal("<null>", failure.PluginId);
+        Assert.Equal("Map plugin registration resolved to null.", failure.Message);
+        Assert.IsType<InvalidOperationException>(failure.Exception);
+        Assert.Equal("healthy", Assert.Single(report.ActivatedPlugins).Id);
+    }
+
+    [Fact]
     public async Task ActivateAsync_TreatsDuplicateContributionAsPluginFailure()
     {
         using var provider = new ServiceCollection()

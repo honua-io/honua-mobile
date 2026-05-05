@@ -57,6 +57,15 @@ public sealed class HonuaMapPluginHost
         {
             ct.ThrowIfCancellationRequested();
 
+            if (plugin is null)
+            {
+                var ex = new InvalidOperationException("Map plugin registration resolved to null.");
+                const string pluginId = "<null>";
+                _logger?.LogError(ex, "Map plugin {PluginId} failed during activation.", pluginId);
+                failures.Add(new HonuaMapPluginActivationFailure(pluginId, ex.Message, ex));
+                continue;
+            }
+
             try
             {
                 var descriptor = plugin.Descriptor;
