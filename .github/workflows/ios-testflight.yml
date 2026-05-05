@@ -119,9 +119,18 @@ jobs:
           xcode_developer_dir="$(xcode-select -p)"
           xcodebuild_bin="${xcode_developer_dir}/usr/bin/xcodebuild"
           macos_sdk="${xcode_developer_dir}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
-          if ! "${xcodebuild_bin}" -sdk "${macos_sdk}" -find actool; then
+          if ! "${xcodebuild_bin}" -sdk "${macos_sdk}" -find actool > /tmp/actool-path 2> /tmp/actool-error; then
             echo "::error::The selected GitHub-hosted Xcode image does not expose actool through the selected Xcode asset-tool lookup."
+            cat /tmp/actool-error
             echo "::error::TestFlight uploads require a runner image with a complete Apple asset compiler toolchain."
+            exit 1
+          fi
+
+          actool_path="$(head -n 1 /tmp/actool-path)"
+          echo "${actool_path}"
+          if [[ -z "${actool_path}" || "${actool_path}" != "${xcode_developer_dir}/"* ]]; then
+            echo "::error::actool resolved outside the selected Xcode developer directory (${actool_path:-<empty>})."
+            echo "::error::TestFlight uploads require the selected Xcode image to contain the Apple asset compiler used by the .NET iOS workload."
             exit 1
           fi
 
