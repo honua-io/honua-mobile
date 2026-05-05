@@ -183,6 +183,10 @@ function createIframeSrc(
 
   const query = url.searchParams.toString();
   const hash = url.hash;
+  if (isProtocolRelativeUrl(iframeUrl)) {
+    return `//${url.host}${url.pathname}${query ? `?${query}` : ''}${hash}`;
+  }
+
   const base = `${url.pathname}${query ? `?${query}` : ''}${hash}`;
   return iframeUrl.startsWith('/') ? base : base.replace(/^\//, '');
 }
@@ -379,6 +383,10 @@ function serializeAttributeValue(value: string | number | null | undefined): str
 
 function isAbsoluteUrl(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+
+function isProtocolRelativeUrl(value: string): boolean {
+  return value.startsWith('//');
 }
 
 function isReadonlyStringArray(value: unknown): value is readonly string[] {

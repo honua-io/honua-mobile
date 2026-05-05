@@ -222,6 +222,19 @@ describe('honua map snippets', () => {
     expect(iframe.className).toBe('embed-frame');
     expect(iframe.getAttribute('style')).toBe('border: 0');
   });
+
+  it('preserves protocol-relative iframe fallback URLs', () => {
+    const snippet = createHonuaMapIframeSnippet({
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      search: true,
+    }, {
+      iframeUrl: '//embed.example.test/map.html?tenant=city#map',
+    });
+
+    expect(readIframe(snippet).getAttribute('src')).toBe(
+      '//embed.example.test/map.html?tenant=city&service-url=https%3A%2F%2Fservices.example.test%2FFeatureServer&search=true#map',
+    );
+  });
 });
 
 function readIframe(snippet: string): HTMLIFrameElement {
