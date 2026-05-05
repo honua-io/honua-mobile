@@ -251,14 +251,14 @@ public sealed class MobileServiceEndpointConfiguration
     {
         get
         {
-            if (!IsConfigured)
+            if (!IsValid)
             {
-                return $"{EnvironmentDisplayName}: no endpoint embedded";
+                return $"{EnvironmentDisplayName}: invalid endpoint metadata";
             }
 
-            return IsValid
+            return IsConfigured
                 ? $"{EnvironmentDisplayName}: {ApiBaseUrl}"
-                : $"{EnvironmentDisplayName}: invalid endpoint metadata";
+                : $"{EnvironmentDisplayName}: no endpoint embedded";
         }
     }
 

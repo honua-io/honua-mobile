@@ -91,6 +91,20 @@ public sealed class MobileBuildConfigurationTests
     }
 
     [Fact]
+    public void ServiceEndpoint_DisplayValueSurfacesInvalidUnparseableEndpointMetadata()
+    {
+        var endpoint = MobileServiceEndpointConfiguration.Create(
+            "staging",
+            "not a uri",
+            "Release");
+
+        Assert.False(endpoint.IsValid);
+        Assert.False(endpoint.IsConfigured);
+        Assert.Contains("absolute URI", endpoint.ValidationMessage);
+        Assert.Equal("Staging: invalid endpoint metadata", endpoint.DisplayValue);
+    }
+
+    [Fact]
     public void ServiceEndpoint_AllowsLoopbackHttpOnlyForDevelopment()
     {
         var development = MobileServiceEndpointConfiguration.Create(
