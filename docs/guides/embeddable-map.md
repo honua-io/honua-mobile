@@ -67,6 +67,29 @@ applyHonuaMapOptions(document.querySelector('honua-map'), {
 });
 ```
 
+For hosts that cannot use web components, generate an iframe fallback with the
+same option shape. Map options are serialized into the iframe URL query string,
+and `apiKey` is omitted unless `includeCredentials: true` is set.
+
+```js
+import { createHonuaMapIframeSnippet } from '@honua-io/embed';
+
+const snippet = createHonuaMapIframeSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  iframe: {
+    title: 'City asset map',
+  },
+});
+```
+
 ## Integration Events
 
 ```js
