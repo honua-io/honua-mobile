@@ -14,7 +14,22 @@ instructions.
 Create or verify a protected GitHub Environment before the first upload. The
 default environment is `ios-testflight`. Require approval from the release
 manager or Apple owner so the job cannot access signing and upload secrets until
-the environment deployment is approved.
+the environment deployment is approved. Use `ios-production` only for the
+separate production lane; TestFlight dry runs and internal beta uploads should
+use `ios-testflight`.
+
+The workflow owns this iOS target mapping:
+
+| Workflow `app_target` | Project | Expected iOS bundle ID | Provisioning profile secret |
+| --- | --- | --- | --- |
+| `field-collection` | `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj` | `io.honua.mobile.fieldcollection` | `IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` |
+| `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` |
+
+Before importing signing assets, the workflow evaluates the selected MAUI
+project's `ApplicationId` for `net10.0-ios` and fails if it no longer matches
+the expected bundle ID in the table. After importing the selected profile, it
+also verifies that the decoded profile team and application identifier match the
+same expected bundle ID.
 
 Store these secrets in the protected environment, not as repository-wide
 secrets:
@@ -48,6 +63,27 @@ base64 -i Honua_FieldCollection_AppStore.mobileprovision | pbcopy
 The App Store Connect API key needs permission to upload builds for the app
 record. Keep the original `.p8`, `.p12`, and `.mobileprovision` files in the
 approved secrets vault outside this repository.
+
+## Apple-Side Prerequisites
+
+These items live in Apple Developer or App Store Connect and cannot be proven by
+repository checks alone:
+
+- The Apple Developer team identified by `APPLE_TEAM_ID` is active and has
+  access to App Store distribution.
+- Explicit bundle identifiers exist for `io.honua.mobile.app` and
+  `io.honua.mobile.fieldcollection`.
+- App Store Connect app records exist for both bundle IDs.
+- Each bundle ID has the capabilities required by the app before the App Store
+  provisioning profile is generated.
+- The Apple Distribution certificate is valid, includes the private key in the
+  exported `.p12`, and belongs to `APPLE_TEAM_ID`.
+- One App Store provisioning profile exists per bundle ID and is regenerated
+  after any bundle ID capability change.
+- The App Store Connect API key is active and has permission to upload builds
+  for both app records.
+- The internal TestFlight tester group exists, initial testers are invited, and
+  the Apple owner knows who may approve distribution after processing.
 
 ## Running a Build
 
