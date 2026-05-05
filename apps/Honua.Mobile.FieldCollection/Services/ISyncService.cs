@@ -15,6 +15,7 @@ public interface ISyncService : INotifyPropertyChanged
     Task CancelSyncAsync();
     Task<IEnumerable<ConflictInfo>> GetConflictsAsync();
     Task<bool> ResolveConflictAsync(string conflictId, ConflictResolution resolution);
+    Task<bool> DeferConflictAsync(string conflictId);
 }
 
 public enum SyncStatus
@@ -184,6 +185,11 @@ public class SyncService : ISyncService
     }
 
     public Task<bool> ResolveConflictAsync(string conflictId, ConflictResolution resolution)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> DeferConflictAsync(string conflictId)
     {
         return Task.FromResult(false);
     }

@@ -273,9 +273,16 @@
                                                    Text="{Binding FeatureId, StringFormat='Feature {0}'}"
                                                    FontSize="13" FontAttributes="Bold" />
                                             <Label Grid.Column="1"
-                                                   Text="{Binding SourceId, StringFormat='Source {0}'}"
+                                                   Text="{Binding Status}"
                                                    FontSize="12" />
                                         </Grid>
+                                        <Label Text="{Binding SourceId, StringFormat='Source {0}'}"
+                                               FontSize="11"
+                                               TextColor="{StaticResource Gray600}" />
+                                        <Label Text="{Binding OperationId, StringFormat='Operation {0}'}"
+                                               FontSize="11"
+                                               TextColor="{StaticResource Gray600}"
+                                               LineBreakMode="TailTruncation" />
                                         <Label Text="{Binding Reason}"
                                                FontSize="12"
                                                TextColor="{StaticResource Gray600}" />
@@ -285,6 +292,11 @@
                                         <Label Text="{Binding ServerState, StringFormat='Server: {0}'}"
                                                FontSize="11"
                                                LineBreakMode="TailTruncation" />
+                                        <Button Text="Review"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                HorizontalOptions="End"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:SyncCenterViewModel}}, Path=ReviewConflictCommand}"
+                                                CommandParameter="{Binding .}" />
                                     </VerticalStackLayout>
                                 </DataTemplate>
                             </CollectionView.ItemTemplate>

@@ -509,6 +509,20 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
     }
 
+    public async Task<bool> DeferConflictAsync(string conflictId)
+    {
+        var conflict = await _storage.GetConflictAsync(conflictId);
+        if (conflict == null || conflict.ResolvedAt != null)
+        {
+            return false;
+        }
+
+        await _storage.MarkConflictDeferredAsync(
+            conflictId,
+            "Deferred for manual review from sync center.");
+        return true;
+    }
+
     private Task AutoResolveConflictsAsync(StorageSyncSession session)
     {
         _logger?.LogInformation(

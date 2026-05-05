@@ -362,6 +362,48 @@ public partial class SyncCenterViewModel : BaseViewModel
     }
 
     [RelayCommand]
+    private async Task ReviewConflict(OfflineConflictReviewItem conflict)
+    {
+        var resolution = await NavigationService.DisplayActionSheet(
+            $"Review Conflict - {conflict.FeatureId}",
+            "Cancel",
+            string.Empty,
+            "Accept Local Changes",
+            "Accept Server Changes",
+            "Defer Review");
+
+        if (resolution == "Cancel")
+        {
+            return;
+        }
+
+        await ExecuteAsync(async () =>
+        {
+            var success = resolution switch
+            {
+                "Accept Local Changes" => await _syncService.ResolveConflictAsync(
+                    conflict.ConflictId,
+                    ConflictResolution.AcceptLocal),
+                "Accept Server Changes" => await _syncService.ResolveConflictAsync(
+                    conflict.ConflictId,
+                    ConflictResolution.AcceptServer),
+                "Defer Review" => await _syncService.DeferConflictAsync(conflict.ConflictId),
+                _ => false
+            };
+
+            if (!success)
+            {
+                await ShowError("Review Failed", "Failed to update the conflict state. Please try again.");
+                return;
+            }
+
+            await LoadConflicts();
+            await LoadOfflineDiagnostics();
+            await ShowMessage("Conflict Updated", "The conflict review state has been updated.");
+        });
+    }
+
+    [RelayCommand]
     private async Task ViewSyncHistory()
     {
         await NavigationService.NavigateToAsync("sync/sync-history");

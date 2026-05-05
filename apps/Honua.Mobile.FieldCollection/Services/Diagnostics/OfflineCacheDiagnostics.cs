@@ -78,6 +78,7 @@ public sealed class OfflineConflictReviewItem
     public string SourceId { get; set; } = string.Empty;
     public string FeatureId { get; set; } = string.Empty;
     public string ConflictType { get; set; } = string.Empty;
+    public string Status { get; set; } = "Needs review";
     public string Reason { get; set; } = string.Empty;
     public string LocalState { get; set; } = string.Empty;
     public string ServerState { get; set; } = string.Empty;

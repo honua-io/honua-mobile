@@ -117,9 +117,9 @@ dotnet build
 dotnet build -c Release
 
 # Deploy to device
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 ## 📱 Platform Support
@@ -185,10 +185,13 @@ public partial class CustomPage : ContentPage
 }
 ```
 
-2. Add navigation in `AppShell.xaml`:
+2. Register and navigate to the page from your existing view:
 
-```xml
-<ShellContent Title="Custom" Icon="custom.png" Route="custom" ContentTemplate="{DataTemplate local:CustomPage}" />
+```csharp
+builder.Services.AddTransient<CustomPage>();
+
+await Navigation.PushAsync(
+    Handler.MauiContext.Services.GetRequiredService<CustomPage>());
 ```
 
 ### Advanced Features

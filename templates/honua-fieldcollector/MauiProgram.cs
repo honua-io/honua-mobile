@@ -11,7 +11,7 @@ using SdkOfflineSyncEngineOptions = Honua.Sdk.Offline.OfflineSyncEngineOptions;
 using Honua.Mobile.IoT;
 <!--#endif-->
 
-namespace namespace;
+namespace HonuaFieldCollector;
 
 public static class MauiProgram
 {
