@@ -36,6 +36,27 @@ export interface HonuaMapSnippetOptions {
   indent?: string;
 }
 
+export interface HonuaMapIframeAttributes {
+  title?: string | null;
+  loading?: 'eager' | 'lazy' | null;
+  referrerPolicy?: ReferrerPolicy | null;
+  sandbox?: string | readonly string[] | null;
+  allow?: string | null;
+  width?: string | number | null;
+  height?: string | number | null;
+  id?: string | null;
+  name?: string | null;
+  className?: string | null;
+  style?: string | null;
+}
+
+export interface HonuaMapIframeSnippetOptions {
+  iframeUrl?: string;
+  includeCredentials?: boolean;
+  iframe?: HonuaMapIframeAttributes;
+  indent?: string;
+}
+
 export function applyHonuaMapOptions(
   element: HTMLElement,
   options: HonuaMapEmbedOptions,
@@ -109,6 +130,21 @@ export function createHonuaMapSnippet(
   return `${script}\n\n${element}`;
 }
 
+export function createHonuaMapIframeSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapIframeSnippetOptions = {},
+): string {
+  const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/map.html';
+  const src = createIframeSrc(iframeUrl, options, snippetOptions.includeCredentials ?? false);
+  const attributes = iframeAttributes(src, snippetOptions.iframe);
+  const indent = snippetOptions.indent ?? '  ';
+  const lines = attributes.map(([name, value]) => (
+    `${indent}${name}="${escapeHtmlAttribute(value)}"`
+  ));
+
+  return `<iframe\n${lines.join('\n')}>\n</iframe>`;
+}
+
 function createElementMarkup(
   elementName: string,
   options: HonuaMapEmbedOptions,
@@ -129,6 +165,49 @@ function createElementMarkup(
     : `${config.indent}${name}="${escapeHtmlAttribute(value)}"`);
 
   return `<${elementName}\n${lines.join('\n')}>\n</${elementName}>`;
+}
+
+function createIframeSrc(
+  iframeUrl: string,
+  options: HonuaMapEmbedOptions,
+  includeCredentials: boolean,
+): string {
+  const url = new URL(iframeUrl, 'https://cdn.honua.dev');
+  for (const [name, value] of mapQueryParameters(options, includeCredentials)) {
+    url.searchParams.set(name, value);
+  }
+
+  if (isAbsoluteUrl(iframeUrl)) {
+    return url.toString();
+  }
+
+  const query = url.searchParams.toString();
+  const hash = url.hash;
+  const base = `${url.pathname}${query ? `?${query}` : ''}${hash}`;
+  return iframeUrl.startsWith('/') ? base : base.replace(/^\//, '');
+}
+
+function iframeAttributes(
+  src: string,
+  custom: HonuaMapIframeAttributes | undefined,
+): Array<[string, string]> {
+  return [
+    ['src', src],
+    ['title', custom?.title ?? 'Embedded map'],
+    ['loading', custom?.loading ?? 'lazy'],
+    ['referrerpolicy', custom?.referrerPolicy ?? 'strict-origin-when-cross-origin'],
+    ['sandbox', serializeSandbox(custom?.sandbox) ?? 'allow-scripts allow-same-origin allow-forms'],
+    ['allow', custom?.allow],
+    ['width', serializeAttributeValue(custom?.width)],
+    ['height', serializeAttributeValue(custom?.height)],
+    ['id', custom?.id],
+    ['name', custom?.name],
+    ['class', custom?.className],
+    ['style', custom?.style],
+  ].filter((entry): entry is [string, string] => {
+    const value = entry[1];
+    return value !== undefined && value !== null && value !== '';
+  });
 }
 
 function mapAttributes(
@@ -187,6 +266,22 @@ function mapThemeVariables(theme: HonuaMapThemeOptions | null | undefined): Reco
     '--honua-map-font-family': theme?.fontFamily,
     '--honua-map-control-size': theme?.controlSize,
   };
+}
+
+function mapQueryParameters(
+  options: HonuaMapEmbedOptions,
+  includeCredentials: boolean,
+): Array<[string, string]> {
+  const parameters = mapAttributes(options, includeCredentials)
+    .map(([name, value]): [string, string] => [name, value === true ? 'true' : value]);
+
+  for (const [property, value] of Object.entries(mapThemeVariables(options.style))) {
+    if (typeof value === 'string' && value !== '') {
+      parameters.push([property, value]);
+    }
+  }
+
+  return parameters;
 }
 
 function setOptionalAttribute(element: HTMLElement, name: string, value: string | null | undefined): void {
@@ -261,6 +356,33 @@ function serializeNumber(value: number | null | undefined): string | null | unde
   }
 
   return String(value);
+}
+
+function serializeSandbox(value: string | readonly string[] | null | undefined): string | null | undefined {
+  if (isReadonlyStringArray(value)) {
+    return value
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(' ') || null;
+  }
+
+  return value;
+}
+
+function serializeAttributeValue(value: string | number | null | undefined): string | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  return String(value);
+}
+
+function isAbsoluteUrl(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+
+function isReadonlyStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value);
 }
 
 function escapeHtmlAttribute(value: string | true): string {
