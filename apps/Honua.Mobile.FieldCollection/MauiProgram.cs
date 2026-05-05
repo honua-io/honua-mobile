@@ -1,12 +1,13 @@
 using CommunityToolkit.Maui;
-using System.Net.Http;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.ViewModels;
 using Honua.Mobile.FieldCollection.Views;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection;
@@ -90,6 +91,10 @@ public static class MauiProgram
         services.AddSingleton<IAttachmentService, AttachmentService>();
 
         // Configuration services
+        services.AddSingleton(_ => MobileBuildConfiguration.FromAssembly(
+            typeof(App).Assembly,
+            GetAppInfoValue(() => AppInfo.Current.VersionString, "unknown"),
+            GetAppInfoValue(() => AppInfo.Current.BuildString, "unknown")));
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConnectivityService, ConnectivityService>();
 
@@ -111,6 +116,18 @@ public static class MauiProgram
         });
 
         // Platform-specific services will be registered by platform startup
+    }
+
+    private static string GetAppInfoValue(Func<string> valueFactory, string fallback)
+    {
+        try
+        {
+            return valueFactory();
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     private static void RegisterViewModels(IServiceCollection services)

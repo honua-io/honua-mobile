@@ -1,8 +1,10 @@
 using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Maui.Annotations;
+using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.Maui.Display;
 using Honua.Mobile.Maui.Location;
+using Honua.Mobile.Maui.SceneAnchoring;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
@@ -15,6 +17,7 @@ using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.Field.Records;
 using Honua.Sdk.GeoServices.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
 using SdkOfflineChangeJournal = Honua.Sdk.Offline.Abstractions.IOfflineChangeJournal;
@@ -149,6 +152,41 @@ public static class HonuaMobileServiceCollectionExtensions
 
         services.AddSingleton<DuplicateDetector>();
         services.AddSingleton<MobileFieldCaptureWorkflow>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers opt-in mobile exception reporting primitives. Disabled mode registers a no-op reporter;
+    /// local-only mode stores sanitized reports in the on-device offline queue.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Exception reporting options. Defaults to disabled.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaMobileExceptionReporting(
+        this IServiceCollection services,
+        MobileExceptionReportingOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        options ??= new MobileExceptionReportingOptions();
+        options.Validate();
+        services.AddSingleton(options);
+
+        if (options.Mode == MobileExceptionReportingMode.LocalOnly)
+        {
+            services.TryAddSingleton(TimeProvider.System);
+            services.TryAddSingleton<IMobileExceptionReportQueue, FileMobileExceptionReportQueue>();
+            services.TryAddSingleton<LocalMobileExceptionReporter>();
+            services.RemoveAll<IMobileExceptionReporter>();
+            services.AddSingleton<IMobileExceptionReporter>(sp => sp.GetRequiredService<LocalMobileExceptionReporter>());
+        }
+        else
+        {
+            services.RemoveAll<IMobileExceptionReporter>();
+            services.AddSingleton<IMobileExceptionReporter, NoOpMobileExceptionReporter>();
+        }
+
+        services.TryAddSingleton<MobileExceptionReportingExceptionHooks>();
         return services;
     }
 
@@ -353,6 +391,24 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the native AR scene anchoring controller.
+    /// Applications must also register an <see cref="IHonuaNativeArSceneAnchorAdapter"/> for ARKit or ARCore.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Optional readiness thresholds for the AR workflow.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaNativeSceneAnchoring(
+        this IServiceCollection services,
+        HonuaNativeArSessionOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(options ?? new HonuaNativeArSessionOptions());
+        services.AddSingleton<HonuaNativeArSceneAnchoringController>();
+        return services;
+    }
+
+    /// <summary>
     /// Registers device location orchestration over app-provided native permission and location adapters.
     /// </summary>
     /// <param name="services">The service collection.</param>
@@ -366,6 +422,9 @@ public static class HonuaMobileServiceCollectionExtensions
             sp.GetRequiredService<IHonuaDeviceLocationProvider>(),
             sp.GetService<IHonuaBackgroundLocationProvider>(),
             sp.GetService<IHonuaGeofenceMonitor>()));
+        services.AddSingleton(sp => new HonuaBackgroundLocationLifecycleController(
+            sp.GetRequiredService<HonuaDeviceLocationCoordinator>(),
+            sp.GetService<ILogger<HonuaBackgroundLocationLifecycleController>>()));
         return services;
     }
 }

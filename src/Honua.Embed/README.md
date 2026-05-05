@@ -73,11 +73,19 @@ import { createCacheStorageScenePackageResolver } from '@honua-io/embed';
 const scene = document.querySelector('honua-scene');
 scene.packageAssetResolver = createCacheStorageScenePackageResolver({
   cacheName: 'honua-scene-packages',
+  responseMode: 'cache-url',
 });
 scene.setAttribute('package-id', manifest.packageId);
 scene.setAttribute('tileset-asset', primaryTileset.path);
 scene.setAttribute('package-expires-at', manifest.offlineUseExpiresAtUtc);
 ```
+
+`responseMode: 'cache-url'` returns stable package-local URLs so Cesium can
+resolve nested 3D Tiles, terrain, textures, and metadata relative to the entry
+asset. Serve the configured URL prefix from a service worker or WebView bridge
+with `matchCacheStorageScenePackageRequest(...)`. Use `responseMode:
+'object-url'` only for standalone assets or hosts that rewrite nested
+references.
 
 ## Map Attributes
 
