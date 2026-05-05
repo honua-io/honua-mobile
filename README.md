@@ -15,7 +15,7 @@ Current mobile SDK roadmap coordination is tracked from
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter |
 | **Honua.Mobile.Field** | Mobile adapters for SDK-owned field forms, validation, media capture metadata, and workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
-| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, and device location orchestration |
+| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration |
 | **@honua/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components for ISV embeds |
 
 ## Quick Start
@@ -148,7 +148,7 @@ src/
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Field/         SDK field workflow adapters
   Honua.Mobile.Offline/       GeoPackage sync engine
-  Honua.Mobile.Maui/          MAUI platform integration
+  Honua.Mobile.Maui/          MAUI platform integration, native display, location, and scene anchoring
   Honua.Mobile.IoT/           IoT sensor abstractions (interface-only, future)
 apps/
   Honua.Mobile.App/           Reference MAUI application
@@ -158,7 +158,7 @@ tests/
   Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
   Honua.Mobile.ServerIntegration.Tests/ Loopback Honua server integration surface (8 tests)
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location (32 tests)
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location, scene anchoring (40 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query (7 tests)
 proto/
   honua/v1/                   gRPC protocol definitions

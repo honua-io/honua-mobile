@@ -3,6 +3,7 @@ using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.Display;
 using Honua.Mobile.Maui.Location;
+using Honua.Mobile.Maui.SceneAnchoring;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
@@ -349,6 +350,24 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTransient<HonuaNativeMapDisplayController>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the native AR scene anchoring controller.
+    /// Applications must also register an <see cref="IHonuaNativeArSceneAnchorAdapter"/> for ARKit or ARCore.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Optional readiness thresholds for the AR workflow.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaNativeSceneAnchoring(
+        this IServiceCollection services,
+        HonuaNativeArSessionOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(options ?? new HonuaNativeArSessionOptions());
+        services.AddSingleton<HonuaNativeArSceneAnchoringController>();
         return services;
     }
 
