@@ -176,11 +176,13 @@ public static class HonuaMobileServiceCollectionExtensions
             services.TryAddSingleton(TimeProvider.System);
             services.TryAddSingleton<IMobileExceptionReportQueue, FileMobileExceptionReportQueue>();
             services.TryAddSingleton<LocalMobileExceptionReporter>();
-            services.TryAddSingleton<IMobileExceptionReporter>(sp => sp.GetRequiredService<LocalMobileExceptionReporter>());
+            services.RemoveAll<IMobileExceptionReporter>();
+            services.AddSingleton<IMobileExceptionReporter>(sp => sp.GetRequiredService<LocalMobileExceptionReporter>());
         }
         else
         {
-            services.TryAddSingleton<IMobileExceptionReporter, NoOpMobileExceptionReporter>();
+            services.RemoveAll<IMobileExceptionReporter>();
+            services.AddSingleton<IMobileExceptionReporter, NoOpMobileExceptionReporter>();
         }
 
         services.TryAddSingleton<MobileExceptionReportingExceptionHooks>();

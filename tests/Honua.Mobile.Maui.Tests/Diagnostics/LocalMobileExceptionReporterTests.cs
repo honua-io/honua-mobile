@@ -59,6 +59,29 @@ public sealed class LocalMobileExceptionReporterTests
     }
 
     [Fact]
+    public void LocalRegistration_OverridesExistingReporterRegistration()
+    {
+        var queueDirectory = CreateQueueDirectoryPath();
+        try
+        {
+            using var provider = new ServiceCollection()
+                .AddSingleton<IMobileExceptionReporter, PreRegisteredExceptionReporter>()
+                .AddHonuaMobileExceptionReporting(new MobileExceptionReportingOptions
+                {
+                    Mode = MobileExceptionReportingMode.LocalOnly,
+                    QueueDirectory = queueDirectory,
+                })
+                .BuildServiceProvider();
+
+            Assert.IsType<LocalMobileExceptionReporter>(provider.GetRequiredService<IMobileExceptionReporter>());
+        }
+        finally
+        {
+            DeleteDirectory(queueDirectory);
+        }
+    }
+
+    [Fact]
     public async Task ReportAsync_QueuesSanitizedReport()
     {
         var queueDirectory = CreateQueueDirectoryPath();
@@ -148,6 +171,25 @@ public sealed class LocalMobileExceptionReporterTests
         }
     }
 
+    [Fact]
+    public async Task ReportAsync_DoesNotDeduplicateWhenInitialQueueWriteFails()
+    {
+        var options = new MobileExceptionReportingOptions
+        {
+            Mode = MobileExceptionReportingMode.LocalOnly,
+            DuplicateWindow = TimeSpan.FromMinutes(10),
+        };
+        var queue = new FailingOnceExceptionReportQueue();
+        var reporter = new LocalMobileExceptionReporter(queue, options);
+        var exception = new InvalidOperationException("same failure");
+        var context = new MobileExceptionReportContext { Source = "auth-refresh" };
+
+        await reporter.ReportAsync(exception, context);
+        await reporter.ReportAsync(exception, context);
+
+        Assert.Single(queue.Reports);
+    }
+
     private static async Task<List<MobileExceptionReport>> ReadReportsAsync(IMobileExceptionReportQueue queue)
     {
         var reports = new List<MobileExceptionReport>();
@@ -169,6 +211,50 @@ public sealed class LocalMobileExceptionReporterTests
         if (Directory.Exists(path))
         {
             Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private sealed class PreRegisteredExceptionReporter : IMobileExceptionReporter
+    {
+        public Task ReportAsync(
+            Exception exception,
+            MobileExceptionReportContext? context = null,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FailingOnceExceptionReportQueue : IMobileExceptionReportQueue
+    {
+        private bool _hasFailed;
+
+        public List<MobileExceptionReport> Reports { get; } = [];
+
+        public Task EnqueueAsync(MobileExceptionReport report, CancellationToken cancellationToken = default)
+        {
+            if (!_hasFailed)
+            {
+                _hasFailed = true;
+                throw new IOException("queue unavailable");
+            }
+
+            Reports.Add(report);
+            return Task.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<QueuedMobileExceptionReport> ReadPendingAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var report in Reports)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return new QueuedMobileExceptionReport(report.Id, report);
+                await Task.Yield();
+            }
+        }
+
+        public Task DeleteAsync(QueuedMobileExceptionReport report, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }

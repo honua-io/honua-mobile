@@ -53,6 +53,7 @@ public sealed class LocalMobileExceptionReporter : IMobileExceptionReporter
         try
         {
             await _queue.EnqueueAsync(report, cancellationToken);
+            TrackFingerprint(report.Fingerprint, now);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
@@ -130,12 +131,23 @@ public sealed class LocalMobileExceptionReporter : IMobileExceptionReporter
             if (_recentFingerprints.TryGetValue(fingerprint, out var previous) &&
                 occurredAtUtc - previous <= _options.DuplicateWindow)
             {
-                _recentFingerprints[fingerprint] = occurredAtUtc;
                 return true;
             }
 
-            _recentFingerprints[fingerprint] = occurredAtUtc;
             return false;
+        }
+    }
+
+    private void TrackFingerprint(string fingerprint, DateTimeOffset occurredAtUtc)
+    {
+        if (_options.DuplicateWindow == TimeSpan.Zero)
+        {
+            return;
+        }
+
+        lock (_dedupeGate)
+        {
+            _recentFingerprints[fingerprint] = occurredAtUtc;
         }
     }
 
