@@ -36,6 +36,23 @@ services.AddHonuaMobileExceptionReporting(new MobileExceptionReportingOptions
 });
 ```
 
+Register server-upload capture only when the environment has an approved mobile
+exception ingestion endpoint. `ServerUpload` still writes sanitized reports to
+the same local queue first; the upload worker deletes queued files only after a
+successful upload:
+
+```csharp
+services.AddHonuaMobileExceptionReporting(new MobileExceptionReportingOptions
+{
+    Mode = MobileExceptionReportingMode.ServerUpload,
+    QueueDirectory = exceptionQueueDirectory,
+    UploadEndpoint = new Uri("https://api.honua.example/mobile/exception-reports"),
+    MaxUploadBatchSize = 10,
+    UploadInitialBackoff = TimeSpan.FromSeconds(30),
+    UploadMaxBackoff = TimeSpan.FromMinutes(15),
+});
+```
+
 Apps can report handled exceptions through `IMobileExceptionReporter` with a
 source, operation, correlation id, request id, and small diagnostic properties.
 Unhandled exception hooks are available through
@@ -73,20 +90,32 @@ Prefer stable identifiers, operation names, correlation ids, and coarse state.
 `MaxQueuedReports` and suppresses repeated reports from the same source,
 exception type, message, and first stack frame inside `DuplicateWindow`.
 
-The queue is intentionally transport-neutral. A later uploader can read pending
-items, attempt delivery when connectivity and battery policy allow, and delete
-items only after successful ingestion. Retry/backoff policy should live in that
-uploader or a background worker, not in UI flows or app startup. Exception
-reporting must never block app launch, sync, auth refresh, or field capture.
+`ServerUpload` mode registers `IMobileExceptionReportUploadWorker`, which can be
+called by app lifecycle or background scheduling code when connectivity and
+battery policy allow. Each flush is bounded by `MaxUploadBatchSize`. Failed
+uploads remain queued and are retried with exponential in-memory backoff between
+`UploadInitialBackoff` and `UploadMaxBackoff`; reports are deleted only after
+`IMobileExceptionReportUploader.UploadAsync` returns success.
+
+The default `HttpMobileExceptionReportUploader` posts the already-sanitized
+`MobileExceptionReport` JSON to the explicit `UploadEndpoint`. The endpoint must
+use HTTPS unless it is localhost for development. Authentication headers,
+tenant routing, and ingestion schema versioning should be added through the
+uploader boundary once the server endpoint contract exists.
+
+Do not flush from a blocking UI path or synchronously during app startup. Start
+flush work from lifecycle/background scheduling code and allow it to stop on
+cancellation. Exception reporting must never block app launch, sync, auth
+refresh, or field capture.
 
 ## Server Dependency
 
 Server ingestion is a separate dependency for issue #91. The mobile repo should
 not add a server API client, shared server DTO, or long-lived copied contract for
 that endpoint. The server-side slice needs to define the ingestion route, auth
-requirements, retention rules, log sink mapping, searchable metadata fields, and
-operational triage behavior. Mobile upload work should consume that versioned
-contract/package once it exists.
+requirements, request headers, retention rules, log sink mapping, searchable
+metadata fields, schema versioning, and operational triage behavior. Mobile
+upload work should consume that versioned contract/package once it exists.
 
 Recommended PR body note:
 

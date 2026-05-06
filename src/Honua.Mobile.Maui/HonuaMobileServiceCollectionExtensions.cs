@@ -157,7 +157,8 @@ public static class HonuaMobileServiceCollectionExtensions
 
     /// <summary>
     /// Registers opt-in mobile exception reporting primitives. Disabled mode registers a no-op reporter;
-    /// local-only mode stores sanitized reports in the on-device offline queue.
+    /// local-only mode stores sanitized reports in the on-device offline queue, and server-upload mode
+    /// adds a bounded queue upload worker.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="options">Exception reporting options. Defaults to disabled.</param>
@@ -172,13 +173,27 @@ public static class HonuaMobileServiceCollectionExtensions
         options.Validate();
         services.AddSingleton(options);
 
-        if (options.Mode == MobileExceptionReportingMode.LocalOnly)
+        if (options.Mode is MobileExceptionReportingMode.LocalOnly or MobileExceptionReportingMode.ServerUpload)
         {
             services.TryAddSingleton(TimeProvider.System);
             services.TryAddSingleton<IMobileExceptionReportQueue, FileMobileExceptionReportQueue>();
             services.TryAddSingleton<LocalMobileExceptionReporter>();
             services.RemoveAll<IMobileExceptionReporter>();
             services.AddSingleton<IMobileExceptionReporter>(sp => sp.GetRequiredService<LocalMobileExceptionReporter>());
+
+            if (options.Mode == MobileExceptionReportingMode.ServerUpload)
+            {
+                services.AddHttpClient("HonuaMobileExceptionReportUploader");
+                services.TryAddSingleton<IMobileExceptionReportUploader>(sp =>
+                {
+                    var factory = sp.GetRequiredService<IHttpClientFactory>();
+                    return new HttpMobileExceptionReportUploader(
+                        factory.CreateClient("HonuaMobileExceptionReportUploader"),
+                        sp.GetRequiredService<MobileExceptionReportingOptions>(),
+                        sp.GetService<ILogger<HttpMobileExceptionReportUploader>>());
+                });
+                services.TryAddSingleton<IMobileExceptionReportUploadWorker, MobileExceptionReportUploadWorker>();
+            }
         }
         else
         {
