@@ -153,6 +153,34 @@ public sealed class MobileExceptionReportUploadWorkerTests
         Assert.Equal(2, uploader.Attempts);
     }
 
+    [Fact]
+    public async Task FlushPendingAsync_SerializesConcurrentFlushes()
+    {
+        var queue = new InMemoryExceptionReportQueue();
+        await queue.EnqueueAsync(CreateReport());
+        var uploadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseUpload = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var uploader = new BlockingUploader(uploadStarted, releaseUpload);
+        var worker = new MobileExceptionReportUploadWorker(
+            queue,
+            uploader,
+            new MobileExceptionReportingOptions
+            {
+                Mode = MobileExceptionReportingMode.ServerUpload,
+                UploadEndpoint = new Uri("https://api.honua.test/mobile/exception-reports"),
+            });
+
+        var firstFlush = worker.FlushPendingAsync();
+        await uploadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondFlush = worker.FlushPendingAsync();
+
+        releaseUpload.SetResult(null);
+        await Task.WhenAll(firstFlush, secondFlush).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(queue.Reports);
+        Assert.Equal(1, uploader.Attempts);
+    }
+
     private static MobileExceptionReport CreateReport(string? message = "boom")
     {
         return new MobileExceptionReport
@@ -222,6 +250,31 @@ public sealed class MobileExceptionReportUploadWorkerTests
         {
             Attempts++;
             return Task.FromResult(_results.Count > 0 && _results.Dequeue());
+        }
+    }
+
+    private sealed class BlockingUploader : IMobileExceptionReportUploader
+    {
+        private readonly TaskCompletionSource<object?> _started;
+        private readonly TaskCompletionSource<object?> _release;
+        private int _attempts;
+
+        public BlockingUploader(
+            TaskCompletionSource<object?> started,
+            TaskCompletionSource<object?> release)
+        {
+            _started = started;
+            _release = release;
+        }
+
+        public int Attempts => Volatile.Read(ref _attempts);
+
+        public async Task<bool> UploadAsync(MobileExceptionReport report, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _attempts);
+            _started.TrySetResult(null);
+            await _release.Task.WaitAsync(cancellationToken);
+            return true;
         }
     }
 

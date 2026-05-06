@@ -12,6 +12,7 @@ public sealed class MobileExceptionReportUploadWorker : IMobileExceptionReportUp
     private readonly MobileExceptionReportingOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MobileExceptionReportUploadWorker>? _logger;
+    private readonly SemaphoreSlim _flushGate = new(1, 1);
     private readonly object _retryGate = new();
     private readonly Dictionary<string, RetryState> _retryStates = new(StringComparer.Ordinal);
 
@@ -31,6 +32,19 @@ public sealed class MobileExceptionReportUploadWorker : IMobileExceptionReportUp
     }
 
     public async Task FlushPendingAsync(CancellationToken cancellationToken = default)
+    {
+        await _flushGate.WaitAsync(cancellationToken);
+        try
+        {
+            await FlushPendingCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _flushGate.Release();
+        }
+    }
+
+    private async Task FlushPendingCoreAsync(CancellationToken cancellationToken)
     {
         if (_options.Mode != MobileExceptionReportingMode.ServerUpload)
         {
