@@ -18,6 +18,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./snippets": {
+      "types": "./dist/snippets.d.ts",
+      "import": "./dist/snippets.js"
     }
   },
   "files": [

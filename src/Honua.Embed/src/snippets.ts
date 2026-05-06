@@ -36,6 +36,22 @@ export interface HonuaMapSnippetOptions {
   indent?: string;
 }
 
+export interface HonuaMapCdnScriptAttributes {
+  nonce?: string | null;
+  integrity?: string | null;
+  crossOrigin?: 'anonymous' | 'use-credentials' | null;
+  referrerPolicy?: ReferrerPolicy | null;
+}
+
+export interface HonuaMapCdnSnippetOptions {
+  scriptUrl?: string;
+  elementName?: string;
+  includeScript?: boolean;
+  includeCredentials?: boolean;
+  indent?: string;
+  scriptAttributes?: HonuaMapCdnScriptAttributes;
+}
+
 export interface HonuaMapIframeAttributes {
   title?: string | null;
   loading?: 'eager' | 'lazy' | null;
@@ -130,6 +146,29 @@ export function createHonuaMapSnippet(
   return `${script}\n\n${element}`;
 }
 
+export function createHonuaMapCdnSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapCdnSnippetOptions = {},
+): string {
+  const elementName = snippetOptions.elementName ?? 'honua-map';
+  assertCustomElementName(elementName);
+
+  const includeScript = snippetOptions.includeScript ?? true;
+  const scriptUrl = snippetOptions.scriptUrl ?? 'https://cdn.honua.dev/embed.js';
+  const indent = snippetOptions.indent ?? '  ';
+  const element = createElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  if (!includeScript) {
+    return element;
+  }
+
+  const script = createCdnScriptMarkup(scriptUrl, elementName, indent, snippetOptions.scriptAttributes);
+  return `${script}\n\n${element}`;
+}
+
 export function createHonuaMapIframeSnippet(
   options: HonuaMapEmbedOptions,
   snippetOptions: HonuaMapIframeSnippetOptions = {},
@@ -143,6 +182,43 @@ export function createHonuaMapIframeSnippet(
   ));
 
   return `<iframe\n${lines.join('\n')}>\n</iframe>`;
+}
+
+function createCdnScriptMarkup(
+  scriptUrl: string,
+  elementName: string,
+  indent: string,
+  attributes: HonuaMapCdnScriptAttributes | undefined,
+): string {
+  if (elementName !== 'honua-map') {
+    const nonce = attributes?.nonce
+      ? ` nonce="${escapeHtmlAttribute(attributes.nonce)}"`
+      : '';
+    return [
+      `<script type="module"${nonce}>`,
+      `${indent}import { defineHonuaMapElement } from '${escapeJsString(scriptUrl)}';`,
+      `${indent}defineHonuaMapElement('${escapeJsString(elementName)}');`,
+      '</script>',
+    ].join('\n');
+  }
+
+  const rawScriptAttributes: Array<[string, string | null | undefined]> = [
+    ['type', 'module'],
+    ['src', scriptUrl],
+    ['nonce', attributes?.nonce],
+    ['integrity', attributes?.integrity],
+    ['crossorigin', attributes?.crossOrigin],
+    ['referrerpolicy', attributes?.referrerPolicy],
+  ];
+  const scriptAttributes = rawScriptAttributes.filter((entry): entry is [string, string] => {
+    const value = entry[1];
+    return value !== undefined && value !== null && value !== '';
+  });
+  const serialized = scriptAttributes
+    .map(([name, value]) => `${name}="${escapeHtmlAttribute(value)}"`)
+    .join(' ');
+
+  return `<script ${serialized}></script>`;
 }
 
 function createElementMarkup(

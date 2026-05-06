@@ -4,15 +4,18 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        snippets: resolve(__dirname, 'src/snippets.ts'),
+      },
       formats: ['es'],
-      fileName: () => 'index.js',
+      fileName: (_format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
       output: {
         assetFileNames: '[name][extname]',
         chunkFileNames: '[name]-[hash].js',
-        entryFileNames: 'index.js',
+        entryFileNames: '[name].js',
       },
     },
     sourcemap: false,
