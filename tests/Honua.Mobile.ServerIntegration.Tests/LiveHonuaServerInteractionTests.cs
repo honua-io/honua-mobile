@@ -796,7 +796,9 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
     private async Task<HonuaScenePackageManifest> CreateLiveSceneManifestAsync(HttpClient http, Uri assetBaseUri)
     {
+        var metadata = await ReadAssetAsync(http, new Uri(assetBaseUri, "metadata/scene.json"));
         var tileset = await ReadAssetAsync(http, new Uri(assetBaseUri, "tileset.json"));
+        var declaredBytes = metadata.Length + tileset.Length;
 
         return new HonuaScenePackageManifest
         {
@@ -825,12 +827,13 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             },
             ByteBudget = new HonuaScenePackageByteBudget
             {
-                MaxPackageBytes = tileset.Length + 1024,
-                DeclaredBytes = tileset.Length,
+                MaxPackageBytes = declaredBytes + 1024,
+                DeclaredBytes = declaredBytes,
             },
             Attribution = ["Honua"],
             Assets =
             [
+                CreateAsset("scene-metadata", HonuaScenePackageAssetTypes.SceneMetadata, "metadata/scene.json", metadata),
                 CreateAsset("tileset", HonuaScenePackageAssetTypes.ThreeDimensionalTileset, "tileset.json", tileset),
             ],
         };
@@ -850,7 +853,9 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Type = type,
             Role = "metadata",
             Path = path,
-            ContentType = "application/octet-stream",
+            ContentType = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                ? "application/json"
+                : "application/octet-stream",
             Bytes = payload.Length,
             Sha256 = HonuaIntegrationServer.Sha256Hex(payload),
             Required = true,
