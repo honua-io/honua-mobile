@@ -53,6 +53,36 @@ name while still using the same implementation. `apiKey` is omitted from
 generated snippets unless `includeCredentials: true` is passed; generated markup
 should only contain renderer-safe public credentials.
 
+Use the CDN helper when a portal needs to emit a standalone `<script>` tag
+instead of an npm import. The default CDN URL is `https://cdn.honua.dev/embed.js`
+and can be replaced for tenant-specific or pinned asset paths.
+
+```js
+import { createHonuaMapCdnSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaMapCdnSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets', 'work-orders'],
+  interactive: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  scriptUrl: 'https://cdn.honua.dev/embed.js',
+  scriptAttributes: {
+    integrity: 'sha384-...',
+    crossOrigin: 'anonymous',
+  },
+});
+```
+
+The generated CDN markup stays white-label; it does not add Honua attribution.
+When `elementName` is customized, the helper emits an inline module import that
+registers the branded tag name from the CDN bundle.
+
+Server-side builders that only generate markup can import from
+`@honua-io/embed/snippets`; that subpath avoids loading the browser custom
+element entrypoint.
+
 Runtime hosts can apply the same configuration shape to an existing element:
 
 ```js
@@ -72,7 +102,7 @@ same option shape. Map options are serialized into the iframe URL query string,
 and `apiKey` is omitted unless `includeCredentials: true` is set.
 
 ```js
-import { createHonuaMapIframeSnippet } from '@honua-io/embed';
+import { createHonuaMapIframeSnippet } from '@honua-io/embed/snippets';
 
 const snippet = createHonuaMapIframeSnippet({
   serviceUrl: 'https://services.honua.example/FeatureServer',

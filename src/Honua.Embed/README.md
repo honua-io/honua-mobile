@@ -228,6 +228,53 @@ const snippet = createHonuaMapSnippet({
 Custom element names generate a script that calls `defineHonuaMapElement(...)`.
 `apiKey` is omitted unless `includeCredentials: true` is passed.
 
+For CDN distribution, use `createHonuaMapCdnSnippet`. It emits the CDN module
+script and the same white-label custom element markup. When a custom
+`elementName` is provided, the snippet imports `defineHonuaMapElement(...)` from
+the CDN bundle and registers that branded tag name.
+
+```ts
+import { createHonuaMapCdnSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaMapCdnSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets'],
+  interactive: true,
+  label: 'City asset map',
+}, {
+  scriptUrl: 'https://cdn.honua.dev/embed.js',
+  scriptAttributes: {
+    integrity: 'sha384-...',
+    crossOrigin: 'anonymous',
+  },
+});
+```
+
+Server-side builders that only generate markup can import from
+`@honua-io/embed/snippets` to avoid loading the browser custom element
+entrypoint.
+
+For hosts that cannot load custom elements, use `createHonuaMapIframeSnippet`.
+Map options are encoded into the iframe URL query string, with `apiKey` omitted
+unless `includeCredentials: true` is passed.
+
+```ts
+import { createHonuaMapIframeSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaMapIframeSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets'],
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  iframe: {
+    title: 'City asset map',
+  },
+});
+```
+
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 
