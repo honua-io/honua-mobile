@@ -139,6 +139,12 @@ export interface HonuaGeoJsonLayerOptions
   source?: HonuaDisplaySourceDescriptor | null;
 }
 
+export interface HonuaDeckGeoJsonLayerData {
+  id: string;
+  source: HonuaDisplaySourceDescriptor | null;
+  data: HonuaDisplayFeatureCollection;
+}
+
 export interface HonuaDeckOverlayOptions
   extends Omit<MapboxOverlayProps, 'layers'> {
   layers?: Layer[];
@@ -291,6 +297,38 @@ export class HonuaWebDisplayAdapter {
     ));
   }
 
+  appendFeatureQueryResult(
+    result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
+    options: HonuaGeoJsonLayerOptions = {},
+  ): Layer {
+    const source = resolveQuerySource(result, options.source ?? undefined)
+      ?? this.#singleFeatureCollectionSource()
+      ?? null;
+    const id = options.id ?? buildLayerId(source);
+    const data = appendFeatureQueryResultToGeoJson(
+      result,
+      this.#featureCollections.get(id),
+      { source },
+    );
+    const layer = createHonuaGeoJsonLayer(data, { ...options, id, source });
+
+    this.#featureCollections.set(id, layer.props.data as HonuaDisplayFeatureCollection);
+    this.setLayers([
+      ...this.#layers.filter((existing) => existing.id !== layer.id),
+      layer,
+    ]);
+
+    return layer;
+  }
+
+  #singleFeatureCollectionSource(): HonuaDisplaySourceDescriptor | null | undefined {
+    if (this.#featureCollections.size !== 1) {
+      return undefined;
+    }
+
+    return this.#featureCollections.values().next().value?.honua?.source ?? undefined;
+  }
+
   setFeatureStreamEvent(
     event: HonuaFeatureStreamEvent,
     options: HonuaGeoJsonLayerOptions = {},
@@ -304,7 +342,7 @@ export class HonuaWebDisplayAdapter {
     );
     const layer = createHonuaGeoJsonLayer(data, { ...options, id, source });
 
-    this.#featureCollections.set(id, data);
+    this.#featureCollections.set(id, layer.props.data as HonuaDisplayFeatureCollection);
     this.setLayers([
       ...this.#layers.filter((existing) => existing.id !== layer.id),
       layer,
@@ -401,6 +439,38 @@ export function featureStreamEventToGeoJson(
   return applyFeatureStreamEventToGeoJson(event, null, options);
 }
 
+export function appendFeatureQueryResultToGeoJson(
+  result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
+  previous: HonuaDisplayFeatureCollection | null | undefined = null,
+  options: HonuaFeatureConversionOptions = {},
+): HonuaDisplayFeatureCollection {
+  const source = resolveQuerySource(result, options.source ?? previous?.honua?.source);
+  const incoming = featureQueryResultToGeoJson(result, { ...options, source });
+
+  if (!previous) {
+    return incoming;
+  }
+
+  const features = mergeStreamFeatures(previous.features, incoming.features, new Set());
+  const metadata: HonuaDisplayDataMetadata = removeUndefinedProperties({
+    ...(previous.honua ?? {}),
+    ...(incoming.honua ?? {}),
+    source,
+    sourceId: source?.id,
+    nextPageToken: hasExplicitNextPageToken(result)
+      ? incoming.honua?.nextPageToken ?? null
+      : previous.honua?.nextPageToken ?? incoming.honua?.nextPageToken ?? null,
+    numberReturned: features.length,
+    stream: incoming.honua?.stream ?? previous.honua?.stream ?? null,
+  });
+
+  return {
+    type: 'FeatureCollection',
+    features,
+    honua: metadata,
+  };
+}
+
 export function applyFeatureStreamEventToGeoJson(
   event: HonuaFeatureStreamEvent,
   previous: HonuaDisplayFeatureCollection | null | undefined = null,
@@ -452,18 +522,12 @@ export function createHonuaGeoJsonLayer(
   result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
   options: HonuaGeoJsonLayerOptions = {},
 ): Layer {
-  const source = options.source ?? (
-    !Array.isArray(result) && !isFeatureCollection(result)
-      ? result.source
-      : (result as HonuaDisplayFeatureCollection).honua?.source ?? null
-  );
-  const id = options.id ?? buildLayerId(source);
-  const featureCollection = featureQueryResultToGeoJson(result, { source });
+  const layerData = createHonuaGeoJsonLayerData(result, options);
   const { source: _source, ...layerOptions } = options;
 
   return new GeoJsonLayer<HonuaGeoJsonProperties>({
-    id,
-    data: featureCollection,
+    id: layerData.id,
+    data: layerData.data,
     pickable: true,
     autoHighlight: true,
     stroked: true,
@@ -477,6 +541,24 @@ export function createHonuaGeoJsonLayer(
     pointRadiusUnits: 'pixels',
     ...layerOptions,
   });
+}
+
+export function createHonuaGeoJsonLayerData(
+  result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
+  options: Pick<HonuaGeoJsonLayerOptions, 'id' | 'source'> = {},
+): HonuaDeckGeoJsonLayerData {
+  const source = options.source ?? (
+    !Array.isArray(result) && !isFeatureCollection(result)
+      ? result.source
+      : (result as HonuaDisplayFeatureCollection).honua?.source ?? null
+  ) ?? null;
+  const id = options.id ?? buildLayerId(source);
+
+  return {
+    id,
+    source,
+    data: featureQueryResultToGeoJson(result, { source }),
+  };
 }
 
 export function createHonuaDeckOverlay(
@@ -624,12 +706,14 @@ function buildCollectionMetadata(
     queryCapabilities: source?.queryCapabilities,
     tileUrl: source?.tileUrl ?? null,
     feedUrl: source?.feedUrl ?? null,
-    providerName: page?.providerName ?? null,
-    objectIdFieldName: page?.objectIdFieldName ?? null,
-    nextPageToken: page?.nextPageToken ?? null,
-    totalCount: page?.totalCount ?? page?.count ?? null,
+    providerName: page?.providerName ?? existing?.providerName ?? null,
+    objectIdFieldName: page?.objectIdFieldName ?? existing?.objectIdFieldName ?? null,
+    nextPageToken: page && 'nextPageToken' in page
+      ? page.nextPageToken ?? null
+      : existing?.nextPageToken ?? null,
+    totalCount: page?.totalCount ?? page?.count ?? existing?.totalCount ?? null,
     numberReturned: page?.numberReturned ?? numberReturned,
-    exceededTransferLimit: page?.exceededTransferLimit ?? null,
+    exceededTransferLimit: page?.exceededTransferLimit ?? existing?.exceededTransferLimit ?? null,
     stream: options.streamEventType
       ? {
           eventType: options.streamEventType,
@@ -869,6 +953,12 @@ function isFeatureCollection(
   value: unknown,
 ): value is FeatureCollection<Geometry, GeoJsonProperties> {
   return isRecord(value) && value.type === 'FeatureCollection' && Array.isArray(value.features);
+}
+
+function hasExplicitNextPageToken(
+  result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
+): boolean {
+  return !Array.isArray(result) && !isFeatureCollection(result) && 'nextPageToken' in result;
 }
 
 function isFeature(value: unknown): value is Feature<Geometry, GeoJsonProperties> {
