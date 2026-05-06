@@ -36,7 +36,7 @@ public sealed class LocalMobileExceptionReporter : IMobileExceptionReporter
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        if (_options.Mode != MobileExceptionReportingMode.LocalOnly)
+        if (_options.Mode is not (MobileExceptionReportingMode.LocalOnly or MobileExceptionReportingMode.ServerUpload))
         {
             return;
         }
