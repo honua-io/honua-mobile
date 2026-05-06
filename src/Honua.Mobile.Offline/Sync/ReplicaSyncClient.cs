@@ -47,9 +47,8 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         var root = doc.RootElement;
         ThrowIfError(root);
 
-        var replicaId = root.GetProperty("replicaID").GetString()
-            ?? throw new InvalidOperationException("Server did not return a replicaID.");
-        var serverGen = root.GetProperty("serverGen").GetInt64();
+        var replicaId = GetRequiredString(root, "replicaID", "replicaId", "replica_id");
+        var serverGen = GetCreateReplicaServerGen(root);
 
         return new CreateReplicaResult(replicaId, serverGen);
     }
@@ -74,7 +73,7 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         var root = doc.RootElement;
         ThrowIfError(root);
 
-        var serverGen = root.GetProperty("serverGen").GetInt64();
+        var serverGen = GetRequiredInt64(root, "serverGen", "serverGeneration", "server_generation");
         var layerChanges = new List<LayerChangeSet>();
 
         if (root.TryGetProperty("layerChanges", out var layerChangesElement) && layerChangesElement.ValueKind == JsonValueKind.Array)
@@ -113,7 +112,7 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
         var root = doc.RootElement;
         ThrowIfError(root);
 
-        var serverGen = root.GetProperty("serverGen").GetInt64();
+        var serverGen = GetRequiredInt64(root, "serverGen", "serverGeneration", "server_generation");
 
         return new SynchronizeResult(replicaId, serverGen);
     }
@@ -189,5 +188,100 @@ public sealed class ReplicaSyncClient : IReplicaSyncClient
 
             throw new InvalidOperationException($"Replica sync error{(code.HasValue ? $" ({code.Value})" : "")}: {message}");
         }
+    }
+
+    private static string GetRequiredString(JsonElement element, params string[] propertyNames)
+    {
+        if (TryGetProperty(element, out var property, propertyNames) && property.ValueKind == JsonValueKind.String)
+        {
+            var value = property.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        throw new InvalidOperationException($"Server did not return a required replica sync property: {string.Join(" or ", propertyNames)}.");
+    }
+
+    private static long GetRequiredInt64(JsonElement element, params string[] propertyNames)
+    {
+        if (TryGetInt64(element, out var value, propertyNames))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Server did not return a required replica sync property: {string.Join(" or ", propertyNames)}.");
+    }
+
+    private static long GetCreateReplicaServerGen(JsonElement root)
+    {
+        if (TryGetInt64(root, out var serverGen, "serverGen", "serverGeneration", "server_generation"))
+        {
+            return serverGen;
+        }
+
+        if (TryGetProperty(root, out var layers, "layers") && layers.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var layer in layers.EnumerateArray())
+            {
+                if (layer.ValueKind == JsonValueKind.Object &&
+                    TryGetInt64(layer, out serverGen, "serverGen", "serverGeneration", "server_generation"))
+                {
+                    return serverGen;
+                }
+            }
+        }
+
+        throw new InvalidOperationException("Server did not return a required replica sync property: serverGen or layers[].serverGen.");
+    }
+
+    private static bool TryGetInt64(JsonElement element, out long value, params string[] propertyNames)
+    {
+        if (TryGetProperty(element, out var property, propertyNames))
+        {
+            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out value))
+            {
+                return true;
+            }
+
+            if (property.ValueKind == JsonValueKind.String &&
+                long.TryParse(property.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryGetProperty(JsonElement element, out JsonElement property, params string[] propertyNames)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            property = default;
+            return false;
+        }
+
+        foreach (var name in propertyNames)
+        {
+            if (element.TryGetProperty(name, out property))
+            {
+                return true;
+            }
+        }
+
+        foreach (var candidate in element.EnumerateObject())
+        {
+            if (propertyNames.Any(name => string.Equals(name, candidate.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                property = candidate.Value;
+                return true;
+            }
+        }
+
+        property = default;
+        return false;
     }
 }

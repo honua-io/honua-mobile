@@ -8,6 +8,8 @@ namespace Honua.Mobile.ServerIntegration.Tests;
 
 public sealed class LiveHonuaServerFixture : IAsyncLifetime
 {
+    public const string DefaultAdminPassword = "live-image-test-admin-password";
+
     private const string PostgresAlias = "postgres";
     private const string PostgresDatabase = "honua_dev";
     private const string PostgresUser = "honua_user";
@@ -80,7 +82,7 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         Options = Options with
         {
             SceneAssetBaseUri = Options.SceneAssetBaseUri
-                ?? Uri("/scene-assets/pkg_downtown_honolulu_2026_04/"),
+                ?? Uri($"/scenes/{Options.SceneId}/"),
         };
     }
 
@@ -107,8 +109,9 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
             .WithEnvironment("ASPNETCORE_URLS", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
+            .WithEnvironment("Kestrel__EndpointDefaults__Protocols", "Http1AndHttp2")
             .WithEnvironment("ConnectionStrings__DefaultConnection", BuildPostgresConnectionString())
-            .WithEnvironment("HONUA_ADMIN_PASSWORD", "live-image-test-admin-password")
+            .WithEnvironment("HONUA_ADMIN_PASSWORD", DefaultAdminPassword)
             .WithEnvironment("Security__ConnectionEncryption__MasterKey", "mobile-live-image-test-master-key-32")
             .WithEnvironment("Security__ConnectionEncryption__Salt", "bW9iaWxlLWxpdmUtaW1hZ2Utc2FsdA==")
             .WithPortBinding(HonuaHttpPort, assignRandomHostPort: true)
@@ -272,7 +275,7 @@ public sealed record LiveHonuaServerOptions
 
     public Uri? GrpcEndpoint { get; init; }
 
-    public string ApiKey { get; init; } = "live-image-test-api-key";
+    public string ApiKey { get; init; } = LiveHonuaServerFixture.DefaultAdminPassword;
 
     public string BearerToken { get; init; } = "live-image-test-bearer-token";
 
@@ -303,7 +306,7 @@ public sealed record LiveHonuaServerOptions
             SceneId = ReadString("HONUA_MOBILE_LIVE_SERVER_SCENE_ID", "downtown-honolulu"),
             RoutingServiceId = ReadString("HONUA_MOBILE_LIVE_SERVER_ROUTING_SERVICE_ID", "Routing"),
             GrpcEndpoint = TryUri(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_GRPC_URL")),
-            ApiKey = ReadString("HONUA_MOBILE_LIVE_SERVER_API_KEY", "live-image-test-api-key"),
+            ApiKey = ReadString("HONUA_MOBILE_LIVE_SERVER_API_KEY", LiveHonuaServerFixture.DefaultAdminPassword),
             BearerToken = ReadString("HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN", "live-image-test-bearer-token"),
             OAuthRefreshPath = ReadPath("HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH", "/oauth/token"),
             ExceptionUploadPath = ReadPath("HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH", "/api/mobile/exceptions"),

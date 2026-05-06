@@ -49,7 +49,7 @@ internal static class SdkFeatureTransportMappings
         return new FeatureServerFeature
         {
             Attributes = feature.Attributes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone()),
-            Geometry = feature.Geometry.HasValue ? feature.Geometry.Value.Clone() : null,
+            Geometry = ToFeatureServerGeometry(feature.Geometry),
         };
     }
 
@@ -230,6 +230,35 @@ internal static class SdkFeatureTransportMappings
             features.ToArray(),
             HonuaMobileSdkTransportJsonContext.Default.FeatureServerFeatureArray);
 
+    private static JsonElement? ToFeatureServerGeometry(JsonElement? geometry)
+    {
+        if (!geometry.HasValue)
+        {
+            return null;
+        }
+
+        var value = geometry.Value;
+        if (value.ValueKind == JsonValueKind.Object &&
+            value.TryGetProperty("type", out var type) &&
+            type.ValueKind == JsonValueKind.String &&
+            string.Equals(type.GetString(), "Point", StringComparison.OrdinalIgnoreCase) &&
+            value.TryGetProperty("coordinates", out var coordinates) &&
+            coordinates.ValueKind == JsonValueKind.Array &&
+            coordinates.GetArrayLength() >= 2)
+        {
+            return JsonSerializer.SerializeToElement(
+                new FeatureServerPointGeometry
+                {
+                    X = coordinates[0].GetDouble(),
+                    Y = coordinates[1].GetDouble(),
+                    SpatialReference = new FeatureServerPointSpatialReference { Wkid = 4326 },
+                },
+                HonuaMobileSdkTransportJsonContext.Default.FeatureServerPointGeometry);
+        }
+
+        return value.Clone();
+    }
+
     private static string SerializeWithContext(object value)
     {
         try
@@ -301,10 +330,29 @@ internal sealed class OgcCollectionsEnvelope
     public IReadOnlyList<OgcCollection> Collections { get; init; } = [];
 }
 
+internal sealed class FeatureServerPointGeometry
+{
+    [JsonPropertyName("x")]
+    public double X { get; init; }
+
+    [JsonPropertyName("y")]
+    public double Y { get; init; }
+
+    [JsonPropertyName("spatialReference")]
+    public FeatureServerPointSpatialReference SpatialReference { get; init; } = new();
+}
+
+internal sealed class FeatureServerPointSpatialReference
+{
+    [JsonPropertyName("wkid")]
+    public int Wkid { get; init; }
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(FeatureServerFeature[]))]
+[JsonSerializable(typeof(FeatureServerPointGeometry))]
 [JsonSerializable(typeof(FeatureServerQueryResponse))]
 [JsonSerializable(typeof(FeatureServerEditResponse))]
 [JsonSerializable(typeof(OgcCollectionsEnvelope))]

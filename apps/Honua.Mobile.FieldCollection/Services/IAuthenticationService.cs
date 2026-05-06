@@ -46,7 +46,9 @@ public class AuthenticationService : IAuthenticationService
 
     private static readonly string[] AuthenticatedValidationPaths =
     {
-        "/api/scenes?f=json"
+        "/api/scenes?f=json",
+        "/rest/services?f=json",
+        "/health"
     };
 
     private readonly HttpClient _httpClient;
