@@ -568,4 +568,49 @@ describe('display adapter', () => {
       nextPageToken: 'page-2',
     });
   });
+
+  it('uses incoming result sources before falling back to the only cached layer source', () => {
+    const workOrderSource: HonuaDisplaySourceDescriptor = {
+      ...fieldAssetSource,
+      id: 'work-orders',
+      title: 'Work orders',
+    };
+    const adapter = new HonuaWebDisplayAdapter({ addControl: vi.fn() });
+
+    adapter.appendFeatureQueryResult({
+      source: fieldAssetSource,
+      features: [
+        {
+          id: 'asset-1',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.85, 21.3],
+          },
+        },
+      ],
+    });
+    const workOrderLayer = adapter.appendFeatureQueryResult({
+      source: workOrderSource,
+      features: [
+        {
+          id: 'work-order-1',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.86, 21.31],
+          },
+        },
+      ],
+    });
+
+    expect(workOrderLayer.id).toBe('honua-work-orders');
+    expect(adapter.layers.map((layer) => layer.id)).toEqual([
+      'honua-field-assets',
+      'honua-work-orders',
+    ]);
+    expect(adapter.getFeatureCollection('honua-field-assets')?.features).toHaveLength(1);
+    expect(adapter.getFeatureCollection('honua-work-orders')?.honua).toMatchObject({
+      source: workOrderSource,
+      sourceId: 'work-orders',
+    });
+  });
 });

@@ -301,7 +301,9 @@ export class HonuaWebDisplayAdapter {
     result: HonuaFeatureQueryResult | HonuaFeatureRecord[] | FeatureCollection<Geometry, GeoJsonProperties>,
     options: HonuaGeoJsonLayerOptions = {},
   ): Layer {
-    const source = resolveQuerySource(result, options.source ?? this.#singleFeatureCollectionSource());
+    const source = resolveQuerySource(result, options.source ?? undefined)
+      ?? this.#singleFeatureCollectionSource()
+      ?? null;
     const id = options.id ?? buildLayerId(source);
     const data = appendFeatureQueryResultToGeoJson(
       result,
