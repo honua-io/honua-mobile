@@ -796,8 +796,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
     private async Task<HonuaScenePackageManifest> CreateLiveSceneManifestAsync(HttpClient http, Uri assetBaseUri)
     {
-        var metadata = await ReadAssetAsync(http, new Uri(assetBaseUri, "metadata/scene.json"));
-        var tileset = await ReadAssetAsync(http, new Uri(assetBaseUri, "tilesets/buildings/tileset.json"));
+        var tileset = await ReadAssetAsync(http, new Uri(assetBaseUri, "tileset.json"));
 
         return new HonuaScenePackageManifest
         {
@@ -826,14 +825,13 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             },
             ByteBudget = new HonuaScenePackageByteBudget
             {
-                MaxPackageBytes = metadata.Length + tileset.Length + 1024,
-                DeclaredBytes = metadata.Length + tileset.Length,
+                MaxPackageBytes = tileset.Length + 1024,
+                DeclaredBytes = tileset.Length,
             },
             Attribution = ["Honua"],
             Assets =
             [
-                CreateAsset("metadata", HonuaScenePackageAssetTypes.SceneMetadata, "metadata/scene.json", metadata),
-                CreateAsset("tileset", HonuaScenePackageAssetTypes.ThreeDimensionalTileset, "tilesets/buildings/tileset.json", tileset),
+                CreateAsset("tileset", HonuaScenePackageAssetTypes.ThreeDimensionalTileset, "tileset.json", tileset),
             ],
         };
     }

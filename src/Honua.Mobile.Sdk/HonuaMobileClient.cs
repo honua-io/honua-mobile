@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -303,6 +305,10 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             return await _featureServerClient.ListAttachmentsAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HonuaFeatureServerException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return await ListAttachmentsRestCompatAsync(request, ct).ConfigureAwait(false);
         }
         catch (HonuaFeatureServerException ex)
         {
@@ -783,14 +789,334 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             }
         }
 
-        try
+        using var raw = await ApplyFeatureServerSdkEditsRestAsync(request, ct).ConfigureAwait(false);
+        return ToFeatureServerFeatureEditResponse(raw.RootElement);
+    }
+
+    private async Task<JsonDocument> ApplyFeatureServerSdkEditsRestAsync(FeatureEditRequest request, CancellationToken ct)
+    {
+        var source = request.Source;
+        var serviceId = source.ServiceId
+            ?? throw new InvalidOperationException("FeatureServer feature edits require a service ID.");
+        var layerId = source.LayerId
+            ?? throw new InvalidOperationException("FeatureServer feature edits require a layer ID.");
+
+        var editRequest = new ApplyEditsRequest
         {
-            return await _featureServerClient.ApplyEditsAsync(request, ct).ConfigureAwait(false);
-        }
-        catch (HonuaFeatureServerException ex)
+            ServiceId = serviceId,
+            LayerId = layerId,
+            Adds = request.Adds.Count > 0
+                ? request.Adds.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToArray()
+                : null,
+            Updates = request.Updates.Count > 0
+                ? request.Updates.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToArray()
+                : null,
+            Deletes = SdkFeatureTransportMappings.ToFeatureServerDeleteObjectIds(request),
+            RollbackOnFailure = request.RollbackOnFailure,
+            ForceWrite = request.ForceWrite,
+        };
+
+        var path = $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/{layerId}/applyEdits";
+        return await SendJsonAsync(
+            HttpMethod.Post,
+            path,
+            query: null,
+            new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(editRequest)),
+            ct).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsRestCompatAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken ct)
+    {
+        var serviceId = request.Source.ServiceId
+            ?? throw new InvalidOperationException("FeatureServer attachments require a service ID.");
+        var layerId = request.Source.LayerId
+            ?? throw new InvalidOperationException("FeatureServer attachments require a layer ID.");
+        var path = $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/{layerId}/queryAttachments";
+
+        using var response = await SendJsonAsync(
+            HttpMethod.Get,
+            path,
+            new Dictionary<string, string?>
+            {
+                ["f"] = "json",
+                ["objectIds"] = request.ObjectId.ToString(CultureInfo.InvariantCulture),
+                ["returnUrl"] = "true",
+            },
+            content: null,
+            ct).ConfigureAwait(false);
+
+        return ToFeatureAttachmentInfos(response.RootElement, request.Source, request.ObjectId);
+    }
+
+    private static FeatureEditResponse ToFeatureServerFeatureEditResponse(JsonElement root)
+    {
+        var error = TryGetJsonProperty(root, out var errorElement, "error") && errorElement.ValueKind == JsonValueKind.Object
+            ? ToFeatureEditError(errorElement)
+            : null;
+        var addResults = ToFeatureEditResults(root, "addResults", "adds");
+        var updateResults = ToFeatureEditResults(root, "updateResults", "updates");
+        var deleteResults = ToFeatureEditResults(root, "deleteResults", "deletes");
+
+        if (error is null &&
+            addResults.Count == 0 &&
+            updateResults.Count == 0 &&
+            deleteResults.Count == 0)
         {
-            throw ToMobileApiException("FeatureServer", ex);
+            error = new FeatureEditError
+            {
+                Message = "FeatureServer applyEdits response is malformed: missing edit result arrays.",
+            };
         }
+
+        return new FeatureEditResponse
+        {
+            ProviderName = "geoservices-featureserver",
+            AddResults = addResults,
+            UpdateResults = updateResults,
+            DeleteResults = deleteResults,
+            Error = error,
+        };
+    }
+
+    private static IReadOnlyList<FeatureEditResult> ToFeatureEditResults(JsonElement root, params string[] propertyNames)
+    {
+        if (!TryGetJsonProperty(root, out var results, propertyNames))
+        {
+            return [];
+        }
+
+        if (results.ValueKind == JsonValueKind.Object)
+        {
+            return [ToFeatureEditResult(results)];
+        }
+
+        if (results.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return results.EnumerateArray()
+            .Where(result => result.ValueKind == JsonValueKind.Object)
+            .Select(ToFeatureEditResult)
+            .ToArray();
+    }
+
+    private static FeatureEditResult ToFeatureEditResult(JsonElement element)
+    {
+        var hasSuccess = TryGetBool(element, out var succeeded, "success", "succeeded");
+        var error = TryGetJsonProperty(element, out var errorElement, "error") && errorElement.ValueKind == JsonValueKind.Object
+            ? ToFeatureEditError(errorElement)
+            : null;
+
+        var hasId = TryGetString(element, out var id, "globalId", "globalid", "id");
+        var hasObjectId = TryGetInt64(element, out var objectId, "objectId", "objectid", "objectID", "oid");
+
+        return new FeatureEditResult
+        {
+            Id = hasId ? id : null,
+            ObjectId = hasObjectId ? objectId : null,
+            Succeeded = hasSuccess ? succeeded : error is null && (hasId || hasObjectId),
+            Error = error,
+        };
+    }
+
+    private static FeatureEditError ToFeatureEditError(JsonElement element)
+        => new()
+        {
+            Code = TryGetInt32(element, out var code, "code")
+                ? code
+                : null,
+            Message = TryGetString(element, out var message, "message", "description") && message is not null
+                ? message
+                : "Unknown FeatureServer edit error.",
+        };
+
+    private static IReadOnlyList<FeatureAttachmentInfo> ToFeatureAttachmentInfos(
+        JsonElement root,
+        FeatureSource source,
+        long parentObjectId)
+    {
+        var attachments = new List<FeatureAttachmentInfo>();
+        if (TryGetJsonProperty(root, out var groups, "attachmentGroups") && groups.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var group in groups.EnumerateArray())
+            {
+                if (group.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var groupParentObjectId = TryGetInt64(group, out var parsedParentObjectId, "parentObjectId", "objectId", "objectid")
+                    ? parsedParentObjectId
+                    : parentObjectId;
+                AddAttachmentInfos(attachments, group, source, groupParentObjectId);
+            }
+        }
+
+        AddAttachmentInfos(attachments, root, source, parentObjectId);
+        return attachments;
+    }
+
+    private static void AddAttachmentInfos(
+        List<FeatureAttachmentInfo> attachments,
+        JsonElement element,
+        FeatureSource source,
+        long parentObjectId)
+    {
+        if (!TryGetJsonProperty(element, out var infos, "attachmentInfos") || infos.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var info in infos.EnumerateArray())
+        {
+            if (info.ValueKind == JsonValueKind.Object)
+            {
+                attachments.Add(ToFeatureAttachmentInfo(info, source, parentObjectId));
+            }
+        }
+    }
+
+    private static FeatureAttachmentInfo ToFeatureAttachmentInfo(JsonElement element, FeatureSource source, long parentObjectId)
+    {
+        var parsedParentObjectId = TryGetInt64(element, out var attachmentParentObjectId, "parentObjectId", "objectId", "objectid")
+            ? attachmentParentObjectId
+            : parentObjectId;
+        var url = TryGetString(element, out var rawUrl, "url") && !string.IsNullOrWhiteSpace(rawUrl)
+            ? new Uri(rawUrl, UriKind.RelativeOrAbsolute)
+            : null;
+
+        return new FeatureAttachmentInfo
+        {
+            Source = source,
+            ParentObjectId = parsedParentObjectId,
+            AttachmentId = TryGetInt64(element, out var attachmentId, "id", "attachmentId")
+                ? attachmentId
+                : 0,
+            GlobalId = TryGetString(element, out var globalId, "globalId", "globalid")
+                ? globalId
+                : null,
+            Name = TryGetString(element, out var name, "name")
+                ? name
+                : string.Empty,
+            ContentType = TryGetString(element, out var contentType, "contentType")
+                ? contentType
+                : "application/octet-stream",
+            Size = TryGetInt64(element, out var size, "size")
+                ? size
+                : 0,
+            Keywords = TryGetString(element, out var keywords, "keywords")
+                ? keywords
+                : null,
+            Url = url,
+        };
+    }
+
+    private static bool TryGetJsonProperty(JsonElement element, out JsonElement property, params string[] propertyNames)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            property = default;
+            return false;
+        }
+
+        foreach (var name in propertyNames)
+        {
+            if (element.TryGetProperty(name, out property))
+            {
+                return true;
+            }
+        }
+
+        foreach (var candidate in element.EnumerateObject())
+        {
+            if (propertyNames.Any(name => string.Equals(name, candidate.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                property = candidate.Value;
+                return true;
+            }
+        }
+
+        property = default;
+        return false;
+    }
+
+    private static bool TryGetString(JsonElement element, out string? value, params string[] propertyNames)
+    {
+        if (TryGetJsonProperty(element, out var property, propertyNames))
+        {
+            if (property.ValueKind == JsonValueKind.String)
+            {
+                value = property.GetString();
+                return !string.IsNullOrWhiteSpace(value);
+            }
+
+            if (property.ValueKind == JsonValueKind.Number)
+            {
+                value = property.GetRawText();
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static bool TryGetInt32(JsonElement element, out int value, params string[] propertyNames)
+    {
+        if (TryGetInt64(element, out var parsed, propertyNames) &&
+            parsed >= int.MinValue &&
+            parsed <= int.MaxValue)
+        {
+            value = (int)parsed;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryGetInt64(JsonElement element, out long value, params string[] propertyNames)
+    {
+        if (TryGetJsonProperty(element, out var property, propertyNames))
+        {
+            if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out value))
+            {
+                return true;
+            }
+
+            if (property.ValueKind == JsonValueKind.String &&
+                long.TryParse(property.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryGetBool(JsonElement element, out bool value, params string[] propertyNames)
+    {
+        if (TryGetJsonProperty(element, out var property, propertyNames))
+        {
+            if (property.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                value = property.GetBoolean();
+                return true;
+            }
+
+            if (property.ValueKind == JsonValueKind.String &&
+                bool.TryParse(property.GetString(), out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private static bool IsDefaultJsonResponseFormat(string? responseFormat)

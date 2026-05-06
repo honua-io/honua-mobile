@@ -217,6 +217,9 @@ adds opt-in live image coverage for the mobile server interaction surface. The
 tests are disabled unless `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set. When
 enabled without `HONUA_MOBILE_LIVE_SERVER_BASE_URL`, the fixture starts a
 PostGIS container plus a Honua Server container image through Testcontainers.
+The local image stack requests HTTP/1.1 plus HTTP/2 from the Honua container;
+images that do not expose native HTTP/2 keep the gRPC live test red until the
+server transport contract is settled.
 When `HONUA_MOBILE_LIVE_SERVER_BASE_URL` is set, the tests use that already
 running Honua environment instead.
 
@@ -239,9 +242,9 @@ validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 | `HONUA_MOBILE_LIVE_SERVER_REPLICA_LAYER_IDS` | No | Comma-separated replica layer ids. Defaults to the editable layer plus `68920`. |
 | `HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID` | No | OGC collection id. Defaults to the layer id. |
 | `HONUA_MOBILE_LIVE_SERVER_SCENE_ID` | No | Scene id used by scene metadata tests. Defaults to `downtown-honolulu`. |
-| `HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL` | No | Base URL that serves `metadata/scene.json` and `tilesets/buildings/tileset.json`. Defaults to `/scene-assets/pkg_downtown_honolulu_2026_04/` under the live base URL. |
+| `HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL` | No | Base URL that serves `tileset.json`. Defaults to `/scenes/{HONUA_MOBILE_LIVE_SERVER_SCENE_ID}/` under the live base URL. |
 | `HONUA_MOBILE_LIVE_SERVER_GRPC_URL` | No | Separate gRPC endpoint. Defaults to the base URL. |
-| `HONUA_MOBILE_LIVE_SERVER_API_KEY` | No | API key sent as `X-API-Key`. |
+| `HONUA_MOBILE_LIVE_SERVER_API_KEY` | No | API key sent as `X-API-Key`. Defaults to the Testcontainers admin password when the fixture starts the image. |
 | `HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN` | No | Bearer token sent on client requests. |
 | `HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH` | No | OAuth refresh path. Defaults to `/oauth/token`. |
 | `HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH` | No | Mobile exception ingestion path. Defaults to `/api/mobile/exceptions`. |

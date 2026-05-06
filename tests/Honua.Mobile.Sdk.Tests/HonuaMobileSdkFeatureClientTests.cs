@@ -127,6 +127,62 @@ public sealed class HonuaMobileSdkFeatureClientTests
     }
 
     [Fact]
+    public async Task ApplyEditsAsync_FeatureServerRequest_AcceptsSparseLiveImageEditResponse()
+    {
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(async (request, ct) =>
+        {
+            capturedBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "addResults": [{ "objectid": 99 }]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+
+        var adapter = CreateAdapter(handler);
+        var result = await adapter.ApplyEditsAsync(new FeatureEditRequest
+        {
+            Source = new FeatureSource { ServiceId = "assets", LayerId = 0 },
+            Adds =
+            [
+                new FeatureEditFeature
+                {
+                    Attributes = new Dictionary<string, JsonElement>
+                    {
+                        ["name"] = JsonSerializer.SerializeToElement("Live Image Edit")
+                    },
+                    Geometry = JsonSerializer.SerializeToElement(new
+                    {
+                        type = "Point",
+                        coordinates = new[] { -157.8, 21.3 },
+                    }),
+                }
+            ],
+        });
+
+        Assert.NotNull(capturedBody);
+        var form = ParseForm(capturedBody);
+        Assert.Contains("\"x\":-157.8", form["adds"]);
+        Assert.Contains("\"y\":21.3", form["adds"]);
+        Assert.DoesNotContain("\"type\":\"Point\"", form["adds"]);
+        Assert.Equal("geoservices-featureserver", result.ProviderName);
+        Assert.True(result.Succeeded);
+        Assert.Equal(99, result.AddResults[0].ObjectId);
+        Assert.Empty(result.UpdateResults);
+        Assert.Empty(result.DeleteResults);
+    }
+
+    [Fact]
     public async Task ApplyEditsAsync_OgcRequest_DeletesObjectIdsThroughSdkFeatureContract()
     {
         var capturedPaths = new List<string>();
@@ -310,6 +366,63 @@ public sealed class HonuaMobileSdkFeatureClientTests
         });
         Assert.True(deleteResult.Succeeded);
         Assert.Equal(7, deleteResult.AttachmentId);
+    }
+
+    [Fact]
+    public async Task ListAttachmentsAsync_FeatureServerRequest_FallsBackToQueryAttachments()
+    {
+        var requestedPaths = new List<string>();
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            requestedPaths.Add(request.RequestUri!.PathAndQuery);
+            if (request.RequestUri!.AbsolutePath == "/rest/services/assets/FeatureServer/0/queryAttachments")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "attachmentGroups": [
+                            {
+                              "parentObjectId": 42,
+                              "attachmentInfos": [
+                                {
+                                  "id": 7,
+                                  "name": "photo.txt",
+                                  "contentType": "text/plain",
+                                  "size": 5,
+                                  "keywords": "field"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json"),
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var adapter = CreateAdapter(handler);
+        var attachments = (IHonuaFeatureAttachmentClient)adapter;
+
+        var listed = await attachments.ListAttachmentsAsync(new FeatureAttachmentListRequest
+        {
+            Source = new FeatureSource { ServiceId = "assets", LayerId = 0 },
+            ObjectId = 42,
+        });
+
+        Assert.Contains(requestedPaths, path => path.Contains("/rest/services/assets/FeatureServer/0/queryAttachments", StringComparison.Ordinal));
+        var attachment = Assert.Single(listed);
+        Assert.Equal(42, attachment.ParentObjectId);
+        Assert.Equal(7, attachment.AttachmentId);
+        Assert.Equal("photo.txt", attachment.Name);
     }
 
     private static HonuaMobileSdkFeatureClient CreateAdapter(HttpMessageHandler handler)
