@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  appendFeatureQueryResultToGeoJson,
   applyFeatureStreamEventToGeoJson,
   createHonuaGeoJsonLayer,
+  createHonuaGeoJsonLayerData,
   featureQueryResultToGeoJson,
   HONUA_FEATURE_METADATA_PROPERTY,
   HonuaWebDisplayAdapter,
@@ -207,6 +209,118 @@ describe('display adapter', () => {
     });
   });
 
+  it('builds deck.gl GeoJsonLayer data without dropping renderer-neutral descriptors', () => {
+    const layerData = createHonuaGeoJsonLayerData({
+      source: fieldAssetSource,
+      features: [
+        {
+          id: 'asset-101',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.83, 21.33],
+          },
+          attributes: {
+            objectid: 101,
+          },
+        },
+      ],
+    });
+
+    expect(layerData.id).toBe('honua-field-assets');
+    expect(layerData.source).toBe(fieldAssetSource);
+    expect(layerData.data.honua).toMatchObject({
+      source: fieldAssetSource,
+      sourceId: 'field-assets',
+      schema: fieldAssetSource.schema,
+      extent: fieldAssetSource.extent,
+      spatialReference: fieldAssetSource.spatialReference,
+      geometryType: fieldAssetSource.geometryType,
+      queryCapabilities: fieldAssetSource.queryCapabilities,
+      tileUrl: fieldAssetSource.tileUrl,
+      feedUrl: fieldAssetSource.feedUrl,
+    });
+  });
+
+  it('appends feature query pages into stable GeoJSON layer data', () => {
+    const firstPage = featureQueryResultToGeoJson({
+      source: fieldAssetSource,
+      objectIdFieldName: 'objectid',
+      nextPageToken: 'page-2',
+      totalCount: 3,
+      numberReturned: 2,
+      features: [
+        {
+          id: 'asset-1',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.85, 21.3],
+          },
+          attributes: {
+            objectid: 1,
+            status: 'active',
+          },
+        },
+        {
+          id: 'asset-2',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.86, 21.31],
+          },
+          attributes: {
+            objectid: 2,
+            status: 'planned',
+          },
+        },
+      ],
+    });
+
+    const appended = appendFeatureQueryResultToGeoJson({
+      source: fieldAssetSource,
+      objectIdFieldName: 'objectid',
+      nextPageToken: null,
+      totalCount: 3,
+      numberReturned: 2,
+      features: [
+        {
+          id: 'asset-2',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.861, 21.311],
+          },
+          attributes: {
+            objectid: 2,
+            status: 'complete',
+          },
+        },
+        {
+          id: 'asset-3',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.87, 21.32],
+          },
+          attributes: {
+            objectid: 3,
+            status: 'active',
+          },
+        },
+      ],
+    }, firstPage);
+
+    expect(appended.features.map((feature) => feature.id)).toEqual([
+      'asset-1',
+      'asset-2',
+      'asset-3',
+    ]);
+    expect(appended.features[1].properties.status).toBe('complete');
+    expect(appended.honua).toMatchObject({
+      source: fieldAssetSource,
+      sourceId: 'field-assets',
+      nextPageToken: null,
+      totalCount: 3,
+      numberReturned: 3,
+    });
+  });
+
   it('keeps renderer-neutral descriptors on layer data and MapLibre overlay updates', () => {
     const controls: unknown[] = [];
     const map = {
@@ -402,5 +516,56 @@ describe('display adapter', () => {
 
     expect(adapter.layers.map((layer) => layer.id)).toEqual(['external-overlay']);
     expect(adapter.getFeatureCollection('honua-work-orders')).toBeUndefined();
+  });
+
+  it('appends query pages through the adapter without replacing external layers', () => {
+    const externalLayer = createHonuaGeoJsonLayer([], {
+      id: 'external-overlay',
+    });
+    const adapter = new HonuaWebDisplayAdapter({ addControl: vi.fn() }, {
+      layers: [externalLayer],
+    });
+
+    adapter.appendFeatureQueryResult({
+      source: fieldAssetSource,
+      objectIdFieldName: 'objectid',
+      nextPageToken: 'page-2',
+      features: [
+        {
+          id: 'asset-1',
+          geometry: {
+            type: 'Point',
+            coordinates: [-157.85, 21.3],
+          },
+          attributes: {
+            objectid: 1,
+          },
+        },
+      ],
+    });
+    const layer = adapter.appendFeatureQueryResult([
+      {
+        id: 'asset-2',
+        geometry: {
+          type: 'Point',
+          coordinates: [-157.86, 21.31],
+        },
+        attributes: {
+          objectid: 2,
+        },
+      },
+    ]);
+
+    expect(adapter.layers.map((candidate) => candidate.id)).toEqual([
+      'external-overlay',
+      'honua-field-assets',
+    ]);
+    expect(layer.props.data).toBe(adapter.getFeatureCollection('honua-field-assets'));
+    expect(adapter.getFeatureCollection('honua-field-assets')?.features).toHaveLength(2);
+    expect(adapter.getFeatureCollection('honua-field-assets')?.honua).toMatchObject({
+      source: fieldAssetSource,
+      sourceId: 'field-assets',
+      nextPageToken: 'page-2',
+    });
   });
 });
