@@ -15,6 +15,7 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
     private const string PostgresUser = "honua_user";
     private const string PostgresPassword = "honua_password";
     private const int HonuaHttpPort = 8080;
+    private const int HonuaGrpcPort = 8081;
 
     private INetwork? _network;
     private IContainer? _postgres;
@@ -108,13 +109,16 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         _honua = new ContainerBuilder(Options.Image)
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
-            .WithEnvironment("ASPNETCORE_URLS", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
-            .WithEnvironment("Kestrel__EndpointDefaults__Protocols", "Http1AndHttp2")
+            .WithEnvironment("Kestrel__Endpoints__Http__Url", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
+            .WithEnvironment("Kestrel__Endpoints__Http__Protocols", "Http1")
+            .WithEnvironment("Kestrel__Endpoints__Grpc__Url", $"http://+:{HonuaGrpcPort.ToString(CultureInfo.InvariantCulture)}")
+            .WithEnvironment("Kestrel__Endpoints__Grpc__Protocols", "Http2")
             .WithEnvironment("ConnectionStrings__DefaultConnection", BuildPostgresConnectionString())
             .WithEnvironment("HONUA_ADMIN_PASSWORD", DefaultAdminPassword)
             .WithEnvironment("Security__ConnectionEncryption__MasterKey", "mobile-live-image-test-master-key-32")
             .WithEnvironment("Security__ConnectionEncryption__Salt", "bW9iaWxlLWxpdmUtaW1hZ2Utc2FsdA==")
             .WithPortBinding(HonuaHttpPort, assignRandomHostPort: true)
+            .WithPortBinding(HonuaGrpcPort, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()
                 .UntilHttpRequestIsSucceeded(request => request
                     .ForPort((ushort)HonuaHttpPort)
@@ -123,6 +127,8 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         await _honua.StartAsync();
 
         BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
+        Options = Options.WithTestcontainersGrpcEndpoint(
+            new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
         await ApplyFixtureSeedAsync();
     }
 
@@ -287,31 +293,47 @@ public sealed record LiveHonuaServerOptions
 
     public static LiveHonuaServerOptions FromEnvironment()
     {
-        var enabled = IsTruthy(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_TESTS"));
-        var baseUri = TryUri(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_BASE_URL"));
-        var layerId = ReadInt("HONUA_MOBILE_LIVE_SERVER_LAYER_ID", 68910);
+        return FromEnvironment(Environment.GetEnvironmentVariable);
+    }
+
+    internal static LiveHonuaServerOptions FromEnvironment(Func<string, string?> readVariable)
+    {
+        ArgumentNullException.ThrowIfNull(readVariable);
+
+        var enabled = IsTruthy(readVariable("HONUA_MOBILE_LIVE_SERVER_TESTS"));
+        var baseUri = TryUri(readVariable("HONUA_MOBILE_LIVE_SERVER_BASE_URL"));
+        var layerId = ReadInt(readVariable, "HONUA_MOBILE_LIVE_SERVER_LAYER_ID", 68910);
 
         return new LiveHonuaServerOptions
         {
             Enabled = enabled,
             BaseUri = baseUri,
-            Image = ReadString("HONUA_MOBILE_LIVE_SERVER_IMAGE", "honuaio/honua-server:latest"),
-            PostgresImage = ReadString("HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE", "postgis/postgis:17-3.5-alpine"),
-            FixtureSqlPath = EmptyToNull(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL")),
-            ReadyPath = ReadPath("HONUA_MOBILE_LIVE_SERVER_READY_PATH", "/healthz/ready"),
-            ServiceId = ReadString("HONUA_MOBILE_LIVE_SERVER_SERVICE_ID", "mobile_offline_demo"),
+            Image = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_IMAGE", "honuaio/honua-server:latest"),
+            PostgresImage = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE", "postgis/postgis:17-3.5-alpine"),
+            FixtureSqlPath = EmptyToNull(readVariable("HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL")),
+            ReadyPath = ReadPath(readVariable, "HONUA_MOBILE_LIVE_SERVER_READY_PATH", "/healthz/ready"),
+            ServiceId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_SERVICE_ID", "mobile_offline_demo"),
             LayerId = layerId,
-            ReplicaLayerIds = ReadIntList("HONUA_MOBILE_LIVE_SERVER_REPLICA_LAYER_IDS", [layerId, 68920]),
-            OgcCollectionId = ReadString("HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID", layerId.ToString(CultureInfo.InvariantCulture)),
-            SceneId = ReadString("HONUA_MOBILE_LIVE_SERVER_SCENE_ID", "downtown-honolulu"),
-            RoutingServiceId = ReadString("HONUA_MOBILE_LIVE_SERVER_ROUTING_SERVICE_ID", "Routing"),
-            GrpcEndpoint = TryUri(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_GRPC_URL")),
-            ApiKey = ReadString("HONUA_MOBILE_LIVE_SERVER_API_KEY", LiveHonuaServerFixture.DefaultAdminPassword),
-            BearerToken = ReadString("HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN", "live-image-test-bearer-token"),
-            OAuthRefreshPath = ReadPath("HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH", "/oauth/token"),
-            ExceptionUploadPath = ReadPath("HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH", "/api/mobile/exceptions"),
-            SceneAssetBaseUri = TryUri(Environment.GetEnvironmentVariable("HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL")),
+            ReplicaLayerIds = ReadIntList(readVariable, "HONUA_MOBILE_LIVE_SERVER_REPLICA_LAYER_IDS", [layerId, 68920]),
+            OgcCollectionId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID", layerId.ToString(CultureInfo.InvariantCulture)),
+            SceneId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_SCENE_ID", "downtown-honolulu"),
+            RoutingServiceId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_ROUTING_SERVICE_ID", "Routing"),
+            GrpcEndpoint = TryUri(readVariable("HONUA_MOBILE_LIVE_SERVER_GRPC_URL")),
+            ApiKey = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_API_KEY", LiveHonuaServerFixture.DefaultAdminPassword),
+            BearerToken = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN", "live-image-test-bearer-token"),
+            OAuthRefreshPath = ReadPath(readVariable, "HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH", "/oauth/token"),
+            ExceptionUploadPath = ReadPath(readVariable, "HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH", "/api/mobile/exceptions"),
+            SceneAssetBaseUri = TryUri(readVariable("HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL")),
         };
+    }
+
+    internal LiveHonuaServerOptions WithTestcontainersGrpcEndpoint(Uri grpcEndpoint)
+    {
+        ArgumentNullException.ThrowIfNull(grpcEndpoint);
+
+        return GrpcEndpoint is null
+            ? this with { GrpcEndpoint = grpcEndpoint }
+            : this;
     }
 
     private static bool IsTruthy(string? value)
@@ -338,23 +360,23 @@ public sealed record LiveHonuaServerOptions
         return uri;
     }
 
-    private static string ReadString(string name, string fallback)
-        => EmptyToNull(Environment.GetEnvironmentVariable(name)) ?? fallback;
+    private static string ReadString(Func<string, string?> readVariable, string name, string fallback)
+        => EmptyToNull(readVariable(name)) ?? fallback;
 
-    private static string ReadPath(string name, string fallback)
+    private static string ReadPath(Func<string, string?> readVariable, string name, string fallback)
     {
-        var value = ReadString(name, fallback);
+        var value = ReadString(readVariable, name, fallback);
         return value.StartsWith("/", StringComparison.Ordinal) ? value : "/" + value;
     }
 
-    private static int ReadInt(string name, int fallback)
-        => int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+    private static int ReadInt(Func<string, string?> readVariable, string name, int fallback)
+        => int.TryParse(readVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value
             : fallback;
 
-    private static IReadOnlyList<int> ReadIntList(string name, IReadOnlyList<int> fallback)
+    private static IReadOnlyList<int> ReadIntList(Func<string, string?> readVariable, string name, IReadOnlyList<int> fallback)
     {
-        var value = Environment.GetEnvironmentVariable(name);
+        var value = readVariable(name);
         if (string.IsNullOrWhiteSpace(value))
         {
             return fallback;

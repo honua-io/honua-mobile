@@ -217,9 +217,9 @@ adds opt-in live image coverage for the mobile server interaction surface. The
 tests are disabled unless `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set. When
 enabled without `HONUA_MOBILE_LIVE_SERVER_BASE_URL`, the fixture starts a
 PostGIS container plus a Honua Server container image through Testcontainers.
-The local image stack requests HTTP/1.1 plus HTTP/2 from the Honua container;
-images that do not expose native HTTP/2 keep the gRPC live test red until the
-server transport contract is settled.
+The local image stack publishes REST on the Honua container's port `8080` and
+native h2c gRPC on port `8081`; for Testcontainers-managed runs the fixture
+derives `GrpcEndpoint` from the mapped host port for container port `8081`.
 When `HONUA_MOBILE_LIVE_SERVER_BASE_URL` is set, the tests use that already
 running Honua environment instead.
 
@@ -243,7 +243,7 @@ validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 | `HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID` | No | OGC collection id. Defaults to the layer id. |
 | `HONUA_MOBILE_LIVE_SERVER_SCENE_ID` | No | Scene id used by scene metadata tests. Defaults to `downtown-honolulu`. |
 | `HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL` | No | Base URL that serves `tileset.json`. Defaults to `/scenes/{HONUA_MOBILE_LIVE_SERVER_SCENE_ID}/` under the live base URL. |
-| `HONUA_MOBILE_LIVE_SERVER_GRPC_URL` | No | Separate gRPC endpoint. Defaults to the base URL. |
+| `HONUA_MOBILE_LIVE_SERVER_GRPC_URL` | No | Separate gRPC endpoint. Overrides the Testcontainers-derived gRPC URL. For prestarted servers, omit it to keep the client default of using the base URL. |
 | `HONUA_MOBILE_LIVE_SERVER_API_KEY` | No | API key sent as `X-API-Key`. Defaults to the Testcontainers admin password when the fixture starts the image. |
 | `HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN` | No | Bearer token sent on client requests. |
 | `HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH` | No | OAuth refresh path. Defaults to `/oauth/token`. |
