@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyHonuaMapOptions,
+  createHonuaMapCdnSnippet,
   createHonuaMapIframeSnippet,
   createHonuaMapSnippet,
   defineHonuaMapElement,
@@ -62,6 +63,64 @@ describe('honua map snippets', () => {
 
     expect(snippet).toContain('api-key="public-browser-key"');
     expect(snippet).not.toContain('<script');
+  });
+
+  it('generates a CDN custom-element snippet without credentials by default', () => {
+    const snippet = createHonuaMapCdnSnippet({
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      layerIds: ['assets'],
+      apiKey: 'secret-key',
+      interactive: true,
+      label: 'City asset map',
+    }, {
+      scriptAttributes: {
+        integrity: 'sha384-example',
+        crossOrigin: 'anonymous',
+        referrerPolicy: 'strict-origin',
+      },
+    });
+
+    expect(snippet).toContain(
+      '<script type="module" src="https://cdn.honua.dev/embed.js" integrity="sha384-example" crossorigin="anonymous" referrerpolicy="strict-origin"></script>',
+    );
+    expect(snippet).toContain('<honua-map');
+    expect(snippet).toContain('service-url="https://services.example.test/FeatureServer"');
+    expect(snippet).toContain('interactive');
+    expect(snippet).toContain('label="City asset map"');
+    expect(snippet).not.toContain('secret-key');
+  });
+
+  it('generates a CDN branded tag snippet with an inline define call', () => {
+    const snippet = createHonuaMapCdnSnippet({
+      basemap: 'dark',
+      apiKey: 'public-browser-key',
+    }, {
+      scriptUrl: 'https://cdn.example.test/honua/embed.js',
+      elementName: 'city-asset-map',
+      includeCredentials: true,
+      scriptAttributes: {
+        nonce: 'nonce-value',
+      },
+    });
+
+    expect(snippet).toContain('<script type="module" nonce="nonce-value">');
+    expect(snippet).toContain(
+      'import { defineHonuaMapElement } from \'https://cdn.example.test/honua/embed.js\';',
+    );
+    expect(snippet).toContain('defineHonuaMapElement(\'city-asset-map\')');
+    expect(snippet).toContain('<city-asset-map');
+    expect(snippet).toContain('basemap="dark"');
+    expect(snippet).toContain('api-key="public-browser-key"');
+  });
+
+  it('omits the CDN script when requested', () => {
+    const snippet = createHonuaMapCdnSnippet({
+      search: true,
+    }, {
+      includeScript: false,
+    });
+
+    expect(snippet).toBe('<honua-map\n  search>\n</honua-map>');
   });
 
   it('applies map options to an existing element and removes null values', () => {
