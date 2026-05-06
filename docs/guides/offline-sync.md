@@ -210,6 +210,61 @@ contract. The loopback harness verifies request-level behavior locally; the
 cloud harness records the fixture assumption in the queued operation metadata
 and evidence artifact.
 
+## Live Honua Image Server Interaction Tests
+
+`tests/Honua.Mobile.ServerIntegration.Tests/LiveHonuaServerInteractionTests.cs`
+adds opt-in live image coverage for the mobile server interaction surface. The
+tests are disabled unless `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set. When
+enabled without `HONUA_MOBILE_LIVE_SERVER_BASE_URL`, the fixture starts a
+PostGIS container plus a Honua Server container image through Testcontainers.
+When `HONUA_MOBILE_LIVE_SERVER_BASE_URL` is set, the tests use that already
+running Honua environment instead.
+
+The live suite covers health, FeatureServer REST query/edit, FeatureServer gRPC
+query/edit, OGC Features CRUD, attachments, replica sync, offline queued upload
+through the background orchestrator path, map area downloads, scene package
+asset downloads, scene metadata/resolve, routing, FieldCollection API-key
+validation, OAuth refresh, and both app-level and MAUI exception upload paths.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `HONUA_MOBILE_LIVE_SERVER_TESTS` | Yes | Set to `1` or `true` to enable live image tests. |
+| `HONUA_MOBILE_LIVE_SERVER_BASE_URL` | No | Existing Honua base URL. If omitted, Testcontainers starts the image. |
+| `HONUA_MOBILE_LIVE_SERVER_IMAGE` | No | Honua Server image. Defaults to `honuaio/honua-server:latest`. |
+| `HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE` | No | PostGIS image for Testcontainers. Defaults to `postgis/postgis:17-3.5-alpine`. |
+| `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` | No | SQL fixture applied to the Testcontainers PostGIS database before tests run. Use the `honua-server#895` mobile fixture seed when available. |
+| `HONUA_MOBILE_LIVE_SERVER_READY_PATH` | No | Readiness path. Defaults to `/healthz/ready`. |
+| `HONUA_MOBILE_LIVE_SERVER_SERVICE_ID` | No | FeatureServer service id. Defaults to `mobile_offline_demo`. |
+| `HONUA_MOBILE_LIVE_SERVER_LAYER_ID` | No | Editable FeatureServer layer id. Defaults to `68910`. |
+| `HONUA_MOBILE_LIVE_SERVER_REPLICA_LAYER_IDS` | No | Comma-separated replica layer ids. Defaults to the editable layer plus `68920`. |
+| `HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID` | No | OGC collection id. Defaults to the layer id. |
+| `HONUA_MOBILE_LIVE_SERVER_SCENE_ID` | No | Scene id used by scene metadata tests. Defaults to `downtown-honolulu`. |
+| `HONUA_MOBILE_LIVE_SERVER_SCENE_ASSET_BASE_URL` | No | Base URL that serves `metadata/scene.json` and `tilesets/buildings/tileset.json`. Defaults to `/scene-assets/pkg_downtown_honolulu_2026_04/` under the live base URL. |
+| `HONUA_MOBILE_LIVE_SERVER_GRPC_URL` | No | Separate gRPC endpoint. Defaults to the base URL. |
+| `HONUA_MOBILE_LIVE_SERVER_API_KEY` | No | API key sent as `X-API-Key`. |
+| `HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN` | No | Bearer token sent on client requests. |
+| `HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH` | No | OAuth refresh path. Defaults to `/oauth/token`. |
+| `HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH` | No | Mobile exception ingestion path. Defaults to `/api/mobile/exceptions`. |
+
+Example using a local `honua-server` checkout fixture seed:
+
+```bash
+HONUA_MOBILE_LIVE_SERVER_TESTS=1 \
+HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=/home/makani/honua-server/tests/seed/mobile-offline-demo-v1.sql \
+dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
+```
+
+The live tests intentionally fail when an enabled server image does not expose a
+configured interaction route or fixture. That keeps the mobile repo from
+claiming live server coverage that is only satisfied by the loopback stub.
+When `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` is set, the seed must match the
+schema in the selected Honua Server image.
+
+The embed package also has an opt-in live metadata fetch check for
+`<honua-scene>`. Set `HONUA_EMBED_LIVE_SCENE_METADATA_URL` to a
+`honua-scene-metadata/v1` document and optionally set
+`HONUA_EMBED_LIVE_SCENE_ID` before running `npm test --prefix src/Honua.Embed`.
+
 ### Basic Setup
 
 Configure offline capabilities in `MauiProgram.cs`:
