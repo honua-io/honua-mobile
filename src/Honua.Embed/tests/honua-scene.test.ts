@@ -1,8 +1,10 @@
+import { env } from 'node:process';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   defineHonuaSceneElement,
   HonuaSceneElement,
   HonuaScenePackageCacheError,
+  type HonuaSceneMetadataChangeDetail,
 } from '../src/index';
 
 interface MockCesiumWidgetSnapshot {
@@ -962,6 +964,40 @@ describe('honua-scene', () => {
     });
 
     fetchSpy.mockRestore();
+  });
+
+  it('fetches live Honua scene metadata when configured', async () => {
+    const metadataUrl = env.HONUA_EMBED_LIVE_SCENE_METADATA_URL;
+    if (!metadataUrl) {
+      return;
+    }
+
+    const element = document.createElement('honua-scene');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    const changed = new Promise<CustomEvent<HonuaSceneMetadataChangeDetail>>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error(`Timed out waiting for live scene metadata from ${metadataUrl}`)),
+        10000,
+      );
+      element.addEventListener('honua-scene-metadata-error', (event) => {
+        clearTimeout(timeout);
+        reject(new Error(JSON.stringify((event as CustomEvent).detail)));
+      }, { once: true });
+      element.addEventListener('honua-scene-metadata-change', (event) => {
+        clearTimeout(timeout);
+        resolve(event as CustomEvent<HonuaSceneMetadataChangeDetail>);
+      }, { once: true });
+    });
+
+    element.setAttribute('metadata-url', metadataUrl);
+
+    const event = await changed;
+    expect(event.detail.source).toBe('fetch');
+    expect(event.detail.metadata?.id).toBe(env.HONUA_EMBED_LIVE_SCENE_ID ?? event.detail.metadata?.id);
+    expect(event.detail.metadata?.name).toEqual(expect.any(String));
+    expect(event.detail.metadata?.layers?.length ?? 0).toBeGreaterThan(0);
   });
 
   it('emits honua-scene-metadata-error when the document is invalid', async () => {
