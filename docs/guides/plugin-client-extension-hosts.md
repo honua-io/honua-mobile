@@ -30,6 +30,11 @@ registration.
 - `AddHonuaMapPluginHost` and `AddHonuaMapPlugin<TPlugin>` DI helpers in a
   separate plugin-host registration extension file.
 
+Use these APIs as host adapter contracts. A mobile plugin package should expose
+registration glue, UI surfaces, and native renderer adapters; portable
+manifests, permissions, validators, workflow hooks, geometry, and service
+clients still come from versioned SDK packages when those contracts exist.
+
 Example:
 
 ```csharp
@@ -86,6 +91,20 @@ load.
 This is runtime failure isolation, not a process sandbox. Code signing,
 enterprise trust, permission enforcement, and package provenance require the SDK
 and server work linked above.
+
+### Mobile Adapter Checklist
+
+Keep mobile plugin slices mergeable by checking these boundaries before adding a
+new extension package:
+
+| Adapter concern | Mobile-owned shape |
+| --- | --- |
+| Registration | `IServiceCollection` extension methods that call `AddHonuaMapPluginHost` and register plugin implementations. |
+| UI mounting | `HonuaMapPluginUiExtension` entries for host-owned panels, dialogs, forms, or workflow screens. |
+| Toolbar commands | `HonuaMapPluginToolbarButton` entries that resolve mobile services from `HonuaMapPluginCommandContext.Services`. |
+| Feature rendering | `HonuaMapPluginFeatureRenderer` entries that point at native renderer adapter types. |
+| SDK dependency | Reference a published `Honua.Sdk.*` package and link the SDK issue when portable contracts are required. |
+| Server dependency | Link the `honua-server` dependency issue when plugin behavior requires server endpoints or hooks. |
 
 ## Web Host Boundary
 
