@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest="${repo_root}/quality/android-store-prereqs.json"
-store_doc="${repo_root}/docs/guides/mobile-store-prereqs.md"
-distribution_doc="${repo_root}/docs/guides/mobile-android-internal-distribution.md"
-workflow="${repo_root}/.github/workflows/android-internal-distribution.yml"
+manifest="${HONUA_ANDROID_STORE_MANIFEST:-${repo_root}/quality/android-store-prereqs.json}"
+store_doc="${HONUA_ANDROID_STORE_PREREQS_DOC:-${repo_root}/docs/guides/mobile-store-prereqs.md}"
+distribution_doc="${HONUA_ANDROID_DISTRIBUTION_DOC:-${repo_root}/docs/guides/mobile-android-internal-distribution.md}"
+workflow="${HONUA_ANDROID_STORE_WORKFLOW:-${repo_root}/.github/workflows/android-internal-distribution.yml}"
 
 fail() {
   printf 'error: %s\n' "$*" >&2
@@ -21,6 +21,40 @@ require_text() {
   local needle="$1"
   local path="$2"
   grep -Fq "${needle}" "${path}" || fail "${path#${repo_root}/} does not mention '${needle}'"
+}
+
+require_workflow_app_target_mapping() {
+  local target_id="$1"
+  local project_rel="$2"
+  local package_id="$3"
+  local secret_stem="$4"
+  local block
+
+  block="$(
+    awk -v target="${target_id}" '
+      function trim(value) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        return value
+      }
+
+      trim($0) == target ")" {
+        in_block = 1
+      }
+
+      in_block {
+        print
+      }
+
+      in_block && trim($0) == ";;" {
+        exit
+      }
+    ' "${workflow}"
+  )"
+
+  [[ -n "${block}" ]] || fail "${workflow#${repo_root}/} is missing an app_target mapping block for '${target_id}'"
+  grep -Fq "app_project=\"${project_rel}\"" <<<"${block}" || fail "${workflow#${repo_root}/} maps '${target_id}' without project '${project_rel}'"
+  grep -Fq "package_name=\"${package_id}\"" <<<"${block}" || fail "${workflow#${repo_root}/} maps '${target_id}' without package '${package_id}'"
+  grep -Fq "secret_stem=\"${secret_stem}\"" <<<"${block}" || fail "${workflow#${repo_root}/} maps '${target_id}' without signing secret stem '${secret_stem}'"
 }
 
 require_file "${manifest}"
@@ -72,10 +106,7 @@ for index in $(seq 0 "$((target_count - 1))"); do
   )"
   [[ "${application_id}" == "${package_id}" ]] || fail "${project_rel} ApplicationId '${application_id}' does not match manifest package '${package_id}'"
 
-  require_text "${target_id}" "${workflow}"
-  require_text "${project_rel}" "${workflow}"
-  require_text "${package_id}" "${workflow}"
-  require_text "${secret_stem}" "${workflow}"
+  require_workflow_app_target_mapping "${target_id}" "${project_rel}" "${package_id}" "${secret_stem}"
 
   require_text "${project_rel}" "${store_doc}"
   require_text "${package_id}" "${store_doc}"
