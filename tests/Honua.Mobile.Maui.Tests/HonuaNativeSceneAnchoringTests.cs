@@ -188,6 +188,122 @@ public sealed class HonuaNativeSceneAnchoringTests
     }
 
     [Fact]
+    public async Task CreateEvidenceContextAsync_CapturesSceneRuntimeAccuracyAndReadiness()
+    {
+        var capturedAt = new DateTimeOffset(2026, 5, 7, 12, 30, 0, TimeSpan.Zero);
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.ControlPointCalibration,
+                packageState: HonuaNativeArScenePackageState.Valid,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 0.4,
+                verticalAccuracyMeters: 0.7,
+                yawAccuracyDegrees: 3,
+                calibrationResidualMeters: 0.2,
+                confirmedControlPointCount: 3,
+                isOnline: false,
+                updatedAt: capturedAt),
+            Status = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.ControlPointCalibration,
+                packageState: HonuaNativeArScenePackageState.Valid,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 0.4,
+                verticalAccuracyMeters: 0.7,
+                yawAccuracyDegrees: 3,
+                calibrationResidualMeters: 0.2,
+                confirmedControlPointCount: 3,
+                isOnline: false,
+                updatedAt: capturedAt),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+        var request = CreateRequest(
+            isOffline: true,
+            packageId: "pkg-2026-05",
+            requiresVerticalPlacement: true,
+            sourceDeclaresSurveyQuality: true,
+            controlPointIds: ["cp-a", "cp-b", "cp-c"]);
+
+        await controller.StartAsync(request);
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal("downtown-honolulu", evidence.SceneId);
+        Assert.Equal("scene-rev-42", evidence.SceneRevision);
+        Assert.Equal("pkg-2026-05", evidence.PackageId);
+        Assert.True(evidence.IsOffline);
+        Assert.False(evidence.IsOnline);
+        Assert.Equal(HonuaNativeArRuntime.AndroidArCore, evidence.Runtime);
+        Assert.Equal(HonuaNativeArReadinessLevel.PrecisionInspection, evidence.ReadinessLevel);
+        Assert.Equal(HonuaNativeArAnchoringMode.ControlPointCalibration, evidence.ActiveAnchoringMode);
+        Assert.Equal(HonuaNativeArScenePackageState.Valid, evidence.PackageState);
+        Assert.Equal(0.4, evidence.HorizontalAccuracyMeters);
+        Assert.Equal(0.7, evidence.VerticalAccuracyMeters);
+        Assert.Equal(3, evidence.YawAccuracyDegrees);
+        Assert.Equal(0.2, evidence.CalibrationResidualMeters);
+        Assert.Equal(3, evidence.ConfirmedControlPointCount);
+        Assert.Equal(["cp-a", "cp-b", "cp-c"], evidence.ControlPointIds);
+        Assert.True(evidence.CanAttachToFieldEvidence);
+        Assert.True(evidence.CanAttachToPrecisionEvidence);
+        Assert.Equal(capturedAt, evidence.CapturedAt);
+        Assert.Equal(1, adapter.GetStatusCalls);
+    }
+
+    [Fact]
+    public async Task CreateEvidenceContextAsync_WhenStatusReportsDifferentScene_CapturesRenderedScene()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(sceneId: "rendered-scene"),
+            Status = CreateStatus(sceneId: "rendered-scene"),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await controller.StartAsync(CreateRequest());
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal("rendered-scene", evidence.SceneId);
+        Assert.Equal(HonuaNativeArReadinessLevel.Blocked, evidence.ReadinessLevel);
+        Assert.Contains(
+            evidence.Blockers,
+            blocker => blocker.Contains("not rendering the requested scene", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CreateEvidenceContextAsync_WhenStatusOmitsScene_CapturesRequestedScene()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(sceneId: null),
+            Status = CreateStatus(sceneId: null),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await controller.StartAsync(CreateRequest());
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal("downtown-honolulu", evidence.SceneId);
+    }
+
+    [Fact]
+    public async Task CreateEvidenceContextAsync_WhenReadinessBlocked_CarriesBlockersWithoutEnablingEvidence()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(horizontalAccuracyMeters: 1),
+            Status = CreateStatus(horizontalAccuracyMeters: null),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await controller.StartAsync(CreateRequest());
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal(HonuaNativeArReadinessLevel.Blocked, evidence.ReadinessLevel);
+        Assert.False(evidence.CanAttachToFieldEvidence);
+        Assert.False(evidence.CanAttachToPrecisionEvidence);
+        Assert.Contains(evidence.Blockers, blocker => blocker.Contains("Horizontal accuracy", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void AddHonuaNativeSceneAnchoring_RegistersControllerAndOptions()
     {
         var options = new HonuaNativeArSessionOptions
@@ -226,25 +342,32 @@ public sealed class HonuaNativeSceneAnchoringTests
         HonuaNativeArTrackingState trackingState = HonuaNativeArTrackingState.Tracking,
         HonuaNativeArAnchoringMode activeAnchoringMode = HonuaNativeArAnchoringMode.PlatformGeospatial,
         HonuaNativeArScenePackageState packageState = HonuaNativeArScenePackageState.NotRequired,
+        string? sceneId = "downtown-honolulu",
         string? packageId = null,
         double? horizontalAccuracyMeters = 1,
+        double? verticalAccuracyMeters = null,
         double? yawAccuracyDegrees = null,
         double? calibrationResidualMeters = null,
-        int confirmedControlPointCount = 0)
+        int confirmedControlPointCount = 0,
+        bool isOnline = true,
+        DateTimeOffset? updatedAt = null)
         => new()
         {
             Runtime = HonuaNativeArRuntime.AndroidArCore,
             State = state,
             TrackingState = trackingState,
             ActiveAnchoringMode = activeAnchoringMode,
-            SceneId = "downtown-honolulu",
+            SceneId = sceneId,
             SceneRevision = "scene-rev-42",
             PackageId = packageId,
             PackageState = packageState,
             ConfirmedControlPointCount = confirmedControlPointCount,
+            IsOnline = isOnline,
+            UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow,
             Accuracy = new HonuaNativeArAccuracySample
             {
                 HorizontalAccuracyMeters = horizontalAccuracyMeters,
+                VerticalAccuracyMeters = verticalAccuracyMeters,
                 YawAccuracyDegrees = yawAccuracyDegrees,
                 CalibrationResidualMeters = calibrationResidualMeters,
             },

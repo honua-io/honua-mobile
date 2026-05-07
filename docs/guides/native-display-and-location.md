@@ -104,6 +104,10 @@ state into the platform adapter.
 - `HonuaNativeArSceneAnchorRequest` carries scene id, scene revision, optional
   offline package id, selected anchoring mode, and control-point IDs. The SDK or
   app remains responsible for resolving the authoritative scene/package data.
+- `HonuaNativeArEvidenceContext` snapshots the mobile runtime metadata that AR
+  field photos, annotations, and reports should carry: scene/package ids,
+  online/offline state, runtime, active anchor mode, package state, accuracy
+  samples, control points, readiness, blockers, and warnings.
 
 ```csharp
 using Honua.Mobile.Maui;
@@ -135,6 +139,17 @@ var readiness = await sceneAnchoring.StartAsync(
 if (readiness.CanRenderOverlay)
 {
     // Render through the app's native AR adapter with the readiness state visible in the UI.
+}
+```
+
+Field evidence capture:
+
+```csharp
+var evidenceContext = await sceneAnchoring.CreateEvidenceContextAsync(ct);
+
+if (evidenceContext.CanAttachToFieldEvidence)
+{
+    // Attach evidenceContext to the captured photo, annotation, or report.
 }
 ```
 
