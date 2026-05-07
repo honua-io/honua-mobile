@@ -1,4 +1,5 @@
 using Honua.Mobile.Maui.Plugins;
+using Honua.Sdk.Abstractions.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Honua.Mobile.Maui.Tests;
@@ -117,6 +118,58 @@ public sealed class HonuaMapPluginHostTests
         Assert.Equal("typed-action", Assert.Single(report.Contributions.ToolbarButtons).Contribution.Id);
     }
 
+    [Fact]
+    public void ToMapPluginDescriptor_UsesSdkOwnedManifestMetadata()
+    {
+        var manifest = CreateSdkManifest(
+            "com.example.inspection",
+            "Inspection Tools",
+            [HonuaPluginHostKinds.Mobile]);
+
+        var descriptor = manifest.ToMapPluginDescriptor(priority: 10);
+
+        Assert.Equal("com.example.inspection", descriptor.Id);
+        Assert.Equal("Inspection Tools", descriptor.DisplayName);
+        Assert.Equal(new Version(1, 2, 3), descriptor.Version);
+        Assert.Equal(10, descriptor.Priority);
+        Assert.Same(manifest, descriptor.SdkManifest);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_TreatsSdkManifestHostMismatchAsActivationFailure()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMapPlugin(new ManifestBackedMapPlugin(CreateSdkManifest(
+                "web-only",
+                "Web Only",
+                [HonuaPluginHostKinds.Web])))
+            .AddHonuaMapPlugin(new RecordingMapPlugin("healthy"))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal(typeof(ManifestBackedMapPlugin).FullName, failure.PluginId);
+        Assert.Contains("mobile", failure.Message, StringComparison.Ordinal);
+        Assert.Equal("healthy", Assert.Single(report.ActivatedPlugins).Id);
+    }
+
+    [Fact]
+    public void EvaluateForMobileHost_ReturnsSdkValidationErrors()
+    {
+        var manifest = CreateSdkManifest(
+            string.Empty,
+            "Missing Id",
+            [HonuaPluginHostKinds.Mobile]);
+
+        var evaluation = manifest.EvaluateForMobileHost();
+
+        Assert.False(evaluation.CanLoad);
+        Assert.False(evaluation.SdkValidation.IsValid);
+        Assert.Contains(evaluation.SdkValidation.Issues, issue =>
+            issue.Severity == HonuaPluginValidationSeverity.Error);
+    }
+
     private sealed class RecordingMapPlugin : IHonuaMapPlugin
     {
         private readonly string _id;
@@ -217,6 +270,27 @@ public sealed class HonuaMapPluginHostTests
         }
     }
 
+    private sealed class ManifestBackedMapPlugin : IHonuaMapPlugin
+    {
+        public ManifestBackedMapPlugin(HonuaPluginManifest manifest)
+        {
+            Descriptor = new HonuaMapPluginDescriptor
+            {
+                Id = manifest.PluginId ?? string.Empty,
+                DisplayName = manifest.DisplayName ?? string.Empty,
+                SdkManifest = manifest,
+            };
+        }
+
+        public HonuaMapPluginDescriptor Descriptor { get; }
+
+        public ValueTask ActivateAsync(IHonuaMapPluginContext context, CancellationToken ct = default)
+        {
+            context.AddToolbarButton(CreateToolbarButton($"{context.Plugin.Id}-action"));
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class RecordingRenderer;
 
     private static HonuaMapPluginToolbarButton CreateToolbarButton(string id)
@@ -225,5 +299,33 @@ public sealed class HonuaMapPluginHostTests
             Id = id,
             Title = id,
             ExecuteAsync = (_, _) => ValueTask.CompletedTask,
+        };
+
+    private static HonuaPluginManifest CreateSdkManifest(
+        string pluginId,
+        string displayName,
+        IReadOnlyList<string> hosts)
+        => new()
+        {
+            SchemaVersion = HonuaPluginManifest.CurrentSchemaVersion,
+            PluginId = pluginId,
+            DisplayName = displayName,
+            Publisher = "Example",
+            Version = "1.2.3",
+            Compatibility = new HonuaPluginCompatibility
+            {
+                SupportedHosts = hosts,
+            },
+            Extensions =
+            [
+                new HonuaPluginExtensionPoint
+                {
+                    ExtensionId = "field-validation",
+                    Type = HonuaPluginExtensionTypes.FieldValidator,
+                    Target = "field",
+                    Handler = "example.field-validation",
+                    Order = 0,
+                },
+            ],
         };
 }

@@ -10,7 +10,7 @@ contracts remain outside this repo.
 | --- | --- | --- |
 | MAUI map plugin activation, host registries, UI mounting, native renderer adapters, and failure isolation | `honua-mobile` | Implemented as thin runtime primitives under `Honua.Mobile.Maui.Plugins`. |
 | Web component and browser host extension details | `honua-mobile` / `@honua-io/embed` | Documented here only for this branch; active embed implementation work stays separate. |
-| Non-UI plugin manifests, permissions, compatibility checks, validators, calculated fields, data transforms, and workflow hooks | `honua-sdk-dotnet` | Track in [honua-sdk-dotnet#72](https://github.com/honua-io/honua-sdk-dotnet/issues/72) and consume as versioned `Honua.Sdk.*` NuGet packages. |
+| Non-UI plugin manifests, permissions, compatibility checks, validators, calculated fields, data transforms, and workflow hooks | `honua-sdk-dotnet` | SDK issue [honua-sdk-dotnet#72](https://github.com/honua-io/honua-sdk-dotnet/issues/72) is available through versioned `Honua.Sdk.*` packages; mobile consumes those contracts instead of redefining them. |
 | Server plugin endpoints, server-side hooks, validators, computed fields, marketplace/discovery APIs, and trusted package metadata | `honua-server` | Track in [honua-server#347](https://github.com/honua-io/honua-server/issues/347). |
 
 The mobile repo should not define durable copies of SDK-owned schemas. If a
@@ -27,6 +27,8 @@ registration.
 - `HonuaMapPluginHost` for activating registered plugins.
 - `HonuaMapPluginContributionRegistry` snapshots for toolbar buttons, UI
   extensions, and native feature renderer adapters.
+- `HonuaPluginManifest` adapters that preflight SDK-owned manifest validation
+  and mobile host compatibility before plugin activation.
 - `AddHonuaMapPluginHost` and `AddHonuaMapPlugin<TPlugin>` DI helpers in a
   separate plugin-host registration extension file.
 
@@ -38,6 +40,7 @@ clients still come from versioned SDK packages when those contracts exist.
 Example:
 
 ```csharp
+using Honua.Sdk.Abstractions.Plugins;
 using Honua.Mobile.Maui.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -47,13 +50,29 @@ services
 
 public sealed class TenantInspectionMapPlugin : IHonuaMapPlugin
 {
-    public HonuaMapPluginDescriptor Descriptor { get; } = new()
+    private static readonly HonuaPluginManifest Manifest = HonuaPluginManifest.ParseJson("""
     {
-        Id = "tenant.inspections",
-        DisplayName = "Tenant inspections",
-        Version = new Version(1, 0, 0),
-        Priority = 20,
-    };
+      "schemaVersion": "honua.plugin.v1",
+      "pluginId": "tenant.inspections",
+      "displayName": "Tenant inspections",
+      "publisher": "Tenant",
+      "version": "1.0.0",
+      "compatibility": {
+        "supportedHosts": [ "mobile" ]
+      },
+      "extensions": [
+        {
+          "extensionId": "tenant.inspections.validate",
+          "type": "field-validator",
+          "target": "inspection",
+          "handler": "tenant.inspections.validate"
+        }
+      ]
+    }
+    """);
+
+    public HonuaMapPluginDescriptor Descriptor { get; } = Manifest.ToMapPluginDescriptor(
+        priority: 20);
 
     public ValueTask ActivateAsync(IHonuaMapPluginContext context, CancellationToken ct = default)
     {
@@ -92,6 +111,12 @@ This is runtime failure isolation, not a process sandbox. Code signing,
 enterprise trust, permission enforcement, and package provenance require the SDK
 and server work linked above.
 
+`HonuaMapPluginDescriptor.SdkManifest` is optional for purely host-local
+extensions, but plugin packages that publish portable manifests should attach
+the SDK `HonuaPluginManifest` or call `ToMapPluginDescriptor`. The MAUI host
+then uses SDK validation and rejects manifests that do not include the `mobile`
+host kind before plugin code is activated.
+
 ### Mobile Adapter Checklist
 
 Keep mobile plugin slices mergeable by checking these boundaries before adding a
@@ -119,8 +144,9 @@ Web hosts should expose browser/runtime extension points only:
 
 Web host plugins should consume SDK-owned TypeScript or generated contract
 packages when they need shared manifests, permissions, validation, feature
-queries, routing, scenes, or data transforms. This branch intentionally does not
-change `src/Honua.Embed` while embed PRs are active.
+queries, routing, scenes, or data transforms. Until a shared TypeScript package
+is published, `@honua-io/embed` should keep extension metadata runtime-only and
+avoid adding local manifest or permission schemas.
 
 ## Intentionally Not Implemented Here
 
