@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Honua.Sdk.Field" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
   </ItemGroup>
 
 </Project>

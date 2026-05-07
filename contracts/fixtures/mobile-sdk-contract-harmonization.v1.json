@@ -11,39 +11,39 @@
     },
     "sdkBaseline": {
       "repository": "honua-io/honua-sdk-dotnet",
-      "ref": "trunk after dotnet-sdk-v0.1.8-alpha.1",
+      "ref": "dotnet-sdk-v0.1.15-alpha.1",
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline.Abstractions",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Scenes",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         },
         {
           "packageId": "Honua.Sdk.Field",
-          "version": "0.1.8-alpha.1"
+          "version": "0.1.15-alpha.1"
         }
       ]
     }
