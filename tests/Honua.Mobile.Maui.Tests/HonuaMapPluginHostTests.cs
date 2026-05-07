@@ -80,6 +80,30 @@ public sealed class HonuaMapPluginHostTests
     }
 
     [Fact]
+    public async Task ActivateAsync_TreatsDuplicatePluginIdAsActivationFailure()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMapPlugin(new ToolbarOnlyPlugin("shared", "first-action", priority: 1))
+            .AddHonuaMapPlugin(new ToolbarOnlyPlugin("shared", "second-action", priority: 2))
+            .AddHonuaMapPlugin(new ToolbarOnlyPlugin("later", "later-action", priority: 3))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        Assert.Equal(["shared", "later"], report.ActivatedPlugins.Select(plugin => plugin.Id));
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal("shared", failure.PluginId);
+        Assert.Contains("already registered", failure.Message, StringComparison.Ordinal);
+        Assert.IsType<InvalidOperationException>(failure.Exception);
+
+        Assert.Equal(["first-action", "later-action"], report.Contributions.ToolbarButtons
+            .Select(item => item.Contribution.Id));
+        Assert.DoesNotContain(report.Contributions.ToolbarButtons, item =>
+            item.Contribution.Id == "second-action");
+    }
+
+    [Fact]
     public async Task AddHonuaMapPlugin_RegistersPluginTypeAndHost()
     {
         using var provider = new ServiceCollection()
