@@ -512,72 +512,100 @@ public async Task UploadOnlyAsync()
 
 ## Conflict Resolution
 
-### Conflict Strategies
-
-Handle data conflicts when multiple users edit the same features:
+`OfflineSyncEngine` defaults to `ManualReview` so conflicting edits are not
+silently overwritten. Apps can set a global v1 strategy and override it per
+layer and operation type:
 
 ```csharp
-public enum ConflictResolution
+var sync = new OfflineSyncEngine(
+    store,
+    uploader,
+    new OfflineSyncEngineOptions
+    {
+        BatchSize = 100,
+        ConflictStrategy = SyncConflictStrategy.ManualReview,
+        ConflictPolicyRules =
+        [
+            new SyncConflictPolicyRule
+            {
+                LayerKey = "critical-assets",
+                OperationType = OfflineOperationType.Update,
+                Strategy = SyncConflictStrategy.ClientWins,
+            },
+            new SyncConflictPolicyRule
+            {
+                LayerKey = "reference-boundaries",
+                Strategy = SyncConflictStrategy.ServerWins,
+            },
+        ],
+    });
+```
+
+The mobile-owned v1 strategies are:
+
+```csharp
+public enum SyncConflictStrategy
 {
-    ServerWins,       // Server data takes precedence
-    ClientWins,       // Local data takes precedence
-    MergeAttributes,  // Merge non-conflicting attributes
-    UserDecides      // Prompt user to resolve
+    ClientWins,   // retry with forceWrite=true
+    ServerWins,   // drop the local operation and accept the server version
+    ManualReview, // mark failed for user/operator resolution
 }
 ```
 
-### Custom Conflict Resolution
+Rules with both `LayerKey` and `OperationType` are more specific than rules for
+only one dimension. If no rule matches, `ConflictStrategy` is used.
 
-Implement custom conflict resolution logic:
+## Pending Queue And Connectivity
+
+`GeoPackageSyncStore` persists the local edit queue in the device GeoPackage, so
+pending operations survive process restart. A sync cycle claims pending rows
+with an in-progress lease, releases claims on cancellation, deletes succeeded
+operations, and leaves retryable failures in the queue for the next run.
+
+`BackgroundSyncOrchestrator` gates upload/download cycles through
+`IConnectivityStateProvider`. When the provider reports offline,
+`RunOnceIfOnlineAsync` returns without claiming queue rows. When connectivity is
+restored, the next manual or scheduled cycle resumes from the persisted pending
+queue.
 
 ```csharp
-public class CustomConflictResolver : IConflictResolver
+await using var orchestrator = new BackgroundSyncOrchestrator(
+    sync,
+    connectivityStateProvider,
+    new BackgroundSyncOrchestratorOptions
+    {
+        SyncInterval = TimeSpan.FromMinutes(5),
+    });
+
+await orchestrator.StartAsync();
+```
+
+## Sync Problems And Telemetry
+
+Sync upload failures are mapped through `MobileSyncProblemHelper` before they are
+stored in queue state or returned in `SyncRunResult.Failures`. Raw provider
+exception names such as gRPC or SQLite exception types are kept as inner
+diagnostic details, not user-facing sync failure reasons.
+
+The mobile sync layer emits:
+
+- ActivitySource: `Honua.Mobile.Sync`
+- Counter: `mobile_sync_runs_total{result}`
+- Counter: `mobile_sync_conflicts_total{strategy}`
+- Gauge: `mobile_pending_operations`
+
+Apps can subscribe with standard .NET diagnostics:
+
+```csharp
+using var listener = new MeterListener();
+listener.InstrumentPublished = (instrument, meterListener) =>
 {
-    public async Task<Feature> ResolveConflictAsync(
-        Feature localFeature,
-        Feature serverFeature,
-        ConflictContext context)
+    if (instrument.Meter.Name == MobileSyncTelemetry.MeterName)
     {
-        // Custom resolution logic
-        if (context.ConflictType == ConflictType.AttributeChange)
-        {
-            return await MergeAttributesAsync(localFeature, serverFeature);
-        }
-        else if (context.ConflictType == ConflictType.GeometryChange)
-        {
-            // Use most recent geometry
-            var newerFeature = localFeature.LastModified > serverFeature.LastModified
-                ? localFeature
-                : serverFeature;
-            return newerFeature;
-        }
-
-        return serverFeature; // Default to server
+        meterListener.EnableMeasurementEvents(instrument);
     }
-
-    private async Task<Feature> MergeAttributesAsync(Feature local, Feature server)
-    {
-        var merged = new Feature
-        {
-            Id = local.Id,
-            Geometry = local.Geometry, // Keep local geometry
-            Attributes = new Dictionary<string, object>()
-        };
-
-        // Merge attributes with local taking precedence
-        foreach (var attr in server.Attributes)
-        {
-            merged.Attributes[attr.Key] = attr.Value;
-        }
-
-        foreach (var attr in local.Attributes)
-        {
-            merged.Attributes[attr.Key] = attr.Value; // Local overwrites server
-        }
-
-        return merged;
-    }
-}
+};
+listener.Start();
 ```
 
 ## Storage Management
