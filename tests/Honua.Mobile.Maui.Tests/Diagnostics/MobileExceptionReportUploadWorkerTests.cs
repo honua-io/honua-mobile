@@ -97,6 +97,33 @@ public sealed class MobileExceptionReportUploadWorkerTests
     }
 
     [Fact]
+    public async Task HttpUploader_AppliesRequestCustomizersBeforeSending()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        using var http = new HttpClient(new StubHttpMessageHandler((request, _) =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
+        }));
+        var options = new MobileExceptionReportingOptions
+        {
+            Mode = MobileExceptionReportingMode.ServerUpload,
+            UploadEndpoint = new Uri("https://api.honua.test/mobile/exception-reports"),
+        };
+        var uploader = new HttpMobileExceptionReportUploader(
+            http,
+            options,
+            [new HeaderRequestCustomizer("X-Honua-Test", "customized")]);
+
+        var uploaded = await uploader.UploadAsync(CreateReport());
+
+        Assert.True(uploaded);
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest.Headers.TryGetValues("X-Honua-Test", out var values));
+        Assert.Equal("customized", Assert.Single(values));
+    }
+
+    [Fact]
     public async Task HttpUploader_WithoutEndpointDoesNotSendRequest()
     {
         var sent = false;
@@ -232,6 +259,23 @@ public sealed class MobileExceptionReportUploadWorkerTests
             CancellationToken cancellationToken)
         {
             return _handler(request, cancellationToken);
+        }
+    }
+
+    private sealed class HeaderRequestCustomizer : IMobileExceptionReportUploadRequestCustomizer
+    {
+        private readonly string _name;
+        private readonly string _value;
+
+        public HeaderRequestCustomizer(string name, string value)
+        {
+            _name = name;
+            _value = value;
+        }
+
+        public void Customize(HttpRequestMessage request, MobileExceptionReport report)
+        {
+            request.Headers.TryAddWithoutValidation(_name, _value);
         }
     }
 

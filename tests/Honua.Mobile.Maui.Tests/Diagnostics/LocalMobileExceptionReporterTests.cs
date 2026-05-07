@@ -190,6 +190,42 @@ public sealed class LocalMobileExceptionReporterTests
         Assert.Single(queue.Reports);
     }
 
+    [Fact]
+    public async Task ExceptionHooks_TerminatingUnhandledExceptionWaitsForReportToQueue()
+    {
+        var reporter = new BlockingExceptionReporter();
+        var hooks = new MobileExceptionReportingExceptionHooks(reporter);
+        var exception = new InvalidOperationException("fatal");
+
+        var invokeTask = Task.Run(() => InvokeUnhandledExceptionHook(hooks, exception, isTerminating: true));
+
+        await reporter.WaitUntilCalledAsync();
+        Assert.False(invokeTask.IsCompleted);
+
+        reporter.AllowReportToComplete();
+        await invokeTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("AppDomain.UnhandledException", reporter.Context?.Source);
+        Assert.Equal(MobileExceptionSeverity.Critical, reporter.Context?.Severity);
+        Assert.True((bool?)reporter.Context?.Properties["isTerminating"]);
+    }
+
+    [Fact]
+    public async Task ExceptionHooks_NonTerminatingUnhandledExceptionReturnsWhileReportQueuesInBackground()
+    {
+        var reporter = new BlockingExceptionReporter();
+        var hooks = new MobileExceptionReportingExceptionHooks(reporter);
+        var exception = new InvalidOperationException("nonfatal");
+
+        InvokeUnhandledExceptionHook(hooks, exception, isTerminating: false);
+
+        await reporter.WaitUntilCalledAsync();
+        Assert.Equal("AppDomain.UnhandledException", reporter.Context?.Source);
+        Assert.Equal(MobileExceptionSeverity.Error, reporter.Context?.Severity);
+
+        reporter.AllowReportToComplete();
+    }
+
     private static async Task<List<MobileExceptionReport>> ReadReportsAsync(IMobileExceptionReportQueue queue)
     {
         var reports = new List<MobileExceptionReport>();
@@ -212,6 +248,19 @@ public sealed class LocalMobileExceptionReporterTests
         {
             Directory.Delete(path, recursive: true);
         }
+    }
+
+    private static void InvokeUnhandledExceptionHook(
+        MobileExceptionReportingExceptionHooks hooks,
+        Exception exception,
+        bool isTerminating)
+    {
+        var handler = typeof(MobileExceptionReportingExceptionHooks).GetMethod(
+            "OnUnhandledException",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(handler);
+        handler.Invoke(hooks, [hooks, new UnhandledExceptionEventArgs(exception, isTerminating)]);
     }
 
     private sealed class PreRegisteredExceptionReporter : IMobileExceptionReporter
@@ -255,6 +304,34 @@ public sealed class LocalMobileExceptionReporterTests
         public Task DeleteAsync(QueuedMobileExceptionReport report, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingExceptionReporter : IMobileExceptionReporter
+    {
+        private readonly TaskCompletionSource _called = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _allowCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public MobileExceptionReportContext? Context { get; private set; }
+
+        public async Task ReportAsync(
+            Exception exception,
+            MobileExceptionReportContext? context = null,
+            CancellationToken cancellationToken = default)
+        {
+            Context = context;
+            _called.SetResult();
+            await _allowCompletion.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task WaitUntilCalledAsync()
+        {
+            return _called.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        public void AllowReportToComplete()
+        {
+            _allowCompletion.SetResult();
         }
     }
 }
