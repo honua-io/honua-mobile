@@ -331,6 +331,89 @@ public sealed record HonuaNativeArReadiness
 }
 
 /// <summary>
+/// Mobile-owned AR evidence metadata attached to field photos, annotations, or reports.
+/// </summary>
+public sealed record HonuaNativeArEvidenceContext
+{
+    public required string SceneId { get; init; }
+
+    public string? SceneRevision { get; init; }
+
+    public string? PackageId { get; init; }
+
+    public bool IsOffline { get; init; }
+
+    public bool IsOnline { get; init; }
+
+    public HonuaNativeArRuntime Runtime { get; init; } = HonuaNativeArRuntime.Unknown;
+
+    public HonuaNativeArReadinessLevel ReadinessLevel { get; init; }
+
+    public HonuaNativeArAnchoringMode ActiveAnchoringMode { get; init; } = HonuaNativeArAnchoringMode.Unknown;
+
+    public HonuaNativeArScenePackageState PackageState { get; init; } = HonuaNativeArScenePackageState.NotRequired;
+
+    public double? HorizontalAccuracyMeters { get; init; }
+
+    public double? VerticalAccuracyMeters { get; init; }
+
+    public double? YawAccuracyDegrees { get; init; }
+
+    public double? CalibrationResidualMeters { get; init; }
+
+    public int ConfirmedControlPointCount { get; init; }
+
+    public IReadOnlyList<string> ControlPointIds { get; init; } = [];
+
+    public IReadOnlyList<string> Blockers { get; init; } = [];
+
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.UtcNow;
+
+    public bool CanAttachToFieldEvidence => ReadinessLevel >= HonuaNativeArReadinessLevel.SiteReview;
+
+    public bool CanAttachToPrecisionEvidence => ReadinessLevel == HonuaNativeArReadinessLevel.PrecisionInspection;
+
+    public static HonuaNativeArEvidenceContext Create(
+        HonuaNativeArSceneAnchorRequest request,
+        HonuaNativeArSessionStatus status,
+        HonuaNativeArReadiness readiness)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(status);
+        ArgumentNullException.ThrowIfNull(readiness);
+        request.Validate();
+        status.Validate();
+
+        ArgumentNullException.ThrowIfNull(readiness.Blockers);
+        ArgumentNullException.ThrowIfNull(readiness.Warnings);
+
+        return new HonuaNativeArEvidenceContext
+        {
+            SceneId = status.SceneId ?? request.SceneId,
+            SceneRevision = status.SceneRevision ?? request.SceneRevision,
+            PackageId = status.PackageId ?? request.PackageId,
+            IsOffline = request.IsOffline,
+            IsOnline = status.IsOnline,
+            Runtime = status.Runtime,
+            ReadinessLevel = readiness.Level,
+            ActiveAnchoringMode = status.ActiveAnchoringMode,
+            PackageState = status.PackageState,
+            HorizontalAccuracyMeters = status.Accuracy.HorizontalAccuracyMeters,
+            VerticalAccuracyMeters = status.Accuracy.VerticalAccuracyMeters,
+            YawAccuracyDegrees = status.Accuracy.YawAccuracyDegrees,
+            CalibrationResidualMeters = status.Accuracy.CalibrationResidualMeters,
+            ConfirmedControlPointCount = status.ConfirmedControlPointCount,
+            ControlPointIds = request.ControlPointIds.ToArray(),
+            Blockers = readiness.Blockers.ToArray(),
+            Warnings = readiness.Warnings.ToArray(),
+            CapturedAt = status.UpdatedAt,
+        };
+    }
+}
+
+/// <summary>
 /// Platform adapter for native ARKit/ARCore scene anchoring.
 /// </summary>
 public interface IHonuaNativeArSceneAnchorAdapter
