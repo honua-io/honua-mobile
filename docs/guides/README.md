@@ -23,6 +23,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |
 | [Plugin and Host Extension Boundary](plugin-extension-api.md) | Web embed extension APIs and the SDK/mobile ownership split for plugin work |
 | [Protected 3D Scene Auth](protected-3d-scene-auth.md) | Signed URL, proxy, header, CORS, cache, and revocation policy for protected scene assets |
+| [Repo Scaffolding Gates](repo-scaffolding-gates.md) | Issue #826 release workflow, package metadata, branch protection, Dependabot, Trivy, and platform smoke verification commands |
 | [Scene Controls](scene-controls.md) | `<honua-scene-*>` control surfaces, `HonuaSceneMetadata` schema, and typed scene events |
 | [Security](security.md) | Authentication, transport security, and secure storage best practices |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions for development and production |
