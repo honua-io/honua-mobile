@@ -19,6 +19,17 @@ require_env() {
   fi
 }
 
+has_live_smoke_config() {
+  [[ -n "${HONUA_MOBILE_SMOKE_BASE_URL:-}" ]] &&
+    [[ -n "${HONUA_MOBILE_SMOKE_SERVICE_ID:-}" ]] &&
+    [[ -n "${HONUA_MOBILE_SMOKE_LAYER_ID:-}" ]]
+}
+
+if ! has_live_smoke_config; then
+  echo "::notice::Skipping iOS live Honua platform smoke because HONUA_MOBILE_SMOKE_BASE_URL, HONUA_MOBILE_SMOKE_SERVICE_ID, or HONUA_MOBILE_SMOKE_LAYER_ID is not configured."
+  exit 0
+fi
+
 require_env HONUA_MOBILE_SMOKE_BASE_URL
 require_env HONUA_MOBILE_SMOKE_SERVICE_ID
 require_env HONUA_MOBILE_SMOKE_LAYER_ID
