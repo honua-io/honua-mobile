@@ -99,7 +99,9 @@ applyHonuaMapOptions(document.querySelector('honua-map'), {
 
 For hosts that cannot use web components, generate an iframe fallback with the
 same option shape. Map options are serialized into the iframe URL query string,
-and `apiKey` is omitted unless `includeCredentials: true` is set.
+and `apiKey` is omitted unless `includeCredentials: true` is set. The npm/CDN
+build packages the fallback shell at `dist/embed/map.html`; the default snippet
+URL assumes that file is hosted as `https://cdn.honua.dev/embed/map.html`.
 
 ```js
 import { createHonuaMapIframeSnippet } from '@honua-io/embed/snippets';
@@ -114,11 +116,19 @@ const snippet = createHonuaMapIframeSnippet({
   label: 'City asset map',
 }, {
   iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  parentOrigin: 'https://portal.example.com',
   iframe: {
     title: 'City asset map',
   },
 });
 ```
+
+The fallback shell imports `../iframe.js`, creates a full-frame `<honua-map>`
+from the query string, and forwards `honua-map-ready`,
+`honua-map-config-change`, `honua-map-search`, and `honua-map-identify` to the
+embedding window with `{ source: 'honua-map-iframe', version: 1, type, detail }`.
+Set `parentOrigin` to constrain forwarded messages to the host application
+origin.
 
 ## Integration Events
 
@@ -273,9 +283,10 @@ original error.
 
 `<honua-map>` provides the declarative, white-label web component shell, Shadow
 DOM encapsulation, theme hooks, generated snippets, host extension controls,
-accessible controls, search events, and identify events. Production map
-rendering should use the MapLibre/deck.gl adapter above until the custom element
-owns a full renderer lifecycle. Follow-on work can add feature loading,
-analytics, binary deck.gl attribute batches, and framework-specific wrappers.
+accessible controls, iframe fallback packaging, search events, and identify
+events. Production map rendering should use the MapLibre/deck.gl adapter above
+until the custom element owns a full renderer lifecycle. Follow-on work can add
+feature loading, analytics, binary deck.gl attribute batches, admin embed-builder
+screens, and framework-specific wrappers.
 
 For 3D Tiles and CesiumJS-based scenes, use the [`<honua-scene>` guide](3d-scene-embed.md).

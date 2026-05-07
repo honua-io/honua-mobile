@@ -256,7 +256,9 @@ entrypoint.
 
 For hosts that cannot load custom elements, use `createHonuaMapIframeSnippet`.
 Map options are encoded into the iframe URL query string, with `apiKey` omitted
-unless `includeCredentials: true` is passed.
+unless `includeCredentials: true` is passed. The package build includes the
+static fallback shell at `dist/embed/map.html`; CDN deployments can serve that
+file as `https://cdn.honua.dev/embed/map.html`.
 
 ```ts
 import { createHonuaMapIframeSnippet } from '@honua-io/embed/snippets';
@@ -269,11 +271,19 @@ const snippet = createHonuaMapIframeSnippet({
   label: 'City asset map',
 }, {
   iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  parentOrigin: 'https://portal.example.com',
   iframe: {
     title: 'City asset map',
   },
 });
 ```
+
+The iframe shell imports `../iframe.js`, hydrates a full-frame `<honua-map>`
+from the query string, and forwards `honua-map-ready`,
+`honua-map-config-change`, `honua-map-search`, and `honua-map-identify` to the
+parent window with `{ source: 'honua-map-iframe', version: 1, type, detail }`.
+Set `parentOrigin` when generating snippets so forwarded messages are scoped to
+the embedding application origin.
 
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.

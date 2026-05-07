@@ -6,6 +6,7 @@ export default defineConfig({
     lib: {
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
+        iframe: resolve(__dirname, 'src/iframe.ts'),
         snippets: resolve(__dirname, 'src/snippets.ts'),
       },
       formats: ['es'],

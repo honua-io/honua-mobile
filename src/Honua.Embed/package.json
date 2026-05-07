@@ -22,6 +22,10 @@
     "./snippets": {
       "types": "./dist/snippets.d.ts",
       "import": "./dist/snippets.js"
+    },
+    "./iframe": {
+      "types": "./dist/iframe.d.ts",
+      "import": "./dist/iframe.js"
     }
   },
   "files": [
