@@ -69,6 +69,7 @@ export interface HonuaMapIframeAttributes {
 export interface HonuaMapIframeSnippetOptions {
   iframeUrl?: string;
   includeCredentials?: boolean;
+  parentOrigin?: string | null;
   iframe?: HonuaMapIframeAttributes;
   indent?: string;
 }
@@ -174,7 +175,10 @@ export function createHonuaMapIframeSnippet(
   snippetOptions: HonuaMapIframeSnippetOptions = {},
 ): string {
   const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/map.html';
-  const src = createIframeSrc(iframeUrl, options, snippetOptions.includeCredentials ?? false);
+  const src = createIframeSrc(iframeUrl, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    parentOrigin: snippetOptions.parentOrigin,
+  });
   const attributes = iframeAttributes(src, snippetOptions.iframe);
   const indent = snippetOptions.indent ?? '  ';
   const lines = attributes.map(([name, value]) => (
@@ -246,11 +250,19 @@ function createElementMarkup(
 function createIframeSrc(
   iframeUrl: string,
   options: HonuaMapEmbedOptions,
-  includeCredentials: boolean,
+  config: {
+    includeCredentials: boolean;
+    parentOrigin?: string | null;
+  },
 ): string {
   const url = new URL(iframeUrl, 'https://cdn.honua.dev');
-  for (const [name, value] of mapQueryParameters(options, includeCredentials)) {
+  for (const [name, value] of mapQueryParameters(options, config.includeCredentials)) {
     url.searchParams.set(name, value);
+  }
+
+  const parentOrigin = config.parentOrigin?.trim();
+  if (parentOrigin) {
+    url.searchParams.set('parent-origin', parentOrigin);
   }
 
   if (isAbsoluteUrl(iframeUrl)) {
