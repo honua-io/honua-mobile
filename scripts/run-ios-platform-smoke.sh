@@ -35,7 +35,9 @@ import json
 import sys
 
 devices = json.load(sys.stdin).get("devices", {})
-for runtime_devices in devices.values():
+for runtime_id, runtime_devices in devices.items():
+    if ".iOS-" not in runtime_id and "SimRuntime.iOS" not in runtime_id:
+        continue
     for device in runtime_devices:
         if device.get("state") == "Booted":
             print(device["udid"])
