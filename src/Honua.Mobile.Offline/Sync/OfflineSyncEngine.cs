@@ -144,7 +144,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         var selected = _options.ConflictStrategy;
         var selectedSpecificity = -1;
 
-        foreach (var rule in _options.ConflictPolicyRules)
+        foreach (var rule in _options.ConflictPolicyRules ?? Array.Empty<SyncConflictPolicyRule>())
         {
             if (!rule.Matches(operation) || rule.Specificity <= selectedSpecificity)
             {

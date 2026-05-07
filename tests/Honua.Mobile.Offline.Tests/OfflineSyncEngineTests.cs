@@ -128,6 +128,29 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAsync_NullConflictPolicyRules_UsesDefaultConflictStrategy()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateOperation("server-wins-op", "assets", OfflineOperationType.Update));
+
+        var engine = new OfflineSyncEngine(
+            store,
+            new AlwaysConflictUploader(),
+            new OfflineSyncEngineOptions
+            {
+                ConflictStrategy = SyncConflictStrategy.ServerWins,
+                ConflictPolicyRules = null!,
+            });
+
+        var result = await engine.SyncAsync();
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.Null(await ReadOperationStateAsync("server-wins-op"));
+    }
+
+    [Fact]
     public async Task SyncAsync_WhenCanceled_RequeuesClaimedOperationsWithoutIncrementingAttempts()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
