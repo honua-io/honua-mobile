@@ -104,6 +104,43 @@ public sealed class OfflineSyncEngineOptions
     /// Strategy for resolving version conflicts. Defaults to <see cref="SyncConflictStrategy.ManualReview"/>.
     /// </summary>
     public SyncConflictStrategy ConflictStrategy { get; init; } = SyncConflictStrategy.ManualReview;
+
+    /// <summary>
+    /// Optional conflict policy overrides. The most specific matching rule is used before
+    /// falling back to <see cref="ConflictStrategy"/>.
+    /// </summary>
+    public IReadOnlyList<SyncConflictPolicyRule> ConflictPolicyRules { get; init; } = [];
+}
+
+/// <summary>
+/// Per-layer and/or per-operation conflict policy override for <see cref="OfflineSyncEngine"/>.
+/// </summary>
+public sealed class SyncConflictPolicyRule
+{
+    /// <summary>
+    /// Exact layer key to match. When <see langword="null"/>, the rule applies to any layer.
+    /// </summary>
+    public string? LayerKey { get; init; }
+
+    /// <summary>
+    /// Operation type to match. When <see langword="null"/>, the rule applies to any operation type.
+    /// </summary>
+    public OfflineOperationType? OperationType { get; init; }
+
+    /// <summary>
+    /// Strategy to use for matching operations.
+    /// </summary>
+    public SyncConflictStrategy Strategy { get; init; } = SyncConflictStrategy.ManualReview;
+
+    internal bool Matches(OfflineEditOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return (LayerKey is null || string.Equals(LayerKey, operation.LayerKey, StringComparison.Ordinal)) &&
+               (OperationType is null || OperationType == operation.OperationType);
+    }
+
+    internal int Specificity => (LayerKey is null ? 0 : 1) + (OperationType is null ? 0 : 1);
 }
 
 /// <summary>
