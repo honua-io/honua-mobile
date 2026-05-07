@@ -5,7 +5,7 @@ namespace Honua.Mobile.Sdk.Tests;
 
 public sealed class SdkTrainReleaseEvidenceTests
 {
-    private const string ExpectedSdkTrainVersion = "0.1.16-alpha.1";
+    private const string ExpectedSdkTrainVersion = "0.1.15-alpha.1";
     private const string SdkTrainVersionExpression = "$(HonuaSdkDotNetTrainVersion)";
     private const string EvidencePath = "quality/release-evidence/honua-2026-05-preview-mobile-dotnet-sdk-train.json";
 
@@ -21,9 +21,9 @@ public sealed class SdkTrainReleaseEvidenceTests
             "https://github.com/honua-io/honua-sdk-dotnet/releases/tag/$(HonuaSdkDotNetTrainTag)",
             ReadProperty(props, "HonuaSdkDotNetTrainReleaseUrl"));
         Assert.Equal(
-            "f31cfeb6c21af896b96194688a393638461f3d8a",
+            "9d264e358099dc20a30b9247013b61d1fba0b0a9",
             ReadProperty(props, "HonuaSdkDotNetTrainReleaseCommit"));
-        Assert.Equal("2026-05-07T08:52:04Z", ReadProperty(props, "HonuaSdkDotNetTrainReleasePublishedAt"));
+        Assert.Equal("2026-04-30T23:32:50Z", ReadProperty(props, "HonuaSdkDotNetTrainReleasePublishedAt"));
     }
 
     [Fact]

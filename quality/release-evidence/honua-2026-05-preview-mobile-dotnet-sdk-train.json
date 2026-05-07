@@ -21,11 +21,18 @@
   },
   "sdkTrain": {
     "repository": "honua-io/honua-sdk-dotnet",
-    "packageVersion": "0.1.16-alpha.1",
+    "packageVersion": "0.1.15-alpha.1",
+    "releaseTag": "dotnet-sdk-v0.1.15-alpha.1",
+    "releaseUrl": "https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v0.1.15-alpha.1",
+    "releaseCommit": "9d264e358099dc20a30b9247013b61d1fba0b0a9",
+    "releasePublishedAt": "2026-04-30T23:32:50Z"
+  },
+  "observedUnconsumedRelease": {
     "releaseTag": "dotnet-sdk-v0.1.16-alpha.1",
     "releaseUrl": "https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v0.1.16-alpha.1",
     "releaseCommit": "f31cfeb6c21af896b96194688a393638461f3d8a",
-    "releasePublishedAt": "2026-05-07T08:52:04Z"
+    "releasePublishedAt": "2026-05-07T08:52:04Z",
+    "reason": "GitHub Packages did not expose Honua.Sdk.* 0.1.16-alpha.1 during PR CI restore; the feed reported 0.1.15-alpha.1 as the nearest published package train."
   },
   "mobileValidation": {
     "packageReferenceProperty": "HonuaSdkDotNetTrainVersion",
