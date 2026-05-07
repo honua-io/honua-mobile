@@ -9,10 +9,10 @@ storage, permissions, and lifecycle concerns.
 
 | Surface | Owner | Notes |
 | --- | --- | --- |
-| Plugin manifest schema, source descriptors, shared DTOs, validation rules | `honua-sdk-dotnet` | Publish as versioned `Honua.Sdk.*` packages and consume them here. |
+| Plugin manifest schema, source descriptors, shared DTOs, validation rules | `honua-sdk-dotnet` | Consume versioned `Honua.Sdk.*` packages here; do not copy SDK-owned contracts. |
 | Web component controls, DOM events, white-label themes, snippet generation | `honua-mobile` / `@honua-io/embed` | Runtime integration for browser and WebView hosts. |
 | MAUI dependency injection, platform permissions, storage, camera, GPS, sensors | `honua-mobile` | Plugin packages should provide mobile registration glue instead of new neutral clients. |
-| Server capabilities needed by plugins | `honua-server` | Link server dependency issues from the mobile issue. |
+| Server capabilities needed by plugins | `honua-server` | Track server plugin APIs in [honua-server#347](https://github.com/honua-io/honua-server/issues/347). |
 
 ## Web Host Extensions
 
@@ -78,8 +78,12 @@ public static IServiceCollection AddTenantFieldTools(
 Registration code may compose existing mobile-owned services such as map
 annotations, offline storage adapters, camera workflows, and background sync.
 When an extension needs portable contracts, feature clients, routing, scenes,
-field schemas, validation, or plugin manifests, add or consume versioned
-`Honua.Sdk.*` packages rather than adding platform-neutral models here.
+field schemas, validation, or plugin manifests, consume versioned `Honua.Sdk.*`
+packages rather than adding platform-neutral models here. MAUI map plugins may
+attach an SDK `HonuaPluginManifest` to `HonuaMapPluginDescriptor.SdkManifest` or
+derive the descriptor with `HonuaPluginManifest.ToMapPluginDescriptor(...)` so
+the host can run SDK validation and mobile compatibility checks before
+activation.
 
 ## Embed Snippet Generation
 
