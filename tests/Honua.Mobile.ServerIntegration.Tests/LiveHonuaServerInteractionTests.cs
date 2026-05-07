@@ -3,8 +3,8 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using AppDiagnostics = Honua.Mobile.FieldCollection.Services.Diagnostics;
 using FieldServices = Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
@@ -864,19 +864,30 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     private async Task UploadAppExceptionReportAsync()
     {
         var auth = new FakeAuthenticationService(_server.BaseUri.ToString(), _server.Options.ApiKey);
-        var options = new AppDiagnostics.MobileExceptionReportingOptions
+        var options = new MobileExceptionReportingOptions
         {
-            Mode = AppDiagnostics.MobileExceptionReportingMode.Server,
-            Endpoint = _server.Uri(_server.Options.ExceptionUploadPath),
-            PendingReportsDirectory = Path.Combine(_rootDirectory, "app-exceptions"),
+            Mode = MobileExceptionReportingMode.ServerUpload,
+            QueueDirectory = Path.Combine(_rootDirectory, "app-exceptions"),
+            UploadEndpoint = _server.Uri(_server.Options.ExceptionUploadPath),
+            UploadInitialBackoff = TimeSpan.Zero,
+            UploadMaxBackoff = TimeSpan.Zero,
         };
-        var reporter = new AppDiagnostics.MobileExceptionReporter(CreateHttpClient(), auth, options);
+        var queue = new FileMobileExceptionReportQueue(options);
+        var reporter = new LocalMobileExceptionReporter(queue, options);
+        var uploader = new HttpMobileExceptionReportUploader(
+            CreateHttpClient(),
+            options,
+            [new FieldCollectionExceptionReportAuthHeader(auth)]);
+        var worker = new MobileExceptionReportUploadWorker(queue, uploader, options);
 
         await reporter.ReportAsync(
             new InvalidOperationException("live app exception token=secret"),
-            "live-image-app",
-            new Dictionary<string, string?> { ["apiKey"] = "secret" });
-        await reporter.FlushPendingAsync();
+            new MobileExceptionReportContext
+            {
+                Source = "live-image-app",
+                Properties = new Dictionary<string, object?> { ["apiKey"] = "secret" },
+            });
+        await worker.FlushPendingAsync();
     }
 
     private async Task UploadMauiExceptionReportAsync()

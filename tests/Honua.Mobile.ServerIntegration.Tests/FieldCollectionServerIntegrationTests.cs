@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.Maui.Diagnostics;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 
@@ -34,28 +35,39 @@ public sealed class FieldCollectionServerIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task MobileExceptionReporter_PostsSanitizedExceptionReportToHonuaServer()
+    public async Task MobileExceptionReportingPipeline_PostsSanitizedExceptionReportToHonuaServer()
     {
         await using var server = await HonuaIntegrationServer.StartAsync();
         using var http = new HttpClient();
-        var reporter = new MobileExceptionReporter(
+        var options = new MobileExceptionReportingOptions
+        {
+            Mode = MobileExceptionReportingMode.ServerUpload,
+            UploadEndpoint = server.Uri("/api/mobile/exceptions"),
+            QueueDirectory = Path.Combine(_rootDirectory, "exception-queue"),
+            UploadInitialBackoff = TimeSpan.Zero,
+            UploadMaxBackoff = TimeSpan.Zero,
+        };
+        var queue = new FileMobileExceptionReportQueue(options);
+        var reporter = new LocalMobileExceptionReporter(queue, options);
+        var auth = new FixedAuthenticationService(server.BaseUri.ToString(), "integration-api-key");
+        var uploader = new HttpMobileExceptionReportUploader(
             http,
-            new FixedAuthenticationService(server.BaseUri.ToString(), "integration-api-key"),
-            new MobileExceptionReportingOptions
-            {
-                Mode = MobileExceptionReportingMode.Server,
-                Endpoint = server.Uri("/api/mobile/exceptions"),
-                PendingReportsDirectory = Path.Combine(_rootDirectory, "exception-queue"),
-            });
+            options,
+            [new FieldCollectionExceptionReportAuthHeader(auth)]);
+        var worker = new MobileExceptionReportUploadWorker(queue, uploader, options);
 
         await reporter.ReportAsync(
-            new InvalidOperationException("integration failure"),
-            "integration-test",
-            new Dictionary<string, string?>
+            new InvalidOperationException("integration failure token=must-not-leak"),
+            new MobileExceptionReportContext
             {
-                ["layer"] = "assets",
-                ["api_key"] = "must-not-leak",
+                Source = "integration-test",
+                Properties = new Dictionary<string, object?>
+                {
+                    ["layer"] = "assets",
+                    ["api_key"] = "must-not-leak",
+                },
             });
+        await worker.FlushPendingAsync();
 
         Assert.True(server.Received("POST", "/api/mobile/exceptions"));
         var request = server.SingleRequest("POST", "/api/mobile/exceptions");

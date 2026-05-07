@@ -52,6 +52,7 @@ public sealed class MobileExceptionReportingExceptionHooks : IDisposable
     private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
     {
         ReportInBackground(args.Exception, "TaskScheduler.UnobservedTaskException", isTerminating: false);
+        args.SetObserved();
     }
 
     private void ReportInBackground(Exception exception, string source, bool isTerminating)

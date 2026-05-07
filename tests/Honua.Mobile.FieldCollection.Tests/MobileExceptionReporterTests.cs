@@ -1,129 +1,122 @@
-using System.Net;
+using System.Globalization;
+using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.Maui.Diagnostics;
 
 namespace Honua.Mobile.FieldCollection.Tests;
 
 public sealed class MobileExceptionReporterTests
 {
     [Fact]
-    public async Task ReportAsync_DoesNotForwardApiKeyToCrossOriginEndpoint()
+    public void CreateOptions_MapsLegacyServerPreferenceToSharedServerUploadMode()
     {
-        HttpRequestMessage? capturedRequest = null;
-        using var http = new HttpClient(new StubHttpMessageHandler(request =>
-        {
-            capturedRequest = request;
-            return new HttpResponseMessage(HttpStatusCode.OK);
-        }));
-        var pendingDirectory = CreatePendingDirectory();
-        try
-        {
-            var reporter = CreateReporter(
-                http,
-                endpoint: new Uri("https://collector.example.test/mobile/exceptions"),
-                pendingDirectory);
+        var build = CreateBuildConfiguration();
+        var queueDirectory = Path.Combine(Path.GetTempPath(), $"honua-exception-options-{Guid.NewGuid():N}");
 
-            await reporter.ReportAsync(new InvalidOperationException("boom"), "unit-test");
+        var options = FieldCollectionExceptionReporting.CreateOptions(
+            "Server",
+            "https://api.honua.test/mobile/exception-reports",
+            queueDirectory,
+            build,
+            "io.honua.mobile.fieldcollection",
+            "Android",
+            "15",
+            "Phone");
 
-            Assert.NotNull(capturedRequest);
-            Assert.False(capturedRequest.Headers.Contains("X-API-Key"));
-            Assert.Empty(Directory.EnumerateFiles(pendingDirectory));
-        }
-        finally
-        {
-            DeleteDirectory(pendingDirectory);
-        }
+        Assert.Equal(MobileExceptionReportingMode.ServerUpload, options.Mode);
+        Assert.Equal(new Uri("https://api.honua.test/mobile/exception-reports"), options.UploadEndpoint);
+        Assert.Equal(queueDirectory, options.QueueDirectory);
+        Assert.Equal("io.honua.mobile.fieldcollection", options.Metadata.AppId);
+        Assert.Equal("1.2.3", options.Metadata.AppVersion);
+        Assert.Equal("456", options.Metadata.BuildNumber);
+        Assert.Equal("abc123", options.Metadata.CommitSha);
+        Assert.Equal("main", options.Metadata.Branch);
+        Assert.Equal("beta", options.Metadata.EnvironmentName);
+        Assert.Equal("Android", options.Metadata.Platform);
+        Assert.Equal("15", options.Metadata.OsVersion);
+        Assert.Equal("Phone", options.Metadata.DeviceClass);
+        Assert.Equal("honua-io/honua-mobile", options.Metadata.Properties["repository"]);
     }
 
     [Fact]
-    public async Task ReportAsync_ForwardsApiKeyToSameOriginEndpoint()
+    public void CreateOptions_LeavesUploadEndpointUnsetWhenPreferenceIsBlank()
     {
-        HttpRequestMessage? capturedRequest = null;
-        using var http = new HttpClient(new StubHttpMessageHandler(request =>
-        {
-            capturedRequest = request;
-            return new HttpResponseMessage(HttpStatusCode.OK);
-        }));
-        var pendingDirectory = CreatePendingDirectory();
-        try
-        {
-            var reporter = CreateReporter(
-                http,
-                endpoint: new Uri("https://api.honua.test/api/mobile/exceptions"),
-                pendingDirectory);
+        var options = FieldCollectionExceptionReporting.CreateOptions(
+            "ServerUpload",
+            string.Empty,
+            string.Empty,
+            CreateBuildConfiguration(),
+            "io.honua.mobile.fieldcollection",
+            "Android",
+            "15",
+            "Phone");
 
-            await reporter.ReportAsync(new InvalidOperationException("boom"), "unit-test");
-
-            Assert.NotNull(capturedRequest);
-            Assert.True(capturedRequest.Headers.TryGetValues("X-API-Key", out var values));
-            Assert.Equal("test-api-key", Assert.Single(values));
-        }
-        finally
-        {
-            DeleteDirectory(pendingDirectory);
-        }
+        Assert.Equal(MobileExceptionReportingMode.ServerUpload, options.Mode);
+        Assert.Null(options.UploadEndpoint);
+        Assert.Null(options.QueueDirectory);
     }
 
     [Fact]
-    public async Task FlushPendingAsync_RetainsReportWhenSendFailsAndDeletesAfterSuccess()
+    public void AuthHeaderCustomizer_DoesNotForwardApiKeyToCrossOriginEndpoint()
     {
-        var responses = new Queue<HttpStatusCode>([
-            HttpStatusCode.InternalServerError,
-            HttpStatusCode.OK
-        ]);
-        using var http = new HttpClient(new StubHttpMessageHandler(_ =>
-            new HttpResponseMessage(responses.Dequeue())));
-        var pendingDirectory = CreatePendingDirectory();
-        try
-        {
-            var reporter = CreateReporter(
-                http,
-                endpoint: new Uri("https://api.honua.test/api/mobile/exceptions"),
-                pendingDirectory);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://collector.example.test/mobile/exceptions");
+        var customizer = CreateAuthHeaderCustomizer();
 
-            await reporter.ReportAsync(new InvalidOperationException("boom"), "unit-test");
-            Assert.Single(Directory.EnumerateFiles(pendingDirectory));
+        customizer.Customize(request, CreateReport());
 
-            await reporter.FlushPendingAsync();
-            Assert.Empty(Directory.EnumerateFiles(pendingDirectory));
-        }
-        finally
-        {
-            DeleteDirectory(pendingDirectory);
-        }
+        Assert.False(request.Headers.Contains("X-API-Key"));
     }
 
-    private static MobileExceptionReporter CreateReporter(
-        HttpClient httpClient,
-        Uri endpoint,
-        string pendingDirectory)
+    [Fact]
+    public void AuthHeaderCustomizer_ForwardsApiKeyToSameOriginEndpoint()
     {
-        return new MobileExceptionReporter(
-            httpClient,
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.honua.test/mobile/exceptions");
+        var customizer = CreateAuthHeaderCustomizer();
+
+        customizer.Customize(request, CreateReport());
+
+        Assert.True(request.Headers.TryGetValues("X-API-Key", out var values));
+        Assert.Equal("test-api-key", Assert.Single(values));
+    }
+
+    private static FieldCollectionExceptionReportAuthHeader CreateAuthHeaderCustomizer()
+    {
+        return new FieldCollectionExceptionReportAuthHeader(
             new TestAuthenticationService
             {
                 ApiKey = "test-api-key",
-                ServerUrl = "https://api.honua.test"
-            },
-            new MobileExceptionReportingOptions
-            {
-                Mode = MobileExceptionReportingMode.Server,
-                Endpoint = endpoint,
-                PendingReportsDirectory = pendingDirectory
+                ServerUrl = "https://api.honua.test",
             });
     }
 
-    private static string CreatePendingDirectory()
+    private static MobileExceptionReport CreateReport()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"honua-exception-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(path);
-        return path;
+        return new MobileExceptionReport
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Fingerprint = "fingerprint",
+            OccurredAtUtc = DateTimeOffset.Parse("2026-05-05T00:00:00Z", CultureInfo.InvariantCulture),
+            Source = "unit-test",
+            ExceptionType = typeof(InvalidOperationException).FullName!,
+            Message = "boom",
+        };
     }
 
-    private static void DeleteDirectory(string path)
+    private static MobileBuildConfiguration CreateBuildConfiguration()
     {
-        if (Directory.Exists(path))
-        {
-            Directory.Delete(path, recursive: true);
-        }
+        return MobileBuildConfiguration.FromAttributes(
+            new Dictionary<string, string?>
+            {
+                ["HonuaMobile.BuildEnvironment"] = "beta",
+                ["HonuaMobile.Repository"] = "honua-io/honua-mobile",
+                ["HonuaMobile.Branch"] = "main",
+                ["HonuaMobile.CommitSha"] = "abc123",
+                ["HonuaMobile.WorkflowRunId"] = "789",
+                ["HonuaMobile.WorkflowRunAttempt"] = "2",
+                ["HonuaMobile.Configuration"] = "Release",
+                ["HonuaMobile.TargetFramework"] = "net10.0-android",
+            },
+            "1.2.3",
+            "456");
     }
 }
