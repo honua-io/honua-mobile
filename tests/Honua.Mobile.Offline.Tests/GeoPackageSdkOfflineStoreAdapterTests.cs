@@ -73,6 +73,50 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveFeaturesAsync_PreservesSdkSourceSpatialReferenceMetadata()
+    {
+        var store = CreateStore();
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(store);
+
+        await adapter.SaveFeaturesAsync(new OfflineFeaturePage
+        {
+            PackageId = "area-1",
+            SourceId = "meters",
+            Source = new SourceDescriptor
+            {
+                Id = "meters",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "assets", LayerId = 0 },
+                Schema = new SourceSchema { SpatialReference = "EPSG:3857" },
+            },
+            Result = new FeatureQueryResult
+            {
+                ProviderName = "fake",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = "42",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["name"] = JsonSerializer.SerializeToElement("Metered"),
+                        },
+                        Geometry = JsonSerializer.SerializeToElement(new { x = -17566607.5, y = 2425287.9 }),
+                    },
+                ],
+                NumberReturned = 1,
+            },
+        });
+
+        var metadata = await store.GetFeatureLayerMetadataAsync("sdk-package:area-1:meters");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("EPSG:3857", metadata!.CrsIdentifier);
+        Assert.Equal(3857, metadata.SrsId);
+    }
+
+    [Fact]
     public async Task ChangeJournal_RoundTripsSdkEntriesThroughMobileQueue()
     {
         var store = CreateStore();

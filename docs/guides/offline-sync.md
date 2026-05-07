@@ -137,7 +137,9 @@ new GeoPackageSyncStoreOptions
 };
 ```
 
-`EvictExpiredFeaturesAsync` removes expired feature rows and their R-tree index records. Point and envelope geometries are indexed on insert in `rtree_honua_features`, and bbox queries use that finite spatial index before returning cached feature JSON. The GeoPackage SRS table keeps the OGC GeoPackage 1.3 built-in records, including EPSG:4326 as the default WGS-84 SRS for Honua-managed cache tables.
+`EvictExpiredFeaturesAsync` removes expired feature rows and their R-tree index records. Point, envelope, GeoJSON point, and GeoJSON `bbox` metadata are indexed on insert in `rtree_honua_features`, and bbox queries use that finite spatial index before returning cached feature JSON.
+
+Cached feature layers default to EPSG:4326. When a FeatureServer payload includes `geometry.spatialReference`, or an SDK download page advertises `SourceDescriptor.Schema.SpatialReference`, the store records the layer CRS in GeoPackage SRS metadata and `honua_feature_layers`; common Web Mercator WKIDs are normalized to EPSG:3857. SDK `FeatureBoundingBox` queries must use the cached layer CRS because the mobile storage layer does not run CRS transforms; projection and topology remain SDK/renderer responsibilities.
 
 SpatiaLite is not bundled for the baseline mobile cache path. Current feature-cache lookups only require SQLite R-tree envelope filtering, so SQLite-PCL-raw plus the platform SQLite provider is sufficient. If future work needs exact topology, CRS transforms, or SpatiaLite SQL functions on-device, add platform native binaries for iOS and Android in a separate packaging PR and gate them with AOT/trim smoke tests.
 

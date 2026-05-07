@@ -1,3 +1,5 @@
+using Honua.Sdk.Abstractions.Features;
+
 namespace Honua.Mobile.Offline.GeoPackage;
 
 /// <summary>
@@ -121,6 +123,15 @@ public interface IGeoPackageSyncStore
     Task DeleteScenePackageAsync(string packageId, CancellationToken ct = default);
 
     /// <summary>
+    /// Retrieves CRS metadata observed for a cached feature layer.
+    /// </summary>
+    /// <param name="layerKey">The layer identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Layer metadata, or <see langword="null"/> when the layer has no cached metadata.</returns>
+    Task<GeoPackageFeatureLayerMetadata?> GetFeatureLayerMetadataAsync(string layerKey, CancellationToken ct = default)
+        => Task.FromResult<GeoPackageFeatureLayerMetadata?>(null);
+
+    /// <summary>
     /// Inserts or updates a replicated feature in the local cache.
     /// The object ID is extracted from the JSON payload.
     /// </summary>
@@ -154,6 +165,19 @@ public interface IGeoPackageSyncStore
     /// <returns>Feature JSON strings for the specified layer and extent.</returns>
     Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, BoundingBox boundingBox, CancellationToken ct = default)
         => throw new NotSupportedException("This GeoPackage sync store does not support spatial feature queries.");
+
+    /// <summary>
+    /// Retrieves cached feature JSON payloads whose stored feature envelope intersects <paramref name="boundingBox"/>.
+    /// </summary>
+    /// <param name="layerKey">The layer identifier.</param>
+    /// <param name="boundingBox">SDK feature bounding box used for R-tree candidate lookup.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Feature JSON strings for the specified layer and extent.</returns>
+    Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, FeatureBoundingBox boundingBox, CancellationToken ct = default)
+        => GetFeaturesAsync(
+            layerKey,
+            new BoundingBox(boundingBox.MinX, boundingBox.MinY, boundingBox.MaxX, boundingBox.MaxY),
+            ct);
 
     /// <summary>
     /// Evicts expired cached features according to the configured per-layer TTL policy.
