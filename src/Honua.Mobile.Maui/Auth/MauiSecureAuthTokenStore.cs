@@ -65,6 +65,10 @@ public sealed class MauiSecureAuthTokenStore : IAuthTokenStore
                 ? null
                 : JsonSerializer.Deserialize(payload, HonuaMobileMauiAuthJsonContext.Default.HonuaAuthToken);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             throw new HonuaMobileAuthException("Honua auth token secure-storage read failed.", ex);
@@ -81,6 +85,10 @@ public sealed class MauiSecureAuthTokenStore : IAuthTokenStore
             var payload = JsonSerializer.Serialize(token, HonuaMobileMauiAuthJsonContext.Default.HonuaAuthToken);
             await _storage.SetAsync(_storageKey, payload, ct).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             throw new HonuaMobileAuthException("Honua auth token secure-storage write failed.", ex);
@@ -93,6 +101,10 @@ public sealed class MauiSecureAuthTokenStore : IAuthTokenStore
         try
         {
             await _storage.RemoveAsync(_storageKey, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
