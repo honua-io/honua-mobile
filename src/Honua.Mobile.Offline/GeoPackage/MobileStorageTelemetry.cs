@@ -8,6 +8,8 @@ namespace Honua.Mobile.Offline.GeoPackage;
 /// </summary>
 public static class MobileStorageTelemetry
 {
+    private static long _lastObservedSizeBytes;
+
     /// <summary>
     /// Activity source name for storage operations.
     /// </summary>
@@ -54,5 +56,13 @@ public static class MobileStorageTelemetry
     /// </summary>
     /// <param name="bytes">Storage size in bytes.</param>
     public static void RecordSizeBytes(long bytes)
-        => SizeBytes.Add(bytes);
+    {
+        var normalizedBytes = Math.Max(0L, bytes);
+        var previousBytes = Interlocked.Exchange(ref _lastObservedSizeBytes, normalizedBytes);
+        var delta = normalizedBytes - previousBytes;
+        if (delta != 0)
+        {
+            SizeBytes.Add(delta);
+        }
+    }
 }
