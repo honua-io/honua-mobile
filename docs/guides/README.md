@@ -26,4 +26,5 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Repo Scaffolding Gates](repo-scaffolding-gates.md) | Issue #826 release workflow, package metadata, branch protection, Dependabot, Trivy, and platform smoke verification commands |
 | [Scene Controls](scene-controls.md) | `<honua-scene-*>` control surfaces, `HonuaSceneMetadata` schema, and typed scene events |
 | [Security](security.md) | Authentication, transport security, and secure storage best practices |
+| [SDK-backed Offline Field Ops Demo Harness](sdk-backed-offline-field-ops-demo-harness.md) | Issue #92 first-slice harness for SDK-backed registration, GeoPackage adapter evidence, and deterministic conflict fixture metadata |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions for development and production |
