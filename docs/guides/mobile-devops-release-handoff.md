@@ -95,6 +95,7 @@ Collect evidence before promotion, not after testers find a problem.
 
 | Stage | Minimum Evidence |
 | --- | --- |
+| .NET SDK train | `HonuaSdkDotNetTrainVersion`, SDK release tag and commit, mobile commit SHA, contract/integration test run URL, release evidence JSON, and the `mobile-dotnet-sdk-train` manifest lane update or approved waiver. |
 | Direct APK | Artifact name, metadata JSON, install notes, selected non-production API base URL, commit SHA, tester notes, and smoke result. |
 | Android internal | Workflow run URL, signed artifact name, SHA-256 digest, Play channel, version name, version code, package name, protected environment approval, and tester link or track. |
 | TestFlight | Workflow run URL, IPA artifact, App Store Connect build number, bundle ID, protected environment approval, TestFlight processing status, and tester group. |

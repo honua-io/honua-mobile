@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <HonuaSdkDotNetTrainVersion>0.1.16-alpha.1</HonuaSdkDotNetTrainVersion>
+    <HonuaSdkDotNetTrainTag>dotnet-sdk-v$(HonuaSdkDotNetTrainVersion)</HonuaSdkDotNetTrainTag>
+    <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
+    <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/$(HonuaSdkDotNetTrainTag)</HonuaSdkDotNetTrainReleaseUrl>
+    <HonuaSdkDotNetTrainReleaseCommit>f31cfeb6c21af896b96194688a393638461f3d8a</HonuaSdkDotNetTrainReleaseCommit>
+    <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-07T08:52:04Z</HonuaSdkDotNetTrainReleasePublishedAt>
+  </PropertyGroup>
+</Project>
