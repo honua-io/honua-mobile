@@ -146,6 +146,9 @@ auditable in the repository.
       may submit or promote iOS builds.
 - [ ] Record certificate and provisioning profile expiration dates in the
       release calendar with rotation reminders.
+- [ ] Run `scripts/validate-ios-store-prereqs.sh` before importing signing
+      assets or enabling TestFlight uploads, then attach the output to the
+      release evidence.
 
 ### iOS Secrets
 
@@ -239,3 +242,19 @@ App Store Connect API key exposure:
 
 Review store access, GitHub environment reviewers, and all store automation
 secrets before each production release and after any owner change.
+
+## Repository Validation
+
+Run this check after changing app identifiers, TestFlight workflow inputs, or
+iOS signing secret names:
+
+```bash
+scripts/validate-ios-store-prereqs.sh
+```
+
+The script validates that the documented iOS bundle IDs match the MAUI
+`ApplicationId` values, that the TestFlight workflow maps each app target to the
+same bundle ID and provisioning profile secret, and that required iOS signing
+and App Store Connect secret names stay documented. It does not read or verify
+secret values, certificate files, provisioning profile contents, App Store
+Connect app records, or Apple Developer account state.
