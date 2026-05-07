@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace Honua.Mobile.Sdk.Tests;
 
@@ -151,7 +152,8 @@ public sealed class MobileContractHarmonizationFixtureTests
 
         var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
         Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
-        Assert.Equal("0.1.8-alpha.1", abstractionsPackage.Version);
+        var sdkTrainVersion = LoadSdkTrainVersion();
+        Assert.Equal(sdkTrainVersion, abstractionsPackage.Version);
 
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
@@ -160,7 +162,7 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Scenes");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.OgcFeatures");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Field");
-        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package => Assert.Equal("0.1.8-alpha.1", package.Version));
+        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package => Assert.Equal(sdkTrainVersion, package.Version));
     }
 
     private static ContractFixture LoadFixture()
@@ -192,6 +194,13 @@ public sealed class MobileContractHarmonizationFixtureTests
         }
 
         throw new DirectoryNotFoundException("Could not locate Honua.Mobile.sln from the test output directory.");
+    }
+
+    private static string LoadSdkTrainVersion()
+    {
+        var path = Path.Combine(FindRepositoryRoot(), "Directory.Build.props");
+        var document = XDocument.Load(path);
+        return document.Descendants("HonuaSdkDotNetTrainVersion").Single().Value;
     }
 
     private sealed record ContractFixture
