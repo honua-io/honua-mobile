@@ -193,6 +193,10 @@ The smoke test project can also run an optional live Honua query when
 `HONUA_MOBILE_SMOKE_LAYER_ID`, and optionally `HONUA_MOBILE_SMOKE_API_KEY` are
 set.
 
+Release workflow, branch-protection, package metadata, Dependabot, Trivy, and
+platform smoke guardrails for honua-server #826 are documented in
+[Repo Scaffolding Gates](docs/guides/repo-scaffolding-gates.md).
+
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
