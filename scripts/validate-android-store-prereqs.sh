@@ -76,7 +76,10 @@ require_text "${service_account_secret}" "${store_doc}"
 require_text "${service_account_secret}" "${distribution_doc}"
 require_text "${service_account_secret}" "${workflow}"
 
-mapfile -t environment_names < <(jq -r '.githubEnvironments[].name' "${manifest}")
+environment_names=()
+while IFS= read -r environment_name; do
+  environment_names+=("${environment_name}")
+done < <(jq -r '.githubEnvironments[].name' "${manifest}")
 [[ "${#environment_names[@]}" -gt 0 ]] || fail "Manifest must define at least one GitHub environment"
 
 for environment_name in "${environment_names[@]}"; do
@@ -86,7 +89,7 @@ done
 target_count="$(jq '.appTargets | length' "${manifest}")"
 [[ "${target_count}" -gt 0 ]] || fail "Manifest must define at least one app target"
 
-for index in $(seq 0 "$((target_count - 1))"); do
+for ((index = 0; index < target_count; index++)); do
   target_id="$(jq -r ".appTargets[${index}].id" "${manifest}")"
   project_rel="$(jq -r ".appTargets[${index}].project" "${manifest}")"
   package_id="$(jq -r ".appTargets[${index}].androidPackageId" "${manifest}")"
@@ -113,7 +116,10 @@ for index in $(seq 0 "$((target_count - 1))"); do
   require_text "${package_id}" "${distribution_doc}"
   require_text "${secret_stem}" "${distribution_doc}"
 
-  mapfile -t required_secrets < <(jq -r ".appTargets[${index}].requiredSigningSecrets[]" "${manifest}")
+  required_secrets=()
+  while IFS= read -r secret_name; do
+    required_secrets+=("${secret_name}")
+  done < <(jq -r ".appTargets[${index}].requiredSigningSecrets[]" "${manifest}")
   [[ "${#required_secrets[@]}" -eq 4 ]] || fail "App target ${target_id} must define four required signing secrets"
 
   for secret_name in "${required_secrets[@]}"; do
@@ -122,7 +128,10 @@ for index in $(seq 0 "$((target_count - 1))"); do
     require_text "${secret_name}" "${distribution_doc}"
   done
 
-  mapfile -t rotation_secrets < <(jq -r ".appTargets[${index}].rotationScope[]" "${manifest}")
+  rotation_secrets=()
+  while IFS= read -r rotation_secret; do
+    rotation_secrets+=("${rotation_secret}")
+  done < <(jq -r ".appTargets[${index}].rotationScope[]" "${manifest}")
   [[ "${required_secrets[*]}" == "${rotation_secrets[*]}" ]] || fail "App target ${target_id} rotation scope must match required signing secrets"
 done
 
