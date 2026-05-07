@@ -9,6 +9,9 @@ comment, etc.) in the Notes column.
 ## CI and Automated Gates
 
 - [ ] All CI gates pass (build, test, gRPC validation, security)
+- [ ] .NET SDK train evidence is current: `Directory.Build.props`
+      `HonuaSdkDotNetTrainVersion` matches the published `honua-sdk-dotnet`
+      train and `quality/release-evidence/` names the release manifest lane
 - [ ] Performance budgets within thresholds (`quality/performance-budget.json`)
 - [ ] Smoke tests pass (`tests/Honua.Mobile.Smoke.Tests`)
 - [ ] MAUI Android API 33 emulator smoke and trim publish pass; direct
@@ -27,6 +30,9 @@ comment, etc.) in the Notes column.
 
 - [ ] CHANGELOG updated with user-facing changes
 - [ ] Version number bumped in `Directory.Build.props` / `.csproj` files
+- [ ] The `mobile-dotnet-sdk-train` release lane in
+      `honua-server/release/honua-2026-05-preview.json` has the mobile commit
+      SHA, SDK train, run URL, and waiver state
 - [ ] Migration notes documented for breaking API changes (if any)
 - [ ] NuGet package metadata reviewed (description, tags, license)
 - [ ] NuGet publish release tag is signed and matches `mobile-dotnet-v*`
