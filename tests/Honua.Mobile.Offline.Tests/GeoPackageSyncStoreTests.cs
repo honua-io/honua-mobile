@@ -146,6 +146,32 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task PendingOperations_PersistAcrossStoreRestart()
+    {
+        var firstStore = CreateStore();
+        await firstStore.InitializeAsync();
+
+        await firstStore.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "restart-op",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+        });
+
+        var restartedStore = CreateStore();
+        await restartedStore.InitializeAsync();
+        var pending = await restartedStore.GetPendingAsync(10);
+
+        Assert.Single(pending);
+        Assert.Equal("restart-op", pending[0].OperationId);
+        Assert.Equal(OfflineOperationType.Update, pending[0].OperationType);
+    }
+
+    [Fact]
     public async Task MapAreas_CanBeUpsertedAndListed()
     {
         var store = CreateStore();

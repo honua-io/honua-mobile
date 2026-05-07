@@ -74,15 +74,19 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         }
         catch (HttpRequestException ex)
         {
-            return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = ex.Message };
+            return MobileSyncProblemHelper.ToUploadResult(ex);
         }
-        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
         catch (TaskCanceledException ex)
         {
-            return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = ex.Message };
+            return MobileSyncProblemHelper.ToUploadResult(ex);
+        }
+        catch (Exception ex)
+        {
+            return MobileSyncProblemHelper.ToUploadResult(ex);
         }
     }
 
@@ -230,36 +234,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
     }
 
     private static UploadResult FromStatusCode(HttpStatusCode statusCode, string message)
-    {
-        if (statusCode is HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed)
-        {
-            return new UploadResult { Outcome = UploadOutcome.Conflict, Message = message };
-        }
-
-        if (statusCode == HttpStatusCode.RequestTimeout ||
-            (int)statusCode == 429 ||
-            (int)statusCode >= 500)
-        {
-            return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = message };
-        }
-
-        return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = message };
-    }
+        => MobileSyncProblemHelper.ToUploadResult(MobileSyncProblemHelper.FromStatusCode(statusCode, message));
 
     private static UploadResult FromErrorCode(int? code, string? message)
-    {
-        if (code is 409 or 412)
-        {
-            return new UploadResult { Outcome = UploadOutcome.Conflict, Message = message ?? "Conflict" };
-        }
-
-        if (code is 408 or 429 || (code.HasValue && code.Value >= 500))
-        {
-            return new UploadResult { Outcome = UploadOutcome.RetryableFailure, Message = message ?? "Retryable error" };
-        }
-
-        return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = message ?? "Fatal error" };
-    }
+        => MobileSyncProblemHelper.ToUploadResult(MobileSyncProblemHelper.FromErrorCode(code, message));
 
     private static bool TryReadError(JsonElement element, out int? code, out string? message)
     {
