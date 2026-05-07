@@ -56,6 +56,47 @@ public sealed class ReplicaSyncClientTests
     }
 
     [Fact]
+    public async Task CreateReplicaAsync_CamelCaseResponse_ReturnsReplicaIdAndServerGen()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"replicaId":"replica-camel","serverGeneration":"42"}""", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
+
+        var result = await client.CreateReplicaAsync("assets", "test-replica");
+
+        Assert.Equal("replica-camel", result.ReplicaId);
+        Assert.Equal(42, result.ServerGen);
+    }
+
+    [Fact]
+    public async Task CreateReplicaAsync_PerLayerServerGenResponse_ReturnsReplicaIdAndServerGen()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"replicaID":"replica-layer","layers":[{"id":68910,"serverGen":43}]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
+
+        var result = await client.CreateReplicaAsync("assets", "test-replica");
+
+        Assert.Equal("replica-layer", result.ReplicaId);
+        Assert.Equal(43, result.ServerGen);
+    }
+
+    [Fact]
     public async Task ExtractChangesAsync_Success_ParsesAddsUpdatesDeletes()
     {
         var responseJson = """

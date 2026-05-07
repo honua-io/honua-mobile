@@ -19,6 +19,7 @@
     <PackageReference Include="Honua.Sdk.Scenes" Version="0.1.8-alpha.1" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers" Version="4.11.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
@@ -28,6 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Honua.Mobile.Maui\Honua.Mobile.Maui.csproj" />
     <ProjectReference Include="..\..\src\Honua.Mobile.Offline\Honua.Mobile.Offline.csproj" />
     <ProjectReference Include="..\..\src\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
   </ItemGroup>

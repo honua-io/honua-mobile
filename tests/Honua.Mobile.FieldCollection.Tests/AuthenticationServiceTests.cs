@@ -25,6 +25,25 @@ public sealed class AuthenticationServiceTests
     }
 
     [Fact]
+    public async Task ValidateConnection_WithApiKey_FallsBackWhenSceneDiscoveryIsMissing()
+    {
+        var requestedPaths = new List<string>();
+        using var http = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            requestedPaths.Add(request.RequestUri!.PathAndQuery);
+            return request.RequestUri!.AbsolutePath == "/rest/services"
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                : new HttpResponseMessage(HttpStatusCode.NotFound);
+        }));
+        var service = new AuthenticationService(http);
+
+        var isValid = await service.ValidateConnectionAsync("https://api.honua.test", "api-key");
+
+        Assert.True(isValid);
+        Assert.Equal(["/api/scenes?f=json", "/rest/services?f=json"], requestedPaths);
+    }
+
+    [Fact]
     public async Task ValidateConnection_WithoutApiKey_AllowsPublicHealthEndpoint()
     {
         using var http = new HttpClient(new StubHttpMessageHandler(request =>

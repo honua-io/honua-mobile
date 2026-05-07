@@ -29,12 +29,11 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 
 builder.Services
-    .AddHonuaMobileAuth()
+    .AddHonuaMobilePlatformAuth()
     .AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
         BaseUri = new Uri("https://your-honua-server.com"),
         GrpcEndpoint = new Uri("https://your-honua-server.com"),
-        ApiKey = "<your-api-key>",
         PreferGrpcForFeatureQueries = true,
     })
     .AddHonuaRouting()
@@ -54,6 +53,9 @@ builder.Services
     .AddHonuaMapAreaDownload()
     .AddHonuaBackgroundSync();
 ```
+
+After sign-in or bootstrap, store the API key or bearer token with `IAuthTokenProvider.StoreTokenAsync(...)`;
+the platform auth registration persists it in iOS Keychain or Android secure storage.
 
 ## Offline Sync
 
@@ -157,7 +159,7 @@ tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (79 tests)
   Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
   Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
-  Honua.Mobile.ServerIntegration.Tests/ Loopback Honua server integration surface (8 tests)
+  Honua.Mobile.ServerIntegration.Tests/ Loopback and opt-in live Honua image integration surface
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)
   Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location, scene anchoring (40 tests)
   Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query (7 tests)
@@ -182,12 +184,14 @@ without the MAUI workload.
 
 The server integration project starts a real ASP.NET Core loopback server and
 exercises the implemented SDK, offline, FieldCollection auth, and mobile
-exception-reporting HTTP paths without requiring external infrastructure.
+exception-reporting HTTP paths without requiring external infrastructure. It
+also includes opt-in live Honua image tests that use Testcontainers or a
+pre-started Honua URL when `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set; see
+`docs/guides/offline-sync.md`.
 The smoke test project can also run an optional live Honua query when
 `HONUA_MOBILE_SMOKE_BASE_URL`, `HONUA_MOBILE_SMOKE_SERVICE_ID`,
 `HONUA_MOBILE_SMOKE_LAYER_ID`, and optionally `HONUA_MOBILE_SMOKE_API_KEY` are
-set. This repository does not currently include Testcontainers or a devcontainer
-for provisioning Honua locally.
+set.
 
 ## Status
 

@@ -88,12 +88,16 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
     public async ValueTask<HonuaAuthToken?> RefreshTokenAsync(CancellationToken ct = default)
     {
         using var activity = MobileAuthTelemetry.ActivitySource.StartActivity("honua.mobile.auth.refresh", ActivityKind.Client);
-        activity?.SetTag("auth.scheme", "bearer");
 
         try
         {
             var current = await _store.ReadAsync(ct).ConfigureAwait(false);
-            if (current is null || string.IsNullOrWhiteSpace(current.RefreshToken) || _options.RefreshEndpoint is null)
+            activity?.SetTag("auth.scheme", current?.Scheme.ToString().ToLowerInvariant() ?? "none");
+
+            if (current is null ||
+                current.Scheme != HonuaAuthScheme.Bearer ||
+                string.IsNullOrWhiteSpace(current.RefreshToken) ||
+                _options.RefreshEndpoint is null)
             {
                 MobileAuthTelemetry.RecordTokenRefresh("skipped");
                 activity?.SetTag("auth.refresh.result", "skipped");
@@ -107,9 +111,8 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
 
             if (!response.IsSuccessStatusCode)
             {
-                MobileAuthTelemetry.RecordTokenRefresh("failure");
-                activity?.SetStatus(ActivityStatusCode.Error);
-                throw new HonuaMobileAuthException("Honua auth token refresh failed.");
+                var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                throw HonuaAuthProblemDetails.CreateRefreshException(response.StatusCode, response.ReasonPhrase, raw);
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -117,7 +120,7 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
                 stream,
                 HonuaMobileAuthJsonContext.Default.JsonElement,
                 ct).ConfigureAwait(false);
-            var refreshed = ParseRefreshResponse(payload, current);
+            var refreshed = ParseRefreshResponse(payload, current, _options.TimeProvider.GetUtcNow());
             await _store.WriteAsync(refreshed, ct).ConfigureAwait(false);
 
             MobileAuthTelemetry.RecordTokenRefresh("success");
@@ -126,6 +129,9 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         }
         catch (HonuaMobileAuthException)
         {
+            MobileAuthTelemetry.RecordTokenRefresh("failure");
+            activity?.SetTag("auth.refresh.result", "failure");
+            activity?.SetStatus(ActivityStatusCode.Error);
             throw;
         }
         catch (OperationCanceledException)
@@ -176,7 +182,10 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         }
     }
 
-    private static HonuaAuthToken ParseRefreshResponse(JsonElement payload, HonuaAuthToken current)
+    private static HonuaAuthToken ParseRefreshResponse(
+        JsonElement payload,
+        HonuaAuthToken current,
+        DateTimeOffset nowUtc)
     {
         var accessToken = ReadString(payload, "accessToken", "access_token")
             ?? throw new HonuaMobileAuthException("Honua auth token refresh returned no access token.");
@@ -186,7 +195,7 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
             string.Equals(tokenType, "apiKey", StringComparison.OrdinalIgnoreCase)
                 ? HonuaAuthScheme.ApiKey
                 : HonuaAuthScheme.Bearer;
-        var expiresAtUtc = ReadExpiresAt(payload);
+        var expiresAtUtc = ReadExpiresAt(payload, nowUtc);
 
         return new HonuaAuthToken(scheme, accessToken, refreshToken, expiresAtUtc);
     }
@@ -197,14 +206,15 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             if (payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
             {
-                return value.GetString();
+                var text = value.GetString();
+                return string.IsNullOrWhiteSpace(text) ? null : text;
             }
         }
 
         return null;
     }
 
-    private static DateTimeOffset? ReadExpiresAt(JsonElement payload)
+    private static DateTimeOffset? ReadExpiresAt(JsonElement payload, DateTimeOffset nowUtc)
     {
         var expiresAt = ReadString(payload, "expiresAtUtc", "expires_at_utc", "expiresAt", "expires_at");
         if (DateTimeOffset.TryParse(expiresAt, out var parsed))
@@ -216,7 +226,7 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             if (expiresIn.TryGetInt64(out var seconds))
             {
-                return DateTimeOffset.UtcNow.AddSeconds(seconds);
+                return nowUtc.AddSeconds(seconds);
             }
         }
 
