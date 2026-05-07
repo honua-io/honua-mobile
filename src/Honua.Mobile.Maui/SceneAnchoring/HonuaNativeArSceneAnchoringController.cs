@@ -58,6 +58,19 @@ public sealed class HonuaNativeArSceneAnchoringController
     }
 
     /// <summary>
+    /// Creates the AR metadata context that field captures should attach to photos, annotations, or reports.
+    /// </summary>
+    public async ValueTask<HonuaNativeArEvidenceContext> CreateEvidenceContextAsync(CancellationToken ct = default)
+    {
+        var request = _activeRequest
+            ?? throw new InvalidOperationException("No native AR scene anchoring session is active.");
+
+        var status = await _adapter.GetStatusAsync(ct).ConfigureAwait(false);
+        var readiness = EvaluateReadiness(status, request, _options);
+        return HonuaNativeArEvidenceContext.Create(request, status, readiness);
+    }
+
+    /// <summary>
     /// Pauses the active native AR session.
     /// </summary>
     public async ValueTask<HonuaNativeArReadiness> PauseAsync(CancellationToken ct = default)
