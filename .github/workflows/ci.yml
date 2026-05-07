@@ -71,6 +71,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify branch protection
+        if: ${{ github.event_name == 'push' && vars.HONUA_VERIFY_BRANCH_PROTECTION == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.HONUA_BRANCH_PROTECTION_READ_TOKEN }}
+        run: bash scripts/verify-branch-protection.sh "${GITHUB_REF_NAME}"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
