@@ -7,7 +7,7 @@ public sealed class AndroidStorePrereqsValidationTests
     [Fact]
     public void ValidationScript_PassesCurrentRepo()
     {
-        if (!IsBashAvailable())
+        if (!HasValidationScriptTools())
         {
             return;
         }
@@ -22,7 +22,7 @@ public sealed class AndroidStorePrereqsValidationTests
     [Fact]
     public void ValidationScript_RejectsSwappedWorkflowMapping()
     {
-        if (!IsBashAvailable())
+        if (!HasValidationScriptTools())
         {
             return;
         }
@@ -90,17 +90,23 @@ public sealed class AndroidStorePrereqsValidationTests
         return new ScriptResult(process.ExitCode, stdout + stderr);
     }
 
-    private static bool IsBashAvailable()
+    private static bool HasValidationScriptTools()
+    {
+        return IsCommandAvailable("bash", "--version") &&
+            IsCommandAvailable("jq", "--version");
+    }
+
+    private static bool IsCommandAvailable(string fileName, string versionArgument)
     {
         try
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "bash",
+                FileName = fileName,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
-            startInfo.ArgumentList.Add("--version");
+            startInfo.ArgumentList.Add(versionArgument);
 
             using var process = Process.Start(startInfo);
             if (process is null)
