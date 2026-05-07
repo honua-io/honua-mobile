@@ -108,6 +108,32 @@ public sealed class OfflineEditOperation
 public sealed record BoundingBox(double MinLongitude, double MinLatitude, double MaxLongitude, double MaxLatitude);
 
 /// <summary>
+/// CRS metadata observed for a cached feature layer in the local GeoPackage.
+/// </summary>
+public sealed class GeoPackageFeatureLayerMetadata
+{
+    /// <summary>
+    /// Layer identifier used by the feature cache.
+    /// </summary>
+    public required string LayerKey { get; init; }
+
+    /// <summary>
+    /// GeoPackage spatial reference system identifier.
+    /// </summary>
+    public int SrsId { get; init; } = 4326;
+
+    /// <summary>
+    /// Stable CRS identifier for consumers, such as EPSG:4326.
+    /// </summary>
+    public string CrsIdentifier { get; init; } = "EPSG:4326";
+
+    /// <summary>
+    /// UTC timestamp when the layer metadata was last updated.
+    /// </summary>
+    public DateTimeOffset UpdatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
 /// Metadata for a downloaded offline map area package stored in the local GeoPackage.
 /// </summary>
 public sealed class MapAreaPackage
