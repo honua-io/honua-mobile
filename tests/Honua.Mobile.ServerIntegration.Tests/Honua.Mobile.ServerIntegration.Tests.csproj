@@ -35,8 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Configuration\MobileBuildConfiguration.cs" Link="App\Services\Configuration\MobileBuildConfiguration.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\IAuthenticationService.cs" Link="App\Services\IAuthenticationService.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\MobileExceptionReporter.cs" Link="App\Services\Diagnostics\MobileExceptionReporter.cs" />
+    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\FieldCollectionExceptionReporting.cs" Link="App\Services\Diagnostics\FieldCollectionExceptionReporting.cs" />
   </ItemGroup>
 
 </Project>

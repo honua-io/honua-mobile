@@ -11,16 +11,27 @@ public sealed class HttpMobileExceptionReportUploader : IMobileExceptionReportUp
 {
     private readonly HttpClient _httpClient;
     private readonly MobileExceptionReportingOptions _options;
+    private readonly IReadOnlyList<IMobileExceptionReportUploadRequestCustomizer> _requestCustomizers;
     private readonly ILogger<HttpMobileExceptionReportUploader>? _logger;
 
     public HttpMobileExceptionReportUploader(
         HttpClient httpClient,
         MobileExceptionReportingOptions options,
         ILogger<HttpMobileExceptionReportUploader>? logger = null)
+        : this(httpClient, options, [], logger)
+    {
+    }
+
+    public HttpMobileExceptionReportUploader(
+        HttpClient httpClient,
+        MobileExceptionReportingOptions options,
+        IEnumerable<IMobileExceptionReportUploadRequestCustomizer>? requestCustomizers,
+        ILogger<HttpMobileExceptionReportUploader>? logger = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _options.Validate();
+        _requestCustomizers = requestCustomizers?.ToArray() ?? [];
         _logger = logger;
     }
 
@@ -42,6 +53,11 @@ public sealed class HttpMobileExceptionReportUploader : IMobileExceptionReportUp
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.UploadEndpoint);
+            foreach (var customizer in _requestCustomizers)
+            {
+                customizer.Customize(request, report);
+            }
+
             var json = JsonSerializer.Serialize(report, HonuaMobileMauiDiagnosticsJsonContext.Default.MobileExceptionReport);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
