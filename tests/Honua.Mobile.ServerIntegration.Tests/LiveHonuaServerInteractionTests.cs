@@ -18,6 +18,7 @@ using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.GeoServices.FeatureServer.Models;
 using Honua.Sdk.OgcFeatures.Models;
+using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 
@@ -158,6 +159,28 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                 await DeleteFeatureServerFeatureAsync(client, sdkObjectId.Value);
             }
         }
+    }
+
+    [Fact]
+    public async Task LiveImage_MobileSdkFeatureClientAdapter_QuerySmoke()
+    {
+        if (!_server.Enabled)
+        {
+            return;
+        }
+
+        using var client = CreateMobileClient(preferGrpc: false);
+        IHonuaFeatureQueryClient featureClient = new SdkFeatureClient(client);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var result = await featureClient.QueryAsync(new FeatureQueryRequest
+        {
+            Source = FeatureSource(),
+            Limit = 1,
+        }, timeout.Token);
+
+        Assert.Equal("honua-mobile", featureClient.ProviderName);
+        Assert.NotNull(result.Features);
     }
 
     [Fact]

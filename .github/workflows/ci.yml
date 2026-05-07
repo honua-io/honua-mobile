@@ -41,7 +41,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }}..${{ github.sha }})
           fi
 
-          SRC_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|apps/|proto/|quality/)' || true)
+          SRC_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|apps/|proto/|quality/|scripts/|\.github/workflows/|tests/Honua.Mobile.PlatformSmoke/)' || true)
           TEST_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^tests/' || true)
 
           if [ -n "$SRC_CHANGED" ]; then
@@ -326,7 +326,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
 
-      - name: Android API 33 emulator smoke
+      - name: Android API 33 platform smoke
         uses: reactivecircus/android-emulator-runner@v2
         env:
           HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
@@ -342,7 +342,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             adb shell getprop ro.build.version.sdk
-            dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj --configuration Release --logger "console;verbosity=minimal"
+            scripts/run-android-platform-smoke.sh
 
   maui-ios:
     name: MAUI iOS Build & AOT Smoke
@@ -439,16 +439,15 @@ jobs:
             /p:TreatWarningsAsErrors=true \
             /p:WarningsNotAsErrors=IL2104%3BIL3053
 
-      - name: iOS live query smoke
+      - name: iOS simulator platform smoke
+        if: steps.ios_tools.outputs.actool_available == 'true'
         env:
           HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
           HONUA_MOBILE_SMOKE_SERVICE_ID: ${{ vars.HONUA_MOBILE_SMOKE_SERVICE_ID }}
           HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
           HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
         run: |
-          dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj \
-            --configuration Release \
-            --logger "console;verbosity=minimal"
+          scripts/run-ios-platform-smoke.sh
 
   maui-windows:
     name: MAUI Windows Build

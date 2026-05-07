@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.FieldCollectio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.ServerIntegration.Tests", "tests\Honua.Mobile.ServerIntegration.Tests\Honua.Mobile.ServerIntegration.Tests.csproj", "{E4932418-1C59-49D0-981E-1A06FC657649}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.PlatformSmoke", "tests\Honua.Mobile.PlatformSmoke\Honua.Mobile.PlatformSmoke.csproj", "{0F322272-A4E5-43B4-909B-40A936F3CFDE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -171,6 +173,18 @@ Global
 		{E4932418-1C59-49D0-981E-1A06FC657649}.Release|x64.Build.0 = Release|Any CPU
 		{E4932418-1C59-49D0-981E-1A06FC657649}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4932418-1C59-49D0-981E-1A06FC657649}.Release|x86.Build.0 = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|x64.Build.0 = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Debug|x86.Build.0 = Debug|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x64.ActiveCfg = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x64.Build.0 = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x86.ActiveCfg = Release|Any CPU
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -187,5 +201,6 @@ Global
 		{2DEE74CC-D0FB-458C-8980-1A9E54FADE0B} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{8F30E9F6-4C66-49FC-9020-0706E5708782} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E4932418-1C59-49D0-981E-1A06FC657649} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{0F322272-A4E5-43B4-909B-40A936F3CFDE} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
