@@ -31,6 +31,12 @@ the expected bundle ID in the table. After importing the selected profile, it
 also verifies that the decoded profile team and application identifier match the
 same expected bundle ID.
 
+Maintainers can run `scripts/validate-ios-store-prereqs.sh` before a signing
+asset rotation or workflow change to verify that this table, the MAUI project
+identifiers, and the workflow secret mapping still agree. The script checks
+names and repository configuration only; it never reads Apple credentials or
+GitHub secret values.
+
 Store these secrets in the protected environment, not as repository-wide
 secrets:
 
