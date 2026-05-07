@@ -1,0 +1,64 @@
+{
+  "schema": "honua.mobile.android-store-prereqs.v1",
+  "githubIssue": 85,
+  "githubEnvironments": [
+    {
+      "name": "android-internal",
+      "purpose": "Google Play internal app sharing and internal testing uploads",
+      "requiredReviewers": true
+    },
+    {
+      "name": "android-production",
+      "purpose": "Google Play production promotion",
+      "requiredReviewers": true
+    }
+  ],
+  "playServiceAccountSecret": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON",
+  "appTargets": [
+    {
+      "id": "field-collection",
+      "displayName": "Honua Field Collection",
+      "project": "apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj",
+      "androidPackageId": "io.honua.mobile.fieldcollection",
+      "playConsoleAppRecord": "external-required",
+      "testerAccess": "external-required",
+      "signingSecretStem": "ANDROID_FIELD_COLLECTION_UPLOAD",
+      "requiredSigningSecrets": [
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD"
+      ],
+      "rotationScope": [
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS",
+        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD"
+      ]
+    },
+    {
+      "id": "mobile-app",
+      "displayName": "Honua Mobile App",
+      "project": "apps/Honua.Mobile.App/Honua.Mobile.App.csproj",
+      "androidPackageId": "io.honua.mobile.app",
+      "playConsoleAppRecord": "external-required",
+      "testerAccess": "external-required",
+      "signingSecretStem": "ANDROID_APP_UPLOAD",
+      "requiredSigningSecrets": [
+        "ANDROID_APP_UPLOAD_KEYSTORE_BASE64",
+        "ANDROID_APP_UPLOAD_KEYSTORE_PASSWORD",
+        "ANDROID_APP_UPLOAD_KEY_ALIAS",
+        "ANDROID_APP_UPLOAD_KEY_PASSWORD"
+      ],
+      "rotationScope": [
+        "ANDROID_APP_UPLOAD_KEYSTORE_BASE64",
+        "ANDROID_APP_UPLOAD_KEYSTORE_PASSWORD",
+        "ANDROID_APP_UPLOAD_KEY_ALIAS",
+        "ANDROID_APP_UPLOAD_KEY_PASSWORD"
+      ]
+    }
+  ],
+  "serviceAccountRotationScope": [
+    "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+  ]
+}

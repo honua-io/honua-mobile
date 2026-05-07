@@ -77,6 +77,9 @@ environment actually needs to sign or upload builds.
 
 ## Android Checklist
 
+- [ ] Run `scripts/validate-android-store-prereqs.sh` and confirm
+      `quality/android-store-prereqs.json` still matches MAUI project IDs,
+      Android internal distribution workflow mappings, and this guide.
 - [ ] Confirm Google Play Console account ownership and billing status.
 - [ ] Grant least-privilege Play Console access to release owners and
       automation.
@@ -101,7 +104,9 @@ environment actually needs to sign or upload builds.
 ### Android Secrets
 
 Use these GitHub secret names. Values must be set only in protected
-environments.
+environments. `quality/android-store-prereqs.json` is the non-secret register
+that keeps package IDs, app targets, required secret names, and rotation scope
+auditable in the repository.
 
 - `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
   Play Console service account JSON with app-scoped permissions.

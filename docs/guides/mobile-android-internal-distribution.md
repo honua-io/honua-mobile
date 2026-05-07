@@ -43,6 +43,11 @@ Known Android app targets:
 | `field-collection` | `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj` | `io.honua.mobile.fieldcollection` | `ANDROID_FIELD_COLLECTION_UPLOAD` |
 | `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `ANDROID_APP_UPLOAD` |
 
+The non-secret source of truth for this table is
+`quality/android-store-prereqs.json`. Run
+`scripts/validate-android-store-prereqs.sh` after changing Android app targets,
+package IDs, or signing secret names.
+
 ## Required Environment
 
 Create a GitHub Environment named `android-internal` or pass another protected
@@ -65,9 +70,15 @@ For the default `field-collection` target, configure these signing secrets:
 - `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS`
 - `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD`
 
-For the `mobile-app` target, configure the equivalent
-`ANDROID_APP_UPLOAD_*` signing secrets. These names match
-`docs/guides/mobile-store-prereqs.md`.
+For the `mobile-app` target, configure these signing secrets:
+
+- `ANDROID_APP_UPLOAD_KEYSTORE_BASE64`
+- `ANDROID_APP_UPLOAD_KEYSTORE_PASSWORD`
+- `ANDROID_APP_UPLOAD_KEY_ALIAS`
+- `ANDROID_APP_UPLOAD_KEY_PASSWORD`
+
+These names match `docs/guides/mobile-store-prereqs.md` and the non-secret
+register in `quality/android-store-prereqs.json`.
 
 Do not configure a free-form Android package-name secret for this workflow. The
 package name is derived from `app_target`, and the workflow fails before restore,
