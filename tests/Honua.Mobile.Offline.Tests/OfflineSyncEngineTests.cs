@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Microsoft.Data.Sqlite;
@@ -79,6 +80,54 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAsync_ConflictPolicyRules_HandleConflictsAcrossThreeLayers()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+
+        await store.EnqueueAsync(CreateOperation("critical-update", "critical", OfflineOperationType.Update));
+        await store.EnqueueAsync(CreateOperation("reference-delete", "reference", OfflineOperationType.Delete));
+        await store.EnqueueAsync(CreateOperation("assets-add", "assets", OfflineOperationType.Add));
+
+        var uploader = new AlwaysConflictRecordingUploader();
+        var engine = new OfflineSyncEngine(
+            store,
+            uploader,
+            new OfflineSyncEngineOptions
+            {
+                BatchSize = 10,
+                ConflictStrategy = SyncConflictStrategy.ManualReview,
+                ConflictPolicyRules =
+                [
+                    new SyncConflictPolicyRule
+                    {
+                        LayerKey = "critical",
+                        OperationType = OfflineOperationType.Update,
+                        Strategy = SyncConflictStrategy.ClientWins,
+                    },
+                    new SyncConflictPolicyRule
+                    {
+                        LayerKey = "reference",
+                        Strategy = SyncConflictStrategy.ServerWins,
+                    },
+                ],
+            });
+
+        var result = await engine.SyncAsync();
+        var manualState = await ReadOperationStateAsync("assets-add");
+
+        Assert.Equal(3, result.Loaded);
+        Assert.Equal(2, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.Null(await ReadOperationStateAsync("critical-update"));
+        Assert.Null(await ReadOperationStateAsync("reference-delete"));
+        Assert.NotNull(manualState);
+        Assert.Equal("failed", manualState!.Value.Status);
+        Assert.Contains(uploader.Calls, call => call.OperationId == "critical-update" && call.ForceWrite);
+        Assert.DoesNotContain(uploader.Calls, call => call.OperationId == "reference-delete" && call.ForceWrite);
+    }
+
+    [Fact]
     public async Task SyncAsync_WhenCanceled_RequeuesClaimedOperationsWithoutIncrementingAttempts()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
@@ -111,7 +160,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task SyncAsync_WhenUploaderThrows_RequeuesClaimedOperations()
+    public async Task SyncAsync_WhenUploaderThrows_MapsProblemAndKeepsOperationsRetryable()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
         await store.InitializeAsync();
@@ -138,12 +187,65 @@ public sealed class OfflineSyncEngineTests : IDisposable
 
         var engine = new OfflineSyncEngine(store, new ThrowingUploader());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => engine.SyncAsync());
+        var result = await engine.SyncAsync();
 
         var pending = await store.GetPendingAsync(10);
+        Assert.Equal(2, result.Loaded);
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(2, result.Failed);
+        Assert.All(result.Failures, failure =>
+        {
+            Assert.DoesNotContain("Grpc", failure.Reason, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Sqlite", failure.Reason, StringComparison.OrdinalIgnoreCase);
+        });
         Assert.Equal(2, pending.Count);
         Assert.Contains(pending, operation => operation.OperationId == "throw-op-1");
         Assert.Contains(pending, operation => operation.OperationId == "throw-op-2");
+    }
+
+    [Fact]
+    public async Task SyncAsync_EmitsSyncTelemetryCountersAndPendingGauge()
+    {
+        var measurements = new List<MetricMeasurement>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == MobileSyncTelemetry.MeterName)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            measurements.Add(new MetricMeasurement(instrument.Name, measurement, tags.ToArray()));
+        });
+        listener.Start();
+
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "telemetry-op",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            Priority = 1,
+        });
+
+        var engine = new OfflineSyncEngine(store, new AlwaysSuccessUploader());
+
+        var result = await engine.SyncAsync();
+        listener.RecordObservableInstruments();
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Contains(measurements, measurement =>
+            measurement.Name == "mobile_sync_runs_total" &&
+            measurement.Value == 1 &&
+            measurement.HasTag("result", "succeeded"));
+        Assert.Contains(measurements, measurement =>
+            measurement.Name == "mobile_pending_operations" &&
+            measurement.Value == 0);
     }
 
     public void Dispose()
@@ -177,6 +279,25 @@ public sealed class OfflineSyncEngineTests : IDisposable
             => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Conflict, Message = "conflict" });
     }
 
+    private sealed class AlwaysConflictRecordingUploader : IOfflineOperationUploader
+    {
+        public List<(string OperationId, bool ForceWrite)> Calls { get; } = [];
+
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        {
+            Calls.Add((operation.OperationId, forceWrite));
+            return Task.FromResult(forceWrite
+                ? new UploadResult { Outcome = UploadOutcome.Success }
+                : new UploadResult { Outcome = UploadOutcome.Conflict, Message = "conflict" });
+        }
+    }
+
+    private sealed class AlwaysSuccessUploader : IOfflineOperationUploader
+    {
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
+    }
+
     private sealed class BlockingUploader : IOfflineOperationUploader
     {
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -192,7 +313,32 @@ public sealed class OfflineSyncEngineTests : IDisposable
     private sealed class ThrowingUploader : IOfflineOperationUploader
     {
         public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
-            => throw new InvalidOperationException("unexpected uploader fault");
+            => throw new InvalidOperationException("Grpc.Core.RpcException: Status(StatusCode=\"Unavailable\")");
+    }
+
+    private static OfflineEditOperation CreateOperation(
+        string operationId,
+        string layerKey,
+        OfflineOperationType operationType)
+        => new()
+        {
+            OperationId = operationId,
+            LayerKey = layerKey,
+            TargetCollection = layerKey,
+            OperationType = operationType,
+            PayloadJson = "{}",
+            Priority = 1,
+        };
+
+    private sealed record MetricMeasurement(
+        string Name,
+        long Value,
+        KeyValuePair<string, object?>[] Tags)
+    {
+        public bool HasTag(string name, string value)
+            => Tags.Any(tag =>
+                tag.Key == name &&
+                string.Equals(tag.Value as string, value, StringComparison.Ordinal));
     }
 
     private async Task<(int AttemptCount, string Status)?> ReadOperationStateAsync(string operationId)
