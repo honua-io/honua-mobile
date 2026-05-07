@@ -12,7 +12,7 @@ the same ownership map without referencing mobile assemblies.
 
 | Mobile baseline | Shared SDK baseline | Status |
 |-----------------|---------------------|--------|
-| `honua-mobile` source packages from `main` after #68 plus scene, field, and feature adapter work | `Honua.Sdk.*` `0.1.8-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, field, and offline contracts |
+| `honua-mobile` source packages from `main` after #68 plus scene, field, and feature adapter work | `Honua.Sdk.*` `0.1.15-alpha.1` | Fixture-level compatibility for shared feature, attachment, source, edit, routing, scene, field, and offline contracts |
 
 `honua-mobile` does not currently publish versioned NuGet packages. Until it
 does, compatibility is stated as source-baseline compatibility against the
@@ -93,9 +93,9 @@ published shared SDK package versions above. When mobile packages gain
   client from `Honua.Sdk.*`; mobile keeps only
   location-provider helpers.
 - #55 consumes SDK scene metadata and package manifest contracts from
-  `Honua.Sdk.*` `0.1.8-alpha.1`; mobile keeps downloader, GeoPackage catalog,
+  `Honua.Sdk.*` `0.1.15-alpha.1`; mobile keeps downloader, GeoPackage catalog,
   display, and renderer lifecycle code.
-- #56 consumes SDK field contracts from `Honua.Sdk.Field` `0.1.8-alpha.1`;
+- #56 consumes SDK field contracts from `Honua.Sdk.Field` `0.1.15-alpha.1`;
   mobile keeps field rendering/capture UX, local media paths, GPS acquisition,
   DI, and offline adapter integration.
 - Once a mobile package version exists, add it to the compatibility table and
