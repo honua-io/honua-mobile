@@ -284,7 +284,8 @@ from the query string, and forwards `honua-map-ready`,
 `honua-map-config-change`, `honua-map-search`, and `honua-map-identify` to the
 parent window with `{ source: 'honua-map-iframe', version: 1, type, detail }`.
 Set `parentOrigin` when generating snippets so forwarded messages are scoped to
-the embedding application origin.
+the embedding application origin. If a `parent-origin` query value is malformed,
+the iframe disables parent event forwarding instead of falling back to `*`.
 
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.

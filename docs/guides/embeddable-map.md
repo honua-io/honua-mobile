@@ -128,7 +128,8 @@ from the query string, and forwards `honua-map-ready`,
 `honua-map-config-change`, `honua-map-search`, and `honua-map-identify` to the
 embedding window with `{ source: 'honua-map-iframe', version: 1, type, detail }`.
 Set `parentOrigin` to constrain forwarded messages to the host application
-origin.
+origin. If a `parent-origin` query value is malformed, the iframe disables
+parent event forwarding instead of falling back to `*`.
 
 ## Integration Events
 

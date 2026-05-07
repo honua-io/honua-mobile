@@ -7,7 +7,7 @@ import {
 
 export interface HonuaMapIframeConfig {
   options: HonuaMapEmbedOptions;
-  parentOrigin: string;
+  parentOrigin: string | null;
 }
 
 export interface HonuaMapIframeMessage {
@@ -97,7 +97,7 @@ export function hydrateHonuaMapIframe(
 
   const parent = options.parent === undefined ? targetWindow.parent : options.parent;
   const targetOrigin = options.targetOrigin?.trim() || config.parentOrigin;
-  const disconnect = parent && parent !== targetWindow
+  const disconnect = parent && parent !== targetWindow && targetOrigin
     ? bridgeMapEvents(element, parent, targetOrigin)
     : () => {};
 
@@ -255,7 +255,7 @@ function parseThemeOptions(params: URLSearchParams): HonuaMapThemeOptions {
   return style;
 }
 
-function parseParentOrigin(value: string | undefined): string {
+function parseParentOrigin(value: string | undefined): string | null {
   if (value === undefined || value === '*') {
     return '*';
   }
@@ -263,6 +263,6 @@ function parseParentOrigin(value: string | undefined): string {
   try {
     return new URL(value).origin;
   } catch {
-    return '*';
+    return null;
   }
 }

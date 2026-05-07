@@ -61,6 +61,9 @@ describe('honua map iframe fallback', () => {
     const flagConfig = parseHonuaMapIframeConfig(new URLSearchParams('search&interactive=false'));
     expect(flagConfig.options.search).toBe(true);
     expect(flagConfig.options.interactive).toBe(false);
+
+    const invalidOriginConfig = parseHonuaMapIframeConfig(new URLSearchParams('parent-origin=portal.example.test'));
+    expect(invalidOriginConfig.parentOrigin).toBeNull();
   });
 
   it('hydrates a full-frame map element from the current URL', () => {
@@ -117,5 +120,22 @@ describe('honua map iframe fallback', () => {
     }));
 
     expect(parent.postMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not forward events when parent-origin is invalid', () => {
+    const url = new URL('/embed/map.html', window.location.href);
+    url.searchParams.set('parent-origin', 'portal.example.test');
+    window.history.replaceState(null, '', url);
+    const parent = {
+      postMessage: vi.fn<(message: HonuaMapIframeMessage, targetOrigin: string) => void>(),
+    };
+
+    const runtime = hydrateHonuaMapIframe({ parent });
+    runtime.element.dispatchEvent(new CustomEvent('honua-map-search', {
+      detail: { query: 'hydrants' },
+    }));
+
+    expect(runtime.config.parentOrigin).toBeNull();
+    expect(parent.postMessage).not.toHaveBeenCalled();
   });
 });
