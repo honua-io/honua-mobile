@@ -308,18 +308,18 @@ public sealed class SdkBackedOfflineFieldOperationsDemoHarnessTests : IDisposabl
         private static string[] CaptureSdkStoreInterfaceEvidence(IServiceProvider provider)
         {
             return [
-                ResolveSdkStoreInterface<SdkOfflineFeatureStore>(provider),
-                ResolveSdkStoreInterface<SdkOfflineChangeJournal>(provider),
-                ResolveSdkStoreInterface<SdkOfflineCheckpointStore>(provider),
-                ResolveSdkStoreInterface<SdkOfflineStateStore>(provider),
+                ResolveSdkStoreInterface<SdkOfflineFeatureStore>(provider, nameof(SdkOfflineFeatureStore)),
+                ResolveSdkStoreInterface<SdkOfflineChangeJournal>(provider, nameof(SdkOfflineChangeJournal)),
+                ResolveSdkStoreInterface<SdkOfflineCheckpointStore>(provider, nameof(SdkOfflineCheckpointStore)),
+                ResolveSdkStoreInterface<SdkOfflineStateStore>(provider, nameof(SdkOfflineStateStore)),
             ];
         }
 
-        private static string ResolveSdkStoreInterface<TStore>(IServiceProvider provider)
+        private static string ResolveSdkStoreInterface<TStore>(IServiceProvider provider, string evidenceName)
             where TStore : notnull
         {
             provider.GetRequiredService<TStore>();
-            return typeof(TStore).Name;
+            return evidenceName;
         }
     }
 
