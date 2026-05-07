@@ -274,12 +274,7 @@ public sealed class SdkBackedOfflineFieldOperationsDemoHarnessTests : IDisposabl
                 provider.GetRequiredService<MobileOfflineSyncRunner>().GetType().Name,
                 provider.GetRequiredService<SdkOfflineSyncEngine>().GetType().FullName!,
                 provider.GetRequiredService<GeoPackageSdkOfflineStoreAdapter>().GetType().Name,
-                [
-                    nameof(SdkOfflineFeatureStore),
-                    nameof(SdkOfflineChangeJournal),
-                    nameof(SdkOfflineCheckpointStore),
-                    nameof(SdkOfflineStateStore),
-                ],
+                CaptureSdkStoreInterfaceEvidence(provider),
                 provider.GetRequiredService<BackgroundSyncOrchestrator>().GetType().Name);
 
             var sourceFeatureCounts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -308,6 +303,23 @@ public sealed class SdkBackedOfflineFieldOperationsDemoHarnessTests : IDisposabl
                     state?.LastSyncToken ?? string.Empty,
                     checkpoint?.PulledFeatureCount ?? 0),
                 new ConflictReviewEvidence("ManualReview", "stale-sync-version-manual-review"));
+        }
+
+        private static string[] CaptureSdkStoreInterfaceEvidence(IServiceProvider provider)
+        {
+            return [
+                ResolveSdkStoreInterface<SdkOfflineFeatureStore>(provider),
+                ResolveSdkStoreInterface<SdkOfflineChangeJournal>(provider),
+                ResolveSdkStoreInterface<SdkOfflineCheckpointStore>(provider),
+                ResolveSdkStoreInterface<SdkOfflineStateStore>(provider),
+            ];
+        }
+
+        private static string ResolveSdkStoreInterface<TStore>(IServiceProvider provider)
+            where TStore : notnull
+        {
+            provider.GetRequiredService<TStore>();
+            return typeof(TStore).Name;
         }
     }
 
