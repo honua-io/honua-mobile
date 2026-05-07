@@ -190,6 +190,34 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeatureAsync_WithThreeDimensionalGeoJsonBbox_IndexesXyExtent()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "routes",
+            """
+            {
+              "type": "Feature",
+              "properties": { "FID": 1, "name": "Ridgeline" },
+              "bbox": [10, 20, 5, 30, 40, 9],
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [[10, 20, 5], [30, 40, 9]]
+              }
+            }
+            """);
+
+        var hits = await store.GetFeaturesAsync("routes", new BoundingBox(29, 39, 31, 41));
+        var misses = await store.GetFeaturesAsync("routes", new BoundingBox(4, 4, 6, 6));
+
+        Assert.Single(hits);
+        Assert.Contains("Ridgeline", hits[0], StringComparison.Ordinal);
+        Assert.Empty(misses);
+    }
+
+    [Fact]
     public async Task UpsertFeatureAsync_DefaultsFeatureLayerCrsMetadataToEpsg4326()
     {
         var store = CreateStore();
@@ -234,6 +262,35 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         Assert.Equal(3857, metadata.SrsId);
         Assert.Single(hits);
         Assert.Equal("WGS 84 / Pseudo-Mercator", srsName);
+    }
+
+    [Fact]
+    public async Task GetFeaturesAsync_WithLegacyMissingLayerMetadata_BackfillsCrsFromCachedFeatures()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        await store.UpsertFeatureAsync(
+            "meters",
+            """{"attributes":{"OBJECTID":1,"name":"Inside"},"geometry":{"x":-17566607.5,"y":2425287.9,"spatialReference":{"wkid":102100,"latestWkid":3857}}}""");
+        await ExecuteNonQueryAsync("DELETE FROM honua_feature_layers WHERE layer_key = 'meters';");
+
+        var hits = await store.GetFeaturesAsync(
+            "meters",
+            new FeatureBoundingBox
+            {
+                MinX = -17566608,
+                MinY = 2425287,
+                MaxX = -17566607,
+                MaxY = 2425289,
+                Crs = "EPSG:3857",
+            });
+        var metadata = await store.GetFeatureLayerMetadataAsync("meters");
+
+        Assert.Single(hits);
+        Assert.Contains("Inside", hits[0], StringComparison.Ordinal);
+        Assert.NotNull(metadata);
+        Assert.Equal("EPSG:3857", metadata!.CrsIdentifier);
+        Assert.Equal(3857, metadata.SrsId);
     }
 
     [Fact]
@@ -392,6 +449,19 @@ WHERE operation_id = $operation_id;
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         return await command.ExecuteScalarAsync() as string;
+    }
+
+    private async Task ExecuteNonQueryAsync(string sql)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+        }.ToString());
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
     }
 
     private sealed class MutableTimeProvider : TimeProvider

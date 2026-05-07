@@ -1035,17 +1035,25 @@ ORDER BY f.object_id ASC;
             : root;
 
         var objectId = ExtractObjectId(root);
-        FeatureSpatialReference? spatialReference = null;
+        return new FeatureCacheRecord(
+            objectId,
+            ExtractFeatureExtent(root, geometry),
+            ExtractFeatureSpatialReference(root, geometry));
+    }
+
+    private static FeatureSpatialReference? ExtractFeatureSpatialReference(JsonElement root, JsonElement geometry)
+    {
         if (TryReadSpatialReference(geometry, out var geometrySpatialReference))
         {
-            spatialReference = geometrySpatialReference;
-        }
-        else if (TryReadSpatialReference(root, out var rootSpatialReference))
-        {
-            spatialReference = rootSpatialReference;
+            return geometrySpatialReference;
         }
 
-        return new FeatureCacheRecord(objectId, ExtractFeatureExtent(root, geometry), spatialReference);
+        if (TryReadSpatialReference(root, out var rootSpatialReference))
+        {
+            return rootSpatialReference;
+        }
+
+        return null;
     }
 
     private static FeatureExtent? ExtractFeatureExtent(JsonElement root, JsonElement geometry)
@@ -1102,16 +1110,19 @@ ORDER BY f.object_id ASC;
 
     private static bool TryReadGeoJsonBboxExtent(JsonElement element, out FeatureExtent extent)
     {
-        if (element.TryGetProperty("bbox", out var bbox) &&
-            bbox.ValueKind == JsonValueKind.Array &&
-            bbox.GetArrayLength() >= 4 &&
-            bbox[0].TryGetDouble(out var minX) &&
-            bbox[1].TryGetDouble(out var minY) &&
-            bbox[2].TryGetDouble(out var maxX) &&
-            bbox[3].TryGetDouble(out var maxY))
+        if (element.TryGetProperty("bbox", out var bbox) && bbox.ValueKind == JsonValueKind.Array)
         {
-            extent = new FeatureExtent(minX, minY, maxX, maxY);
-            return true;
+            var axisCount = bbox.GetArrayLength() / 2;
+            if (axisCount >= 2 &&
+                bbox.GetArrayLength() % 2 == 0 &&
+                bbox[0].TryGetDouble(out var minX) &&
+                bbox[1].TryGetDouble(out var minY) &&
+                bbox[axisCount].TryGetDouble(out var maxX) &&
+                bbox[axisCount + 1].TryGetDouble(out var maxY))
+            {
+                extent = new FeatureExtent(minX, minY, maxX, maxY);
+                return true;
+            }
         }
 
         extent = default;
@@ -1411,8 +1422,18 @@ ON CONFLICT(srs_id) DO UPDATE SET
         string queryCrs,
         CancellationToken ct)
     {
-        var layerCrs = await ReadFeatureLayerCrsIdentifierAsync(connection, layerKey, ct).ConfigureAwait(false)
-            ?? DefaultCrsIdentifier;
+        var layerCrs = await ReadFeatureLayerCrsIdentifierAsync(connection, layerKey, ct).ConfigureAwait(false);
+        if (layerCrs is null)
+        {
+            var backfilled = await TryBackfillFeatureLayerCrsAsync(connection, layerKey, ct).ConfigureAwait(false);
+            if (backfilled is null)
+            {
+                return;
+            }
+
+            layerCrs = backfilled.Value.CrsIdentifier;
+        }
+
         if (!string.Equals(NormalizeCrsIdentifier(layerCrs), NormalizeCrsIdentifier(queryCrs), StringComparison.OrdinalIgnoreCase))
         {
             throw GeoPackageStorageProblems.CrsMismatch(layerKey, layerCrs, queryCrs);
@@ -1430,6 +1451,89 @@ ON CONFLICT(srs_id) DO UPDATE SET
 
         var value = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return value as string;
+    }
+
+    private static async Task<FeatureSpatialReference?> TryBackfillFeatureLayerCrsAsync(
+        SqliteConnection connection,
+        string layerKey,
+        CancellationToken ct)
+    {
+        var spatialReference = await TryReadCachedLayerSpatialReferenceAsync(connection, layerKey, ct).ConfigureAwait(false);
+        if (spatialReference is null)
+        {
+            return null;
+        }
+
+        await UpsertFeatureLayerMetadataAsync(connection, layerKey, spatialReference.Value, isExplicit: true, ct)
+            .ConfigureAwait(false);
+        return spatialReference;
+    }
+
+    private static async Task<FeatureSpatialReference?> TryReadCachedLayerSpatialReferenceAsync(
+        SqliteConnection connection,
+        string layerKey,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT feature_json
+FROM honua_features
+WHERE layer_key = $layer_key
+ORDER BY object_id ASC;
+";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+
+        FeatureSpatialReference? layerSpatialReference = null;
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            if (!TryReadCachedFeatureSpatialReference(reader.GetString(0), out var featureSpatialReference))
+            {
+                continue;
+            }
+
+            if (layerSpatialReference is null)
+            {
+                layerSpatialReference = featureSpatialReference;
+                continue;
+            }
+
+            if (!string.Equals(
+                    NormalizeCrsIdentifier(layerSpatialReference.Value.CrsIdentifier),
+                    NormalizeCrsIdentifier(featureSpatialReference.CrsIdentifier),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+        }
+
+        return layerSpatialReference;
+    }
+
+    private static bool TryReadCachedFeatureSpatialReference(string featureJson, out FeatureSpatialReference spatialReference)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(featureJson);
+            var root = doc.RootElement;
+            var geometry = root.TryGetProperty("geometry", out var geometryElement)
+                ? geometryElement
+                : root;
+
+            var value = ExtractFeatureSpatialReference(root, geometry);
+            if (value is not null)
+            {
+                spatialReference = value.Value;
+                return true;
+            }
+        }
+        catch (JsonException)
+        {
+            // Legacy cache rows should not make otherwise queryable layers unreadable.
+        }
+
+        spatialReference = default;
+        return false;
     }
 
     private static void ValidateBoundingBox(BoundingBox boundingBox)
