@@ -208,6 +208,7 @@ describe('honua map snippets', () => {
       },
     }, {
       iframeUrl: 'https://embed.example.test/map.html?tenant=city',
+      parentOrigin: 'https://portal.example.test/admin/embed',
     });
 
     const src = readIframe(snippet).getAttribute('src');
@@ -215,6 +216,7 @@ describe('honua map snippets', () => {
 
     expect(url.origin).toBe('https://embed.example.test');
     expect(url.searchParams.get('tenant')).toBe('city');
+    expect(url.searchParams.get('parent-origin')).toBe('https://portal.example.test/admin/embed');
     expect(url.searchParams.get('service-url')).toBe('https://services.example.test/FeatureServer');
     expect(url.searchParams.get('layer-ids')).toBe('assets,work-orders');
     expect(url.searchParams.get('center')).toBe('21.3069,-157.8583');
