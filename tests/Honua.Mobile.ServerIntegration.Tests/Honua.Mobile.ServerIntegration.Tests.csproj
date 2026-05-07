@@ -13,10 +13,10 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Scenes" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Honua.Sdk.GeoServices" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Honua.Sdk.Scenes" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Testcontainers" Version="4.11.0" />
