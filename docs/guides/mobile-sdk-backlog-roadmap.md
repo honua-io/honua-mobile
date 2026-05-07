@@ -33,7 +33,7 @@ scene auth, or display implementation.
 | Display and embed | Active work is split between map embedding, web display adapters, scene rendering, and native display evaluation. | #10, #50, and #57 should remain separate so product packaging, web rendering, and native .NET evaluation do not block each other unnecessarily. |
 | 3D, offline scene, and AR/VR | Policy and dependency order are documented; implementation depends on server, SDK, browser/WebView, and native platform decisions. | #12 remains the umbrella. #42 and #38 are immediate prerequisites for production offline scenes and native AR/VR work. |
 | Field location behavior | Geofencing acquisition remains a mobile-owned runtime slice once SDK evaluation contracts are available. | #51 should not define portable geofence rules; it should consume the SDK and own permissions, sensors, background behavior, and battery policy. |
-| Plugins | Mobile/web hosts own runtime loading and UI integration; non-UI manifests and permission contracts belong in shared SDK/server work. | #16 should wait for server and SDK contract dependencies before adding long-lived mobile-local contracts. |
+| Plugins | Mobile/web hosts own runtime loading and UI integration; non-UI manifests and permission contracts belong in shared SDK/server work. | #16 can consume SDK manifests from `Honua.Sdk.Abstractions`; server plugin APIs remain tracked in honua-io/honua-server#347. |
 
 ## Acceptance Matrix
 
@@ -41,7 +41,7 @@ scene auth, or display implementation.
 |-------|------------|------------------|------------------------------|-------------|
 | #10 Embeddable map component | Beta product/API packaging for a white-label `<honua-map>` integration surface. | Drop-in component exposes theming, camera/options, events, auth/cache boundaries, and a working sample over the approved display adapter. | Depends on #50 for web display architecture; see [Embeddable Map](embeddable-map.md). | Current slice. Keep product packaging separate from #50's adapter internals. |
 | #12 3D / Scene services | GA umbrella for 3D visualization, terrain, building layers, CesiumJS, and related scene service capability. | Close only after server 3D serving/registry/terrain/elevation/generation/I3S decisions and client SDK/render/offline hooks are complete or explicitly split into follow-up epics. | Depends on honua-io/honua-server#837 through #844, SDK scene contracts, #42, #38, and #23; see [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md). | Remains epic scope. Do not close from mobile docs alone. |
-| #16 Plugin client SDK | GA host/runtime plugin framework for mobile and web. | Hosts can load/register approved plugins, surface UI extension points, enforce sandbox/signing/permission rules, and consume shared non-UI manifests from SDK/server contracts. | Depends on honua-io/honua-server#347 and future SDK-owned plugin contracts; see [Mobile Contract Harmonization](mobile-contract-harmonization.md). | Remaining workstream. Avoid defining stable plugin contracts locally. |
+| #16 Plugin client SDK | GA host/runtime plugin framework for mobile and web. | Hosts can load/register approved plugins, surface UI extension points, enforce sandbox/signing/permission rules, and consume shared non-UI manifests from SDK/server contracts. | Consumes SDK-owned plugin manifests from `Honua.Sdk.Abstractions`; server plugin API dependency remains honua-io/honua-server#347. See [Mobile Contract Harmonization](mobile-contract-harmonization.md). | Host/runtime slice closeable when mobile/web adapters and docs are linked; avoid defining stable plugin contracts locally. |
 | #23 AR/VR field workflow enablement | GA field overlay workflow over scene, device pose, camera, and field context. | Native or WebXR prototype uses the selected #38 anchoring strategy, documents platform support and calibration limits, and has sample/test coverage for the first field workflow. | Depends on #38, #12 scene foundations, protected scene auth, and offline scene policy where disconnected AR is in scope. | Remaining implementation stream. Start after #38 closes. |
 | #38 Native scene anchoring spike | Decision spike for ARKit, ARCore, WebXR, and MAUI anchoring strategy. | Device capability requirements, anchoring comparison, accuracy/calibration risks, and first prototype target are documented and accepted. | Feeds #23; see [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md). | Closure-friendly decision slice. Close before AR/VR implementation begins. |
 | #42 Browser offline 3D scene cache adapter | Browser/WebView package-local asset resolution for `<honua-scene>`. | Adapter strategy is selected, package-local URLs resolve 3D Tiles/terrain/textures/metadata, stale/expired/revoked states match policy, and browser/WebView tests or fixtures cover cache behavior. | Depends on #36, #40, and #41; see [Offline 3D Scene Packages](offline-3d-scene-packages.md). | Current implementation slice owned separately. Reference here, but do not duplicate detailed cache design. |
@@ -69,8 +69,9 @@ scene auth, or display implementation.
    AR/VR scope is either delivered or explicitly split into follow-up epics.
 5. Start #51 only after the SDK geofence/event evaluation contracts are ready to
    consume from published `Honua.Sdk.*` packages.
-6. Start #16 after the server plugin API and SDK-owned non-UI plugin manifest
-   contracts are available.
+6. Keep #16 scoped to host/runtime adapters now that SDK-owned non-UI plugin
+   manifests are available; link server-side plugin behavior to
+   honua-io/honua-server#347.
 7. Close #1 only when every non-Flutter child in this matrix is closed or
    intentionally deferred with a linked follow-up. Do not count #22 toward this
    workstream's closure.

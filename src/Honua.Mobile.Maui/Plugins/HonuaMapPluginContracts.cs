@@ -1,3 +1,5 @@
+using Honua.Sdk.Abstractions.Plugins;
+
 namespace Honua.Mobile.Maui.Plugins;
 
 /// <summary>
@@ -13,10 +15,34 @@ public sealed record HonuaMapPluginDescriptor
 
     public int Priority { get; init; }
 
+    /// <summary>
+    /// Optional SDK-owned manifest for host-neutral plugin metadata, permissions,
+    /// compatibility, and non-UI extension declarations.
+    /// </summary>
+    public HonuaPluginManifest? SdkManifest { get; init; }
+
     public void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
         ArgumentException.ThrowIfNullOrWhiteSpace(DisplayName);
+
+        if (SdkManifest is null)
+        {
+            return;
+        }
+
+        if (!StringComparer.Ordinal.Equals(Id, SdkManifest.PluginId))
+        {
+            throw new InvalidOperationException(
+                $"Map plugin descriptor id '{Id}' does not match SDK manifest plugin id '{SdkManifest.PluginId}'.");
+        }
+
+        var evaluation = SdkManifest.EvaluateForMobileHost();
+        if (!evaluation.CanLoad)
+        {
+            throw new InvalidOperationException(
+                $"SDK plugin manifest '{SdkManifest.PluginId}' is not valid for the mobile host: {evaluation.FormatIssues()}");
+        }
     }
 }
 
