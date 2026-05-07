@@ -37,9 +37,10 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
 
         await _store.InitializeAsync(ct).ConfigureAwait(false);
         var layerKey = GetPackageSourceKey(page.PackageId, page.SourceId);
+        var sourceCrs = ResolveSourceCrs(page);
         foreach (var feature in page.Result.Features)
         {
-            var featureJson = SerializeFeatureRecord(feature, page.Result.ObjectIdFieldName);
+            var featureJson = SerializeFeatureRecord(feature, page.Result.ObjectIdFieldName, sourceCrs);
             await _store.UpsertFeatureAsync(layerKey, featureJson, ct).ConfigureAwait(false);
         }
     }
@@ -350,7 +351,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
             .ToArray();
     }
 
-    private static string SerializeFeatureRecord(FeatureRecord feature, string? objectIdFieldName)
+    private static string SerializeFeatureRecord(FeatureRecord feature, string? objectIdFieldName, string? sourceCrs)
     {
         var attributes = new Dictionary<string, JsonElement>(feature.Attributes, StringComparer.Ordinal);
         var objectIdField = string.IsNullOrWhiteSpace(objectIdFieldName) ? "objectid" : objectIdFieldName;
@@ -374,8 +375,47 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
                 geometry.WriteTo(writer);
             }
 
+            if (TryReadEpsgCode(sourceCrs, out var epsgCode))
+            {
+                writer.WritePropertyName("spatialReference");
+                writer.WriteStartObject();
+                writer.WriteNumber("wkid", epsgCode);
+                writer.WriteEndObject();
+            }
+
             writer.WriteEndObject();
         });
+    }
+
+    private static string? ResolveSourceCrs(OfflineFeaturePage page)
+        => page.Source.Schema?.SpatialReference ?? page.Result.Extent?.Crs;
+
+    private static bool TryReadEpsgCode(string? crs, out int epsgCode)
+    {
+        if (string.IsNullOrWhiteSpace(crs))
+        {
+            epsgCode = 0;
+            return false;
+        }
+
+        var trimmed = crs.Trim();
+        const string epsgPrefix = "EPSG:";
+        var epsgIndex = trimmed.LastIndexOf(epsgPrefix, StringComparison.OrdinalIgnoreCase);
+        if (epsgIndex >= 0 &&
+            int.TryParse(trimmed.AsSpan(epsgIndex + epsgPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out epsgCode))
+        {
+            return true;
+        }
+
+        const string ogcCrsPrefix = "http://www.opengis.net/def/crs/EPSG/0/";
+        if (trimmed.StartsWith(ogcCrsPrefix, StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(trimmed.AsSpan(ogcCrsPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out epsgCode))
+        {
+            return true;
+        }
+
+        epsgCode = 0;
+        return false;
     }
 
     private static JsonElement ToFeatureServerFeature(FeatureEditFeature feature)
