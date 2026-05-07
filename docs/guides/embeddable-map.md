@@ -197,6 +197,10 @@ display.setFeatureQueryResults([assetPage, workOrderPage], (_page, index) => ({
   source: index === 0 ? assetSource : workOrderSource,
 }));
 
+display.appendFeatureQueryResult(assetPage2, {
+  source: assetSource,
+});
+
 const assets = display.getFeatureCollection('honua-assets');
 display.removeLayer('honua-work-orders');
 display.clearFeatureLayers();
@@ -204,7 +208,9 @@ display.clearFeatureLayers();
 
 `clearFeatureLayers()` only removes layers created by feature query and stream
 helpers. Host-owned deck.gl layers passed to the adapter constructor remain in
-place.
+place. When appending pages, pass the SDK source descriptor whenever the host is
+loading more than one source; the adapter resolves the incoming result source
+before falling back to its single cached feature layer.
 
 Streaming feature feeds can use the same renderer-neutral source descriptor and
 apply upsert/delete events into the adapter's GeoJSON layer state:
