@@ -99,9 +99,19 @@ uploads remain queued and are retried with exponential in-memory backoff between
 
 The default `HttpMobileExceptionReportUploader` posts the already-sanitized
 `MobileExceptionReport` JSON to the explicit `UploadEndpoint`. The endpoint must
-use HTTPS unless it is localhost for development. Authentication headers,
-tenant routing, and ingestion schema versioning should be added through the
-uploader boundary once the server endpoint contract exists.
+use HTTPS unless it is localhost for development. Apps that need approved
+request metadata, such as same-origin authentication headers, should register an
+`IMobileExceptionReportUploadRequestCustomizer` instead of creating a parallel
+exception-report DTO or hardcoded server client. Tenant routing and ingestion
+schema versioning should be added through the uploader boundary once the server
+endpoint contract exists.
+
+The FieldCollection app maps the legacy `honua_exception_reporting_mode=Server`
+preference to `ServerUpload`, stamps build/device metadata from the mobile build
+configuration, and attaches its API key only when the configured upload endpoint
+shares the authenticated server origin. It still requires the explicit
+`honua_exception_reporting_endpoint` preference; mobile does not assume a server
+route before the ingestion contract is defined.
 
 Do not flush from a blocking UI path or synchronously during app startup. Start
 flush work from lifecycle/background scheduling code and allow it to stop on

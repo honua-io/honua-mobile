@@ -1,21 +1,29 @@
-using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.Maui.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection;
 
 public partial class App : Application
 {
-    private readonly IMobileExceptionReporter _exceptionReporter;
+    private readonly MobileExceptionReportingExceptionHooks _exceptionHooks;
+    private readonly IReadOnlyList<IMobileExceptionReportUploadWorker> _uploadWorkers;
+    private readonly MobileExceptionReportingOptions _exceptionOptions;
     private readonly ILogger<App>? _logger;
 
-    public App(IMobileExceptionReporter exceptionReporter, ILogger<App>? logger = null)
+    public App(
+        MobileExceptionReportingExceptionHooks exceptionHooks,
+        IEnumerable<IMobileExceptionReportUploadWorker> uploadWorkers,
+        MobileExceptionReportingOptions exceptionOptions,
+        ILogger<App>? logger = null)
     {
-        _exceptionReporter = exceptionReporter;
+        _exceptionHooks = exceptionHooks ?? throw new ArgumentNullException(nameof(exceptionHooks));
+        _uploadWorkers = uploadWorkers?.ToArray() ?? [];
+        _exceptionOptions = exceptionOptions ?? throw new ArgumentNullException(nameof(exceptionOptions));
         _logger = logger;
 
         InitializeComponent();
         RegisterExceptionHandlers();
-        _ = Task.Run(() => _exceptionReporter.FlushPendingAsync());
+        StartExceptionReportUploadFlush();
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
@@ -46,41 +54,37 @@ public partial class App : Application
 
     protected override void OnResume()
     {
-        // App resumed from sleep
-        // Check for pending sync operations
+        StartExceptionReportUploadFlush();
     }
 
     private void RegisterExceptionHandlers()
     {
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        if (_exceptionOptions.Mode != MobileExceptionReportingMode.Disabled)
         {
-            if (args.ExceptionObject is Exception exception)
-            {
-                ReportUnhandledException(exception, "AppDomain.UnhandledException");
-            }
-        };
-
-        TaskScheduler.UnobservedTaskException += (_, args) =>
-        {
-            ReportUnhandledException(args.Exception, "TaskScheduler.UnobservedTaskException");
-            args.SetObserved();
-        };
+            _exceptionHooks.Register();
+        }
     }
 
-    private void ReportUnhandledException(Exception exception, string source)
+    private void StartExceptionReportUploadFlush()
     {
-        _logger?.LogError(exception, "Unhandled mobile exception from {Source}", source);
-        var reportTask = Task.Run(() => _exceptionReporter.ReportAsync(exception, source));
-        if (source == "AppDomain.UnhandledException")
+        if (_exceptionOptions.Mode != MobileExceptionReportingMode.ServerUpload || _uploadWorkers.Count == 0)
         {
-            try
-            {
-                reportTask.Wait(TimeSpan.FromSeconds(2));
-            }
-            catch (AggregateException ex)
-            {
-                _logger?.LogWarning(ex, "Failed to flush unhandled mobile exception report");
-            }
+            return;
         }
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var worker in _uploadWorkers)
+            {
+                try
+                {
+                    await worker.FlushPendingAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to flush pending mobile exception reports");
+                }
+            }
+        });
     }
 }

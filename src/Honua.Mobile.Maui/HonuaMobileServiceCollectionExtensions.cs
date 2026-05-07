@@ -224,6 +224,7 @@ public static class HonuaMobileServiceCollectionExtensions
                     return new HttpMobileExceptionReportUploader(
                         factory.CreateClient("HonuaMobileExceptionReportUploader"),
                         sp.GetRequiredService<MobileExceptionReportingOptions>(),
+                        sp.GetServices<IMobileExceptionReportUploadRequestCustomizer>(),
                         sp.GetService<ILogger<HttpMobileExceptionReportUploader>>());
                 });
                 services.TryAddSingleton<IMobileExceptionReportUploadWorker, MobileExceptionReportUploadWorker>();

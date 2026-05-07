@@ -5,6 +5,8 @@ using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Honua.Mobile.Maui;
+using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.FieldCollection.ViewModels;
 using Honua.Mobile.FieldCollection.Views;
 using Microsoft.Maui.ApplicationModel;
@@ -91,29 +93,18 @@ public static class MauiProgram
         services.AddSingleton<IAttachmentService, AttachmentService>();
 
         // Configuration services
-        services.AddSingleton(_ => MobileBuildConfiguration.FromAssembly(
+        var buildConfiguration = MobileBuildConfiguration.FromAssembly(
             typeof(App).Assembly,
             GetAppInfoValue(() => AppInfo.Current.VersionString, "unknown"),
-            GetAppInfoValue(() => AppInfo.Current.BuildString, "unknown")));
+            GetAppInfoValue(() => AppInfo.Current.BuildString, "unknown"));
+        services.AddSingleton(buildConfiguration);
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConnectivityService, ConnectivityService>();
 
         // Diagnostic service for database management and system monitoring
         services.AddSingleton<DiagnosticService>();
-        services.AddSingleton(_ => MobileExceptionReportingOptions.FromPreferences());
-        services.AddHttpClient("HonuaMobileExceptionReporter");
-        services.AddSingleton<IMobileExceptionReporter>(provider =>
-        {
-            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
-            var authService = provider.GetRequiredService<IAuthenticationService>();
-            var options = provider.GetRequiredService<MobileExceptionReportingOptions>();
-            var logger = provider.GetService<ILogger<MobileExceptionReporter>>();
-            return new MobileExceptionReporter(
-                httpClientFactory.CreateClient("HonuaMobileExceptionReporter"),
-                authService,
-                options,
-                logger);
-        });
+        services.AddSingleton<IMobileExceptionReportUploadRequestCustomizer, FieldCollectionExceptionReportAuthHeader>();
+        services.AddHonuaMobileExceptionReporting(FieldCollectionExceptionReporting.FromPreferences(buildConfiguration));
 
         // Platform-specific services will be registered by platform startup
     }
