@@ -249,6 +249,42 @@ public sealed class HonuaNativeSceneAnchoringTests
     }
 
     [Fact]
+    public async Task CreateEvidenceContextAsync_WhenStatusReportsDifferentScene_CapturesRenderedScene()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(sceneId: "rendered-scene"),
+            Status = CreateStatus(sceneId: "rendered-scene"),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await controller.StartAsync(CreateRequest());
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal("rendered-scene", evidence.SceneId);
+        Assert.Equal(HonuaNativeArReadinessLevel.Blocked, evidence.ReadinessLevel);
+        Assert.Contains(
+            evidence.Blockers,
+            blocker => blocker.Contains("not rendering the requested scene", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CreateEvidenceContextAsync_WhenStatusOmitsScene_CapturesRequestedScene()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(sceneId: null),
+            Status = CreateStatus(sceneId: null),
+        };
+        var controller = new HonuaNativeArSceneAnchoringController(adapter);
+
+        await controller.StartAsync(CreateRequest());
+        var evidence = await controller.CreateEvidenceContextAsync();
+
+        Assert.Equal("downtown-honolulu", evidence.SceneId);
+    }
+
+    [Fact]
     public async Task CreateEvidenceContextAsync_WhenReadinessBlocked_CarriesBlockersWithoutEnablingEvidence()
     {
         var adapter = new RecordingNativeArSceneAnchorAdapter
@@ -306,6 +342,7 @@ public sealed class HonuaNativeSceneAnchoringTests
         HonuaNativeArTrackingState trackingState = HonuaNativeArTrackingState.Tracking,
         HonuaNativeArAnchoringMode activeAnchoringMode = HonuaNativeArAnchoringMode.PlatformGeospatial,
         HonuaNativeArScenePackageState packageState = HonuaNativeArScenePackageState.NotRequired,
+        string? sceneId = "downtown-honolulu",
         string? packageId = null,
         double? horizontalAccuracyMeters = 1,
         double? verticalAccuracyMeters = null,
@@ -320,7 +357,7 @@ public sealed class HonuaNativeSceneAnchoringTests
             State = state,
             TrackingState = trackingState,
             ActiveAnchoringMode = activeAnchoringMode,
-            SceneId = "downtown-honolulu",
+            SceneId = sceneId,
             SceneRevision = "scene-rev-42",
             PackageId = packageId,
             PackageState = packageState,

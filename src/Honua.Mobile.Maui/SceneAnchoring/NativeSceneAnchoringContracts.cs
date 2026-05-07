@@ -391,7 +391,7 @@ public sealed record HonuaNativeArEvidenceContext
 
         return new HonuaNativeArEvidenceContext
         {
-            SceneId = request.SceneId,
+            SceneId = status.SceneId ?? request.SceneId,
             SceneRevision = status.SceneRevision ?? request.SceneRevision,
             PackageId = status.PackageId ?? request.PackageId,
             IsOffline = request.IsOffline,
