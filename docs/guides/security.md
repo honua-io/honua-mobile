@@ -117,8 +117,7 @@ using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Sdk.Auth;
 
 builder.Services
-    .AddHonuaMobileAuth(
-        new MauiSecureAuthTokenStore(new PlatformMauiSecureStorage()),
+    .AddHonuaMobilePlatformAuth(
         new RefreshingAuthTokenProviderOptions
         {
             RefreshEndpoint = new Uri("https://api.example.com/auth/refresh"),
@@ -128,6 +127,9 @@ builder.Services
         BaseUri = new Uri("https://api.example.com"),
     });
 ```
+
+Store the initial API key or bearer token through `IAuthTokenProvider.StoreTokenAsync(...)` after sign-in
+or device bootstrap. Avoid keeping long-lived literals in `HonuaMobileClientOptions` outside local tests.
 
 `PlatformMauiSecureStorage` uses MAUI Essentials secure storage on platform targets: iOS Keychain on Apple platforms and encrypted Android storage backed by the Android Keystore provider. For unit tests, use `InMemoryAuthTokenStore` and a stub `HttpMessageHandler` to exercise refresh logic without a live server.
 

@@ -29,12 +29,11 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 
 builder.Services
-    .AddHonuaMobileAuth()
+    .AddHonuaMobilePlatformAuth()
     .AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
         BaseUri = new Uri("https://your-honua-server.com"),
         GrpcEndpoint = new Uri("https://your-honua-server.com"),
-        ApiKey = "<your-api-key>",
         PreferGrpcForFeatureQueries = true,
     })
     .AddHonuaRouting()
@@ -54,6 +53,9 @@ builder.Services
     .AddHonuaMapAreaDownload()
     .AddHonuaBackgroundSync();
 ```
+
+After sign-in or bootstrap, store the API key or bearer token with `IAuthTokenProvider.StoreTokenAsync(...)`;
+the platform auth registration persists it in iOS Keychain or Android secure storage.
 
 ## Offline Sync
 
