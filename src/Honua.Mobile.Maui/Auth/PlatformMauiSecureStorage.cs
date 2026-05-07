@@ -1,4 +1,3 @@
-#if IOS || ANDROID || MACCATALYST
 using Microsoft.Maui.Storage;
 
 namespace Honua.Mobile.Maui.Auth;
@@ -25,4 +24,3 @@ public sealed class PlatformMauiSecureStorage : IMauiSecureStorage
         return ValueTask.CompletedTask;
     }
 }
-#endif

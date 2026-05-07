@@ -77,13 +77,47 @@ public static class HonuaMobileServiceCollectionExtensions
 
         if (tokenStore is null)
         {
-            services.AddSingleton<IAuthTokenStore, InMemoryAuthTokenStore>();
+            services.TryAddSingleton<IAuthTokenStore, InMemoryAuthTokenStore>();
         }
         else
         {
             services.AddSingleton<IAuthTokenStore>(tokenStore);
         }
 
+        return services.AddHonuaMobileAuthProvider(options);
+    }
+
+    /// <summary>
+    /// Registers mobile auth using MAUI secure storage. iOS and Mac Catalyst use Keychain, while Android uses
+    /// encrypted storage backed by the Android Keystore provider.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Optional token refresh options.</param>
+    /// <param name="storageKey">Optional secure-storage key. Defaults to the Honua SDK key.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddHonuaMobilePlatformAuth(
+        this IServiceCollection services,
+        RefreshingAuthTokenProviderOptions? options = null,
+        string? storageKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IMauiSecureStorage, PlatformMauiSecureStorage>();
+        services.TryAddSingleton<IAuthTokenStore>(sp =>
+        {
+            var secureStorage = sp.GetRequiredService<IMauiSecureStorage>();
+            return storageKey is null
+                ? new MauiSecureAuthTokenStore(secureStorage)
+                : new MauiSecureAuthTokenStore(secureStorage, storageKey);
+        });
+
+        return services.AddHonuaMobileAuthProvider(options);
+    }
+
+    private static IServiceCollection AddHonuaMobileAuthProvider(
+        this IServiceCollection services,
+        RefreshingAuthTokenProviderOptions? options)
+    {
         services.AddSingleton(options ?? new RefreshingAuthTokenProviderOptions());
         services.AddHttpClient("HonuaMobileAuth");
         services.AddSingleton<IAuthTokenProvider>(sp =>

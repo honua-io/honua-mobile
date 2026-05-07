@@ -47,6 +47,32 @@ public sealed class MauiAuthRegistrationTests
         Assert.Equal("refresh-token", token.RefreshToken);
     }
 
+    [Fact]
+    public async Task AddHonuaMobilePlatformAuth_RegistersSecureStorageBackedStore()
+    {
+        using var provider = new ServiceCollection()
+            .AddSingleton<IMauiSecureStorage, FakeSecureStorage>()
+            .AddHonuaMobilePlatformAuth()
+            .BuildServiceProvider();
+
+        var store = Assert.IsType<MauiSecureAuthTokenStore>(provider.GetRequiredService<IAuthTokenStore>());
+        await store.WriteAsync(new HonuaAuthToken(HonuaAuthScheme.ApiKey, "provider-api-key"));
+
+        var token = await provider.GetRequiredService<IAuthTokenProvider>().GetTokenAsync();
+
+        Assert.NotNull(token);
+        Assert.Equal(HonuaAuthScheme.ApiKey, token.Scheme);
+        Assert.Equal("provider-api-key", token.AccessToken);
+    }
+
+    [Fact]
+    public async Task MauiSecureAuthTokenStore_WhenStorageCancels_PreservesCancellation()
+    {
+        var store = new MauiSecureAuthTokenStore(new CancelingSecureStorage());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await store.ReadAsync());
+    }
+
     private sealed class FakeSecureStorage : IMauiSecureStorage
     {
         private string? _value;
@@ -65,5 +91,17 @@ public sealed class MauiAuthRegistrationTests
             _value = null;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class CancelingSecureStorage : IMauiSecureStorage
+    {
+        public ValueTask<string?> GetAsync(string key, CancellationToken ct = default)
+            => throw new OperationCanceledException();
+
+        public ValueTask SetAsync(string key, string value, CancellationToken ct = default)
+            => throw new OperationCanceledException();
+
+        public ValueTask RemoveAsync(string key, CancellationToken ct = default)
+            => throw new OperationCanceledException();
     }
 }
