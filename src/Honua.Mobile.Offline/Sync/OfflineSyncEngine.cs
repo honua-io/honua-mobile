@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 
 namespace Honua.Mobile.Offline.Sync;
@@ -29,80 +30,142 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
     /// <inheritdoc />
     public async Task<SyncRunResult> SyncAsync(CancellationToken ct = default)
     {
-        await _store.InitializeAsync(ct).ConfigureAwait(false);
-        var pending = await _store.GetPendingAsync(_options.BatchSize, ct).ConfigureAwait(false);
-
-        var failures = new List<SyncFailure>();
-        var success = 0;
-
-        for (var index = 0; index < pending.Count; index++)
+        using var activity = MobileSyncTelemetry.ActivitySource.StartActivity("honua.mobile.sync.run", ActivityKind.Internal);
+        try
         {
-            var operation = pending[index];
+            await _store.InitializeAsync(ct).ConfigureAwait(false);
+            await RecordPendingGaugeAsync(ct).ConfigureAwait(false);
+            var pending = await _store.GetPendingAsync(_options.BatchSize, ct).ConfigureAwait(false);
+            activity?.SetTag("honua.mobile.sync.loaded", pending.Count);
 
-            try
+            var failures = new List<SyncFailure>();
+            var success = 0;
+
+            for (var index = 0; index < pending.Count; index++)
             {
-                ct.ThrowIfCancellationRequested();
+                var operation = pending[index];
 
-                if (operation.AttemptCount >= _options.MaxAttempts)
+                try
                 {
-                    await _store.MarkFailedAsync(operation.OperationId, "max attempts reached", retryable: false, ct).ConfigureAwait(false);
-                    failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
-                    continue;
-                }
+                    ct.ThrowIfCancellationRequested();
 
-                var uploadResult = await _uploader.UploadAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
-                if (uploadResult.Outcome == UploadOutcome.Success)
-                {
-                    await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
-                    success++;
-                    continue;
-                }
-
-                if (uploadResult.Outcome == UploadOutcome.Conflict)
-                {
-                    var conflictResolved = await HandleConflictAsync(operation, ct).ConfigureAwait(false);
-                    if (conflictResolved.Resolved)
+                    if (operation.AttemptCount >= _options.MaxAttempts)
                     {
+                        await _store.MarkFailedAsync(operation.OperationId, "max attempts reached", retryable: false, ct).ConfigureAwait(false);
+                        failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
+                        continue;
+                    }
+
+                    var uploadResult = await UploadSafelyAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
+                    if (uploadResult.Outcome == UploadOutcome.Success)
+                    {
+                        await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
                         success++;
                         continue;
                     }
 
-                    if (conflictResolved.FailureHandled)
+                    if (uploadResult.Outcome == UploadOutcome.Conflict)
                     {
-                        failures.Add(new SyncFailure(operation.OperationId, conflictResolved.FailureReason ?? "Conflict resolution failed."));
-                        continue;
+                        var strategy = ResolveConflictStrategy(operation);
+                        var conflictResolved = await HandleConflictAsync(operation, strategy, ct).ConfigureAwait(false);
+                        if (conflictResolved.Resolved)
+                        {
+                            success++;
+                            continue;
+                        }
+
+                        if (conflictResolved.FailureHandled)
+                        {
+                            failures.Add(new SyncFailure(operation.OperationId, conflictResolved.FailureReason ?? "Conflict resolution failed."));
+                            continue;
+                        }
                     }
+
+                    var retryable = uploadResult.Outcome == UploadOutcome.RetryableFailure;
+                    var reason = uploadResult.Message ?? uploadResult.Outcome.ToString();
+                    await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
+                    failures.Add(new SyncFailure(operation.OperationId, reason));
                 }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    await ReleaseClaimedOperationsBestEffortAsync(pending, index).ConfigureAwait(false);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    await ReleaseClaimedOperationsBestEffortAsync(pending, index).ConfigureAwait(false);
+                    throw new MobileSyncException(MobileSyncProblemHelper.FromException(ex), ex);
+                }
+            }
 
-                var retryable = uploadResult.Outcome == UploadOutcome.RetryableFailure;
-                var reason = uploadResult.Message ?? uploadResult.Outcome.ToString();
-                await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
-                failures.Add(new SyncFailure(operation.OperationId, reason));
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            var result = new SyncRunResult
             {
-                await ReleaseClaimedOperationsAsync(pending, index).ConfigureAwait(false);
-                throw;
-            }
-            catch
-            {
-                await ReleaseClaimedOperationsAsync(pending, index).ConfigureAwait(false);
-                throw;
-            }
+                Loaded = pending.Count,
+                Succeeded = success,
+                Failed = failures.Count,
+                Failures = failures,
+            };
+
+            activity?.SetTag("honua.mobile.sync.succeeded", result.Succeeded);
+            activity?.SetTag("honua.mobile.sync.failed", result.Failed);
+            var resultLabel = result.Failed == 0 ? "succeeded" : result.Succeeded == 0 ? "failed" : "partial_failure";
+            MobileSyncTelemetry.RecordRun(resultLabel);
+            activity?.SetStatus(result.Failed == 0 ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+            await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
+
+            return result;
         }
-
-        return new SyncRunResult
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            Loaded = pending.Count,
-            Succeeded = success,
-            Failed = failures.Count,
-            Failures = failures,
-        };
+            MobileSyncTelemetry.RecordRun("cancelled");
+            activity?.SetStatus(ActivityStatusCode.Error, "cancelled");
+            await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (MobileSyncException ex)
+        {
+            MobileSyncTelemetry.RecordRun("exception");
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Problem.Message);
+            await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var problem = MobileSyncProblemHelper.FromException(ex);
+            MobileSyncTelemetry.RecordRun("exception");
+            activity?.SetStatus(ActivityStatusCode.Error, problem.Message);
+            await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
+            throw new MobileSyncException(problem, ex);
+        }
     }
 
-    private async Task<ConflictResolutionState> HandleConflictAsync(OfflineEditOperation operation, CancellationToken ct)
+    private SyncConflictStrategy ResolveConflictStrategy(OfflineEditOperation operation)
     {
-        switch (_options.ConflictStrategy)
+        var selected = _options.ConflictStrategy;
+        var selectedSpecificity = -1;
+
+        foreach (var rule in _options.ConflictPolicyRules ?? Array.Empty<SyncConflictPolicyRule>())
+        {
+            if (!rule.Matches(operation) || rule.Specificity <= selectedSpecificity)
+            {
+                continue;
+            }
+
+            selected = rule.Strategy;
+            selectedSpecificity = rule.Specificity;
+        }
+
+        return selected;
+    }
+
+    private async Task<ConflictResolutionState> HandleConflictAsync(
+        OfflineEditOperation operation,
+        SyncConflictStrategy strategy,
+        CancellationToken ct)
+    {
+        MobileSyncTelemetry.RecordConflict(strategy);
+
+        switch (strategy)
         {
             case SyncConflictStrategy.ServerWins:
                 await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
@@ -110,7 +173,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
 
             case SyncConflictStrategy.ClientWins:
                 {
-                    var forced = await _uploader.UploadAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
+                    var forced = await UploadSafelyAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
                     if (forced.Outcome == UploadOutcome.Success)
                     {
                         await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
@@ -130,16 +193,51 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         }
     }
 
+    private async Task<UploadResult> UploadSafelyAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct)
+    {
+        try
+        {
+            return await _uploader.UploadAsync(operation, forceWrite, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return MobileSyncProblemHelper.ToUploadResult(ex);
+        }
+    }
+
     private readonly record struct ConflictResolutionState(bool Resolved, bool FailureHandled, string? FailureReason)
     {
         public static readonly ConflictResolutionState ResolvedState = new(true, false, null);
     }
 
-    private async Task ReleaseClaimedOperationsAsync(IReadOnlyList<OfflineEditOperation> pending, int startIndex)
+    private async Task ReleaseClaimedOperationsBestEffortAsync(IReadOnlyList<OfflineEditOperation> pending, int startIndex)
     {
-        for (var i = startIndex; i < pending.Count; i++)
+        try
         {
-            await _store.MarkPendingAsync(pending[i].OperationId, CancellationToken.None).ConfigureAwait(false);
+            for (var i = startIndex; i < pending.Count; i++)
+            {
+                await _store.MarkPendingAsync(pending[i].OperationId, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // Preserve the original sync failure/cancellation surface.
+        }
+    }
+
+    private async Task RecordPendingGaugeAsync(CancellationToken ct)
+    {
+        try
+        {
+            MobileSyncTelemetry.RecordPendingOperations(await _store.CountPendingAsync(ct).ConfigureAwait(false));
+        }
+        catch
+        {
+            // Telemetry must not change sync behavior.
         }
     }
 }

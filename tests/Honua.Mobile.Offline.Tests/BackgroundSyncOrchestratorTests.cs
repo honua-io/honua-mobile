@@ -1,3 +1,4 @@
+using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 
 namespace Honua.Mobile.Offline.Tests;
@@ -60,6 +61,70 @@ public sealed class BackgroundSyncOrchestratorTests
         Assert.True(runner.SuccessCount >= 1);
     }
 
+    [Fact]
+    public async Task RunOnceIfOnlineAsync_OutageDuringHundredFeatureBatch_PreservesQueueUntilReconnect()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-mobile-outage-{Guid.NewGuid():N}.gpkg");
+
+        try
+        {
+            var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = databasePath });
+            await store.InitializeAsync();
+
+            for (var index = 0; index < 100; index++)
+            {
+                await store.EnqueueAsync(new OfflineEditOperation
+                {
+                    OperationId = $"outage-op-{index:000}",
+                    LayerKey = "assets",
+                    TargetCollection = "assets",
+                    OperationType = OfflineOperationType.Update,
+                    PayloadJson = $$"""{"id":{{index}}}""",
+                    Priority = 1,
+                    CreatedAtUtc = DateTimeOffset.UtcNow.AddSeconds(index),
+                });
+            }
+
+            var connectivity = new ToggleConnectivityProvider { IsOnline = false };
+            var offlineStore = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = databasePath });
+            var offlineEngine = new OfflineSyncEngine(
+                offlineStore,
+                new AlwaysSuccessUploader(),
+                new OfflineSyncEngineOptions { BatchSize = 100 });
+            await using (var offlineOrchestrator = new BackgroundSyncOrchestrator(offlineEngine, connectivity))
+            {
+                var offlineResult = await offlineOrchestrator.RunOnceIfOnlineAsync();
+                Assert.Null(offlineResult);
+            }
+
+            var restartedStore = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = databasePath });
+            await restartedStore.InitializeAsync();
+            Assert.Equal(100, await restartedStore.CountPendingAsync());
+
+            connectivity.IsOnline = true;
+            var resumedEngine = new OfflineSyncEngine(
+                restartedStore,
+                new AlwaysSuccessUploader(),
+                new OfflineSyncEngineOptions { BatchSize = 100 });
+            await using var resumedOrchestrator = new BackgroundSyncOrchestrator(resumedEngine, connectivity);
+
+            var resumedResult = await resumedOrchestrator.RunOnceIfOnlineAsync();
+
+            Assert.NotNull(resumedResult);
+            Assert.Equal(100, resumedResult.Loaded);
+            Assert.Equal(100, resumedResult.Succeeded);
+            Assert.Equal(0, resumedResult.Failed);
+            Assert.Equal(0, await restartedStore.CountPendingAsync());
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
+
     private sealed class FakeSyncRunner : IOfflineSyncRunner
     {
         private int _callCount;
@@ -82,6 +147,12 @@ public sealed class BackgroundSyncOrchestratorTests
                 Failed = 0,
             });
         }
+    }
+
+    private sealed class AlwaysSuccessUploader : IOfflineOperationUploader
+    {
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
     }
 
     private sealed class ToggleConnectivityProvider : IConnectivityStateProvider
