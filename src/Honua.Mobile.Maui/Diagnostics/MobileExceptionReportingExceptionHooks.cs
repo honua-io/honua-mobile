@@ -7,6 +7,8 @@ namespace Honua.Mobile.Maui.Diagnostics;
 /// </summary>
 public sealed class MobileExceptionReportingExceptionHooks : IDisposable
 {
+    private static readonly TimeSpan TerminatingUnhandledExceptionFlushTimeout = TimeSpan.FromSeconds(2);
+
     private readonly IMobileExceptionReporter _reporter;
     private readonly ILogger<MobileExceptionReportingExceptionHooks>? _logger;
     private int _registered;
@@ -45,7 +47,11 @@ public sealed class MobileExceptionReportingExceptionHooks : IDisposable
     {
         if (args.ExceptionObject is Exception exception)
         {
-            ReportInBackground(exception, "AppDomain.UnhandledException", args.IsTerminating);
+            var reportTask = ReportInBackground(exception, "AppDomain.UnhandledException", args.IsTerminating);
+            if (args.IsTerminating)
+            {
+                WaitForTerminatingUnhandledExceptionReport(reportTask);
+            }
         }
     }
 
@@ -55,9 +61,9 @@ public sealed class MobileExceptionReportingExceptionHooks : IDisposable
         args.SetObserved();
     }
 
-    private void ReportInBackground(Exception exception, string source, bool isTerminating)
+    private Task ReportInBackground(Exception exception, string source, bool isTerminating)
     {
-        _ = Task.Run(async () =>
+        return Task.Run(async () =>
         {
             try
             {
@@ -78,5 +84,22 @@ public sealed class MobileExceptionReportingExceptionHooks : IDisposable
                 _logger?.LogWarning(ex, "Mobile exception reporting hook failed");
             }
         });
+    }
+
+    private void WaitForTerminatingUnhandledExceptionReport(Task reportTask)
+    {
+        try
+        {
+            if (!reportTask.Wait(TerminatingUnhandledExceptionFlushTimeout))
+            {
+                _logger?.LogWarning(
+                    "Timed out after {Timeout} waiting to queue terminating mobile exception report",
+                    TerminatingUnhandledExceptionFlushTimeout);
+            }
+        }
+        catch (AggregateException ex)
+        {
+            _logger?.LogWarning(ex, "Failed to flush terminating mobile exception report");
+        }
     }
 }
