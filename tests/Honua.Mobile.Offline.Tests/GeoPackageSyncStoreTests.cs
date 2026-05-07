@@ -1,5 +1,6 @@
 using System.Globalization;
 using Honua.Mobile.Offline.GeoPackage;
+using Honua.Sdk.Abstractions.Features;
 using Microsoft.Data.Sqlite;
 
 namespace Honua.Mobile.Offline.Tests;
@@ -189,6 +190,90 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeatureAsync_DefaultsFeatureLayerCrsMetadataToEpsg4326()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":1},"geometry":{"x":-157.8,"y":21.3}}""");
+
+        var metadata = await store.GetFeatureLayerMetadataAsync("parks");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("EPSG:4326", metadata!.CrsIdentifier);
+        Assert.Equal(4326, metadata.SrsId);
+    }
+
+    [Fact]
+    public async Task UpsertFeatureAsync_PreservesFeatureServerSpatialReferenceMetadata()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "meters",
+            """{"attributes":{"OBJECTID":1},"geometry":{"x":-17566607.5,"y":2425287.9,"spatialReference":{"wkid":102100,"latestWkid":3857}}}""");
+
+        var metadata = await store.GetFeatureLayerMetadataAsync("meters");
+        var hits = await store.GetFeaturesAsync(
+            "meters",
+            new FeatureBoundingBox
+            {
+                MinX = -17566608,
+                MinY = 2425287,
+                MaxX = -17566607,
+                MaxY = 2425289,
+                Crs = "EPSG:3857",
+            });
+        var srsName = await ReadStringScalarAsync("SELECT srs_name FROM gpkg_spatial_ref_sys WHERE srs_id = 3857;");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("EPSG:3857", metadata!.CrsIdentifier);
+        Assert.Equal(3857, metadata.SrsId);
+        Assert.Single(hits);
+        Assert.Equal("WGS 84 / Pseudo-Mercator", srsName);
+    }
+
+    [Fact]
+    public async Task GetFeaturesAsync_WithSdkBoundingBox_RejectsCrsMismatch()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":1},"geometry":{"x":-157.8,"y":21.3}}""");
+
+        var exception = await Assert.ThrowsAsync<GeoPackageStorageException>(() =>
+            store.GetFeaturesAsync(
+                "parks",
+                new FeatureBoundingBox
+                {
+                    MinX = -17566608,
+                    MinY = 2425287,
+                    MaxX = -17566607,
+                    MaxY = 2425289,
+                    Crs = "EPSG:3857",
+                }));
+
+        Assert.Equal("crs-mismatch", exception.Problem?.Code);
+    }
+
+    [Fact]
+    public async Task UpsertFeatureAsync_InvalidFeatureJson_MapsStorageProblem()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        var exception = await Assert.ThrowsAsync<GeoPackageStorageException>(() =>
+            store.UpsertFeatureAsync("parks", """{"geometry":{"x":-157.8,"y":21.3}}"""));
+
+        Assert.Equal("invalid-feature-json", exception.Problem?.Code);
+        Assert.StartsWith("https://honua.io/problems/mobile/storage/", exception.Problem?.Type, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EvictExpiredFeaturesAsync_RemovesExpiredLayerCacheEntries()
     {
         var timeProvider = new MutableTimeProvider(DateTimeOffset.Parse("2026-05-01T00:00:00Z", CultureInfo.InvariantCulture));
@@ -294,6 +379,19 @@ WHERE operation_id = $operation_id;
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {tableName};";
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private async Task<string?> ReadStringScalarAsync(string sql)
+    {
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+        }.ToString());
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return await command.ExecuteScalarAsync() as string;
     }
 
     private sealed class MutableTimeProvider : TimeProvider

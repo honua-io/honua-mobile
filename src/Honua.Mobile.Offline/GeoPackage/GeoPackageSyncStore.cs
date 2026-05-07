@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Honua.Mobile.Offline;
+using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
 using Microsoft.Data.Sqlite;
 
@@ -15,6 +18,10 @@ namespace Honua.Mobile.Offline.GeoPackage;
 /// </summary>
 public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
 {
+    private const int DefaultSrsId = 4326;
+    private const string DefaultCrsIdentifier = "EPSG:4326";
+    private const string Wgs84Definition = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]]";
+    private const string WebMercatorDefinition = "PROJCS[\"WGS 84 / Pseudo-Mercator\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],PROJECTION[\"Mercator_1SP\"],PARAMETER[\"central_meridian\",0],PARAMETER[\"scale_factor\",1],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"X\",EAST],AXIS[\"Y\",NORTH],AUTHORITY[\"EPSG\",\"3857\"]]";
     private readonly GeoPackageSyncStoreOptions _options;
 
     /// <summary>
@@ -75,6 +82,18 @@ CREATE TABLE IF NOT EXISTS gpkg_contents (
     CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
 );
 
+CREATE TABLE IF NOT EXISTS gpkg_geometry_columns (
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    geometry_type_name TEXT NOT NULL,
+    srs_id INTEGER NOT NULL,
+    z TINYINT NOT NULL,
+    m TINYINT NOT NULL,
+    PRIMARY KEY (table_name, column_name),
+    CONSTRAINT fk_ggc_tn FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
+    CONSTRAINT fk_ggc_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+);
+
 CREATE TABLE IF NOT EXISTS honua_sync_queue (
     operation_id TEXT PRIMARY KEY,
     layer_key TEXT NOT NULL,
@@ -128,6 +147,14 @@ CREATE TABLE IF NOT EXISTS honua_scene_packages (
     updated_at_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS honua_feature_layers (
+    layer_key TEXT PRIMARY KEY,
+    crs_identifier TEXT NOT NULL DEFAULT 'EPSG:4326',
+    srs_id INTEGER NOT NULL DEFAULT 4326,
+    updated_at_utc TEXT NOT NULL,
+    CONSTRAINT fk_hfl_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+);
+
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_sync_queue', 'attributes', 'honua_sync_queue', 'Offline edit queue for Honua mobile sync', 4326);
 
@@ -136,6 +163,9 @@ VALUES ('honua_map_areas', 'attributes', 'honua_map_areas', 'Downloaded map area
 
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_scene_packages', 'attributes', 'honua_scene_packages', 'Downloaded immutable 3D scene package catalog', 4326);
+
+INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
+VALUES ('honua_feature_layers', 'attributes', 'honua_feature_layers', 'Feature cache layer CRS metadata', 4326);
 
 CREATE TABLE IF NOT EXISTS honua_features (
     layer_key TEXT NOT NULL,
@@ -641,6 +671,38 @@ ORDER BY scene_id ASC, package_id ASC;
     }
 
     /// <inheritdoc />
+    public async Task<GeoPackageFeatureLayerMetadata?> GetFeatureLayerMetadataAsync(string layerKey, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+SELECT layer_key, crs_identifier, srs_id, updated_at_utc
+FROM honua_feature_layers
+WHERE layer_key = $layer_key
+LIMIT 1;
+";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new GeoPackageFeatureLayerMetadata
+        {
+            LayerKey = reader.GetString(0),
+            CrsIdentifier = reader.GetString(1),
+            SrsId = reader.GetInt32(2),
+            UpdatedAtUtc = DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        };
+    }
+
+    /// <inheritdoc />
     public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
@@ -649,8 +711,25 @@ ORDER BY scene_id ASC, package_id ASC;
         using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.upsert", ActivityKind.Internal);
         activity?.SetTag("layer_key", layerKey);
 
-        var objectId = ExtractObjectId(featureJson);
-        var extent = ExtractFeatureExtent(featureJson);
+        FeatureCacheRecord feature;
+        try
+        {
+            feature = ExtractFeatureCacheRecord(featureJson);
+        }
+        catch (JsonException ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw GeoPackageStorageProblems.InvalidFeatureJson(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw GeoPackageStorageProblems.InvalidFeatureJson(ex);
+        }
+
+        var objectId = feature.ObjectId;
+        var extent = feature.Extent;
+        var spatialReference = feature.SpatialReference ?? FeatureSpatialReference.Default;
         var expiresAtUtc = ResolveFeatureExpiresAtUtc(layerKey);
 
         await using var connection = OpenConnection();
@@ -659,6 +738,13 @@ ORDER BY scene_id ASC, package_id ASC;
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
         {
+            await UpsertFeatureLayerMetadataAsync(
+                connection,
+                layerKey,
+                spatialReference,
+                feature.SpatialReference is not null,
+                ct).ConfigureAwait(false);
+
             await using (var command = connection.CreateCommand())
             {
                 command.CommandText = @"
@@ -694,7 +780,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         {
             await RollbackQuietlyAsync(connection).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Error);
-            throw new GeoPackageStorageException("GeoPackage feature cache write failed.", ex);
+            throw GeoPackageStorageProblems.WriteFailed(ex);
         }
         catch
         {
@@ -731,7 +817,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
         catch (SqliteException ex)
         {
             await RollbackQuietlyAsync(connection).ConfigureAwait(false);
-            throw new GeoPackageStorageException("GeoPackage feature cache delete failed.", ex);
+            throw GeoPackageStorageProblems.DeleteFailed(ex);
         }
         catch
         {
@@ -778,20 +864,53 @@ ORDER BY object_id ASC;
         {
             MobileStorageTelemetry.RecordQuery("failure");
             activity?.SetStatus(ActivityStatusCode.Error);
-            throw new GeoPackageStorageException("GeoPackage feature cache query failed.", ex);
+            throw GeoPackageStorageProblems.QueryFailed(ex);
         }
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, BoundingBox boundingBox, CancellationToken ct = default)
+        => await GetFeaturesByBoundingBoxCoreAsync(layerKey, boundingBox, DefaultCrsIdentifier, ct).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, FeatureBoundingBox boundingBox, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(boundingBox);
+
+        var queryCrs = NormalizeCrsIdentifier(boundingBox.Crs) ?? DefaultCrsIdentifier;
+        return await GetFeaturesByBoundingBoxCoreAsync(
+            layerKey,
+            new BoundingBox(boundingBox.MinX, boundingBox.MinY, boundingBox.MaxX, boundingBox.MaxY),
+            queryCrs,
+            ct).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<string>> GetFeaturesByBoundingBoxCoreAsync(
+        string layerKey,
+        BoundingBox boundingBox,
+        string queryCrs,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
+        ValidateBoundingBox(boundingBox);
 
         using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.query_bbox", ActivityKind.Internal);
         activity?.SetTag("layer_key", layerKey);
+        activity?.SetTag("query_crs", queryCrs);
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            await EnsureQueryCrsMatchesLayerAsync(connection, layerKey, queryCrs, ct).ConfigureAwait(false);
+        }
+        catch (GeoPackageStorageException)
+        {
+            MobileStorageTelemetry.RecordQuery("failure");
+            activity?.SetStatus(ActivityStatusCode.Error);
+            throw;
+        }
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -833,7 +952,7 @@ ORDER BY f.object_id ASC;
         {
             MobileStorageTelemetry.RecordQuery("failure");
             activity?.SetStatus(ActivityStatusCode.Error);
-            throw new GeoPackageStorageException("GeoPackage feature cache query failed.", ex);
+            throw GeoPackageStorageProblems.QueryFailed(ex);
         }
     }
 
@@ -866,7 +985,7 @@ ORDER BY f.object_id ASC;
         catch (SqliteException ex)
         {
             await RollbackQuietlyAsync(connection).ConfigureAwait(false);
-            throw new GeoPackageStorageException("GeoPackage feature cache eviction failed.", ex);
+            throw GeoPackageStorageProblems.EvictionFailed(ex);
         }
         catch
         {
@@ -907,7 +1026,7 @@ ORDER BY f.object_id ASC;
         return _options.TimeProvider.GetUtcNow().Add(ttl.Value);
     }
 
-    private static FeatureExtent? ExtractFeatureExtent(string featureJson)
+    private static FeatureCacheRecord ExtractFeatureCacheRecord(string featureJson)
     {
         using var doc = JsonDocument.Parse(featureJson);
         var root = doc.RootElement;
@@ -915,6 +1034,22 @@ ORDER BY f.object_id ASC;
             ? geometryElement
             : root;
 
+        var objectId = ExtractObjectId(root);
+        FeatureSpatialReference? spatialReference = null;
+        if (TryReadSpatialReference(geometry, out var geometrySpatialReference))
+        {
+            spatialReference = geometrySpatialReference;
+        }
+        else if (TryReadSpatialReference(root, out var rootSpatialReference))
+        {
+            spatialReference = rootSpatialReference;
+        }
+
+        return new FeatureCacheRecord(objectId, ExtractFeatureExtent(root, geometry), spatialReference);
+    }
+
+    private static FeatureExtent? ExtractFeatureExtent(JsonElement root, JsonElement geometry)
+    {
         if (TryReadPointExtent(geometry, out var pointExtent))
         {
             return pointExtent;
@@ -923,6 +1058,16 @@ ORDER BY f.object_id ASC;
         if (TryReadEnvelopeExtent(geometry, out var envelopeExtent))
         {
             return envelopeExtent;
+        }
+
+        if (TryReadGeoJsonBboxExtent(root, out var bboxExtent))
+        {
+            return bboxExtent;
+        }
+
+        if (TryReadGeoJsonPointExtent(geometry, out var geoJsonPointExtent))
+        {
+            return geoJsonPointExtent;
         }
 
         return null;
@@ -955,6 +1100,43 @@ ORDER BY f.object_id ASC;
         return false;
     }
 
+    private static bool TryReadGeoJsonBboxExtent(JsonElement element, out FeatureExtent extent)
+    {
+        if (element.TryGetProperty("bbox", out var bbox) &&
+            bbox.ValueKind == JsonValueKind.Array &&
+            bbox.GetArrayLength() >= 4 &&
+            bbox[0].TryGetDouble(out var minX) &&
+            bbox[1].TryGetDouble(out var minY) &&
+            bbox[2].TryGetDouble(out var maxX) &&
+            bbox[3].TryGetDouble(out var maxY))
+        {
+            extent = new FeatureExtent(minX, minY, maxX, maxY);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static bool TryReadGeoJsonPointExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (geometry.TryGetProperty("type", out var type) &&
+            type.ValueKind == JsonValueKind.String &&
+            string.Equals(type.GetString(), "Point", StringComparison.OrdinalIgnoreCase) &&
+            geometry.TryGetProperty("coordinates", out var coordinates) &&
+            coordinates.ValueKind == JsonValueKind.Array &&
+            coordinates.GetArrayLength() >= 2 &&
+            coordinates[0].TryGetDouble(out var x) &&
+            coordinates[1].TryGetDouble(out var y))
+        {
+            extent = new FeatureExtent(x, y, x, y);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
     private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
     {
         if (element.TryGetProperty(propertyName, out var property) && property.TryGetDouble(out value))
@@ -966,32 +1148,18 @@ ORDER BY f.object_id ASC;
         return false;
     }
 
-    private static long ExtractObjectId(string featureJson)
+    private static long ExtractObjectId(JsonElement root)
     {
-        using var doc = JsonDocument.Parse(featureJson);
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("attributes", out var attributes))
+        if (root.TryGetProperty("attributes", out var attributes) &&
+            TryReadObjectId(attributes, out var id))
         {
-            if (attributes.TryGetProperty("OBJECTID", out var oid) && oid.TryGetInt64(out var id))
-            {
-                return id;
-            }
+            return id;
+        }
 
-            if (attributes.TryGetProperty("objectid", out oid) && oid.TryGetInt64(out id))
-            {
-                return id;
-            }
-
-            if (attributes.TryGetProperty("ObjectID", out oid) && oid.TryGetInt64(out id))
-            {
-                return id;
-            }
-
-            if (attributes.TryGetProperty("FID", out oid) && oid.TryGetInt64(out id))
-            {
-                return id;
-            }
+        if (root.TryGetProperty("properties", out var properties) &&
+            TryReadObjectId(properties, out id))
+        {
+            return id;
         }
 
         if (root.TryGetProperty("OBJECTID", out var topOid) && topOid.TryGetInt64(out var topId))
@@ -1017,6 +1185,142 @@ ORDER BY f.object_id ASC;
         throw new InvalidOperationException("Feature JSON does not contain a recognizable object ID field (OBJECTID, objectid, ObjectID, or FID).");
     }
 
+    private static bool TryReadObjectId(JsonElement attributes, out long objectId)
+    {
+        if (attributes.ValueKind != JsonValueKind.Object)
+        {
+            objectId = 0;
+            return false;
+        }
+
+        if (attributes.TryGetProperty("OBJECTID", out var oid) && oid.TryGetInt64(out objectId))
+        {
+            return true;
+        }
+
+        if (attributes.TryGetProperty("objectid", out oid) && oid.TryGetInt64(out objectId))
+        {
+            return true;
+        }
+
+        if (attributes.TryGetProperty("ObjectID", out oid) && oid.TryGetInt64(out objectId))
+        {
+            return true;
+        }
+
+        if (attributes.TryGetProperty("FID", out oid) && oid.TryGetInt64(out objectId))
+        {
+            return true;
+        }
+
+        objectId = 0;
+        return false;
+    }
+
+    private static bool TryReadSpatialReference(JsonElement element, out FeatureSpatialReference spatialReference)
+    {
+        if (element.TryGetProperty("spatialReference", out var spatialReferenceElement) &&
+            spatialReferenceElement.ValueKind == JsonValueKind.Object &&
+            TryReadFeatureServerSpatialReference(spatialReferenceElement, out spatialReference))
+        {
+            return true;
+        }
+
+        if (element.TryGetProperty("crs", out var crsElement) &&
+            crsElement.ValueKind == JsonValueKind.Object &&
+            TryReadGeoJsonCrs(crsElement, out spatialReference))
+        {
+            return true;
+        }
+
+        spatialReference = default;
+        return false;
+    }
+
+    private static bool TryReadFeatureServerSpatialReference(JsonElement spatialReferenceElement, out FeatureSpatialReference spatialReference)
+    {
+        if (TryGetInt32(spatialReferenceElement, "latestWkid", out var latestWkid) && latestWkid > 0)
+        {
+            spatialReference = FeatureSpatialReference.FromWkid(latestWkid);
+            return true;
+        }
+
+        if (TryGetInt32(spatialReferenceElement, "wkid", out var wkid) && wkid > 0)
+        {
+            spatialReference = FeatureSpatialReference.FromWkid(wkid);
+            return true;
+        }
+
+        if (TryGetString(spatialReferenceElement, "wkt", out var wkt))
+        {
+            spatialReference = FeatureSpatialReference.FromWkt(wkt);
+            return true;
+        }
+
+        spatialReference = default;
+        return false;
+    }
+
+    private static bool TryReadGeoJsonCrs(JsonElement crsElement, out FeatureSpatialReference spatialReference)
+    {
+        if (crsElement.TryGetProperty("properties", out var properties) &&
+            TryGetString(properties, "name", out var name) &&
+            TryParseCrsIdentifier(name, out spatialReference))
+        {
+            return true;
+        }
+
+        if (TryGetString(crsElement, "name", out name) &&
+            TryParseCrsIdentifier(name, out spatialReference))
+        {
+            return true;
+        }
+
+        spatialReference = default;
+        return false;
+    }
+
+    private static bool TryParseCrsIdentifier(string value, out FeatureSpatialReference spatialReference)
+    {
+        var normalized = NormalizeCrsIdentifier(value);
+        if (normalized is not null &&
+            normalized.StartsWith("EPSG:", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(normalized.AsSpan("EPSG:".Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var epsgCode) &&
+            epsgCode > 0)
+        {
+            spatialReference = FeatureSpatialReference.FromWkid(epsgCode);
+            return true;
+        }
+
+        spatialReference = default;
+        return false;
+    }
+
+    private static bool TryGetInt32(JsonElement element, string propertyName, out int value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetString(JsonElement element, string propertyName, out string value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(property.GetString()))
+        {
+            value = property.GetString()!;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
+    }
+
     private static async Task ExecuteTransactionCommandAsync(SqliteConnection connection, string sql, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
@@ -1034,6 +1338,146 @@ ORDER BY f.object_id ASC;
         {
             // Preserve the original exception.
         }
+    }
+
+    private static async Task UpsertFeatureLayerMetadataAsync(
+        SqliteConnection connection,
+        string layerKey,
+        FeatureSpatialReference spatialReference,
+        bool isExplicit,
+        CancellationToken ct)
+    {
+        await UpsertSpatialReferenceAsync(connection, spatialReference, ct).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+INSERT INTO honua_feature_layers (layer_key, crs_identifier, srs_id, updated_at_utc)
+VALUES ($layer_key, $crs_identifier, $srs_id, $updated_at_utc)
+ON CONFLICT(layer_key) DO UPDATE SET
+  crs_identifier = CASE WHEN $is_explicit = 1 THEN excluded.crs_identifier ELSE honua_feature_layers.crs_identifier END,
+  srs_id = CASE WHEN $is_explicit = 1 THEN excluded.srs_id ELSE honua_feature_layers.srs_id END,
+  updated_at_utc = CASE WHEN $is_explicit = 1 THEN excluded.updated_at_utc ELSE honua_feature_layers.updated_at_utc END;
+";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+        command.Parameters.AddWithValue("$crs_identifier", spatialReference.CrsIdentifier);
+        command.Parameters.AddWithValue("$srs_id", spatialReference.SrsId);
+        command.Parameters.AddWithValue("$updated_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$is_explicit", isExplicit ? 1 : 0);
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task UpsertSpatialReferenceAsync(
+        SqliteConnection connection,
+        FeatureSpatialReference spatialReference,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"
+INSERT INTO gpkg_spatial_ref_sys (
+  srs_name,
+  srs_id,
+  organization,
+  organization_coordsys_id,
+  definition,
+  description)
+VALUES (
+  $srs_name,
+  $srs_id,
+  $organization,
+  $organization_coordsys_id,
+  $definition,
+  $description)
+ON CONFLICT(srs_id) DO UPDATE SET
+  srs_name = excluded.srs_name,
+  organization = excluded.organization,
+  organization_coordsys_id = excluded.organization_coordsys_id,
+  definition = excluded.definition,
+  description = excluded.description;
+";
+        command.Parameters.AddWithValue("$srs_name", spatialReference.SrsName);
+        command.Parameters.AddWithValue("$srs_id", spatialReference.SrsId);
+        command.Parameters.AddWithValue("$organization", spatialReference.Organization);
+        command.Parameters.AddWithValue("$organization_coordsys_id", spatialReference.OrganizationCoordsysId);
+        command.Parameters.AddWithValue("$definition", spatialReference.Definition);
+        command.Parameters.AddWithValue("$description", spatialReference.Description);
+
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureQueryCrsMatchesLayerAsync(
+        SqliteConnection connection,
+        string layerKey,
+        string queryCrs,
+        CancellationToken ct)
+    {
+        var layerCrs = await ReadFeatureLayerCrsIdentifierAsync(connection, layerKey, ct).ConfigureAwait(false)
+            ?? DefaultCrsIdentifier;
+        if (!string.Equals(NormalizeCrsIdentifier(layerCrs), NormalizeCrsIdentifier(queryCrs), StringComparison.OrdinalIgnoreCase))
+        {
+            throw GeoPackageStorageProblems.CrsMismatch(layerKey, layerCrs, queryCrs);
+        }
+    }
+
+    private static async Task<string?> ReadFeatureLayerCrsIdentifierAsync(
+        SqliteConnection connection,
+        string layerKey,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT crs_identifier FROM honua_feature_layers WHERE layer_key = $layer_key LIMIT 1;";
+        command.Parameters.AddWithValue("$layer_key", layerKey);
+
+        var value = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return value as string;
+    }
+
+    private static void ValidateBoundingBox(BoundingBox boundingBox)
+    {
+        ArgumentNullException.ThrowIfNull(boundingBox);
+        if (!double.IsFinite(boundingBox.MinLongitude) ||
+            !double.IsFinite(boundingBox.MinLatitude) ||
+            !double.IsFinite(boundingBox.MaxLongitude) ||
+            !double.IsFinite(boundingBox.MaxLatitude))
+        {
+            throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box coordinates must be finite.");
+        }
+
+        if (boundingBox.MaxLongitude < boundingBox.MinLongitude)
+        {
+            throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box max X must be greater than or equal to min X.");
+        }
+
+        if (boundingBox.MaxLatitude < boundingBox.MinLatitude)
+        {
+            throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box max Y must be greater than or equal to min Y.");
+        }
+    }
+
+    private static string? NormalizeCrsIdentifier(string? crs)
+    {
+        if (string.IsNullOrWhiteSpace(crs))
+        {
+            return null;
+        }
+
+        var trimmed = crs.Trim();
+        const string epsgPrefix = "EPSG:";
+        var epsgIndex = trimmed.LastIndexOf(epsgPrefix, StringComparison.OrdinalIgnoreCase);
+        if (epsgIndex >= 0 &&
+            int.TryParse(trimmed.AsSpan(epsgIndex + epsgPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var epsgCode))
+        {
+            return $"EPSG:{epsgCode}";
+        }
+
+        const string ogcCrsPrefix = "http://www.opengis.net/def/crs/EPSG/0/";
+        if (trimmed.StartsWith(ogcCrsPrefix, StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(trimmed.AsSpan(ogcCrsPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out epsgCode))
+        {
+            return $"EPSG:{epsgCode}";
+        }
+
+        return trimmed.ToUpperInvariant();
     }
 
     private static async Task UpsertFeatureIndexAsync(
@@ -1083,7 +1527,7 @@ ON CONFLICT(layer_key, object_id) DO NOTHING;
         }
 
         return await GetFeatureIndexIdAsync(connection, layerKey, objectId, ct).ConfigureAwait(false)
-            ?? throw new GeoPackageStorageException("GeoPackage feature index key was not created.");
+            ?? throw GeoPackageStorageProblems.WriteFailed(new InvalidOperationException("GeoPackage feature index key was not created."));
     }
 
     private static async Task<long?> GetFeatureIndexIdAsync(
@@ -1310,7 +1754,139 @@ LIMIT $limit;
         return string.Join(", ", parameterNames);
     }
 
+    private readonly record struct FeatureCacheRecord(
+        long ObjectId,
+        FeatureExtent? Extent,
+        FeatureSpatialReference? SpatialReference);
+
     private readonly record struct FeatureExtent(double MinX, double MinY, double MaxX, double MaxY);
+
+    private readonly record struct FeatureSpatialReference(
+        int SrsId,
+        string CrsIdentifier,
+        string SrsName,
+        string Organization,
+        int OrganizationCoordsysId,
+        string Definition,
+        string Description)
+    {
+        public static FeatureSpatialReference Default => new(
+            DefaultSrsId,
+            DefaultCrsIdentifier,
+            "WGS 84 geodetic",
+            "EPSG",
+            DefaultSrsId,
+            Wgs84Definition,
+            "longitude/latitude coordinates in decimal degrees on the WGS 84 spheroid");
+
+        public static FeatureSpatialReference FromWkid(int wkid)
+        {
+            if (wkid is 3857 or 102100 or 102113)
+            {
+                return new FeatureSpatialReference(
+                    3857,
+                    "EPSG:3857",
+                    "WGS 84 / Pseudo-Mercator",
+                    "EPSG",
+                    3857,
+                    WebMercatorDefinition,
+                    "Web Mercator projected coordinates in metres.");
+            }
+
+            if (wkid == DefaultSrsId)
+            {
+                return Default;
+            }
+
+            return new FeatureSpatialReference(
+                wkid,
+                $"EPSG:{wkid}",
+                $"EPSG {wkid}",
+                "EPSG",
+                wkid,
+                "undefined",
+                $"Spatial reference observed from source metadata as EPSG:{wkid}.");
+        }
+
+        public static FeatureSpatialReference FromWkt(string wkt)
+        {
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(wkt));
+            var srsId = 1_000_000_000 + (int)(BitConverter.ToUInt32(hash, 0) % 1_000_000_000);
+            return new FeatureSpatialReference(
+                srsId,
+                $"WKT:{srsId}",
+                $"Honua source WKT {srsId}",
+                "NONE",
+                srsId,
+                wkt,
+                "Spatial reference observed from source WKT metadata.");
+        }
+    }
+
+    private static class GeoPackageStorageProblems
+    {
+        public static GeoPackageStorageException InvalidFeatureJson(Exception innerException)
+            => Create(
+                "invalid-feature-json",
+                "GeoPackage feature cache received invalid feature JSON.",
+                "The cached feature payload could not be parsed or did not include a supported object ID.",
+                innerException);
+
+        public static GeoPackageStorageException InvalidBoundingBox(string detail)
+            => Create("invalid-bounding-box", "GeoPackage feature query received an invalid bounding box.", detail);
+
+        public static GeoPackageStorageException CrsMismatch(string layerKey, string layerCrs, string queryCrs)
+            => Create(
+                "crs-mismatch",
+                "GeoPackage feature query CRS does not match the cached layer CRS.",
+                $"Layer '{layerKey}' is cached as '{layerCrs}', but the query was '{queryCrs}'.");
+
+        public static GeoPackageStorageException WriteFailed(Exception innerException)
+            => Create(
+                "write-failed",
+                "GeoPackage feature cache write failed.",
+                "The local GeoPackage provider rejected the feature cache write.",
+                innerException);
+
+        public static GeoPackageStorageException DeleteFailed(Exception innerException)
+            => Create(
+                "delete-failed",
+                "GeoPackage feature cache delete failed.",
+                "The local GeoPackage provider rejected the feature cache delete.",
+                innerException);
+
+        public static GeoPackageStorageException QueryFailed(Exception innerException)
+            => Create(
+                "query-failed",
+                "GeoPackage feature cache query failed.",
+                "The local GeoPackage provider rejected the feature cache query.",
+                innerException);
+
+        public static GeoPackageStorageException EvictionFailed(Exception innerException)
+            => Create(
+                "eviction-failed",
+                "GeoPackage feature cache eviction failed.",
+                "The local GeoPackage provider rejected the cache eviction.",
+                innerException);
+
+        private static GeoPackageStorageException Create(string code, string title, string detail)
+            => new(new GeoPackageStorageProblem
+            {
+                Type = $"https://honua.io/problems/mobile/storage/{code}",
+                Title = title,
+                Code = code,
+                Detail = detail,
+            });
+
+        private static GeoPackageStorageException Create(string code, string title, string detail, Exception innerException)
+            => new(new GeoPackageStorageProblem
+            {
+                Type = $"https://honua.io/problems/mobile/storage/{code}",
+                Title = title,
+                Code = code,
+                Detail = detail,
+            }, innerException);
+    }
 
     private static void ValidateSqlIdentifier(string identifier, string parameterName)
     {
