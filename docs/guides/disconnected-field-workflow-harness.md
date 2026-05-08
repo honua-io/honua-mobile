@@ -47,6 +47,7 @@ for acceptance edits:
 | `HONUA_MOBILE_CLOUD_LAYER_IDS` | No | Comma-separated FeatureServer layer ids. Defaults to `0`; the first layer is the editable source. |
 | `HONUA_MOBILE_CLOUD_API_KEY` | No | API key sent as `X-API-Key` when the fixture uses API key auth. |
 | `HONUA_MOBILE_CLOUD_BEARER_TOKEN` | No | Bearer token when the fixture uses token auth. |
+| `HONUA_MOBILE_CLOUD_VERIFY_READBACK` | No | Defaults to `true`. Set to `0`, `false`, or `no` only for bring-up runs where the fixture can accept edits but cannot yet answer readback queries. |
 | `HONUA_MOBILE_ACCEPTANCE_PACKAGE_ID` | No | Package id recorded in queued operation payloads and evidence. Defaults to `pkg_acceptance_field_workflow`. |
 | `HONUA_MOBILE_ACCEPTANCE_RUN_ID` | No | Stable run id used in operation metadata and artifact file names. Defaults to a UTC timestamped cloud run id. |
 | `HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR` | No | Directory for evidence artifacts. Defaults to a temp directory for cloud runs. |
@@ -62,6 +63,15 @@ The fixture must support the FeatureServer replica endpoints used by
 | `/rest/services/{serviceId}/FeatureServer/extractChanges` | Download deterministic pre-edit features into the GeoPackage cache. |
 | `/rest/services/{serviceId}/FeatureServer/synchronizeReplica` | Advance the download cursor after extraction. |
 | `/rest/services/{serviceId}/FeatureServer/{layerId}/applyEdits` | Reconcile create, update, and delete operations after reconnect. |
+| `/rest/services/{serviceId}/FeatureServer/{layerId}/query` | Read back run-tagged create/update records and deterministic delete-target state. |
+
+When readback verification is enabled, the fixture must expose:
+
+- a seeded feature with `objectid = 3` so the delete operation can prove
+  pre-sync presence and post-sync removal;
+- a writable `honua_acceptance_run` field on the editable layer;
+- a writable `status` field that preserves `created-offline` and
+  `inspection-complete` after reconnect sync.
 
 If the fixture supports attachment or media readback, capture it as additional
 manual evidence. The current automated harness records attachment/media metadata
@@ -110,7 +120,7 @@ Required evidence fields:
 | `plannedOperations` | Operation kind, target id, syncability, and metadata for each planned edit or media item. |
 | `cursorState` | Replica and server generation cursors after verification. |
 | `phases` | Per-phase status, timings, details, and failure category when applicable. |
-| `finalState` | Pre-reconnect pending count, final pending count, local feature count, and verification notes. |
+| `finalState` | Pre-reconnect pending count, final pending count, local feature count, readback counts, delete-target state, and verification notes. |
 | `failureCategories` | Structured category definitions for troubleshooting. |
 
 Keep the JSON evidence with any cloud run logs, server fixture seed identifiers,

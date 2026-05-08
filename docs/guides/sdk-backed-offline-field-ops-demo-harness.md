@@ -3,9 +3,10 @@
 This page documents the first repeatable slice for issue
 [honua-mobile#92](https://github.com/honua-io/honua-mobile/issues/92).
 It proves the preferred mobile registration path and evidence shape for the
-offline field operations demo. It does not close the full epic: cloud fixture
-seeding, end-to-end push/pull verification, attachment upload, and in-app
-conflict review still require follow-up work.
+offline field operations demo. The cloud/staging end-to-end path is covered by
+the disconnected field workflow harness in
+`tests/Honua.Mobile.ServerIntegration.Tests/DisconnectedFieldWorkflowAcceptanceTests.cs`,
+which verifies readback once the honua-server#895 fixture is configured.
 
 ## Scope
 
@@ -78,13 +79,23 @@ Required fields:
 | `syncState` | Persisted SDK sync phase, token, and pulled feature count. |
 | `conflictReview` | Manual-review mode and deterministic conflict scenario label. |
 
-## Remaining Work
+## Cloud Acceptance Handoff
 
-- Run the existing disconnected workflow harness against the seeded cloud
-  fixture once `honua-io/honua-server#895` is available.
-- Move reconnect push/pull verification from the mobile-owned sync engine path
-  to the SDK-backed runner when the fixture can safely accept deterministic
-  edits.
-- Surface the conflict-review operation in the field collection app UX.
-- Extend evidence with package size, metadata cache status, retry failures, and
-  attachment/media upload results.
+For issue #92 closure, run both harnesses:
+
+```bash
+dotnet test tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj --filter FullyQualifiedName~SdkBackedOfflineFieldOperationsDemoHarnessTests
+
+HONUA_MOBILE_CLOUD_ACCEPTANCE=1 \
+HONUA_MOBILE_CLOUD_BASE_URL=https://staging-api.honua.io \
+HONUA_MOBILE_CLOUD_SERVICE_ID=mobile_offline_demo \
+HONUA_MOBILE_CLOUD_LAYER_IDS=68910 \
+HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR=/tmp/honua-mobile-acceptance-evidence \
+dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj --filter "Category=CloudAcceptance"
+```
+
+The cloud run expects the fixture to preserve `honua_acceptance_run` and
+`status` fields on create/update and to seed `objectid = 3` as the deterministic
+delete target. If a fixture is still being brought up, set
+`HONUA_MOBILE_CLOUD_VERIFY_READBACK=0` to collect upload evidence without
+claiming final readback acceptance.
