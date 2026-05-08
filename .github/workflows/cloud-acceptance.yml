@@ -1,0 +1,120 @@
+name: Cloud Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Cloud Honua base URL"
+        required: true
+        default: "https://staging-api.honua.io"
+      service_id:
+        description: "FeatureServer service id for the seeded offline fixture"
+        required: true
+        default: "mobile_offline_demo"
+      layer_ids:
+        description: "Comma-separated FeatureServer layer ids; first layer is editable"
+        required: true
+        default: "68910"
+      verify_readback:
+        description: "Require FeatureServer readback verification"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      run_id:
+        description: "Optional stable acceptance run id"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  disconnected-field-workflow:
+    name: Disconnected Field Workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HONUA_MOBILE_CLOUD_ACCEPTANCE: "1"
+      HONUA_MOBILE_CLOUD_BASE_URL: ${{ inputs.base_url }}
+      HONUA_MOBILE_CLOUD_SERVICE_ID: ${{ inputs.service_id }}
+      HONUA_MOBILE_CLOUD_LAYER_IDS: ${{ inputs.layer_ids }}
+      HONUA_MOBILE_CLOUD_VERIFY_READBACK: ${{ inputs.verify_readback }}
+      HONUA_MOBILE_CLOUD_API_KEY: ${{ secrets.HONUA_MOBILE_CLOUD_API_KEY }}
+      HONUA_MOBILE_CLOUD_BEARER_TOKEN: ${{ secrets.HONUA_MOBILE_CLOUD_BEARER_TOKEN }}
+      HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore harness projects
+        run: |
+          dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
+          dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
+
+      - name: Build harness projects
+        run: |
+          dotnet build tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj \
+            --no-restore --configuration Release
+          dotnet build tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
+            --no-restore --configuration Release
+
+      - name: Create artifact directories
+        run: |
+          mkdir -p TestResults
+          mkdir -p "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}"
+
+      - name: Configure optional run id
+        if: ${{ inputs.run_id != '' }}
+        run: echo "HONUA_MOBILE_ACCEPTANCE_RUN_ID=${{ inputs.run_id }}" >> "$GITHUB_ENV"
+
+      - name: Run SDK-backed offline demo harness
+        run: |
+          dotnet test tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --filter "FullyQualifiedName~SdkBackedOfflineFieldOperationsDemoHarnessTests" \
+            --logger "trx;LogFileName=sdk-backed-offline-demo-harness.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults
+
+      - name: Run cloud disconnected workflow acceptance harness
+        run: |
+          dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --filter "Category=CloudAcceptance" \
+            --logger "trx;LogFileName=cloud-disconnected-field-workflow.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults
+
+      - name: Upload acceptance artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cloud-acceptance-evidence
+          path: |
+            TestResults/
+            CloudAcceptanceEvidence/
+          retention-days: 14
