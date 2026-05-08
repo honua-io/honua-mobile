@@ -169,6 +169,7 @@ The loopback test runs by default against the in-process integration server. The
 | `HONUA_MOBILE_CLOUD_LAYER_IDS` | No | Comma-separated FeatureServer layer IDs. Defaults to `0`. |
 | `HONUA_MOBILE_CLOUD_API_KEY` | No | API key sent as `X-API-Key`. |
 | `HONUA_MOBILE_CLOUD_BEARER_TOKEN` | No | Bearer token for authenticated staging fixtures. |
+| `HONUA_MOBILE_CLOUD_VERIFY_READBACK` | No | Defaults to `true`. Set to `0` only for fixture bring-up runs that cannot yet answer FeatureServer readback queries. |
 | `HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR` | No | Directory for evidence JSON artifacts. Defaults to a temp evidence directory for cloud runs. |
 | `HONUA_MOBILE_ACCEPTANCE_RUN_ID` | No | Stable run id used in artifact names and operation metadata. |
 | `HONUA_MOBILE_ACCEPTANCE_PACKAGE_ID` | No | Offline package id recorded in evidence. Defaults to `pkg_acceptance_field_workflow`. |
@@ -200,17 +201,24 @@ Evidence artifacts are written as `<run-id>.evidence.json` and use schema
   "finalState": {
     "localFeatureCount": 1,
     "pendingOperationCount": 0,
+    "runTaggedFeatureCountBeforeReconnect": 0,
+    "deleteTargetPresentBeforeReconnect": true,
+    "runTaggedFeatureCount": 2,
+    "deleteTargetPresent": false,
     "localVerification": "downloaded features retained and sync queue drained",
-    "cloudVerification": "fixture-specific verification result"
+    "cloudVerification": "cloud readback found run-tagged create/update edits and confirmed deterministic delete target removal"
   }
 }
 ```
 
-Until honua-server#895 is available, the cloud test intentionally does not
-assume server-side readback endpoints beyond the replica and `applyEdits`
-contract. The loopback harness verifies request-level behavior locally; the
-cloud harness records the fixture assumption in the queued operation metadata
-and evidence artifact.
+The cloud harness now expects the honua-server#895 fixture path to support
+server-side readback on the editable FeatureServer layer. Before reconnect it
+asserts that no records carry the current `HONUA_MOBILE_ACCEPTANCE_RUN_ID` and
+that the deterministic delete target, `objectid = 3`, exists. After reconnect it
+asserts that run-tagged create/update records are visible with
+`created-offline` and `inspection-complete` statuses and that `objectid = 3` is
+no longer returned. The loopback harness continues to verify request-level
+behavior locally for ordinary CI runs.
 
 ## Live Honua Image Server Interaction Tests
 

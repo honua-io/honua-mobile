@@ -4,6 +4,7 @@ using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Mobile.Sdk.Models;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 
@@ -19,6 +20,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     private const string FailureCategoryEditQueue = "edit-queue";
     private const string FailureCategoryTransport = "transport";
     private const string FailureCategoryConflict = "conflict";
+    private const long DeleteTargetObjectId = 3;
     private static readonly DateTimeOffset FixedOperationTime = new(2026, 5, 4, 10, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -139,17 +141,43 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             config,
             createReplicaClient: () => CreateReplicaClient(config),
             createUploader: () => CreateUploader(config),
-            verifyPreSyncCloudStateAsync: evidence =>
+            verifyPreSyncCloudStateAsync: async evidence =>
             {
+                if (!config.VerifyCloudReadback)
+                {
+                    evidence.FinalState.PreSyncCloudVerification =
+                        "cloud readback verification disabled by HONUA_MOBILE_CLOUD_VERIFY_READBACK=0";
+                    return;
+                }
+
+                var preSync = await QueryCloudReadbackAsync(config);
+                evidence.FinalState.RunTaggedFeatureCountBeforeReconnect = preSync.RunTaggedFeatureCount;
+                evidence.FinalState.DeleteTargetPresentBeforeReconnect = preSync.DeleteTargetPresent;
                 evidence.FinalState.PreSyncCloudVerification =
-                    "cloud fixture pre-sync verification requires fixture query inputs from honua-server#895";
-                return Task.CompletedTask;
+                    "cloud fixture has no run-tagged edits before reconnect and includes the deterministic delete target";
+
+                Assert.Equal(0, preSync.RunTaggedFeatureCount);
+                Assert.True(preSync.DeleteTargetPresent);
             },
-            verifyPostSyncCloudStateAsync: evidence =>
+            verifyPostSyncCloudStateAsync: async evidence =>
             {
+                if (!config.VerifyCloudReadback)
+                {
+                    evidence.FinalState.CloudVerification =
+                        "cloud readback verification disabled by HONUA_MOBILE_CLOUD_VERIFY_READBACK=0";
+                    return;
+                }
+
+                var postSync = await QueryCloudReadbackAsync(config);
+                evidence.FinalState.RunTaggedFeatureCount = postSync.RunTaggedFeatureCount;
+                evidence.FinalState.DeleteTargetPresent = postSync.DeleteTargetPresent;
                 evidence.FinalState.CloudVerification =
-                    "cloud fixture verification delegated to honua-server#895; request-level verification is not available from this process";
-                return Task.CompletedTask;
+                    "cloud readback found run-tagged create/update edits and confirmed deterministic delete target removal";
+
+                Assert.True(postSync.RunTaggedFeatureCount >= 2, $"Expected at least two run-tagged create/update records, got {postSync.RunTaggedFeatureCount}.");
+                Assert.Contains("created-offline", postSync.Statuses);
+                Assert.Contains("inspection-complete", postSync.Statuses);
+                Assert.False(postSync.DeleteTargetPresent);
             });
 
         Assert.Equal("passed", result.Evidence.Status);
@@ -207,6 +235,32 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         Assert.Equal(
             FailureCategoryLocalCache,
             ClassifyFailure(new GeoPackageStorageException("GeoPackage feature cache write failed."), "offline-edit"));
+    }
+
+    [Fact]
+    public void CloudReadbackParser_ExtractsRunTaggedStatusesAndDeleteTargetPresence()
+    {
+        using var runTaggedFeatures = JsonDocument.Parse("""
+            {
+              "features": [
+                { "attributes": { "objectid": 9001, "status": "created-offline", "honua_acceptance_run": "run-1" } },
+                { "attributes": { "objectid": 1, "status": "inspection-complete", "honua_acceptance_run": "run-1" } }
+              ]
+            }
+            """);
+        using var deleteTarget = JsonDocument.Parse("""
+            {
+              "features": [
+                { "attributes": { "objectid": 3, "status": "seeded" } }
+              ]
+            }
+            """);
+
+        var readback = CloudReadback.FromQueryResponses(runTaggedFeatures, deleteTarget);
+
+        Assert.Equal(2, readback.RunTaggedFeatureCount);
+        Assert.Equal(["created-offline", "inspection-complete"], readback.Statuses);
+        Assert.True(readback.DeleteTargetPresent);
     }
 
     public void Dispose()
@@ -638,7 +692,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 OfflineOperationType.Delete,
                 layerId,
                 priority: 3,
-                deleteObjectIds: [3]);
+                deleteObjectIds: [DeleteTargetObjectId]);
 
             return new AcceptanceWorkflowPlan
             {
@@ -781,6 +835,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
         public string? BearerToken { get; init; }
 
+        public bool VerifyCloudReadback { get; init; } = true;
+
         public static AcceptanceHarnessConfiguration Loopback(Uri baseUri, string artifactDirectory)
             => new()
             {
@@ -822,6 +878,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 ArtifactDirectory = artifactDirectory,
                 ApiKey = Environment.GetEnvironmentVariable("HONUA_MOBILE_CLOUD_API_KEY"),
                 BearerToken = Environment.GetEnvironmentVariable("HONUA_MOBILE_CLOUD_BEARER_TOKEN"),
+                VerifyCloudReadback = ReadBoolean(Environment.GetEnvironmentVariable("HONUA_MOBILE_CLOUD_VERIFY_READBACK"), defaultValue: true),
             };
         }
 
@@ -841,6 +898,30 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             }
 
             return layerIds;
+        }
+
+        private static bool ReadBoolean(string? value, bool defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return defaultValue;
+            }
+
+            if (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(value, "0", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "false", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "no", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            throw new InvalidOperationException("HONUA_MOBILE_CLOUD_VERIFY_READBACK must be 1, true, yes, 0, false, or no.");
         }
     }
 
@@ -970,10 +1051,100 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
         public int PendingOperationCount { get; set; }
 
+        public int RunTaggedFeatureCountBeforeReconnect { get; set; }
+
+        public bool DeleteTargetPresentBeforeReconnect { get; set; }
+
+        public int RunTaggedFeatureCount { get; set; }
+
+        public bool DeleteTargetPresent { get; set; }
+
         public string? LocalVerification { get; set; }
 
         public string? PreSyncCloudVerification { get; set; }
 
         public string? CloudVerification { get; set; }
+    }
+
+    private static async Task<CloudReadback> QueryCloudReadbackAsync(AcceptanceHarnessConfiguration config)
+    {
+        using var client = CreateReadbackClient(config);
+        var layerId = config.LayerIds[0];
+        var escapedRunId = config.RunId.Replace("'", "''", StringComparison.Ordinal);
+
+        using var runTagged = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = config.ServiceId,
+            LayerId = layerId,
+            Where = $"honua_acceptance_run = '{escapedRunId}'",
+            OutFields = ["objectid", "status", "honua_acceptance_run"],
+            ReturnGeometry = false,
+            ResultRecordCount = 10,
+        });
+        using var deleteTarget = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = config.ServiceId,
+            LayerId = layerId,
+            ObjectIds = [DeleteTargetObjectId],
+            OutFields = ["objectid", "status"],
+            ReturnGeometry = false,
+            ResultRecordCount = 1,
+        });
+
+        return CloudReadback.FromQueryResponses(runTagged, deleteTarget);
+    }
+
+    private static HonuaMobileClient CreateReadbackClient(AcceptanceHarnessConfiguration config)
+    {
+        return new HonuaMobileClient(
+            new HttpClient(),
+            new HonuaMobileClientOptions
+            {
+                BaseUri = config.BaseUri,
+                ApiKey = config.ApiKey,
+                BearerToken = config.BearerToken,
+                AllowInsecureTransportForDevelopment = config.BaseUri.Scheme == Uri.UriSchemeHttp,
+                PreferGrpcForFeatureQueries = false,
+                PreferGrpcForFeatureEdits = false,
+            });
+    }
+
+    private sealed record CloudReadback(
+        int RunTaggedFeatureCount,
+        IReadOnlyList<string> Statuses,
+        bool DeleteTargetPresent)
+    {
+        public static CloudReadback FromQueryResponses(JsonDocument runTaggedFeatures, JsonDocument deleteTarget)
+            => new(
+                CountFeatures(runTaggedFeatures.RootElement),
+                ReadFeatureStatuses(runTaggedFeatures.RootElement),
+                CountFeatures(deleteTarget.RootElement) > 0);
+
+        private static int CountFeatures(JsonElement root)
+            => root.TryGetProperty("features", out var features) && features.ValueKind == JsonValueKind.Array
+                ? features.GetArrayLength()
+                : 0;
+
+        private static string[] ReadFeatureStatuses(JsonElement root)
+        {
+            if (!root.TryGetProperty("features", out var features) || features.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var statuses = new List<string>();
+            foreach (var feature in features.EnumerateArray())
+            {
+                if (feature.TryGetProperty("attributes", out var attributes) &&
+                    attributes.TryGetProperty("status", out var status) &&
+                    status.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(status.GetString()))
+                {
+                    statuses.Add(status.GetString()!);
+                }
+            }
+
+            return statuses.ToArray();
+        }
     }
 }
