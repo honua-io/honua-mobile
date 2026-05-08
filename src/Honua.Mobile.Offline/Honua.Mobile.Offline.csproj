@@ -9,7 +9,7 @@
     <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Offline" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
