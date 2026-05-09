@@ -8,9 +8,16 @@ namespace Honua.Mobile.FieldCollection.Services.Diagnostics;
 
 public static class FieldCollectionExceptionReporting
 {
-    private const string ModePreferenceKey = "honua_exception_reporting_mode";
-    private const string EndpointPreferenceKey = "honua_exception_reporting_endpoint";
-    private const string QueuePathPreferenceKey = "honua_exception_reporting_queue_path";
+    internal const string ModePreferenceKey = "honua_exception_reporting_mode";
+    internal const string EndpointPreferenceKey = "honua_exception_reporting_endpoint";
+    internal const string QueuePathPreferenceKey = "honua_exception_reporting_queue_path";
+    internal const string TesterConsentPreferenceKey = "honua_exception_reporting_tester_consent";
+    internal const string EnvironmentEnabledPreferenceKey = "honua_exception_reporting_environment_enabled";
+
+    internal readonly record struct PreferenceUpdate(
+        bool ShouldWriteModeAndConsent,
+        bool TesterConsent,
+        MobileExceptionReportingMode Mode);
 
     public static MobileExceptionReportingOptions FromPreferences(MobileBuildConfiguration buildConfiguration)
     {
@@ -24,7 +31,28 @@ public static class FieldCollectionExceptionReporting
             SafeAppId(),
             SafePlatform(),
             SafeOsVersion(),
-            SafeDeviceClass());
+            SafeDeviceClass(),
+            Preferences.Default.Get(TesterConsentPreferenceKey, false),
+            Preferences.Default.Get(EnvironmentEnabledPreferenceKey, true));
+    }
+
+    internal static PreferenceUpdate CreatePreferenceUpdate(
+        bool enableExceptionReporting,
+        bool environmentAllowsReporting,
+        string? endpointValue)
+    {
+        if (!environmentAllowsReporting)
+        {
+            return new PreferenceUpdate(false, false, MobileExceptionReportingMode.Disabled);
+        }
+
+        var mode = enableExceptionReporting
+            ? string.IsNullOrWhiteSpace(endpointValue)
+                ? MobileExceptionReportingMode.LocalOnly
+                : MobileExceptionReportingMode.ServerUpload
+            : MobileExceptionReportingMode.Disabled;
+
+        return new PreferenceUpdate(true, enableExceptionReporting, mode);
     }
 
     internal static MobileExceptionReportingOptions CreateOptions(
@@ -35,13 +63,19 @@ public static class FieldCollectionExceptionReporting
         string? appId,
         string? platform,
         string? osVersion,
-        string? deviceClass)
+        string? deviceClass,
+        bool hasTesterConsent = true,
+        bool environmentAllowsReporting = true)
     {
         ArgumentNullException.ThrowIfNull(buildConfiguration);
+        var requestedMode = ParseMode(modeValue);
+        var mode = hasTesterConsent && environmentAllowsReporting
+            ? requestedMode
+            : MobileExceptionReportingMode.Disabled;
 
         return new MobileExceptionReportingOptions
         {
-            Mode = ParseMode(modeValue),
+            Mode = mode,
             UploadEndpoint = Uri.TryCreate(endpointValue, UriKind.Absolute, out var endpoint) ? endpoint : null,
             QueueDirectory = string.IsNullOrWhiteSpace(queueDirectory) ? null : queueDirectory,
             Metadata = new MobileExceptionReportMetadata

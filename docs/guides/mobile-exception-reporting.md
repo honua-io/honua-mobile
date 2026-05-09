@@ -106,12 +106,22 @@ exception-report DTO or hardcoded server client. Tenant routing and ingestion
 schema versioning should be added through the uploader boundary once the server
 endpoint contract exists.
 
-The FieldCollection app maps the legacy `honua_exception_reporting_mode=Server`
-preference to `ServerUpload`, stamps build/device metadata from the mobile build
+The FieldCollection app keeps exception reporting off until both tester consent
+and the environment kill switch allow it. The Settings screen writes
+`honua_exception_reporting_tester_consent` and `honua_exception_reporting_mode`
+after the tester opts in. Environments can force reporting off by setting
+`honua_exception_reporting_environment_enabled=false`; that override wins even
+when a tester has opted in. Settings changes are read during app startup, so a
+restart is required before reporter registration changes take effect.
+
+When enabled without an upload endpoint, FieldCollection uses `LocalOnly` mode
+and stores sanitized reports in the local queue. When
+`honua_exception_reporting_endpoint` is configured, it uses `ServerUpload`. The
+app also maps the legacy `honua_exception_reporting_mode=Server` preference to
+`ServerUpload`, stamps build/device metadata from the mobile build
 configuration, and attaches its API key only when the configured upload endpoint
-shares the authenticated server origin. It still requires the explicit
-`honua_exception_reporting_endpoint` preference; mobile does not assume a server
-route before the ingestion contract is defined.
+shares the authenticated server origin. Mobile does not assume a server route
+before the ingestion contract is defined.
 
 Do not flush from a blocking UI path or synchronously during app startup. Start
 flush work from lifecycle/background scheduling code and allow it to stop on

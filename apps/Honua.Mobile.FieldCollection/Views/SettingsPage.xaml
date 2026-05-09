@@ -90,6 +90,29 @@
                                     VerticalOptions="Center" />
                         </Grid>
 
+                        <!-- Exception Reporting -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <StackLayout Grid.Column="0">
+                                <Label Text="Exception Reporting" FontSize="16" />
+                                <Label Text="{Binding ExceptionReportingStatus}"
+                                       FontSize="12" TextColor="{StaticResource Gray600}" />
+                            </StackLayout>
+                            <Switch Grid.Column="1"
+                                    IsToggled="{Binding EnableExceptionReporting}"
+                                    IsEnabled="{Binding CanEnableExceptionReporting}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+
+                        <StackLayout>
+                            <Label Text="Exception Upload Endpoint" FontSize="16" />
+                            <Entry Text="{Binding ExceptionReportingEndpoint}"
+                                   Placeholder="Local queue only"
+                                   Keyboard="Url"
+                                   IsEnabled="{Binding EnableExceptionReporting}" />
+                            <Label Text="Leave blank to store sanitized reports locally until an approved ingestion endpoint is configured."
+                                   FontSize="12" TextColor="{StaticResource Gray600}" />
+                        </StackLayout>
+
                         <!-- Sync Interval -->
                         <StackLayout>
                             <Label Text="⏱️ Sync Interval" FontSize="16" />
