@@ -38,6 +38,8 @@ comment, etc.) in the Notes column.
 - [ ] NuGet publish release tag is signed and matches `mobile-dotnet-v*`
 - [ ] Mobile store prerequisites reviewed for app-store builds
       (`docs/guides/mobile-store-prereqs.md`)
+- [ ] Android store prerequisite mapping validation passes
+      (`scripts/validate-android-store-prereqs.sh`)
 - [ ] iOS store prerequisite mapping validation passes
       (`scripts/validate-ios-store-prereqs.sh`)
 - [ ] `trunk` branch protection confirmed: required reviews, required status
