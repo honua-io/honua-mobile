@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.Maui.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
@@ -48,6 +49,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     private readonly IConnectivityService _connectivityService;
     private readonly IFieldCollectionChangeUploader _changeUploader;
     private readonly IFieldCollectionChangePuller _changePuller;
+    private readonly IMobileExceptionReporter _exceptionReporter;
     private readonly ILogger<GeoPackageSyncService>? _logger;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private readonly CancellationTokenSource _pendingChangesCancellation = new();
@@ -79,13 +81,15 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,
         IFieldCollectionChangePuller? changePuller = null,
-        ILogger<GeoPackageSyncService>? logger = null)
+        ILogger<GeoPackageSyncService>? logger = null,
+        IMobileExceptionReporter? exceptionReporter = null)
     {
         _storage = storage;
         _authService = authService;
         _connectivityService = connectivityService;
         _changeUploader = changeUploader ?? new UnconfiguredFieldCollectionChangeUploader();
         _changePuller = changePuller ?? new UnconfiguredFieldCollectionChangePuller();
+        _exceptionReporter = exceptionReporter ?? new NoOpMobileExceptionReporter();
         _logger = logger;
 
         // Update pending changes count periodically
@@ -218,6 +222,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                     await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Failed, ex.Message);
                 }
 
+                await ReportSyncFailureAsync(ex, "sync.full", sessionId, session);
+
                 return new SyncResult
                 {
                     IsSuccess = false,
@@ -255,11 +261,13 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
 
         await _syncLock.WaitAsync();
+        string? sessionId = null;
+        StorageSyncSession? session = null;
         try
         {
             _syncCancellation = new CancellationTokenSource();
-            var sessionId = Guid.NewGuid().ToString();
-            var session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: true);
+            sessionId = Guid.NewGuid().ToString();
+            session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: true);
 
             IsSyncing = true;
             Status = SyncStatus.PullingChanges;
@@ -276,9 +284,20 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 ChangesPulled = session.ChangesPulled
             };
         }
+        catch (OperationCanceledException)
+        {
+            Status = SyncStatus.Cancelled;
+            return new SyncResult
+            {
+                IsSuccess = false,
+                ErrorMessage = "Pull was cancelled",
+                CompletedAt = DateTime.UtcNow
+            };
+        }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Field collection pull failed");
+            await ReportSyncFailureAsync(ex, "sync.pull", sessionId, session);
             return new SyncResult
             {
                 IsSuccess = false,
@@ -342,6 +361,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
 
         await _syncLock.WaitAsync();
+        string? sessionId = null;
+        StorageSyncSession? session = null;
         try
         {
             var pendingChanges = await _storage.GetPendingChangesAsync();
@@ -356,8 +377,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             }
 
             _syncCancellation = new CancellationTokenSource();
-            var sessionId = Guid.NewGuid().ToString();
-            var session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: false);
+            sessionId = Guid.NewGuid().ToString();
+            session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: false);
 
             IsSyncing = true;
             Status = SyncStatus.PushingChanges;
@@ -372,9 +393,20 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 ChangesPushed = session.ChangesPushed
             };
         }
+        catch (OperationCanceledException)
+        {
+            Status = SyncStatus.Cancelled;
+            return new SyncResult
+            {
+                IsSuccess = false,
+                ErrorMessage = "Push was cancelled",
+                CompletedAt = DateTime.UtcNow
+            };
+        }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Field collection push failed");
+            await ReportSyncFailureAsync(ex, "sync.push", sessionId, session);
             return new SyncResult
             {
                 IsSuccess = false,
@@ -529,6 +561,45 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             "{ConflictCount} sync conflict(s) require manual review",
             session.ConflictsDetected);
         return Task.CompletedTask;
+    }
+
+    private async Task ReportSyncFailureAsync(
+        Exception exception,
+        string operation,
+        string? sessionId,
+        StorageSyncSession? session)
+    {
+        var properties = new Dictionary<string, object?>
+        {
+            ["status"] = Status.ToString(),
+            ["pendingChangesCount"] = PendingChangesCount,
+        };
+
+        if (session is not null)
+        {
+            properties["sessionStatus"] = session.Status.ToString();
+            properties["changesPulled"] = session.ChangesPulled;
+            properties["changesPushed"] = session.ChangesPushed;
+            properties["conflictsDetected"] = session.ConflictsDetected;
+        }
+
+        try
+        {
+            await _exceptionReporter.ReportAsync(
+                exception,
+                new MobileExceptionReportContext
+                {
+                    Source = "FieldCollection.Sync",
+                    Operation = operation,
+                    CorrelationId = sessionId,
+                    Severity = MobileExceptionSeverity.Error,
+                    Properties = properties,
+                });
+        }
+        catch (Exception reportException)
+        {
+            _logger?.LogWarning(reportException, "Failed to report field collection sync exception");
+        }
     }
 
     private async Task<bool> ApplyServerChangeAsync(ServerChange serverChange, StorageSyncSession session)

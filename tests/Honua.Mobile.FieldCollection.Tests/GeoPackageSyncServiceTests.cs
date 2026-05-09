@@ -3,6 +3,7 @@ using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.Maui.Diagnostics;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
@@ -31,6 +32,50 @@ public sealed class GeoPackageSyncServiceTests
         Assert.False(result.IsSuccess);
         Assert.Contains("failed to upload", result.ErrorMessage);
         Assert.Single(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WhenHandledFailureOccurs_ReportsSyncExceptionContext()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new FixedResultUploader(false),
+            exceptionReporter: reporter);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        var report = Assert.Single(reporter.Reports);
+        var context = AssertSyncReportContext(report, "sync.push");
+        Assert.Equal("PushingChanges", context.Properties["status"]);
+        Assert.Equal("Active", context.Properties["sessionStatus"]);
+        Assert.Equal(0, context.Properties["changesPushed"]);
+        Assert.Equal(0, context.Properties["conflictsDetected"]);
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WhenCanceled_DoesNotReportSyncException()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new CancelingUploader(),
+            exceptionReporter: reporter);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Push was cancelled", result.ErrorMessage);
+        Assert.Empty(reporter.Reports);
     }
 
     [Fact]
@@ -69,6 +114,87 @@ public sealed class GeoPackageSyncServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(0, result.ChangesPulled);
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WhenHandledFailureOccurs_ReportsSyncExceptionContext()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var serverChange = new ServerChange
+        {
+            FeatureId = "asset-1",
+            LayerId = 1,
+            Operation = StorageChangeOperation.Update,
+            Version = 1,
+            Feature = CreateFeature("asset-1", version: 1, geometry: new UnsupportedGeometry())
+        };
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            puller: new FixedPuller([serverChange]),
+            exceptionReporter: reporter);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        var report = Assert.Single(reporter.Reports);
+        var context = AssertSyncReportContext(report, "sync.pull");
+        Assert.Equal("PullingChanges", context.Properties["status"]);
+        Assert.Equal("Active", context.Properties["sessionStatus"]);
+        Assert.Equal(0, context.Properties["changesPulled"]);
+        Assert.Equal(0, context.Properties["conflictsDetected"]);
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WhenCanceled_DoesNotReportSyncException()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            puller: new CancelingPuller(),
+            exceptionReporter: reporter);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Pull was cancelled", result.ErrorMessage);
+        Assert.Empty(reporter.Reports);
+    }
+
+    [Fact]
+    public async Task SyncAsync_WhenHandledFailureOccurs_ReportsFullSyncExceptionContext()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var serverChange = new ServerChange
+        {
+            FeatureId = "asset-1",
+            LayerId = 1,
+            Operation = StorageChangeOperation.Update,
+            Version = 1,
+            Feature = CreateFeature("asset-1", version: 1, geometry: new UnsupportedGeometry())
+        };
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            puller: new FixedPuller([serverChange]),
+            exceptionReporter: reporter);
+
+        var result = await sync.SyncAsync();
+
+        Assert.False(result.IsSuccess);
+        var report = Assert.Single(reporter.Reports);
+        var context = AssertSyncReportContext(report, "sync.full");
+        Assert.Equal("Error", context.Properties["status"]);
+        Assert.Equal("Failed", context.Properties["sessionStatus"]);
+        Assert.Equal(0, context.Properties["changesPulled"]);
+        Assert.Equal(0, context.Properties["changesPushed"]);
     }
 
     [Fact]
@@ -189,14 +315,29 @@ public sealed class GeoPackageSyncServiceTests
     private static GeoPackageSyncService CreateSyncService(
         GeoPackageStorageService storage,
         IFieldCollectionChangeUploader? uploader = null,
-        IFieldCollectionChangePuller? puller = null)
+        IFieldCollectionChangePuller? puller = null,
+        IMobileExceptionReporter? exceptionReporter = null)
     {
         return new GeoPackageSyncService(
             storage,
             new TestAuthenticationService(),
             new TestConnectivityService(),
             uploader ?? new FixedResultUploader(true),
-            puller ?? new FixedPuller([]));
+            puller ?? new FixedPuller([]),
+            exceptionReporter: exceptionReporter);
+    }
+
+    private static MobileExceptionReportContext AssertSyncReportContext(
+        ReportedException report,
+        string expectedOperation)
+    {
+        var context = Assert.IsType<MobileExceptionReportContext>(report.Context);
+        Assert.Equal("FieldCollection.Sync", context.Source);
+        Assert.Equal(expectedOperation, context.Operation);
+        Assert.Equal(MobileExceptionSeverity.Error, context.Severity);
+        Assert.False(string.IsNullOrWhiteSpace(context.CorrelationId));
+        Assert.True(context.Properties.ContainsKey("pendingChangesCount"));
+        return context;
     }
 
     private static Feature CreateFeature(
@@ -241,6 +382,16 @@ public sealed class GeoPackageSyncServiceTests
         }
     }
 
+    private sealed class CancelingUploader : IFieldCollectionChangeUploader
+    {
+        public Task<bool> UploadChangeAsync(
+            StorageChangeRecord change,
+            CancellationToken cancellationToken = default)
+        {
+            throw new OperationCanceledException("Push canceled.");
+        }
+    }
+
     private sealed class FixedPuller : IFieldCollectionChangePuller
     {
         private readonly IReadOnlyList<ServerChange> _changes;
@@ -267,6 +418,42 @@ public sealed class GeoPackageSyncServiceTests
             return Task.FromResult(0L);
         }
     }
+
+    private sealed class CancelingPuller : IFieldCollectionChangePuller
+    {
+        public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
+            long sinceGeneration,
+            CancellationToken cancellationToken = default)
+        {
+            throw new OperationCanceledException("Pull canceled.");
+        }
+
+        public Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(1L);
+        }
+
+        public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0L);
+        }
+    }
+
+    private sealed class RecordingExceptionReporter : IMobileExceptionReporter
+    {
+        public List<ReportedException> Reports { get; } = [];
+
+        public Task ReportAsync(
+            Exception exception,
+            MobileExceptionReportContext? context = null,
+            CancellationToken cancellationToken = default)
+        {
+            Reports.Add(new ReportedException(exception, context));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record ReportedException(Exception Exception, MobileExceptionReportContext? Context);
 
     private sealed class UnsupportedGeometry : Geometry
     {
