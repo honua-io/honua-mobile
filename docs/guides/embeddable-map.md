@@ -131,6 +131,24 @@ Set `parentOrigin` to constrain forwarded messages to the host application
 origin. If a `parent-origin` query value is malformed, the iframe disables
 parent event forwarding instead of falling back to `*`.
 
+Browser hosts can consume those forwarded events through the typed iframe helper.
+The `origin` filter is the iframe shell origin, while `parentOrigin` in the
+generated snippet is the embedding application origin used by `postMessage`.
+
+```js
+import { addHonuaMapIframeMessageListener } from '@honua-io/embed/iframe';
+
+const iframe = document.querySelector('#asset-map-frame');
+const disconnect = addHonuaMapIframeMessageListener((message) => {
+  if (message.type === 'honua-map-identify') {
+    console.log(message.detail);
+  }
+}, {
+  origin: 'https://cdn.honua.dev',
+  source: iframe.contentWindow,
+});
+```
+
 ## Integration Events
 
 ```js

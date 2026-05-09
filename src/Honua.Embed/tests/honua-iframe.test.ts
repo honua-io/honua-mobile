@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  addHonuaMapIframeMessageListener,
   hydrateHonuaMapIframe,
+  isHonuaMapIframeMessage,
   parseHonuaMapIframeConfig,
   type HonuaMapIframeMessage,
 } from '../src/iframe';
@@ -137,5 +139,74 @@ describe('honua map iframe fallback', () => {
 
     expect(runtime.config.parentOrigin).toBeNull();
     expect(parent.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('identifies iframe fallback messages by source, version, and forwarded event type', () => {
+    expect(isHonuaMapIframeMessage({
+      source: 'honua-map-iframe',
+      version: 1,
+      type: 'honua-map-search',
+      detail: { query: 'hydrants' },
+    })).toBe(true);
+
+    expect(isHonuaMapIframeMessage({
+      source: 'other-frame',
+      version: 1,
+      type: 'honua-map-search',
+      detail: {},
+    })).toBe(false);
+
+    expect(isHonuaMapIframeMessage({
+      source: 'honua-map-iframe',
+      version: 1,
+      type: 'unscoped-event',
+      detail: {},
+    })).toBe(false);
+  });
+
+  it('subscribes to iframe fallback messages with origin and source filtering', () => {
+    const sourceFrame = document.createElement('iframe');
+    document.body.append(sourceFrame);
+    const source = sourceFrame.contentWindow;
+    const listener = vi.fn<(message: HonuaMapIframeMessage, event: MessageEvent) => void>();
+    const message: HonuaMapIframeMessage = {
+      source: 'honua-map-iframe',
+      version: 1,
+      type: 'honua-map-identify',
+      detail: { x: 12, y: 34 },
+    };
+    const disconnect = addHonuaMapIframeMessageListener(listener, {
+      origin: 'https://portal.example.test/admin/embed',
+      source,
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://other.example.test',
+      source,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source: window,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source,
+    }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe(message);
+    expect(listener.mock.calls[0]?.[1].origin).toBe('https://portal.example.test');
+
+    disconnect();
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source,
+    }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });

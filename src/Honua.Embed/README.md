@@ -287,6 +287,23 @@ Set `parentOrigin` when generating snippets so forwarded messages are scoped to
 the embedding application origin. If a `parent-origin` query value is malformed,
 the iframe disables parent event forwarding instead of falling back to `*`.
 
+Hosts can validate and subscribe to forwarded iframe events from the browser
+entrypoint. The `origin` filter is the iframe shell origin.
+
+```js
+import { addHonuaMapIframeMessageListener } from '@honua-io/embed/iframe';
+
+const iframe = document.querySelector('#asset-map-frame');
+const disconnect = addHonuaMapIframeMessageListener((message) => {
+  if (message.type === 'honua-map-search') {
+    console.log(message.detail);
+  }
+}, {
+  origin: 'https://cdn.honua.dev',
+  source: iframe.contentWindow,
+});
+```
+
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 

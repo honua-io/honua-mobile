@@ -13,12 +13,23 @@ export interface HonuaMapIframeConfig {
 export interface HonuaMapIframeMessage {
   source: 'honua-map-iframe';
   version: 1;
-  type: string;
+  type: HonuaMapIframeEventType;
   detail: unknown;
 }
 
+export type HonuaMapIframeMessageListener = (
+  message: HonuaMapIframeMessage,
+  event: MessageEvent<HonuaMapIframeMessage>,
+) => void;
+
 export interface HonuaMapIframeMessageTarget {
   postMessage(message: HonuaMapIframeMessage, targetOrigin: string): void;
+}
+
+export interface HonuaMapIframeMessageListenerOptions {
+  window?: Window;
+  origin?: string | readonly string[] | null;
+  source?: MessageEventSource | null;
 }
 
 export interface HonuaMapIframeHydrateOptions {
@@ -40,6 +51,10 @@ const FORWARDED_EVENTS = [
   'honua-map-search',
   'honua-map-identify',
 ] as const;
+
+export type HonuaMapIframeEventType = (typeof FORWARDED_EVENTS)[number];
+
+const FORWARDED_EVENT_SET = new Set<string>(FORWARDED_EVENTS);
 
 const THEME_PARAMETERS: Array<[keyof HonuaMapThemeOptions, string]> = [
   ['accent', '--honua-map-accent'],
@@ -111,6 +126,45 @@ export function hydrateHonuaMapIframe(
   return { element, config, disconnect };
 }
 
+export function isHonuaMapIframeMessage(value: unknown): value is HonuaMapIframeMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<HonuaMapIframeMessage>;
+  return candidate.source === 'honua-map-iframe'
+    && candidate.version === 1
+    && typeof candidate.type === 'string'
+    && FORWARDED_EVENT_SET.has(candidate.type);
+}
+
+export function addHonuaMapIframeMessageListener(
+  listener: HonuaMapIframeMessageListener,
+  options: HonuaMapIframeMessageListenerOptions = {},
+): () => void {
+  const targetWindow = options.window ?? defaultWindow();
+  const expectedOrigins = normalizeExpectedOrigins(options.origin);
+  const expectedSource = options.source;
+  const messageListener = (event: MessageEvent) => {
+    if (expectedSource !== undefined && event.source !== expectedSource) {
+      return;
+    }
+
+    if (!originMatches(event.origin, expectedOrigins)) {
+      return;
+    }
+
+    if (!isHonuaMapIframeMessage(event.data)) {
+      return;
+    }
+
+    listener(event.data, event as MessageEvent<HonuaMapIframeMessage>);
+  };
+
+  targetWindow.addEventListener('message', messageListener);
+  return () => targetWindow.removeEventListener('message', messageListener);
+}
+
 function bridgeMapEvents(
   element: HonuaMapElement,
   parent: HonuaMapIframeMessageTarget,
@@ -135,6 +189,39 @@ function bridgeMapEvents(
       remove();
     }
   };
+}
+
+function defaultWindow(): Window {
+  if (typeof window === 'undefined') {
+    throw new Error('Honua map iframe message listeners require a browser Window.');
+  }
+
+  return window;
+}
+
+function normalizeExpectedOrigins(origin: string | readonly string[] | null | undefined): Set<string> | null {
+  if (origin === undefined || origin === null) {
+    return null;
+  }
+
+  const values = Array.isArray(origin) ? origin : [origin];
+  const normalized = new Set<string>();
+  for (const value of values) {
+    const parsed = parseParentOrigin(value);
+    if (parsed) {
+      normalized.add(parsed);
+    }
+  }
+
+  return normalized;
+}
+
+function originMatches(origin: string, expectedOrigins: Set<string> | null): boolean {
+  if (expectedOrigins === null || expectedOrigins.has('*')) {
+    return true;
+  }
+
+  return expectedOrigins.has(origin);
 }
 
 function applyFrameSizing(element: HTMLElement): void {
