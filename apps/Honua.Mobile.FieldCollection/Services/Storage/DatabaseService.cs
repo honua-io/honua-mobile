@@ -1,5 +1,6 @@
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Honua.Mobile.Maui.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.FieldCollection.Services.Storage;
@@ -79,7 +80,8 @@ public class DatabaseService : IDisposable
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,
         IFieldCollectionChangePuller? changePuller = null,
-        ILogger<GeoPackageSyncService>? logger = null)
+        ILogger<GeoPackageSyncService>? logger = null,
+        IMobileExceptionReporter? exceptionReporter = null)
     {
         lock (_serviceLock)
         {
@@ -92,7 +94,8 @@ public class DatabaseService : IDisposable
                     connectivityService,
                     changeUploader,
                     changePuller,
-                    logger);
+                    logger,
+                    exceptionReporter);
             }
 
             return _syncService;

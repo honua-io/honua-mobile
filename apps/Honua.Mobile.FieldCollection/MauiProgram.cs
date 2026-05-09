@@ -62,7 +62,12 @@ public static class MauiProgram
             var authService = provider.GetRequiredService<IAuthenticationService>();
             var connectivityService = provider.GetRequiredService<IConnectivityService>();
             var logger = provider.GetRequiredService<ILogger<GeoPackageSyncService>>();
-            return databaseService.GetSyncService(authService, connectivityService, logger: logger);
+            var exceptionReporter = provider.GetRequiredService<IMobileExceptionReporter>();
+            return databaseService.GetSyncService(
+                authService,
+                connectivityService,
+                logger: logger,
+                exceptionReporter: exceptionReporter);
         });
 
         // Core services
