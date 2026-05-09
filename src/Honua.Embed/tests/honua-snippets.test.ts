@@ -319,7 +319,9 @@ describe('honua map snippets', () => {
     });
 
     expect(snippet).toContain('export function CityAssetMap()');
-    expect(snippet).toContain('import \'@honua-io/embed\';');
+    expect(snippet).toContain('import { useEffect } from \'react\';');
+    expect(snippet).toContain('useEffect(() => {');
+    expect(snippet).toContain('await import(\'@honua-io/embed\');');
     expect(snippet).toContain('<honua-map');
     expect(snippet).toContain('service-url="https://services.example.test/FeatureServer?name=&quot;Assets&quot;&amp;team=&lt;GIS&gt;"');
     expect(snippet).toContain('interactive');
@@ -347,7 +349,7 @@ describe('honua map snippets', () => {
       selector: 'city-angular-map-host',
     });
 
-    expect(reactSnippet).toContain('import { defineHonuaMapElement } from \'@honua-io/embed\';');
+    expect(reactSnippet).toContain('const { defineHonuaMapElement } = await import(\'@honua-io/embed\');');
     expect(reactSnippet).toContain('defineHonuaMapElement(\'city-map\');');
     expect(reactSnippet).toContain('<city-map');
     expect(vueSnippet).toContain('defineHonuaMapElement(\'city-vue-map\');');
@@ -365,6 +367,15 @@ describe('honua map snippets', () => {
 
     expect(snippet).not.toContain('<script');
     expect(snippet).not.toContain('@honua-io/embed');
+  });
+
+  it('rejects reserved JavaScript words for generated component names', () => {
+    expect(() => createHonuaMapReactSnippet({}, {
+      componentName: 'default',
+    })).toThrow('Invalid JavaScript identifier: default');
+    expect(() => createHonuaMapAngularSnippet({}, {
+      componentName: 'class',
+    })).toThrow('Invalid JavaScript identifier: class');
   });
 
   it('generates a React iframe fallback component with serialized iframe options', () => {
@@ -408,7 +419,9 @@ describe('honua map snippets', () => {
     expect(elementSnippet).toContain('<template>\n  <honua-map');
     expect(elementSnippet).toContain('    layer-ids="assets"');
     expect(elementSnippet).toContain('    identify');
-    expect(elementSnippet).toContain('<script setup lang="ts">\nimport \'@honua-io/embed\';\n</script>');
+    expect(elementSnippet).toContain('<script setup lang="ts">\nimport { onMounted } from \'vue\';');
+    expect(elementSnippet).toContain('onMounted(() => {');
+    expect(elementSnippet).toContain('await import(\'@honua-io/embed\');');
     expect(elementSnippet).not.toContain('secret-key');
     expect(iframeSnippet).toContain('<template>\n  <iframe');
     expect(iframeSnippet).toContain('    src="/embeds/map.html?basemap=satellite"');
@@ -432,14 +445,15 @@ describe('honua map snippets', () => {
       iframeUrl: '/embeds/map.html',
     });
 
-    expect(elementSnippet).toContain('import { Component, CUSTOM_ELEMENTS_SCHEMA } from \'@angular/core\';');
-    expect(elementSnippet).toContain('import \'@honua-io/embed\';');
+    expect(elementSnippet).toContain('import { Component, CUSTOM_ELEMENTS_SCHEMA, AfterViewInit } from \'@angular/core\';');
+    expect(elementSnippet).toContain('export class CityAssetMapComponent implements AfterViewInit');
+    expect(elementSnippet).toContain('ngAfterViewInit(): void');
+    expect(elementSnippet).toContain('await import(\'@honua-io/embed\');');
     expect(elementSnippet).toContain('selector: \'city-asset-map\'');
     expect(elementSnippet).toContain('schemas: [CUSTOM_ELEMENTS_SCHEMA]');
     expect(elementSnippet).toContain('<honua-map');
     expect(elementSnippet).toContain('service-url="https://services.example.test/FeatureServer"');
     expect(elementSnippet).toContain('search');
-    expect(elementSnippet).toContain('export class CityAssetMapComponent {}');
     expect(elementSnippet).not.toContain('secret-key');
     expect(iframeSnippet).toContain('selector: \'city-asset-map-frame\'');
     expect(iframeSnippet).toContain('<iframe');
