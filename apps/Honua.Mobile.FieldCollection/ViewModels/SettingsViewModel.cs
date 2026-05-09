@@ -2,6 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Configuration;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.Maui.Diagnostics;
 using Microsoft.Maui.Storage;
 using FieldDeviceInfo = Honua.Mobile.FieldCollection.Models.DeviceInfo;
 
@@ -45,6 +47,18 @@ public partial class SettingsViewModel : BaseViewModel
 
     [ObservableProperty]
     private bool enableDeveloperMode = false;
+
+    [ObservableProperty]
+    private bool enableExceptionReporting;
+
+    [ObservableProperty]
+    private bool canEnableExceptionReporting = true;
+
+    [ObservableProperty]
+    private string exceptionReportingEndpoint = string.Empty;
+
+    [ObservableProperty]
+    private string exceptionReportingStatus = "Disabled";
 
     [ObservableProperty]
     private int syncIntervalMinutes = 15;
@@ -148,6 +162,16 @@ public partial class SettingsViewModel : BaseViewModel
             EnableBackgroundSync = await _settingsService.GetSettingAsync("background_sync", true);
             EnablePushNotifications = await _settingsService.GetSettingAsync("push_notifications", true);
             EnableDeveloperMode = await _settingsService.GetSettingAsync("developer_mode", false);
+            CanEnableExceptionReporting = Preferences.Default.Get(
+                FieldCollectionExceptionReporting.EnvironmentEnabledPreferenceKey,
+                true);
+            EnableExceptionReporting = CanEnableExceptionReporting &&
+                Preferences.Default.Get(FieldCollectionExceptionReporting.TesterConsentPreferenceKey, false) &&
+                ReadExceptionReportingMode() != MobileExceptionReportingMode.Disabled;
+            ExceptionReportingEndpoint = Preferences.Default.Get(
+                FieldCollectionExceptionReporting.EndpointPreferenceKey,
+                string.Empty);
+            UpdateExceptionReportingStatus();
             SyncIntervalMinutes = await _settingsService.GetSettingAsync("sync_interval_minutes", 15);
             MaxOfflineStorageMb = await _settingsService.GetSettingAsync("max_offline_storage_mb", 500);
         });
@@ -162,11 +186,94 @@ public partial class SettingsViewModel : BaseViewModel
             await _settingsService.SetSettingAsync("background_sync", EnableBackgroundSync);
             await _settingsService.SetSettingAsync("push_notifications", EnablePushNotifications);
             await _settingsService.SetSettingAsync("developer_mode", EnableDeveloperMode);
+            SaveExceptionReportingPreferences();
             await _settingsService.SetSettingAsync("sync_interval_minutes", SyncIntervalMinutes);
             await _settingsService.SetSettingAsync("max_offline_storage_mb", MaxOfflineStorageMb);
 
-            await ShowMessage("Settings Saved", "Your settings have been saved successfully.");
+            await ShowMessage(
+                "Settings Saved",
+                "Your settings have been saved. Exception reporting changes take effect after app restart.");
         });
+    }
+
+    partial void OnEnableExceptionReportingChanged(bool value)
+    {
+        UpdateExceptionReportingStatus();
+    }
+
+    partial void OnCanEnableExceptionReportingChanged(bool value)
+    {
+        if (!value)
+        {
+            EnableExceptionReporting = false;
+        }
+
+        UpdateExceptionReportingStatus();
+    }
+
+    partial void OnExceptionReportingEndpointChanged(string value)
+    {
+        UpdateExceptionReportingStatus();
+    }
+
+    private MobileExceptionReportingMode ReadExceptionReportingMode()
+    {
+        var value = Preferences.Default.Get(
+            FieldCollectionExceptionReporting.ModePreferenceKey,
+            MobileExceptionReportingMode.Disabled.ToString());
+        return string.Equals(value, "Server", StringComparison.OrdinalIgnoreCase)
+            ? MobileExceptionReportingMode.ServerUpload
+            : Enum.TryParse<MobileExceptionReportingMode>(value, ignoreCase: true, out var mode)
+                ? mode
+                : MobileExceptionReportingMode.Disabled;
+    }
+
+    private void SaveExceptionReportingPreferences()
+    {
+        var endpoint = (ExceptionReportingEndpoint ?? string.Empty).Trim();
+        var shouldEnable = EnableExceptionReporting && CanEnableExceptionReporting;
+        var mode = shouldEnable
+            ? string.IsNullOrWhiteSpace(endpoint)
+                ? MobileExceptionReportingMode.LocalOnly
+                : MobileExceptionReportingMode.ServerUpload
+            : MobileExceptionReportingMode.Disabled;
+
+        Preferences.Default.Set(
+            FieldCollectionExceptionReporting.TesterConsentPreferenceKey,
+            shouldEnable);
+        Preferences.Default.Set(
+            FieldCollectionExceptionReporting.ModePreferenceKey,
+            mode.ToString());
+
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            Preferences.Default.Remove(FieldCollectionExceptionReporting.EndpointPreferenceKey);
+        }
+        else
+        {
+            Preferences.Default.Set(FieldCollectionExceptionReporting.EndpointPreferenceKey, endpoint);
+        }
+
+        UpdateExceptionReportingStatus();
+    }
+
+    private void UpdateExceptionReportingStatus()
+    {
+        if (!CanEnableExceptionReporting)
+        {
+            ExceptionReportingStatus = "Disabled by environment";
+            return;
+        }
+
+        if (!EnableExceptionReporting)
+        {
+            ExceptionReportingStatus = "Disabled";
+            return;
+        }
+
+        ExceptionReportingStatus = string.IsNullOrWhiteSpace(ExceptionReportingEndpoint)
+            ? "Local queue only"
+            : "Uploads after local queue";
     }
 
     [RelayCommand]

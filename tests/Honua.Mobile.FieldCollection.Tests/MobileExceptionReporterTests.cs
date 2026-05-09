@@ -57,6 +57,62 @@ public sealed class MobileExceptionReporterTests
     }
 
     [Fact]
+    public void CreateOptions_UsesLocalOnlyWhenConsentAllowsReportingWithoutEndpoint()
+    {
+        var options = FieldCollectionExceptionReporting.CreateOptions(
+            "LocalOnly",
+            string.Empty,
+            string.Empty,
+            CreateBuildConfiguration(),
+            "io.honua.mobile.fieldcollection",
+            "Android",
+            "15",
+            "Phone",
+            hasTesterConsent: true,
+            environmentAllowsReporting: true);
+
+        Assert.Equal(MobileExceptionReportingMode.LocalOnly, options.Mode);
+        Assert.Null(options.UploadEndpoint);
+    }
+
+    [Fact]
+    public void CreateOptions_DisablesReportingWhenTesterConsentIsMissing()
+    {
+        var options = FieldCollectionExceptionReporting.CreateOptions(
+            "ServerUpload",
+            "https://api.honua.test/mobile/exception-reports",
+            string.Empty,
+            CreateBuildConfiguration(),
+            "io.honua.mobile.fieldcollection",
+            "Android",
+            "15",
+            "Phone",
+            hasTesterConsent: false,
+            environmentAllowsReporting: true);
+
+        Assert.Equal(MobileExceptionReportingMode.Disabled, options.Mode);
+        Assert.Equal(new Uri("https://api.honua.test/mobile/exception-reports"), options.UploadEndpoint);
+    }
+
+    [Fact]
+    public void CreateOptions_DisablesReportingWhenEnvironmentKillSwitchIsOff()
+    {
+        var options = FieldCollectionExceptionReporting.CreateOptions(
+            "LocalOnly",
+            string.Empty,
+            string.Empty,
+            CreateBuildConfiguration(),
+            "io.honua.mobile.fieldcollection",
+            "Android",
+            "15",
+            "Phone",
+            hasTesterConsent: true,
+            environmentAllowsReporting: false);
+
+        Assert.Equal(MobileExceptionReportingMode.Disabled, options.Mode);
+    }
+
+    [Fact]
     public void AuthHeaderCustomizer_DoesNotForwardApiKeyToCrossOriginEndpoint()
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://collector.example.test/mobile/exceptions");
