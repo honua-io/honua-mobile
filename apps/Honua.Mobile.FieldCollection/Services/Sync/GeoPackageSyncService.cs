@@ -284,19 +284,18 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 ChangesPulled = session.ChangesPulled
             };
         }
+        catch (OperationCanceledException)
+        {
+            Status = SyncStatus.Cancelled;
+            return new SyncResult
+            {
+                IsSuccess = false,
+                ErrorMessage = "Pull was cancelled",
+                CompletedAt = DateTime.UtcNow
+            };
+        }
         catch (Exception ex)
         {
-            if (ex is OperationCanceledException)
-            {
-                Status = SyncStatus.Cancelled;
-                return new SyncResult
-                {
-                    IsSuccess = false,
-                    ErrorMessage = "Pull was cancelled",
-                    CompletedAt = DateTime.UtcNow
-                };
-            }
-
             _logger?.LogError(ex, "Field collection pull failed");
             await ReportSyncFailureAsync(ex, "sync.pull", sessionId, session);
             return new SyncResult
@@ -394,19 +393,18 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 ChangesPushed = session.ChangesPushed
             };
         }
+        catch (OperationCanceledException)
+        {
+            Status = SyncStatus.Cancelled;
+            return new SyncResult
+            {
+                IsSuccess = false,
+                ErrorMessage = "Push was cancelled",
+                CompletedAt = DateTime.UtcNow
+            };
+        }
         catch (Exception ex)
         {
-            if (ex is OperationCanceledException)
-            {
-                Status = SyncStatus.Cancelled;
-                return new SyncResult
-                {
-                    IsSuccess = false,
-                    ErrorMessage = "Push was cancelled",
-                    CompletedAt = DateTime.UtcNow
-                };
-            }
-
             _logger?.LogError(ex, "Field collection push failed");
             await ReportSyncFailureAsync(ex, "sync.push", sessionId, session);
             return new SyncResult
