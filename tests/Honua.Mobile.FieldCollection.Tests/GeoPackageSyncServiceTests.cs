@@ -59,6 +59,26 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PushChangesAsync_WhenCanceled_DoesNotReportSyncException()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new CancelingUploader(),
+            exceptionReporter: reporter);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Push was cancelled", result.ErrorMessage);
+        Assert.Empty(reporter.Reports);
+    }
+
+    [Fact]
     public async Task PushChangesAsync_WhenUploaderReturnsTrue_MarksChangeSynced()
     {
         var databasePath = CreateDatabasePath();
@@ -125,6 +145,25 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Equal("Active", context.Properties["sessionStatus"]);
         Assert.Equal(0, context.Properties["changesPulled"]);
         Assert.Equal(0, context.Properties["conflictsDetected"]);
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WhenCanceled_DoesNotReportSyncException()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var reporter = new RecordingExceptionReporter();
+        using var sync = CreateSyncService(
+            storage,
+            puller: new CancelingPuller(),
+            exceptionReporter: reporter);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Pull was cancelled", result.ErrorMessage);
+        Assert.Empty(reporter.Reports);
     }
 
     [Fact]
@@ -343,6 +382,16 @@ public sealed class GeoPackageSyncServiceTests
         }
     }
 
+    private sealed class CancelingUploader : IFieldCollectionChangeUploader
+    {
+        public Task<bool> UploadChangeAsync(
+            StorageChangeRecord change,
+            CancellationToken cancellationToken = default)
+        {
+            throw new OperationCanceledException("Push canceled.");
+        }
+    }
+
     private sealed class FixedPuller : IFieldCollectionChangePuller
     {
         private readonly IReadOnlyList<ServerChange> _changes;
@@ -357,6 +406,26 @@ public sealed class GeoPackageSyncServiceTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_changes);
+        }
+
+        public Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(1L);
+        }
+
+        public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0L);
+        }
+    }
+
+    private sealed class CancelingPuller : IFieldCollectionChangePuller
+    {
+        public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
+            long sinceGeneration,
+            CancellationToken cancellationToken = default)
+        {
+            throw new OperationCanceledException("Pull canceled.");
         }
 
         public Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default)
