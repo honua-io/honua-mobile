@@ -231,19 +231,20 @@ public partial class SettingsViewModel : BaseViewModel
     private void SaveExceptionReportingPreferences()
     {
         var endpoint = (ExceptionReportingEndpoint ?? string.Empty).Trim();
-        var shouldEnable = EnableExceptionReporting && CanEnableExceptionReporting;
-        var mode = shouldEnable
-            ? string.IsNullOrWhiteSpace(endpoint)
-                ? MobileExceptionReportingMode.LocalOnly
-                : MobileExceptionReportingMode.ServerUpload
-            : MobileExceptionReportingMode.Disabled;
+        var preferenceUpdate = FieldCollectionExceptionReporting.CreatePreferenceUpdate(
+            EnableExceptionReporting,
+            CanEnableExceptionReporting,
+            endpoint);
 
-        Preferences.Default.Set(
-            FieldCollectionExceptionReporting.TesterConsentPreferenceKey,
-            shouldEnable);
-        Preferences.Default.Set(
-            FieldCollectionExceptionReporting.ModePreferenceKey,
-            mode.ToString());
+        if (preferenceUpdate.ShouldWriteModeAndConsent)
+        {
+            Preferences.Default.Set(
+                FieldCollectionExceptionReporting.TesterConsentPreferenceKey,
+                preferenceUpdate.TesterConsent);
+            Preferences.Default.Set(
+                FieldCollectionExceptionReporting.ModePreferenceKey,
+                preferenceUpdate.Mode.ToString());
+        }
 
         if (string.IsNullOrWhiteSpace(endpoint))
         {

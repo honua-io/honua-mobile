@@ -113,6 +113,43 @@ public sealed class MobileExceptionReporterTests
     }
 
     [Fact]
+    public void CreatePreferenceUpdate_UsesLocalOnlyWhenConsentAllowsReportingWithoutEndpoint()
+    {
+        var update = FieldCollectionExceptionReporting.CreatePreferenceUpdate(
+            enableExceptionReporting: true,
+            environmentAllowsReporting: true,
+            endpointValue: string.Empty);
+
+        Assert.True(update.ShouldWriteModeAndConsent);
+        Assert.True(update.TesterConsent);
+        Assert.Equal(MobileExceptionReportingMode.LocalOnly, update.Mode);
+    }
+
+    [Fact]
+    public void CreatePreferenceUpdate_UsesServerUploadWhenEndpointIsConfigured()
+    {
+        var update = FieldCollectionExceptionReporting.CreatePreferenceUpdate(
+            enableExceptionReporting: true,
+            environmentAllowsReporting: true,
+            endpointValue: "https://api.honua.test/mobile/exception-reports");
+
+        Assert.True(update.ShouldWriteModeAndConsent);
+        Assert.True(update.TesterConsent);
+        Assert.Equal(MobileExceptionReportingMode.ServerUpload, update.Mode);
+    }
+
+    [Fact]
+    public void CreatePreferenceUpdate_PreservesConsentWhenEnvironmentKillSwitchIsOff()
+    {
+        var update = FieldCollectionExceptionReporting.CreatePreferenceUpdate(
+            enableExceptionReporting: false,
+            environmentAllowsReporting: false,
+            endpointValue: "https://api.honua.test/mobile/exception-reports");
+
+        Assert.False(update.ShouldWriteModeAndConsent);
+    }
+
+    [Fact]
     public void AuthHeaderCustomizer_DoesNotForwardApiKeyToCrossOriginEndpoint()
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://collector.example.test/mobile/exceptions");

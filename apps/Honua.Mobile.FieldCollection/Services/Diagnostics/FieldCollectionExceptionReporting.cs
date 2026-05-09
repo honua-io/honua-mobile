@@ -14,6 +14,11 @@ public static class FieldCollectionExceptionReporting
     internal const string TesterConsentPreferenceKey = "honua_exception_reporting_tester_consent";
     internal const string EnvironmentEnabledPreferenceKey = "honua_exception_reporting_environment_enabled";
 
+    internal readonly record struct PreferenceUpdate(
+        bool ShouldWriteModeAndConsent,
+        bool TesterConsent,
+        MobileExceptionReportingMode Mode);
+
     public static MobileExceptionReportingOptions FromPreferences(MobileBuildConfiguration buildConfiguration)
     {
         ArgumentNullException.ThrowIfNull(buildConfiguration);
@@ -29,6 +34,25 @@ public static class FieldCollectionExceptionReporting
             SafeDeviceClass(),
             Preferences.Default.Get(TesterConsentPreferenceKey, false),
             Preferences.Default.Get(EnvironmentEnabledPreferenceKey, true));
+    }
+
+    internal static PreferenceUpdate CreatePreferenceUpdate(
+        bool enableExceptionReporting,
+        bool environmentAllowsReporting,
+        string? endpointValue)
+    {
+        if (!environmentAllowsReporting)
+        {
+            return new PreferenceUpdate(false, false, MobileExceptionReportingMode.Disabled);
+        }
+
+        var mode = enableExceptionReporting
+            ? string.IsNullOrWhiteSpace(endpointValue)
+                ? MobileExceptionReportingMode.LocalOnly
+                : MobileExceptionReportingMode.ServerUpload
+            : MobileExceptionReportingMode.Disabled;
+
+        return new PreferenceUpdate(true, enableExceptionReporting, mode);
     }
 
     internal static MobileExceptionReportingOptions CreateOptions(
