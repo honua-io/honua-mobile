@@ -101,6 +101,9 @@ export interface HonuaMapIframeAttributes {
   style?: string | null;
 }
 
+export interface HonuaSceneIframeAttributes extends HonuaMapIframeAttributes {
+}
+
 export interface HonuaMapIframeSnippetOptions {
   iframeUrl?: string;
   includeCredentials?: boolean;
@@ -113,7 +116,7 @@ export interface HonuaSceneIframeSnippetOptions {
   iframeUrl?: string;
   includeCredentials?: boolean;
   parentOrigin?: string | null;
-  iframe?: HonuaMapIframeAttributes;
+  iframe?: HonuaSceneIframeAttributes;
   indent?: string;
 }
 
@@ -121,14 +124,28 @@ export interface HonuaMapReactSnippetOptions extends HonuaMapSnippetOptions {
   componentName?: string;
 }
 
+export interface HonuaSceneReactSnippetOptions extends HonuaSceneSnippetOptions {
+  componentName?: string;
+}
+
 export interface HonuaMapReactIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+  componentName?: string;
+}
+
+export interface HonuaSceneReactIframeSnippetOptions extends HonuaSceneIframeSnippetOptions {
   componentName?: string;
 }
 
 export interface HonuaMapVueSnippetOptions extends HonuaMapSnippetOptions {
 }
 
+export interface HonuaSceneVueSnippetOptions extends HonuaSceneSnippetOptions {
+}
+
 export interface HonuaMapVueIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+}
+
+export interface HonuaSceneVueIframeSnippetOptions extends HonuaSceneIframeSnippetOptions {
 }
 
 export interface HonuaMapAngularSnippetOptions extends HonuaMapSnippetOptions {
@@ -136,7 +153,17 @@ export interface HonuaMapAngularSnippetOptions extends HonuaMapSnippetOptions {
   selector?: string;
 }
 
+export interface HonuaSceneAngularSnippetOptions extends HonuaSceneSnippetOptions {
+  componentName?: string;
+  selector?: string;
+}
+
 export interface HonuaMapAngularIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+  componentName?: string;
+  selector?: string;
+}
+
+export interface HonuaSceneAngularIframeSnippetOptions extends HonuaSceneIframeSnippetOptions {
   componentName?: string;
   selector?: string;
 }
@@ -562,6 +589,160 @@ export function createHonuaMapEmbedBuilderSnippet(
   }
 }
 
+export function createHonuaSceneReactSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneReactSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaSceneEmbed';
+  assertJsIdentifier(componentName);
+  const elementName = snippetOptions.elementName ?? 'honua-scene';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createSceneReactRegistrationSnippet(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+    indent,
+  );
+  const element = createSceneReactElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent: `${indent}${indent}`,
+  });
+
+  return [
+    ...registration.imports,
+    ...(registration.imports.length > 0 ? [''] : []),
+    `export function ${componentName}() {`,
+    ...registration.effectLines,
+    `${indent}return (`,
+    element,
+    `${indent});`,
+    '}',
+    ...(registration.helpers.length > 0 ? ['', ...registration.helpers] : []),
+  ].join('\n');
+}
+
+export function createHonuaSceneReactIframeSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneReactIframeSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaSceneEmbed';
+  assertJsIdentifier(componentName);
+  const indent = snippetOptions.indent ?? '  ';
+  const element = createSceneReactIframeMarkup(options, {
+    ...snippetOptions,
+    indent: `${indent}${indent}`,
+  });
+
+  return [
+    `export function ${componentName}() {`,
+    `${indent}return (`,
+    element,
+    `${indent});`,
+    '}',
+  ].join('\n');
+}
+
+export function createHonuaSceneVueSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneVueSnippetOptions = {},
+): string {
+  const elementName = snippetOptions.elementName ?? 'honua-scene';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createSceneVueRegistrationLines(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+  );
+  const element = createSceneElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  return [
+    '<template>',
+    indentBlock(element, indent),
+    '</template>',
+    ...(registration.length > 0
+      ? [
+        '',
+        '<script setup lang="ts">',
+        ...registration,
+        '</script>',
+      ]
+      : []),
+  ].join('\n');
+}
+
+export function createHonuaSceneVueIframeSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneVueIframeSnippetOptions = {},
+): string {
+  const indent = snippetOptions.indent ?? '  ';
+  const iframe = createHonuaSceneIframeSnippet(options, {
+    ...snippetOptions,
+    indent,
+  });
+
+  return [
+    '<template>',
+    indentBlock(iframe, indent),
+    '</template>',
+  ].join('\n');
+}
+
+export function createHonuaSceneAngularSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneAngularSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaSceneEmbedComponent';
+  assertJsIdentifier(componentName);
+  const selector = snippetOptions.selector ?? 'honua-scene-embed';
+  assertCustomElementName(selector);
+  const elementName = snippetOptions.elementName ?? 'honua-scene';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createSceneAngularRegistrationSnippet(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+    indent,
+  );
+  const element = createSceneElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  return createAngularComponentSnippet(componentName, selector, registration, element, indent);
+}
+
+export function createHonuaSceneAngularIframeSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneAngularIframeSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaSceneEmbedComponent';
+  assertJsIdentifier(componentName);
+  const selector = snippetOptions.selector ?? 'honua-scene-embed';
+  assertCustomElementName(selector);
+  const indent = snippetOptions.indent ?? '  ';
+  const iframe = createHonuaSceneIframeSnippet(options, {
+    ...snippetOptions,
+    indent,
+  });
+
+  return createAngularComponentSnippet(
+    componentName,
+    selector,
+    emptyAngularRegistrationSnippet(),
+    iframe,
+    indent,
+  );
+}
+
 function createCdnScriptMarkup(
   config: {
     scriptUrl: string;
@@ -748,6 +929,73 @@ function createAngularRegistrationSnippet(
   };
 }
 
+function createSceneReactRegistrationSnippet(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+  indent: string,
+): ReactRegistrationSnippet {
+  if (!includeScript) {
+    return { imports: [], effectLines: [], helpers: [] };
+  }
+
+  return {
+    imports: ['import { useEffect } from \'react\';'],
+    effectLines: [
+      `${indent}useEffect(() => {`,
+      `${indent}${indent}void registerHonuaSceneElement();`,
+      `${indent}}, []);`,
+      '',
+    ],
+    helpers: createSceneBrowserRegistrationHelper(packageName, elementName, ''),
+  };
+}
+
+function createSceneVueRegistrationLines(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+): string[] {
+  if (!includeScript) {
+    return [];
+  }
+
+  return [
+    'import { onMounted } from \'vue\';',
+    '',
+    'onMounted(() => {',
+    '  void registerHonuaSceneElement();',
+    '});',
+    '',
+    ...createSceneBrowserRegistrationHelper(packageName, elementName, ''),
+  ];
+}
+
+function createSceneAngularRegistrationSnippet(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+  indent: string,
+): AngularRegistrationSnippet {
+  if (!includeScript) {
+    return emptyAngularRegistrationSnippet();
+  }
+
+  return {
+    coreImports: ['AfterViewInit'],
+    classImplements: ' implements AfterViewInit',
+    classBody: [
+      `${indent}ngAfterViewInit(): void {`,
+      `${indent}${indent}void this.registerHonuaSceneElement();`,
+      `${indent}}`,
+      '',
+      `${indent}private async registerHonuaSceneElement(): Promise<void> {`,
+      ...createSceneBrowserRegistrationBody(packageName, elementName, `${indent}${indent}`),
+      `${indent}}`,
+    ],
+  };
+}
+
 function createBrowserRegistrationHelper(
   packageName: string,
   elementName: string,
@@ -773,6 +1021,41 @@ function createBrowserRegistrationBody(
   const defineLine = elementName === 'honua-map'
     ? null
     : `${indent}defineHonuaMapElement('${escapedElementName}');`;
+  return [
+    `${indent}if (typeof window === 'undefined') {`,
+    `${indent}  return;`,
+    `${indent}}`,
+    '',
+    loadLine,
+    ...(defineLine ? [defineLine] : []),
+  ];
+}
+
+function createSceneBrowserRegistrationHelper(
+  packageName: string,
+  elementName: string,
+  indent: string,
+): string[] {
+  return [
+    `${indent}async function registerHonuaSceneElement(): Promise<void> {`,
+    ...createSceneBrowserRegistrationBody(packageName, elementName, `${indent}  `),
+    `${indent}}`,
+  ];
+}
+
+function createSceneBrowserRegistrationBody(
+  packageName: string,
+  elementName: string,
+  indent: string,
+): string[] {
+  const escapedPackageName = escapeJsString(packageName);
+  const escapedElementName = escapeJsString(elementName);
+  const loadLine = elementName === 'honua-scene'
+    ? `${indent}await import('${escapedPackageName}');`
+    : `${indent}const { defineHonuaSceneElement } = await import('${escapedPackageName}');`;
+  const defineLine = elementName === 'honua-scene'
+    ? null
+    : `${indent}defineHonuaSceneElement('${escapedElementName}');`;
   return [
     `${indent}if (typeof window === 'undefined') {`,
     `${indent}  return;`,
@@ -844,6 +1127,24 @@ function createReactElementMarkup(
   return `${config.indent}<${elementName}\n${lines.join('\n')}\n${config.indent}/>`;
 }
 
+function createSceneReactElementMarkup(
+  elementName: string,
+  options: HonuaSceneEmbedOptions,
+  config: Required<Pick<HonuaSceneSnippetOptions, 'includeCredentials' | 'indent'>>,
+): string {
+  const attributes = sceneAttributes(options, config.includeCredentials);
+  const attributeIndent = `${config.indent}  `;
+  const lines = attributes.map(([name, value]) => value === true
+    ? `${attributeIndent}${name}`
+    : `${attributeIndent}${name}="${escapeHtmlAttribute(value)}"`);
+
+  if (lines.length === 0) {
+    return `${config.indent}<${elementName} />`;
+  }
+
+  return `${config.indent}<${elementName}\n${lines.join('\n')}\n${config.indent}/>`;
+}
+
 function createReactIframeMarkup(
   options: HonuaMapEmbedOptions,
   snippetOptions: HonuaMapIframeSnippetOptions,
@@ -853,6 +1154,25 @@ function createReactIframeMarkup(
     parentOrigin: snippetOptions.parentOrigin,
   });
   const attributes = iframeAttributes(src, snippetOptions.iframe, 'Embedded map');
+  const indent = snippetOptions.indent ?? '    ';
+  const attributeIndent = `${indent}  `;
+  const lines = attributes.map(([name, value]) => {
+    const attributeName = reactIframeAttributeName(name);
+    return `${attributeIndent}${attributeName}="${escapeHtmlAttribute(value)}"`;
+  });
+
+  return `${indent}<iframe\n${lines.join('\n')}\n${indent}/>`;
+}
+
+function createSceneReactIframeMarkup(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneIframeSnippetOptions,
+): string {
+  const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/scene.html';
+  const src = createIframeSrc(iframeUrl, sceneQueryParameters(options, snippetOptions.includeCredentials ?? false), {
+    parentOrigin: snippetOptions.parentOrigin,
+  });
+  const attributes = iframeAttributes(src, snippetOptions.iframe, 'Embedded scene');
   const indent = snippetOptions.indent ?? '    ';
   const attributeIndent = `${indent}  `;
   const lines = attributes.map(([name, value]) => {

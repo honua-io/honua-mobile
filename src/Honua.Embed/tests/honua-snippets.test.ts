@@ -12,9 +12,15 @@ import {
   createHonuaMapSnippet,
   createHonuaMapVueIframeSnippet,
   createHonuaMapVueSnippet,
+  createHonuaSceneAngularIframeSnippet,
+  createHonuaSceneAngularSnippet,
   createHonuaSceneCdnSnippet,
   createHonuaSceneIframeSnippet,
+  createHonuaSceneReactIframeSnippet,
+  createHonuaSceneReactSnippet,
   createHonuaSceneSnippet,
+  createHonuaSceneVueIframeSnippet,
+  createHonuaSceneVueSnippet,
   defineHonuaMapElement,
   defineHonuaSceneElement,
 } from '../src/index';
@@ -776,6 +782,95 @@ describe('honua scene snippets', () => {
     expect(element.getAttribute('theme')).toBe('dark');
     expect(element.getAttribute('autoload')).toBe('false');
     expect(element.getAttribute('cesium-base-url')).toBe('https://cdn.example.test/cesium/');
+  });
+
+  it('generates a React scene custom-element component without credentials by default', () => {
+    const snippet = createHonuaSceneReactSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json?name="Site"&team=<AEC>',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'secret-token',
+      autoload: true,
+    }, {
+      componentName: 'ConstructionScene',
+    });
+
+    expect(snippet).toContain('export function ConstructionScene()');
+    expect(snippet).toContain('import { useEffect } from \'react\';');
+    expect(snippet).toContain('void registerHonuaSceneElement();');
+    expect(snippet).toContain('await import(\'@honua-io/embed\');');
+    expect(snippet).toContain('<honua-scene');
+    expect(snippet).toContain('tileset-url="https://tiles.example.test/site/tileset.json?name=&quot;Site&quot;&amp;team=&lt;AEC&gt;"');
+    expect(snippet).toContain('metadata-url="https://metadata.example.test/site.json"');
+    expect(snippet).toContain('autoload');
+    expect(snippet).not.toContain('secret-token');
+  });
+
+  it('registers custom framework scene element names when requested', () => {
+    const reactSnippet = createHonuaSceneReactSnippet({
+      autoload: false,
+    }, {
+      elementName: 'city-scene',
+      componentName: 'CityScene',
+    });
+    const vueSnippet = createHonuaSceneVueSnippet({
+      metadataUrl: 'https://metadata.example.test/site.json',
+    }, {
+      elementName: 'city-vue-scene',
+    });
+    const angularSnippet = createHonuaSceneAngularSnippet({
+      terrainUrl: 'https://terrain.example.test/world',
+    }, {
+      elementName: 'city-angular-scene',
+      selector: 'city-angular-scene-host',
+    });
+
+    expect(reactSnippet).toContain('const { defineHonuaSceneElement } = await import(\'@honua-io/embed\');');
+    expect(reactSnippet).toContain('defineHonuaSceneElement(\'city-scene\');');
+    expect(reactSnippet).toContain('<city-scene');
+    expect(vueSnippet).toContain('defineHonuaSceneElement(\'city-vue-scene\');');
+    expect(vueSnippet).toContain('<city-vue-scene');
+    expect(angularSnippet).toContain('defineHonuaSceneElement(\'city-angular-scene\');');
+    expect(angularSnippet).toContain('<city-angular-scene');
+  });
+
+  it('generates scene framework iframe fallback snippets', () => {
+    const reactSnippet = createHonuaSceneReactIframeSnippet({
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'secret-token',
+      autoload: true,
+    }, {
+      componentName: 'ConstructionSceneFrame',
+      iframeUrl: 'https://embed.example.test/scene.html?tenant=city',
+      parentOrigin: 'https://portal.example.test',
+      iframe: {
+        title: 'Construction scene',
+        className: 'embed-frame',
+      },
+    });
+    const vueSnippet = createHonuaSceneVueIframeSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+    }, {
+      iframeUrl: '/embeds/scene.html',
+    });
+    const angularSnippet = createHonuaSceneAngularIframeSnippet({
+      terrainUrl: 'https://terrain.example.test/world',
+    }, {
+      componentName: 'ConstructionSceneFrameComponent',
+      selector: 'construction-scene-frame',
+      iframeUrl: '/embeds/scene.html',
+    });
+
+    expect(reactSnippet).toContain('export function ConstructionSceneFrame()');
+    expect(reactSnippet).toContain('<iframe');
+    expect(reactSnippet).toContain('src="https://embed.example.test/scene.html?tenant=city&amp;metadata-url=https%3A%2F%2Fmetadata.example.test%2Fsite.json&amp;autoload=true&amp;parent-origin=https%3A%2F%2Fportal.example.test"');
+    expect(reactSnippet).toContain('title="Construction scene"');
+    expect(reactSnippet).toContain('className="embed-frame"');
+    expect(reactSnippet).not.toContain('secret-token');
+    expect(vueSnippet).toContain('<template>\n  <iframe');
+    expect(vueSnippet).toContain('    src="/embeds/scene.html?tileset-url=https%3A%2F%2Ftiles.example.test%2Fsite%2Ftileset.json"');
+    expect(angularSnippet).toContain('selector: \'construction-scene-frame\'');
+    expect(angularSnippet).toContain('src="/embeds/scene.html?terrain-url=https%3A%2F%2Fterrain.example.test%2Fworld"');
+    expect(angularSnippet).toContain('export class ConstructionSceneFrameComponent {}');
   });
 });
 
