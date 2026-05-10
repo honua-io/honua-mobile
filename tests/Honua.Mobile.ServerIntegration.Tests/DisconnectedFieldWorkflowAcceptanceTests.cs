@@ -458,7 +458,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             return FailureCategoryTransport;
         }
 
-        var message = FormatExceptionForEvidence(ex);
+        var message = FlattenExceptionMessages(ex);
         if (message.Contains("HONUA_MOBILE_", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("base url", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("api key", StringComparison.OrdinalIgnoreCase))
@@ -473,6 +473,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         }
 
         if (message.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("RemoteCertificate", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("TLS", StringComparison.OrdinalIgnoreCase))
@@ -481,7 +482,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         }
 
         if (message.Contains("invalid offline payload", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("operation", StringComparison.OrdinalIgnoreCase))
+            message.Contains("offline operation", StringComparison.OrdinalIgnoreCase))
         {
             return FailureCategoryEditQueue;
         }
@@ -501,6 +502,17 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         for (var current = ex; current is not null; current = current.InnerException)
         {
             messages.Add($"{current.GetType().Name}: {current.Message}");
+        }
+
+        return string.Join(" | ", messages);
+    }
+
+    private static string FlattenExceptionMessages(Exception ex)
+    {
+        var messages = new List<string>();
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            messages.Add(current.Message);
         }
 
         return string.Join(" | ", messages);
