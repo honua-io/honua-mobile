@@ -1,7 +1,8 @@
 # Mobile Exception Reporting
 
-Honua mobile exception reporting is opt-in. The first mobile slice provides a
-sanitized local reporting surface and offline queue for MAUI/mobile apps. It
+Honua mobile exception reporting is opt-in. The mobile implementation provides
+a sanitized local reporting surface, offline queue, bounded upload worker,
+tester consent gates, and an environment kill switch for MAUI/mobile apps. It
 does not define or implement the Honua Server ingestion endpoint.
 
 ## Enablement
@@ -136,6 +137,12 @@ that endpoint. The server-side slice needs to define the ingestion route, auth
 requirements, request headers, retention rules, log sink mapping, searchable
 metadata fields, schema versioning, and operational triage behavior. Mobile
 upload work should consume that versioned contract/package once it exists.
+
+The mobile server integration suite has loopback coverage for sanitized report
+delivery and opt-in live coverage through
+`HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH`. A live failure leaves the
+report queued, so enabled live tests should fail until the configured server
+route accepts the mobile report and records it in server observability.
 
 Recommended PR body note:
 
