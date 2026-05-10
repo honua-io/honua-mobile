@@ -476,6 +476,37 @@ from the query string, and forwards only core scene events to the parent window:
 tileset, picked object, and error references are sanitized before forwarding so
 messages stay cloneable.
 
+Framework hosts can generate scene starter components with the same public URL
+and credential-omission behavior as the plain helpers:
+
+```ts
+import {
+  createHonuaSceneAngularIframeSnippet,
+  createHonuaSceneReactSnippet,
+  createHonuaSceneVueSnippet,
+} from '@honua-io/embed/snippets';
+
+const reactComponent = createHonuaSceneReactSnippet({
+  tilesetUrl: 'https://example.com/tileset.json',
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  componentName: 'ConstructionScene',
+});
+
+const vueComponent = createHonuaSceneVueSnippet({
+  metadataUrl: 'https://example.com/site.metadata.json',
+});
+
+const angularIframeComponent = createHonuaSceneAngularIframeSnippet({
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  iframeUrl: 'https://cdn.honua.dev/embed/scene.html',
+  parentOrigin: 'https://portal.example.com',
+});
+```
+
 ## Host Extensions
 
 ```ts
