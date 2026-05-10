@@ -109,6 +109,14 @@ export interface HonuaMapIframeSnippetOptions {
   indent?: string;
 }
 
+export interface HonuaSceneIframeSnippetOptions {
+  iframeUrl?: string;
+  includeCredentials?: boolean;
+  parentOrigin?: string | null;
+  iframe?: HonuaMapIframeAttributes;
+  indent?: string;
+}
+
 export interface HonuaMapReactSnippetOptions extends HonuaMapSnippetOptions {
   componentName?: string;
 }
@@ -317,11 +325,27 @@ export function createHonuaMapIframeSnippet(
   snippetOptions: HonuaMapIframeSnippetOptions = {},
 ): string {
   const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/map.html';
-  const src = createIframeSrc(iframeUrl, options, {
-    includeCredentials: snippetOptions.includeCredentials ?? false,
+  const src = createIframeSrc(iframeUrl, mapQueryParameters(options, snippetOptions.includeCredentials ?? false), {
     parentOrigin: snippetOptions.parentOrigin,
   });
-  const attributes = iframeAttributes(src, snippetOptions.iframe);
+  const attributes = iframeAttributes(src, snippetOptions.iframe, 'Embedded map');
+  const indent = snippetOptions.indent ?? '  ';
+  const lines = attributes.map(([name, value]) => (
+    `${indent}${name}="${escapeHtmlAttribute(value)}"`
+  ));
+
+  return `<iframe\n${lines.join('\n')}>\n</iframe>`;
+}
+
+export function createHonuaSceneIframeSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneIframeSnippetOptions = {},
+): string {
+  const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/scene.html';
+  const src = createIframeSrc(iframeUrl, sceneQueryParameters(options, snippetOptions.includeCredentials ?? false), {
+    parentOrigin: snippetOptions.parentOrigin,
+  });
+  const attributes = iframeAttributes(src, snippetOptions.iframe, 'Embedded scene');
   const indent = snippetOptions.indent ?? '  ';
   const lines = attributes.map(([name, value]) => (
     `${indent}${name}="${escapeHtmlAttribute(value)}"`
@@ -771,11 +795,10 @@ function createReactIframeMarkup(
   snippetOptions: HonuaMapIframeSnippetOptions,
 ): string {
   const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/map.html';
-  const src = createIframeSrc(iframeUrl, options, {
-    includeCredentials: snippetOptions.includeCredentials ?? false,
+  const src = createIframeSrc(iframeUrl, mapQueryParameters(options, snippetOptions.includeCredentials ?? false), {
     parentOrigin: snippetOptions.parentOrigin,
   });
-  const attributes = iframeAttributes(src, snippetOptions.iframe);
+  const attributes = iframeAttributes(src, snippetOptions.iframe, 'Embedded map');
   const indent = snippetOptions.indent ?? '    ';
   const attributeIndent = `${indent}  `;
   const lines = attributes.map(([name, value]) => {
@@ -788,14 +811,13 @@ function createReactIframeMarkup(
 
 function createIframeSrc(
   iframeUrl: string,
-  options: HonuaMapEmbedOptions,
+  parameters: Array<[string, string]>,
   config: {
-    includeCredentials: boolean;
     parentOrigin?: string | null;
   },
 ): string {
   const url = new URL(iframeUrl, 'https://cdn.honua.dev');
-  for (const [name, value] of mapQueryParameters(options, config.includeCredentials)) {
+  for (const [name, value] of parameters) {
     url.searchParams.set(name, value);
   }
 
@@ -821,10 +843,11 @@ function createIframeSrc(
 function iframeAttributes(
   src: string,
   custom: HonuaMapIframeAttributes | undefined,
+  defaultTitle: string,
 ): Array<[string, string]> {
   return [
     ['src', src],
-    ['title', custom?.title ?? 'Embedded map'],
+    ['title', custom?.title ?? defaultTitle],
     ['loading', custom?.loading ?? 'lazy'],
     ['referrerpolicy', custom?.referrerPolicy ?? 'strict-origin-when-cross-origin'],
     ['sandbox', serializeSandbox(custom?.sandbox) ?? 'allow-scripts allow-same-origin allow-forms'],
@@ -886,6 +909,14 @@ function sceneAttributes(
     const value = entry[1];
     return value !== undefined && value !== null && value !== '';
   });
+}
+
+function sceneQueryParameters(
+  options: HonuaSceneEmbedOptions,
+  includeCredentials: boolean,
+): Array<[string, string]> {
+  return sceneAttributes(options, includeCredentials)
+    .map(([name, value]): [string, string] => [name, value === true ? 'true' : value]);
 }
 
 function serializeTheme(theme: HonuaMapThemeOptions | null | undefined): string | null {

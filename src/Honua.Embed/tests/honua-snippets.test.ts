@@ -12,6 +12,7 @@ import {
   createHonuaMapVueIframeSnippet,
   createHonuaMapVueSnippet,
   createHonuaSceneCdnSnippet,
+  createHonuaSceneIframeSnippet,
   createHonuaSceneSnippet,
   defineHonuaMapElement,
   defineHonuaSceneElement,
@@ -565,6 +566,92 @@ describe('honua scene snippets', () => {
     expect(snippet).toContain('<honua-scene');
     expect(snippet).toContain('metadata-url="https://metadata.example.test/site.json"');
     expect(snippet).toContain('autoload="false"');
+  });
+
+  it('generates a scene iframe fallback snippet without credentials by default', () => {
+    const snippet = createHonuaSceneIframeSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'secret-token',
+      autoload: true,
+    });
+
+    const iframe = readIframe(snippet);
+
+    expect(iframe.getAttribute('title')).toBe('Embedded scene');
+    expect(iframe.getAttribute('loading')).toBe('lazy');
+    expect(iframe.getAttribute('src')).toContain('https://cdn.honua.dev/embed/scene.html');
+    expect(iframe.getAttribute('src')).toContain('tileset-url=');
+    expect(iframe.getAttribute('src')).toContain('autoload=true');
+    expect(iframe.getAttribute('src')).not.toContain('secret-token');
+    expect(snippet).not.toContain('ion-token');
+  });
+
+  it('serializes scene options into iframe query parameters', () => {
+    const snippet = createHonuaSceneIframeSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      terrainUrl: 'https://terrain.example.test/world',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'public-browser-token',
+      center: { latitude: 21.3069, longitude: -157.8583 },
+      height: 1800,
+      heading: 20,
+      pitch: -35,
+      roll: 1,
+      theme: 'dark',
+      autoload: false,
+      cesiumBaseUrl: 'https://cdn.example.test/cesium/',
+    }, {
+      iframeUrl: 'https://embed.example.test/scene.html?tenant=city',
+      includeCredentials: true,
+      parentOrigin: 'https://portal.example.test/admin/embed',
+    });
+
+    const src = readIframe(snippet).getAttribute('src');
+    const url = new URL(src ?? '');
+
+    expect(url.origin).toBe('https://embed.example.test');
+    expect(url.searchParams.get('tenant')).toBe('city');
+    expect(url.searchParams.get('parent-origin')).toBe('https://portal.example.test/admin/embed');
+    expect(url.searchParams.get('tileset-url')).toBe('https://tiles.example.test/site/tileset.json');
+    expect(url.searchParams.get('terrain-url')).toBe('https://terrain.example.test/world');
+    expect(url.searchParams.get('metadata-url')).toBe('https://metadata.example.test/site.json');
+    expect(url.searchParams.get('ion-token')).toBe('public-browser-token');
+    expect(url.searchParams.get('center')).toBe('21.3069,-157.8583');
+    expect(url.searchParams.get('height')).toBe('1800');
+    expect(url.searchParams.get('heading')).toBe('20');
+    expect(url.searchParams.get('pitch')).toBe('-35');
+    expect(url.searchParams.get('roll')).toBe('1');
+    expect(url.searchParams.get('theme')).toBe('dark');
+    expect(url.searchParams.get('autoload')).toBe('false');
+    expect(url.searchParams.get('cesium-base-url')).toBe('https://cdn.example.test/cesium/');
+  });
+
+  it('applies custom scene iframe fallback options and preserves protocol-relative URLs', () => {
+    const snippet = createHonuaSceneIframeSnippet({
+      metadataUrl: 'https://metadata.example.test/site.json',
+      autoload: true,
+    }, {
+      iframeUrl: '//embed.example.test/scene.html?tenant=city#scene',
+      iframe: {
+        title: 'Construction scene',
+        loading: 'eager',
+        width: '100%',
+        height: 420,
+        className: 'embed-frame',
+      },
+    });
+
+    const iframe = readIframe(snippet);
+
+    expect(iframe.getAttribute('src')).toBe(
+      '//embed.example.test/scene.html?tenant=city&metadata-url=https%3A%2F%2Fmetadata.example.test%2Fsite.json&autoload=true#scene',
+    );
+    expect(iframe.getAttribute('title')).toBe('Construction scene');
+    expect(iframe.getAttribute('loading')).toBe('eager');
+    expect(iframe.getAttribute('width')).toBe('100%');
+    expect(iframe.getAttribute('height')).toBe('420');
+    expect(iframe.className).toBe('embed-frame');
   });
 
   it('applies scene options to an existing element and removes null values', () => {

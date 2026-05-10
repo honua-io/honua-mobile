@@ -393,6 +393,36 @@ const snippet = createHonuaSceneCdnSnippet({
 Use `applyHonuaSceneOptions(element, options)` to apply the same scene options
 shape to an existing scene element at runtime.
 
+For hosts that cannot load custom elements, use
+`createHonuaSceneIframeSnippet`. Scene options are encoded into the iframe URL
+query string, with `ionToken` omitted unless `includeCredentials: true` is
+passed. The package build includes the static fallback shell at
+`dist/embed/scene.html`; CDN deployments can serve that file as
+`https://cdn.honua.dev/embed/scene.html`.
+
+```ts
+import { createHonuaSceneIframeSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaSceneIframeSnippet({
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  parentOrigin: 'https://portal.example.com',
+  iframe: {
+    title: 'Construction scene',
+  },
+});
+```
+
+The iframe shell imports `../iframe.js`, hydrates a full-frame `<honua-scene>`
+from the query string, and forwards only core scene events to the parent window:
+`honua-scene-ready`, `honua-scene-config-change`,
+`honua-scene-load-error`, `honua-scene-camera-change`,
+`honua-scene-identify`, `honua-scene-metadata-change`,
+`honua-scene-metadata-error`, and `honua-scene-layer-change`. Cesium widget,
+tileset, picked object, and error references are sanitized before forwarding so
+messages stay cloneable.
+
 ## Host Extensions
 
 ```ts
