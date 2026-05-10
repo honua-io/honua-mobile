@@ -211,6 +211,12 @@ Evidence artifacts are written as `<run-id>.evidence.json` and use schema
 }
 ```
 
+When cloud acceptance fails with `failureCategory = "transport"`, inspect the
+phase error for TLS or certificate text before changing mobile sync code. A
+`RemoteCertificateNameMismatch` or certificate hostname/SAN mismatch means the
+configured Honua base URL is presenting a certificate for a different host; keep
+that tracked as a cloud/server infrastructure issue.
+
 The cloud harness now expects the honua-server#895 fixture path to support
 server-side readback on the editable FeatureServer layer. Before reconnect it
 asserts that no records carry the current `HONUA_MOBILE_ACCEPTANCE_RUN_ID` and

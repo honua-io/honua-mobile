@@ -137,9 +137,15 @@ Failures are written into the failed phase details as `failureCategory`:
 | `package` | Replica creation, package extraction, or fixture payload download failed. | Confirm the seeded service id, layer ids, and replica endpoint support. |
 | `local-cache` | GeoPackage file, cursor, feature cache, or SQLite persistence failed. | Check database path permissions and remaining device or CI disk space. |
 | `edit-queue` | A planned operation could not be serialized, queued, claimed, or uploaded as a valid edit. | Inspect `plannedOperations`, operation payload metadata, and sync phase failures. |
-| `transport` | Network, auth, timeout, throttling, or server availability blocked upload/download. | Check cloud health, credentials, logs, and retryable server status codes. |
+| `transport` | Network, TLS/certificate validation, auth, timeout, throttling, or server availability blocked upload/download. | Check cloud health, certificate hostname/SANs for the configured base URL, credentials, logs, and retryable server status codes. |
 | `conflict` | Server state rejected an edit due to stale base token or feature version conflict. | Compare fixture seed state, `servergen` cursor, and the conflicting operation id. |
 
 Cloud failures should be reported with the evidence JSON, the full test command,
 the exact fixture identifiers, and the server-side correlation or request log
 ids when available.
+
+For the current staging closure path, a `transport` failure containing
+`RemoteCertificateNameMismatch` means the configured cloud host presented a
+certificate for a different hostname. Track that as an infrastructure blocker
+instead of changing mobile TLS validation; issue #92 currently points at
+`honua-io/honua-server#965` for this case.

@@ -221,12 +221,30 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     [InlineData("reconnect-sync", "conflict requires manual review", FailureCategoryConflict)]
     [InlineData("reconnect-sync", "Invalid offline payload", FailureCategoryEditQueue)]
     [InlineData("reconnect-sync", "Connection refused", FailureCategoryTransport)]
+    [InlineData("online-download", "RemoteCertificateNameMismatch", FailureCategoryTransport)]
+    [InlineData("online-download", "TLS certificate hostname mismatch", FailureCategoryTransport)]
+    [InlineData("online-download", "operation failed: RemoteCertificateNameMismatch", FailureCategoryTransport)]
     public void FailureClassifier_MapsHarnessFailuresToActionableCategories(
         string phaseName,
         string message,
         string expectedCategory)
     {
         Assert.Equal(expectedCategory, ClassifyFailure(new InvalidOperationException(message), phaseName));
+    }
+
+    [Fact]
+    public void FailedCloudGate_EvidenceIncludesInnerCertificateDetails()
+    {
+        var failure = new HttpRequestException(
+            "The SSL connection could not be established.",
+            new InvalidOperationException("RemoteCertificateNameMismatch"));
+
+        var evidence = DisconnectedFieldWorkflowEvidence.FailedCloudGate(_rootDirectory, failure);
+
+        var phase = Assert.Single(evidence.Phases);
+        Assert.Equal(FailureCategoryTransport, phase.Details["failureCategory"]);
+        Assert.Contains("The SSL connection could not be established.", phase.Details["error"], StringComparison.Ordinal);
+        Assert.Contains("RemoteCertificateNameMismatch", phase.Details["error"], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -413,7 +431,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         catch (Exception ex)
         {
             phase.Status = "failed";
-            phase.Details["error"] = ex.Message;
+            phase.Details["error"] = FormatExceptionForEvidence(ex);
             phase.Details["failureCategory"] = ClassifyFailure(ex, phaseName);
             throw;
         }
@@ -440,7 +458,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             return FailureCategoryTransport;
         }
 
-        var message = ex.Message;
+        var message = FlattenExceptionMessages(ex);
         if (message.Contains("HONUA_MOBILE_", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("base url", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("api key", StringComparison.OrdinalIgnoreCase))
@@ -454,8 +472,17 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             return FailureCategoryConflict;
         }
 
+        if (message.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("RemoteCertificate", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("TLS", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryTransport;
+        }
+
         if (message.Contains("invalid offline payload", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("operation", StringComparison.OrdinalIgnoreCase))
+            message.Contains("offline operation", StringComparison.OrdinalIgnoreCase))
         {
             return FailureCategoryEditQueue;
         }
@@ -469,6 +496,28 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         };
     }
 
+    private static string FormatExceptionForEvidence(Exception ex)
+    {
+        var messages = new List<string>();
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            messages.Add($"{current.GetType().Name}: {current.Message}");
+        }
+
+        return string.Join(" | ", messages);
+    }
+
+    private static string FlattenExceptionMessages(Exception ex)
+    {
+        var messages = new List<string>();
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            messages.Add(current.Message);
+        }
+
+        return string.Join(" | ", messages);
+    }
+
     private static string ClassifySyncFailureReason(string reason)
     {
         if (reason.Contains("conflict", StringComparison.OrdinalIgnoreCase) ||
@@ -477,19 +526,23 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             return FailureCategoryConflict;
         }
 
+        if (reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("certificate", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("RemoteCertificate", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("TLS", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("transport", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategoryTransport;
+        }
+
         if (reason.Contains("invalid offline payload", StringComparison.OrdinalIgnoreCase) ||
             reason.Contains("unsupported protocol", StringComparison.OrdinalIgnoreCase) ||
             reason.Contains("operation", StringComparison.OrdinalIgnoreCase))
         {
             return FailureCategoryEditQueue;
-        }
-
-        if (reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("unavailable", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("transport", StringComparison.OrdinalIgnoreCase))
-        {
-            return FailureCategoryTransport;
         }
 
         return FailureCategoryTransport;
@@ -502,7 +555,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             [FailureCategoryPackage] = "The cloud/staging package or replica fixture cannot be created, downloaded, or decoded.",
             [FailureCategoryLocalCache] = "The mobile GeoPackage cache could not persist features, cursors, or queued operations.",
             [FailureCategoryEditQueue] = "A planned offline operation cannot be serialized, queued, claimed, or uploaded as a valid edit.",
-            [FailureCategoryTransport] = "Network transport, authentication, timeout, or server availability prevented an operation.",
+            [FailureCategoryTransport] = "Network transport, TLS/certificate validation, authentication, timeout, or server availability prevented an operation.",
             [FailureCategoryConflict] = "Server state rejected an offline edit because the base sync token or feature version conflicted.",
         };
 
@@ -1022,7 +1075,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 CompletedAtUtc = evidence.CompletedAtUtc,
                 Details =
                 {
-                    ["error"] = ex.Message,
+                    ["error"] = FormatExceptionForEvidence(ex),
                     ["failureCategory"] = ClassifyFailure(ex, "cloud-fixture-gate"),
                 },
             });
