@@ -67,6 +67,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Generate CDN manifest
+        run: npm run cdn:manifest
+
       - name: Pack npm package
         shell: bash
         run: |
@@ -81,12 +84,23 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Upload CDN dist artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: honua-mobile-embed-${{ github.run_id }}-cdn-dist
+          path: src/Honua.Embed/dist/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Dry-run summary
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
         shell: bash
         run: |
           echo "Dry run complete. Built npm package:" >> "${GITHUB_STEP_SUMMARY}"
           ls -1 "${GITHUB_WORKSPACE}"/npm-packages/*.tgz >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "CDN dist artifact includes manifest:" >> "${GITHUB_STEP_SUMMARY}"
+          echo "${GITHUB_WORKSPACE}/src/Honua.Embed/dist/cdn-manifest.json" >> "${GITHUB_STEP_SUMMARY}"
 
   publish:
     name: Publish to GitHub Packages

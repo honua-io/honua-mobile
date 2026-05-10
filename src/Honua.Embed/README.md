@@ -251,6 +251,34 @@ const snippet = createHonuaMapCdnSnippet({
 });
 ```
 
+After `npm run build`, generate `dist/cdn-manifest.json` for CDN publishing
+metadata:
+
+```bash
+npm run cdn:manifest
+```
+
+The manifest records the package name/version, default CDN URLs, and each
+top-level JavaScript entry's byte size, SHA-256 hash, and SHA-384 SRI value. It
+includes `embed.js`, `index.js`, `iframe.js`, `snippets.js`, and top-level Vite
+chunks, but does not enumerate the copied Cesium asset tree. Use the manifest
+entry for the hosted script when emitting CDN snippets. The publish workflow
+also uploads the built `dist/` directory as a CDN artifact for operators that
+promote static assets separately from the npm package.
+
+```ts
+const manifest = await fetch('https://cdn.honua.dev/cdn-manifest.json').then((response) => response.json());
+const embedEntry = manifest.files.find((file) => file.path === 'embed.js');
+
+const snippet = createHonuaMapCdnSnippet(options, {
+  scriptUrl: embedEntry.url,
+  scriptAttributes: {
+    integrity: embedEntry.integrity,
+    crossOrigin: 'anonymous',
+  },
+});
+```
+
 Server-side builders that only generate markup can import from
 `@honua-io/embed/snippets` to avoid loading the browser custom element
 entrypoint.
