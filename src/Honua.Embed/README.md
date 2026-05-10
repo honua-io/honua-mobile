@@ -304,6 +304,40 @@ const disconnect = addHonuaMapIframeMessageListener((message) => {
 });
 ```
 
+Framework hosts can generate starter components without taking a React, Vue, or
+Angular dependency from this package. These helpers reuse the same map options,
+HTML escaping, iframe query serialization, and default credential omission as
+the plain snippet helpers.
+
+```ts
+import {
+  createHonuaMapAngularIframeSnippet,
+  createHonuaMapReactSnippet,
+  createHonuaMapVueSnippet,
+} from '@honua-io/embed/snippets';
+
+const reactComponent = createHonuaMapReactSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets'],
+  search: true,
+  label: 'City asset map',
+}, {
+  componentName: 'CityAssetMap',
+});
+
+const vueComponent = createHonuaMapVueSnippet({
+  basemap: 'satellite',
+  identify: true,
+});
+
+const angularIframeComponent = createHonuaMapAngularIframeSnippet({
+  search: true,
+}, {
+  iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  parentOrigin: 'https://portal.example.com',
+});
+```
+
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 

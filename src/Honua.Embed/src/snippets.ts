@@ -74,6 +74,30 @@ export interface HonuaMapIframeSnippetOptions {
   indent?: string;
 }
 
+export interface HonuaMapReactSnippetOptions extends HonuaMapSnippetOptions {
+  componentName?: string;
+}
+
+export interface HonuaMapReactIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+  componentName?: string;
+}
+
+export interface HonuaMapVueSnippetOptions extends HonuaMapSnippetOptions {
+}
+
+export interface HonuaMapVueIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+}
+
+export interface HonuaMapAngularSnippetOptions extends HonuaMapSnippetOptions {
+  componentName?: string;
+  selector?: string;
+}
+
+export interface HonuaMapAngularIframeSnippetOptions extends HonuaMapIframeSnippetOptions {
+  componentName?: string;
+  selector?: string;
+}
+
 export function applyHonuaMapOptions(
   element: HTMLElement,
   options: HonuaMapEmbedOptions,
@@ -188,6 +212,160 @@ export function createHonuaMapIframeSnippet(
   return `<iframe\n${lines.join('\n')}>\n</iframe>`;
 }
 
+export function createHonuaMapReactSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapReactSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaMapEmbed';
+  assertJsIdentifier(componentName);
+  const elementName = snippetOptions.elementName ?? 'honua-map';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createReactRegistrationSnippet(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+    indent,
+  );
+  const element = createReactElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent: `${indent}${indent}`,
+  });
+
+  return [
+    ...registration.imports,
+    ...(registration.imports.length > 0 ? [''] : []),
+    `export function ${componentName}() {`,
+    ...registration.effectLines,
+    `${indent}return (`,
+    element,
+    `${indent});`,
+    '}',
+    ...(registration.helpers.length > 0 ? ['', ...registration.helpers] : []),
+  ].join('\n');
+}
+
+export function createHonuaMapReactIframeSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapReactIframeSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaMapEmbed';
+  assertJsIdentifier(componentName);
+  const indent = snippetOptions.indent ?? '  ';
+  const element = createReactIframeMarkup(options, {
+    ...snippetOptions,
+    indent: `${indent}${indent}`,
+  });
+
+  return [
+    `export function ${componentName}() {`,
+    `${indent}return (`,
+    element,
+    `${indent});`,
+    '}',
+  ].join('\n');
+}
+
+export function createHonuaMapVueSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapVueSnippetOptions = {},
+): string {
+  const elementName = snippetOptions.elementName ?? 'honua-map';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createVueRegistrationLines(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+  );
+  const element = createElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  return [
+    '<template>',
+    indentBlock(element, indent),
+    '</template>',
+    ...(registration.length > 0
+      ? [
+        '',
+        '<script setup lang="ts">',
+        ...registration,
+        '</script>',
+      ]
+      : []),
+  ].join('\n');
+}
+
+export function createHonuaMapVueIframeSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapVueIframeSnippetOptions = {},
+): string {
+  const indent = snippetOptions.indent ?? '  ';
+  const iframe = createHonuaMapIframeSnippet(options, {
+    ...snippetOptions,
+    indent,
+  });
+
+  return [
+    '<template>',
+    indentBlock(iframe, indent),
+    '</template>',
+  ].join('\n');
+}
+
+export function createHonuaMapAngularSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapAngularSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaMapEmbedComponent';
+  assertJsIdentifier(componentName);
+  const selector = snippetOptions.selector ?? 'honua-map-embed';
+  assertCustomElementName(selector);
+  const elementName = snippetOptions.elementName ?? 'honua-map';
+  assertCustomElementName(elementName);
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const registration = createAngularRegistrationSnippet(
+    packageName,
+    elementName,
+    snippetOptions.includeScript ?? true,
+    indent,
+  );
+  const element = createElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  return createAngularComponentSnippet(componentName, selector, registration, element, indent);
+}
+
+export function createHonuaMapAngularIframeSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapAngularIframeSnippetOptions = {},
+): string {
+  const componentName = snippetOptions.componentName ?? 'HonuaMapEmbedComponent';
+  assertJsIdentifier(componentName);
+  const selector = snippetOptions.selector ?? 'honua-map-embed';
+  assertCustomElementName(selector);
+  const indent = snippetOptions.indent ?? '  ';
+  const iframe = createHonuaMapIframeSnippet(options, {
+    ...snippetOptions,
+    indent,
+  });
+
+  return createAngularComponentSnippet(
+    componentName,
+    selector,
+    emptyAngularRegistrationSnippet(),
+    iframe,
+    indent,
+  );
+}
+
 function createCdnScriptMarkup(
   scriptUrl: string,
   elementName: string,
@@ -225,6 +403,154 @@ function createCdnScriptMarkup(
   return `<script ${serialized}></script>`;
 }
 
+function createAngularComponentSnippet(
+  componentName: string,
+  selector: string,
+  registration: AngularRegistrationSnippet,
+  template: string,
+  indent: string,
+): string {
+  const lines = [
+    `import { ${['Component', 'CUSTOM_ELEMENTS_SCHEMA', ...registration.coreImports].join(', ')} } from '@angular/core';`,
+    '',
+    '@Component({',
+    `${indent}selector: '${escapeJsString(selector)}',`,
+    `${indent}standalone: true,`,
+    `${indent}schemas: [CUSTOM_ELEMENTS_SCHEMA],`,
+    `${indent}template: \``,
+    indentTemplateLiteral(template, indent),
+    `${indent}\`,`,
+    '})',
+    registration.classBody.length > 0
+      ? [
+        `export class ${componentName}${registration.classImplements} {`,
+        ...registration.classBody,
+        '}',
+      ].join('\n')
+      : `export class ${componentName} {}`,
+  ];
+
+  return lines.join('\n');
+}
+
+interface ReactRegistrationSnippet {
+  imports: string[];
+  effectLines: string[];
+  helpers: string[];
+}
+
+interface AngularRegistrationSnippet {
+  coreImports: string[];
+  classImplements: string;
+  classBody: string[];
+}
+
+function emptyAngularRegistrationSnippet(): AngularRegistrationSnippet {
+  return { coreImports: [], classImplements: '', classBody: [] };
+}
+
+function createReactRegistrationSnippet(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+  indent: string,
+): ReactRegistrationSnippet {
+  if (!includeScript) {
+    return { imports: [], effectLines: [], helpers: [] };
+  }
+
+  return {
+    imports: ['import { useEffect } from \'react\';'],
+    effectLines: [
+      `${indent}useEffect(() => {`,
+      `${indent}${indent}void registerHonuaMapElement();`,
+      `${indent}}, []);`,
+      '',
+    ],
+    helpers: createBrowserRegistrationHelper(packageName, elementName, ''),
+  };
+}
+
+function createVueRegistrationLines(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+): string[] {
+  if (!includeScript) {
+    return [];
+  }
+
+  return [
+    'import { onMounted } from \'vue\';',
+    '',
+    'onMounted(() => {',
+    '  void registerHonuaMapElement();',
+    '});',
+    '',
+    ...createBrowserRegistrationHelper(packageName, elementName, ''),
+  ];
+}
+
+function createAngularRegistrationSnippet(
+  packageName: string,
+  elementName: string,
+  includeScript: boolean,
+  indent: string,
+): AngularRegistrationSnippet {
+  if (!includeScript) {
+    return emptyAngularRegistrationSnippet();
+  }
+
+  return {
+    coreImports: ['AfterViewInit'],
+    classImplements: ' implements AfterViewInit',
+    classBody: [
+      `${indent}ngAfterViewInit(): void {`,
+      `${indent}${indent}void this.registerHonuaMapElement();`,
+      `${indent}}`,
+      '',
+      `${indent}private async registerHonuaMapElement(): Promise<void> {`,
+      ...createBrowserRegistrationBody(packageName, elementName, `${indent}${indent}`),
+      `${indent}}`,
+    ],
+  };
+}
+
+function createBrowserRegistrationHelper(
+  packageName: string,
+  elementName: string,
+  indent: string,
+): string[] {
+  return [
+    `${indent}async function registerHonuaMapElement(): Promise<void> {`,
+    ...createBrowserRegistrationBody(packageName, elementName, `${indent}  `),
+    `${indent}}`,
+  ];
+}
+
+function createBrowserRegistrationBody(
+  packageName: string,
+  elementName: string,
+  indent: string,
+): string[] {
+  const escapedPackageName = escapeJsString(packageName);
+  const escapedElementName = escapeJsString(elementName);
+  const loadLine = elementName === 'honua-map'
+    ? `${indent}await import('${escapedPackageName}');`
+    : `${indent}const { defineHonuaMapElement } = await import('${escapedPackageName}');`;
+  const defineLine = elementName === 'honua-map'
+    ? null
+    : `${indent}defineHonuaMapElement('${escapedElementName}');`;
+  return [
+    `${indent}if (typeof window === 'undefined') {`,
+    `${indent}  return;`,
+    `${indent}}`,
+    '',
+    loadLine,
+    ...(defineLine ? [defineLine] : []),
+  ];
+}
+
 function createElementMarkup(
   elementName: string,
   options: HonuaMapEmbedOptions,
@@ -245,6 +571,48 @@ function createElementMarkup(
     : `${config.indent}${name}="${escapeHtmlAttribute(value)}"`);
 
   return `<${elementName}\n${lines.join('\n')}>\n</${elementName}>`;
+}
+
+function createReactElementMarkup(
+  elementName: string,
+  options: HonuaMapEmbedOptions,
+  config: Required<Pick<HonuaMapSnippetOptions, 'includeCredentials' | 'indent'>>,
+): string {
+  const attributes = mapAttributes(options, config.includeCredentials);
+  const style = reactStyleObject(options.style);
+  const attributeIndent = `${config.indent}  `;
+  const lines = attributes.map(([name, value]) => value === true
+    ? `${attributeIndent}${name}`
+    : `${attributeIndent}${name}="${escapeHtmlAttribute(value)}"`);
+  if (style) {
+    lines.push(`${attributeIndent}style={${style}}`);
+  }
+
+  if (lines.length === 0) {
+    return `${config.indent}<${elementName} />`;
+  }
+
+  return `${config.indent}<${elementName}\n${lines.join('\n')}\n${config.indent}/>`;
+}
+
+function createReactIframeMarkup(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapIframeSnippetOptions,
+): string {
+  const iframeUrl = snippetOptions.iframeUrl ?? 'https://cdn.honua.dev/embed/map.html';
+  const src = createIframeSrc(iframeUrl, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    parentOrigin: snippetOptions.parentOrigin,
+  });
+  const attributes = iframeAttributes(src, snippetOptions.iframe);
+  const indent = snippetOptions.indent ?? '    ';
+  const attributeIndent = `${indent}  `;
+  const lines = attributes.map(([name, value]) => {
+    const attributeName = reactIframeAttributeName(name);
+    return `${attributeIndent}${attributeName}="${escapeHtmlAttribute(value)}"`;
+  });
+
+  return `${indent}<iframe\n${lines.join('\n')}\n${indent}/>`;
 }
 
 function createIframeSrc(
@@ -376,6 +744,47 @@ function mapQueryParameters(
   return parameters;
 }
 
+function reactStyleObject(theme: HonuaMapThemeOptions | null | undefined): string | null {
+  const declarations = Object.entries(mapThemeVariables(theme))
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .map(([property, value]) => `'${escapeJsString(property)}': '${escapeJsString(value)}'`);
+
+  if (declarations.length === 0) {
+    return null;
+  }
+
+  return `{ ${declarations.join(', ')} }`;
+}
+
+function reactIframeAttributeName(name: string): string {
+  if (name === 'class') {
+    return 'className';
+  }
+
+  if (name === 'referrerpolicy') {
+    return 'referrerPolicy';
+  }
+
+  return name;
+}
+
+function indentBlock(value: string, indent: string): string {
+  return value
+    .split('\n')
+    .map((line) => `${indent}${line}`)
+    .join('\n');
+}
+
+function indentTemplateLiteral(value: string, indent: string): string {
+  return value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('`', '\\`')
+    .replaceAll('${', '\\${')
+    .split('\n')
+    .map((line) => `${indent}${indent}${line}`)
+    .join('\n');
+}
+
 function setOptionalAttribute(element: HTMLElement, name: string, value: string | null | undefined): void {
   if (value === undefined) {
     return;
@@ -503,3 +912,58 @@ function assertCustomElementName(name: string): void {
     throw new Error(`Invalid custom element name: ${name}`);
   }
 }
+
+function assertJsIdentifier(name: string): void {
+  if (!/^[$A-Z_a-z][$\w]*$/.test(name) || JS_RESERVED_WORDS.has(name)) {
+    throw new Error(`Invalid JavaScript identifier: ${name}`);
+  }
+}
+
+const JS_RESERVED_WORDS = new Set([
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'instanceof',
+  'interface',
+  'let',
+  'new',
+  'null',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'return',
+  'static',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+]);

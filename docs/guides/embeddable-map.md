@@ -149,6 +149,44 @@ const disconnect = addHonuaMapIframeMessageListener((message) => {
 });
 ```
 
+Framework teams can generate typed starter components around the same
+`<honua-map>` custom element or iframe fallback. `@honua-io/embed` does not
+depend on React, Vue, or Angular; these helpers only return code strings and
+reuse the same option serializers and credential omission defaults as the base
+snippet helpers.
+
+```js
+import {
+  createHonuaMapAngularSnippet,
+  createHonuaMapReactIframeSnippet,
+  createHonuaMapVueSnippet,
+} from '@honua-io/embed/snippets';
+
+const vueComponent = createHonuaMapVueSnippet({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  layerIds: ['assets'],
+  identify: true,
+  label: 'City asset map',
+});
+
+const reactIframeComponent = createHonuaMapReactIframeSnippet({
+  search: true,
+  label: 'City asset map',
+}, {
+  componentName: 'CityAssetMapFrame',
+  iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+  parentOrigin: 'https://portal.example.com',
+});
+
+const angularComponent = createHonuaMapAngularSnippet({
+  basemap: 'streets',
+  search: true,
+}, {
+  componentName: 'CityAssetMapComponent',
+  selector: 'city-asset-map',
+});
+```
+
 ## Integration Events
 
 ```js
