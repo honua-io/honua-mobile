@@ -619,6 +619,11 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         return http;
     }
 
+    private HttpClient CreateUnauthenticatedHttpClient()
+    {
+        return new HttpClient { BaseAddress = _server.BaseUri, Timeout = TimeSpan.FromSeconds(30) };
+    }
+
     private HonuaMobileClient CreateMobileClient(bool preferGrpc, bool allowRestFallbackOnGrpcFailure = true)
     {
         return new HonuaMobileClient(
@@ -897,8 +902,9 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         };
         var queue = new FileMobileExceptionReportQueue(options);
         var reporter = new LocalMobileExceptionReporter(queue, options);
+        using var http = CreateUnauthenticatedHttpClient();
         var uploader = new HttpMobileExceptionReportUploader(
-            CreateHttpClient(),
+            http,
             options,
             [new FieldCollectionExceptionReportAuthHeader(auth)]);
         var worker = new MobileExceptionReportUploadWorker(queue, uploader, options);
@@ -911,6 +917,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                 Properties = new Dictionary<string, object?> { ["apiKey"] = "secret" },
             });
         await worker.FlushPendingAsync();
+        await AssertQueueDrainedAsync(queue);
     }
 
     private async Task UploadMauiExceptionReportAsync()
@@ -933,6 +940,11 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             new MobileExceptionReportContext { Source = "live-image-maui" });
         await worker.FlushPendingAsync();
 
+        await AssertQueueDrainedAsync(queue);
+    }
+
+    private static async Task AssertQueueDrainedAsync(IMobileExceptionReportQueue queue)
+    {
         var pending = new List<QueuedMobileExceptionReport>();
         await foreach (var report in queue.ReadPendingAsync())
         {
