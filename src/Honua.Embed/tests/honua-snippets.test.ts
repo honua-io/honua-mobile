@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyHonuaMapOptions,
+  applyHonuaSceneOptions,
   createHonuaMapAngularIframeSnippet,
   createHonuaMapAngularSnippet,
   createHonuaMapCdnSnippet,
@@ -10,7 +11,10 @@ import {
   createHonuaMapSnippet,
   createHonuaMapVueIframeSnippet,
   createHonuaMapVueSnippet,
+  createHonuaSceneCdnSnippet,
+  createHonuaSceneSnippet,
   defineHonuaMapElement,
+  defineHonuaSceneElement,
 } from '../src/index';
 
 describe('honua map snippets', () => {
@@ -459,6 +463,144 @@ describe('honua map snippets', () => {
     expect(iframeSnippet).toContain('<iframe');
     expect(iframeSnippet).toContain('src="/embeds/map.html?basemap=dark"');
     expect(iframeSnippet).toContain('export class CityAssetMapFrameComponent {}');
+  });
+});
+
+describe('honua scene snippets', () => {
+  beforeEach(() => {
+    defineHonuaSceneElement();
+    document.body.replaceChildren();
+  });
+
+  it('generates a public 3D Tiles custom-element snippet without credentials by default', () => {
+    const snippet = createHonuaSceneSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      terrainUrl: 'https://terrain.example.test/world',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'secret-token',
+      center: { latitude: 21.3069, longitude: -157.8583 },
+      height: 1800,
+      heading: 20,
+      pitch: -35,
+      roll: 1,
+      theme: 'light',
+      autoload: true,
+      cesiumBaseUrl: 'https://cdn.example.test/cesium/',
+    }, {
+      elementName: 'city-construction-scene',
+    });
+
+    expect(snippet).toContain('defineHonuaSceneElement(\'city-construction-scene\')');
+    expect(snippet).toContain('<city-construction-scene');
+    expect(snippet).toContain('tileset-url="https://tiles.example.test/site/tileset.json"');
+    expect(snippet).toContain('terrain-url="https://terrain.example.test/world"');
+    expect(snippet).toContain('metadata-url="https://metadata.example.test/site.json"');
+    expect(snippet).toContain('center="21.3069,-157.8583"');
+    expect(snippet).toContain('height="1800"');
+    expect(snippet).toContain('heading="20"');
+    expect(snippet).toContain('pitch="-35"');
+    expect(snippet).toContain('roll="1"');
+    expect(snippet).toContain('theme="light"');
+    expect(snippet).toContain('autoload');
+    expect(snippet).toContain('cesium-base-url="https://cdn.example.test/cesium/"');
+    expect(snippet).not.toContain('secret-token');
+  });
+
+  it('includes scene credentials only when explicitly requested', () => {
+    const snippet = createHonuaSceneSnippet({
+      tilesetUrl: 'https://assets.cesium.com/123/tileset.json',
+      ionToken: 'public-browser-token',
+    }, {
+      includeCredentials: true,
+      includeScript: false,
+    });
+
+    expect(snippet).toContain('ion-token="public-browser-token"');
+    expect(snippet).not.toContain('<script');
+  });
+
+  it('generates a CDN scene snippet and registers branded scene tags', () => {
+    const snippet = createHonuaSceneCdnSnippet({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      ionToken: 'secret-token',
+      autoload: true,
+    }, {
+      scriptUrl: 'https://cdn.example.test/honua/embed.js',
+      elementName: 'city-scene',
+      scriptAttributes: {
+        nonce: 'nonce-value',
+        crossOrigin: 'anonymous',
+        referrerPolicy: 'strict-origin',
+      },
+    });
+
+    expect(snippet).toContain(
+      '<script type="module" nonce="nonce-value" crossorigin="anonymous" referrerpolicy="strict-origin">',
+    );
+    expect(snippet).toContain(
+      'import { defineHonuaSceneElement } from \'https://cdn.example.test/honua/embed.js\';',
+    );
+    expect(snippet).toContain('defineHonuaSceneElement(\'city-scene\')');
+    expect(snippet).toContain('<city-scene');
+    expect(snippet).toContain('tileset-url="https://tiles.example.test/site/tileset.json"');
+    expect(snippet).toContain('autoload');
+    expect(snippet).not.toContain('secret-token');
+  });
+
+  it('emits a default CDN scene script with attributes', () => {
+    const snippet = createHonuaSceneCdnSnippet({
+      metadataUrl: 'https://metadata.example.test/site.json',
+      autoload: false,
+    }, {
+      scriptAttributes: {
+        integrity: 'sha384-example',
+        crossOrigin: 'anonymous',
+        referrerPolicy: 'strict-origin',
+      },
+    });
+
+    expect(snippet).toContain(
+      '<script type="module" src="https://cdn.honua.dev/embed.js" integrity="sha384-example" crossorigin="anonymous" referrerpolicy="strict-origin"></script>',
+    );
+    expect(snippet).toContain('<honua-scene');
+    expect(snippet).toContain('metadata-url="https://metadata.example.test/site.json"');
+    expect(snippet).toContain('autoload="false"');
+  });
+
+  it('applies scene options to an existing element and removes null values', () => {
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://old.example.test/tileset.json');
+    element.setAttribute('ion-token', 'old-token');
+    element.setAttribute('autoload', '');
+    document.body.append(element);
+
+    applyHonuaSceneOptions(element, {
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      terrainUrl: 'https://terrain.example.test/world',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: null,
+      center: { latitude: 21.3069, longitude: -157.8583 },
+      height: 1800,
+      heading: 20,
+      pitch: -35,
+      roll: 0,
+      theme: 'dark',
+      autoload: false,
+      cesiumBaseUrl: 'https://cdn.example.test/cesium/',
+    });
+
+    expect(element.getAttribute('tileset-url')).toBe('https://tiles.example.test/site/tileset.json');
+    expect(element.getAttribute('terrain-url')).toBe('https://terrain.example.test/world');
+    expect(element.getAttribute('metadata-url')).toBe('https://metadata.example.test/site.json');
+    expect(element.hasAttribute('ion-token')).toBe(false);
+    expect(element.getAttribute('center')).toBe('21.3069,-157.8583');
+    expect(element.getAttribute('height')).toBe('1800');
+    expect(element.getAttribute('heading')).toBe('20');
+    expect(element.getAttribute('pitch')).toBe('-35');
+    expect(element.getAttribute('roll')).toBe('0');
+    expect(element.getAttribute('theme')).toBe('dark');
+    expect(element.getAttribute('autoload')).toBe('false');
+    expect(element.getAttribute('cesium-base-url')).toBe('https://cdn.example.test/cesium/');
   });
 });
 

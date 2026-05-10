@@ -1,4 +1,5 @@
 import type { HonuaMapBounds, HonuaMapCoordinate } from './map';
+import type { HonuaSceneCoordinate } from './scene';
 
 export interface HonuaMapThemeOptions {
   accent?: string | null;
@@ -43,6 +44,8 @@ export interface HonuaMapCdnScriptAttributes {
   referrerPolicy?: ReferrerPolicy | null;
 }
 
+export type HonuaSceneCdnScriptAttributes = HonuaMapCdnScriptAttributes;
+
 export interface HonuaMapCdnSnippetOptions {
   scriptUrl?: string;
   elementName?: string;
@@ -50,6 +53,38 @@ export interface HonuaMapCdnSnippetOptions {
   includeCredentials?: boolean;
   indent?: string;
   scriptAttributes?: HonuaMapCdnScriptAttributes;
+}
+
+export interface HonuaSceneEmbedOptions {
+  tilesetUrl?: string | null;
+  terrainUrl?: string | null;
+  metadataUrl?: string | null;
+  ionToken?: string | null;
+  cesiumBaseUrl?: string | null;
+  center?: HonuaSceneCoordinate | null;
+  height?: number | null;
+  heading?: number | null;
+  pitch?: number | null;
+  roll?: number | null;
+  theme?: 'light' | 'dark' | null;
+  autoload?: boolean | null;
+}
+
+export interface HonuaSceneSnippetOptions {
+  packageName?: string;
+  elementName?: string;
+  includeScript?: boolean;
+  includeCredentials?: boolean;
+  indent?: string;
+}
+
+export interface HonuaSceneCdnSnippetOptions {
+  scriptUrl?: string;
+  elementName?: string;
+  includeScript?: boolean;
+  includeCredentials?: boolean;
+  indent?: string;
+  scriptAttributes?: HonuaSceneCdnScriptAttributes;
 }
 
 export interface HonuaMapIframeAttributes {
@@ -136,6 +171,24 @@ export function applyHonuaMapTheme(element: HTMLElement, theme: HonuaMapThemeOpt
   }
 }
 
+export function applyHonuaSceneOptions(
+  element: HTMLElement,
+  options: HonuaSceneEmbedOptions,
+): void {
+  setOptionalAttribute(element, 'tileset-url', options.tilesetUrl);
+  setOptionalAttribute(element, 'terrain-url', options.terrainUrl);
+  setOptionalAttribute(element, 'metadata-url', options.metadataUrl);
+  setOptionalAttribute(element, 'ion-token', options.ionToken);
+  setOptionalAttribute(element, 'cesium-base-url', options.cesiumBaseUrl);
+  setOptionalAttribute(element, 'center', serializeCoordinate(options.center));
+  setOptionalAttribute(element, 'height', serializeNumber(options.height));
+  setOptionalAttribute(element, 'heading', serializeNumber(options.heading));
+  setOptionalAttribute(element, 'pitch', serializeNumber(options.pitch));
+  setOptionalAttribute(element, 'roll', serializeNumber(options.roll));
+  setOptionalAttribute(element, 'theme', options.theme);
+  setAutoloadAttribute(element, options.autoload);
+}
+
 export function createHonuaMapSnippet(
   options: HonuaMapEmbedOptions,
   snippetOptions: HonuaMapSnippetOptions = {},
@@ -171,6 +224,41 @@ export function createHonuaMapSnippet(
   return `${script}\n\n${element}`;
 }
 
+export function createHonuaSceneSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneSnippetOptions = {},
+): string {
+  const elementName = snippetOptions.elementName ?? 'honua-scene';
+  assertCustomElementName(elementName);
+
+  const includeScript = snippetOptions.includeScript ?? true;
+  const packageName = snippetOptions.packageName ?? '@honua-io/embed';
+  const indent = snippetOptions.indent ?? '  ';
+  const element = createSceneElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  if (!includeScript) {
+    return element;
+  }
+
+  const script = elementName === 'honua-scene'
+    ? [
+      '<script type="module">',
+      `${indent}import '${escapeJsString(packageName)}';`,
+      '</script>',
+    ].join('\n')
+    : [
+      '<script type="module">',
+      `${indent}import { defineHonuaSceneElement } from '${escapeJsString(packageName)}';`,
+      `${indent}defineHonuaSceneElement('${escapeJsString(elementName)}');`,
+      '</script>',
+    ].join('\n');
+
+  return `${script}\n\n${element}`;
+}
+
 export function createHonuaMapCdnSnippet(
   options: HonuaMapEmbedOptions,
   snippetOptions: HonuaMapCdnSnippetOptions = {},
@@ -190,7 +278,37 @@ export function createHonuaMapCdnSnippet(
     return element;
   }
 
-  const script = createCdnScriptMarkup(scriptUrl, elementName, indent, snippetOptions.scriptAttributes);
+  const script = createMapCdnScriptMarkup(scriptUrl, elementName, indent, snippetOptions.scriptAttributes);
+  return `${script}\n\n${element}`;
+}
+
+export function createHonuaSceneCdnSnippet(
+  options: HonuaSceneEmbedOptions,
+  snippetOptions: HonuaSceneCdnSnippetOptions = {},
+): string {
+  const elementName = snippetOptions.elementName ?? 'honua-scene';
+  assertCustomElementName(elementName);
+
+  const includeScript = snippetOptions.includeScript ?? true;
+  const scriptUrl = snippetOptions.scriptUrl ?? 'https://cdn.honua.dev/embed.js';
+  const indent = snippetOptions.indent ?? '  ';
+  const element = createSceneElementMarkup(elementName, options, {
+    includeCredentials: snippetOptions.includeCredentials ?? false,
+    indent,
+  });
+
+  if (!includeScript) {
+    return element;
+  }
+
+  const script = createCdnScriptMarkup({
+    scriptUrl,
+    elementName,
+    defaultElementName: 'honua-scene',
+    defineExportName: 'defineHonuaSceneElement',
+    indent,
+    attributes: snippetOptions.scriptAttributes,
+  });
   return `${script}\n\n${element}`;
 }
 
@@ -367,40 +485,76 @@ export function createHonuaMapAngularIframeSnippet(
 }
 
 function createCdnScriptMarkup(
-  scriptUrl: string,
-  elementName: string,
-  indent: string,
-  attributes: HonuaMapCdnScriptAttributes | undefined,
+  config: {
+    scriptUrl: string;
+    elementName: string;
+    defaultElementName: string;
+    defineExportName: string;
+    indent: string;
+    attributes: HonuaMapCdnScriptAttributes | undefined;
+  },
 ): string {
-  if (elementName !== 'honua-map') {
-    const nonce = attributes?.nonce
-      ? ` nonce="${escapeHtmlAttribute(attributes.nonce)}"`
-      : '';
+  const {
+    scriptUrl,
+    elementName,
+    defaultElementName,
+    defineExportName,
+    indent,
+    attributes,
+  } = config;
+  if (elementName !== defaultElementName) {
+    const inlineScriptAttributes = serializeHtmlAttributes([
+      ['type', 'module'],
+      ['nonce', attributes?.nonce],
+      ['crossorigin', attributes?.crossOrigin],
+      ['referrerpolicy', attributes?.referrerPolicy],
+    ]);
     return [
-      `<script type="module"${nonce}>`,
-      `${indent}import { defineHonuaMapElement } from '${escapeJsString(scriptUrl)}';`,
-      `${indent}defineHonuaMapElement('${escapeJsString(elementName)}');`,
+      `<script ${inlineScriptAttributes}>`,
+      `${indent}import { ${defineExportName} } from '${escapeJsString(scriptUrl)}';`,
+      `${indent}${defineExportName}('${escapeJsString(elementName)}');`,
       '</script>',
     ].join('\n');
   }
 
-  const rawScriptAttributes: Array<[string, string | null | undefined]> = [
+  const serialized = serializeHtmlAttributes([
     ['type', 'module'],
     ['src', scriptUrl],
     ['nonce', attributes?.nonce],
     ['integrity', attributes?.integrity],
     ['crossorigin', attributes?.crossOrigin],
     ['referrerpolicy', attributes?.referrerPolicy],
-  ];
-  const scriptAttributes = rawScriptAttributes.filter((entry): entry is [string, string] => {
-    const value = entry[1];
-    return value !== undefined && value !== null && value !== '';
-  });
-  const serialized = scriptAttributes
-    .map(([name, value]) => `${name}="${escapeHtmlAttribute(value)}"`)
-    .join(' ');
+  ]);
 
   return `<script ${serialized}></script>`;
+}
+
+function serializeHtmlAttributes(
+  attributes: Array<[string, string | null | undefined]>,
+): string {
+  return attributes
+    .filter((entry): entry is [string, string] => {
+      const value = entry[1];
+      return value !== undefined && value !== null && value !== '';
+    })
+    .map(([name, value]) => `${name}="${escapeHtmlAttribute(value)}"`)
+    .join(' ');
+}
+
+function createMapCdnScriptMarkup(
+  scriptUrl: string,
+  elementName: string,
+  indent: string,
+  attributes: HonuaMapCdnScriptAttributes | undefined,
+): string {
+  return createCdnScriptMarkup({
+    scriptUrl,
+    elementName,
+    defaultElementName: 'honua-map',
+    defineExportName: 'defineHonuaMapElement',
+    indent,
+    attributes,
+  });
 }
 
 function createAngularComponentSnippet(
@@ -573,6 +727,23 @@ function createElementMarkup(
   return `<${elementName}\n${lines.join('\n')}>\n</${elementName}>`;
 }
 
+function createSceneElementMarkup(
+  elementName: string,
+  options: HonuaSceneEmbedOptions,
+  config: Required<Pick<HonuaSceneSnippetOptions, 'includeCredentials' | 'indent'>>,
+): string {
+  const attributes = sceneAttributes(options, config.includeCredentials);
+  if (attributes.length === 0) {
+    return `<${elementName}></${elementName}>`;
+  }
+
+  const lines = attributes.map(([name, value]) => value === true
+    ? `${config.indent}${name}`
+    : `${config.indent}${name}="${escapeHtmlAttribute(value)}"`);
+
+  return `<${elementName}\n${lines.join('\n')}>\n</${elementName}>`;
+}
+
 function createReactElementMarkup(
   elementName: string,
   options: HonuaMapEmbedOptions,
@@ -688,6 +859,29 @@ function mapAttributes(
     ['attribution', options.attribution],
     ['theme', options.theme],
     ['label', options.label],
+  ].filter((entry): entry is [string, string | true] => {
+    const value = entry[1];
+    return value !== undefined && value !== null && value !== '';
+  });
+}
+
+function sceneAttributes(
+  options: HonuaSceneEmbedOptions,
+  includeCredentials: boolean,
+): Array<[string, string | true]> {
+  return [
+    ['tileset-url', options.tilesetUrl],
+    ['terrain-url', options.terrainUrl],
+    ['metadata-url', options.metadataUrl],
+    ['ion-token', includeCredentials ? options.ionToken : undefined],
+    ['center', serializeCoordinate(options.center)],
+    ['height', serializeNumber(options.height)],
+    ['heading', serializeNumber(options.heading)],
+    ['pitch', serializeNumber(options.pitch)],
+    ['roll', serializeNumber(options.roll)],
+    ['theme', options.theme],
+    ['autoload', serializeAutoload(options.autoload)],
+    ['cesium-base-url', options.cesiumBaseUrl],
   ].filter((entry): entry is [string, string | true] => {
     const value = entry[1];
     return value !== undefined && value !== null && value !== '';
@@ -811,12 +1005,38 @@ function setBooleanAttribute(element: HTMLElement, name: string, value: boolean 
   element.removeAttribute(name);
 }
 
+function setAutoloadAttribute(element: HTMLElement, value: boolean | null | undefined): void {
+  if (value === undefined) {
+    return;
+  }
+
+  if (value === null) {
+    element.removeAttribute('autoload');
+    return;
+  }
+
+  if (value) {
+    element.setAttribute('autoload', '');
+    return;
+  }
+
+  element.setAttribute('autoload', 'false');
+}
+
 function serializeBoolean(value: boolean | null | undefined): true | null | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   return value ? true : null;
+}
+
+function serializeAutoload(value: boolean | null | undefined): string | true | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  return value ? true : 'false';
 }
 
 function serializeList(value: readonly string[] | null | undefined): string | null | undefined {
