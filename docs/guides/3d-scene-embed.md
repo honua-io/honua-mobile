@@ -1,10 +1,10 @@
 # 3D Scene Embed
 
-`@honua/embed` includes a CesiumJS-backed `<honua-scene>` custom element for loading external or Honua-hosted 3D Tiles datasets.
+`@honua-io/embed` includes a CesiumJS-backed `<honua-scene>` custom element for loading external or Honua-hosted 3D Tiles datasets.
 
 ```html
 <script type="module">
-  import '@honua/embed';
+  import '@honua-io/embed';
 </script>
 
 <honua-scene
@@ -62,6 +62,64 @@ scene.addEventListener('honua-scene-identify', (event) => {
   // could sample a surface at (x, y); otherwise null.
   console.log(event.detail.x, event.detail.y, event.detail.picked, event.detail.position);
 });
+```
+
+## Generated Snippets and Iframes
+
+Server-side builders can import from `@honua-io/embed/snippets` to generate
+scene markup without loading the browser custom-element entrypoint. The helpers
+omit credential-bearing `ionToken` values unless `includeCredentials: true` is
+passed.
+
+```ts
+import {
+  createHonuaSceneIframeSnippet,
+  createHonuaSceneReactSnippet,
+} from '@honua-io/embed/snippets';
+
+const reactSnippet = createHonuaSceneReactSnippet({
+  tilesetUrl: 'https://example.com/tileset.json',
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  componentName: 'ConstructionScene',
+});
+
+const iframeSnippet = createHonuaSceneIframeSnippet({
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  parentOrigin: 'https://portal.example.com',
+  iframe: {
+    title: 'Construction scene',
+  },
+});
+```
+
+The iframe shell hydrates a full-frame `<honua-scene>` from query parameters,
+accepts typed configure commands, and forwards cloneable scene events to the
+parent window when `parentOrigin` is set.
+
+```ts
+import {
+  addHonuaSceneIframeMessageListener,
+  postHonuaSceneIframeConfigure,
+} from '@honua-io/embed/iframe';
+
+const iframe = document.querySelector<HTMLIFrameElement>('#scene-frame');
+const disconnectSceneMessages = addHonuaSceneIframeMessageListener((message) => {
+  console.log(message.type, message.detail);
+}, {
+  origin: 'https://cdn.honua.dev',
+  source: iframe?.contentWindow ?? null,
+});
+window.addEventListener('pagehide', disconnectSceneMessages, { once: true });
+
+if (iframe?.contentWindow) {
+  postHonuaSceneIframeConfigure(iframe.contentWindow, {
+    theme: 'light',
+  }, 'https://cdn.honua.dev');
+}
 ```
 
 ## Asset Packaging

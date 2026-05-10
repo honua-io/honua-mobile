@@ -81,6 +81,9 @@ export interface HonuaMapIframeMessageListenerOptions {
   source?: MessageEventSource | null;
 }
 
+export interface HonuaSceneIframeMessageListenerOptions extends HonuaMapIframeMessageListenerOptions {
+}
+
 export interface HonuaMapIframeHydrateOptions {
   window?: Window;
   element?: HonuaMapElement | null;
@@ -410,7 +413,7 @@ export function addHonuaMapIframeMessageListener(
 
 export function addHonuaSceneIframeMessageListener(
   listener: HonuaSceneIframeMessageListener,
-  options: HonuaMapIframeMessageListenerOptions = {},
+  options: HonuaSceneIframeMessageListenerOptions = {},
 ): () => void {
   const targetWindow = options.window ?? defaultWindow();
   const expectedOrigins = normalizeExpectedOrigins(options.origin);
