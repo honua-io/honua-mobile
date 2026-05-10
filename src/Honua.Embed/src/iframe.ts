@@ -17,6 +17,15 @@ export interface HonuaMapIframeMessage {
   detail: unknown;
 }
 
+export interface HonuaMapIframeConfigureCommand {
+  source: 'honua-map-host';
+  version: 1;
+  type: 'honua-map-configure';
+  options: HonuaMapEmbedOptions;
+}
+
+export type HonuaMapIframeCommand = HonuaMapIframeConfigureCommand;
+
 export type HonuaMapIframeMessageListener = (
   message: HonuaMapIframeMessage,
   event: MessageEvent<HonuaMapIframeMessage>,
@@ -24,6 +33,10 @@ export type HonuaMapIframeMessageListener = (
 
 export interface HonuaMapIframeMessageTarget {
   postMessage(message: HonuaMapIframeMessage, targetOrigin: string): void;
+}
+
+export interface HonuaMapIframeCommandTarget {
+  postMessage(message: HonuaMapIframeCommand, targetOrigin: string): void;
 }
 
 export interface HonuaMapIframeMessageListenerOptions {
@@ -66,6 +79,33 @@ const THEME_PARAMETERS: Array<[keyof HonuaMapThemeOptions, string]> = [
   ['fontFamily', '--honua-map-font-family'],
   ['controlSize', '--honua-map-control-size'],
 ];
+
+const EMBED_OPTION_KEYS = [
+  'serviceUrl',
+  'layerIds',
+  'apiKey',
+  'center',
+  'zoom',
+  'bounds',
+  'basemap',
+  'interactive',
+  'search',
+  'identify',
+  'attribution',
+  'theme',
+  'label',
+] as const;
+
+const THEME_OPTION_KEYS = [
+  'accent',
+  'background',
+  'foreground',
+  'muted',
+  'surface',
+  'border',
+  'fontFamily',
+  'controlSize',
+] as const;
 
 export function parseHonuaMapIframeConfig(
   input: URL | URLSearchParams | string | null | undefined = defaultLocation(),
@@ -113,7 +153,10 @@ export function hydrateHonuaMapIframe(
   const parent = options.parent === undefined ? targetWindow.parent : options.parent;
   const targetOrigin = options.targetOrigin?.trim() || config.parentOrigin;
   const disconnect = parent && parent !== targetWindow && targetOrigin
-    ? bridgeMapEvents(element, parent, targetOrigin)
+    ? composeDisconnects(
+      bridgeMapEvents(element, parent, targetOrigin),
+      listenForConfigureCommands(targetWindow, element, config, parent, targetOrigin),
+    )
     : () => {};
 
   if (!element.isConnected) {
@@ -126,6 +169,19 @@ export function hydrateHonuaMapIframe(
   return { element, config, disconnect };
 }
 
+export function postHonuaMapIframeConfigure(
+  target: HonuaMapIframeCommandTarget,
+  options: HonuaMapEmbedOptions,
+  targetOrigin: string,
+): void {
+  target.postMessage({
+    source: 'honua-map-host',
+    version: 1,
+    type: 'honua-map-configure',
+    options,
+  }, targetOrigin);
+}
+
 export function isHonuaMapIframeMessage(value: unknown): value is HonuaMapIframeMessage {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -136,6 +192,19 @@ export function isHonuaMapIframeMessage(value: unknown): value is HonuaMapIframe
     && candidate.version === 1
     && typeof candidate.type === 'string'
     && FORWARDED_EVENT_SET.has(candidate.type);
+}
+
+export function isHonuaMapIframeCommand(value: unknown): value is HonuaMapIframeCommand {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<HonuaMapIframeCommand>;
+  return candidate.source === 'honua-map-host'
+    && candidate.version === 1
+    && candidate.type === 'honua-map-configure'
+    && typeof candidate.options === 'object'
+    && candidate.options !== null;
 }
 
 export function addHonuaMapIframeMessageListener(
@@ -189,6 +258,89 @@ function bridgeMapEvents(
       remove();
     }
   };
+}
+
+function listenForConfigureCommands(
+  targetWindow: Window,
+  element: HonuaMapElement,
+  config: HonuaMapIframeConfig,
+  parent: HonuaMapIframeMessageTarget,
+  parentOrigin: string,
+): () => void {
+  const expectedOrigins = normalizeExpectedOrigins(parentOrigin);
+  const messageListener = (event: MessageEvent) => {
+    if (event.source !== parent) {
+      return;
+    }
+
+    if (!originMatches(event.origin, expectedOrigins)) {
+      return;
+    }
+
+    if (!isHonuaMapIframeCommand(event.data)) {
+      return;
+    }
+
+    config.options = mergeHonuaMapOptions(config.options, event.data.options);
+    applyHonuaMapOptions(element, event.data.options);
+  };
+
+  targetWindow.addEventListener('message', messageListener);
+  return () => targetWindow.removeEventListener('message', messageListener);
+}
+
+function composeDisconnects(...disconnects: Array<() => void>): () => void {
+  return () => {
+    for (const disconnect of disconnects) {
+      disconnect();
+    }
+  };
+}
+
+function mergeHonuaMapOptions(
+  current: HonuaMapEmbedOptions,
+  updates: HonuaMapEmbedOptions,
+): HonuaMapEmbedOptions {
+  const merged: HonuaMapEmbedOptions = { ...current };
+  for (const key of EMBED_OPTION_KEYS) {
+    assignDefinedOption(merged, updates, key);
+  }
+
+  if (updates.style !== undefined) {
+    merged.style = mergeHonuaMapThemeOptions(current.style, updates.style);
+  }
+
+  return merged;
+}
+
+function assignDefinedOption<TKey extends keyof HonuaMapEmbedOptions>(
+  target: HonuaMapEmbedOptions,
+  source: HonuaMapEmbedOptions,
+  key: TKey,
+): void {
+  const value = source[key];
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+function mergeHonuaMapThemeOptions(
+  current: HonuaMapThemeOptions | null | undefined,
+  updates: HonuaMapThemeOptions | null,
+): HonuaMapThemeOptions | null {
+  if (updates === null) {
+    return null;
+  }
+
+  const merged: HonuaMapThemeOptions = current ? { ...current } : {};
+  for (const key of THEME_OPTION_KEYS) {
+    const value = updates[key];
+    if (value !== undefined) {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
 }
 
 function defaultWindow(): Window {

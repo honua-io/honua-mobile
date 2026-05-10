@@ -149,6 +149,30 @@ const disconnect = addHonuaMapIframeMessageListener((message) => {
 });
 ```
 
+Hosts can also update iframe map options after initial load without rebuilding
+the iframe `src`. Send a typed configure command to the iframe content window
+and scope `targetOrigin` to the iframe shell origin.
+
+```js
+import { postHonuaMapIframeConfigure } from '@honua-io/embed/iframe';
+
+const iframe = document.querySelector('#asset-map-frame');
+
+postHonuaMapIframeConfigure(iframe.contentWindow, {
+  basemap: 'satellite',
+  search: true,
+  style: {
+    accent: '#334155',
+  },
+}, 'https://cdn.honua.dev');
+```
+
+The fallback shell accepts configure commands only from the window and origin
+declared by `parentOrigin` and applies the update with `applyHonuaMapOptions`.
+The command envelope uses `source: 'honua-map-host'`, `version: 1`,
+`type: 'honua-map-configure'`, and `options`; `isHonuaMapIframeCommand` is
+available for hosts that proxy or validate these messages.
+
 Framework teams can generate typed starter components around the same
 `<honua-map>` custom element or iframe fallback. `@honua-io/embed` does not
 depend on React, Vue, or Angular; these helpers only return code strings and
