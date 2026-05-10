@@ -245,7 +245,27 @@ secrets before each production release and after any owner change.
 
 ## Repository Validation
 
-Run this check after changing app identifiers, TestFlight workflow inputs, or
+Run the Android check after changing package IDs, Android app target mappings,
+signing secret names, or the Android internal distribution workflow:
+
+```bash
+scripts/validate-android-store-prereqs.sh
+```
+
+Run the Android validator smoke test after changing the validator itself:
+
+```bash
+scripts/test-validate-android-store-prereqs.sh
+```
+
+The Android validator checks that `quality/android-store-prereqs.json`, the
+MAUI `ApplicationId` values, this guide, the Android internal distribution
+guide, and `.github/workflows/android-internal-distribution.yml` stay aligned.
+It does not read or verify secret values, keystore contents, Google Play
+Console app records, Play App Signing state, service account permissions, or
+tester access.
+
+Run the iOS check after changing app identifiers, TestFlight workflow inputs, or
 iOS signing secret names:
 
 ```bash
