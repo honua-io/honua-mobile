@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addHonuaMapIframeMessageListener,
+  addHonuaSceneIframeMessageListener,
   hydrateHonuaMapIframe,
+  hydrateHonuaSceneIframe,
   isHonuaMapIframeCommand,
   isHonuaMapIframeMessage,
+  isHonuaSceneIframeCommand,
+  isHonuaSceneIframeMessage,
   parseHonuaMapIframeConfig,
+  parseHonuaSceneIframeConfig,
   postHonuaMapIframeConfigure,
+  postHonuaSceneIframeConfigure,
   type HonuaMapIframeCommand,
   type HonuaMapIframeMessage,
+  type HonuaSceneIframeCommand,
+  type HonuaSceneIframeMessage,
 } from '../src/iframe';
 
 describe('honua map iframe fallback', () => {
@@ -398,6 +406,304 @@ describe('honua map iframe fallback', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0]?.[0]).toBe(message);
     expect(listener.mock.calls[0]?.[1].origin).toBe('https://portal.example.test');
+
+    disconnect();
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source,
+    }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('honua scene iframe fallback', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    window.history.replaceState(null, '', '/embed/scene.html');
+  });
+
+  it('parses scene options and parent origin from iframe query parameters', () => {
+    const url = new URL('/embed/scene.html', window.location.href);
+    url.searchParams.set('tileset-url', 'https://tiles.example.test/site/tileset.json');
+    url.searchParams.set('terrain-url', 'https://terrain.example.test/world');
+    url.searchParams.set('metadata-url', 'https://metadata.example.test/site.json');
+    url.searchParams.set('ion-token', 'public-browser-token');
+    url.searchParams.set('cesium-base-url', 'https://cdn.example.test/cesium/');
+    url.searchParams.set('center', '21.3069,-157.8583');
+    url.searchParams.set('height', '1800');
+    url.searchParams.set('heading', '20');
+    url.searchParams.set('pitch', '-35');
+    url.searchParams.set('roll', '1');
+    url.searchParams.set('theme', 'dark');
+    url.searchParams.set('autoload', 'false');
+    url.searchParams.set('parent-origin', 'https://portal.example.test/admin');
+
+    const config = parseHonuaSceneIframeConfig(url);
+
+    expect(config.parentOrigin).toBe('https://portal.example.test');
+    expect(config.options).toMatchObject({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      terrainUrl: 'https://terrain.example.test/world',
+      metadataUrl: 'https://metadata.example.test/site.json',
+      ionToken: 'public-browser-token',
+      cesiumBaseUrl: 'https://cdn.example.test/cesium/',
+      center: { latitude: 21.3069, longitude: -157.8583 },
+      height: 1800,
+      heading: 20,
+      pitch: -35,
+      roll: 1,
+      theme: 'dark',
+      autoload: false,
+    });
+  });
+
+  it('hydrates a full-frame scene element from the current URL', () => {
+    const mount = document.createElement('div');
+    mount.id = 'honua-scene-frame-root';
+    document.body.append(mount);
+    const url = new URL('/embed/scene.html', window.location.href);
+    url.searchParams.set('tileset-url', 'https://tiles.example.test/site/tileset.json');
+    url.searchParams.set('autoload', 'false');
+    window.history.replaceState(null, '', url);
+
+    const runtime = hydrateHonuaSceneIframe({ parent: null });
+
+    expect(mount.querySelector('honua-scene')).toBe(runtime.element);
+    expect(runtime.element.getAttribute('tileset-url')).toBe('https://tiles.example.test/site/tileset.json');
+    expect(runtime.element.getAttribute('autoload')).toBe('false');
+    expect(runtime.element.style.height).toBe('100%');
+  });
+
+  it('forwards sanitized scene events to the parent frame with the scoped target origin', () => {
+    const url = new URL('/embed/scene.html', window.location.href);
+    url.searchParams.set('parent-origin', 'https://portal.example.test');
+    window.history.replaceState(null, '', url);
+    const parent = {
+      postMessage: vi.fn<(message: HonuaSceneIframeMessage, targetOrigin: string) => void>(),
+    };
+    const widget = { scene: { requestRender: () => undefined } };
+    const tileset = { root: { transform: () => undefined } };
+
+    const runtime = hydrateHonuaSceneIframe({ parent });
+    runtime.element.dispatchEvent(new CustomEvent('honua-scene-ready', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        config: { tilesetUrl: 'https://tiles.example.test/site/tileset.json' },
+        widget,
+        tileset,
+      },
+    }));
+    runtime.element.dispatchEvent(new CustomEvent('honua-scene-identify', {
+      detail: {
+        config: { theme: 'dark' },
+        x: 12,
+        y: 34,
+        picked: { id: 'feature-1', widget },
+        position: { latitude: 21, longitude: -157, height: 8 },
+      },
+    }));
+
+    expect(parent.postMessage).toHaveBeenNthCalledWith(1, {
+      source: 'honua-scene-iframe',
+      version: 1,
+      type: 'honua-scene-ready',
+      detail: {
+        config: { tilesetUrl: 'https://tiles.example.test/site/tileset.json' },
+        widget: null,
+        tileset: null,
+      },
+    }, 'https://portal.example.test');
+    expect(parent.postMessage).toHaveBeenNthCalledWith(2, {
+      source: 'honua-scene-iframe',
+      version: 1,
+      type: 'honua-scene-identify',
+      detail: {
+        config: { theme: 'dark' },
+        x: 12,
+        y: 34,
+        picked: { id: 'feature-1', widget: { scene: {} } },
+        position: { latitude: 21, longitude: -157, height: 8 },
+      },
+    }, 'https://portal.example.test');
+
+    runtime.disconnect();
+    runtime.element.dispatchEvent(new CustomEvent('honua-scene-camera-change', {
+      detail: { height: 100 },
+    }));
+
+    expect(parent.postMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('identifies scene iframe messages and configure commands by source, version, and type', () => {
+    expect(isHonuaSceneIframeMessage({
+      source: 'honua-scene-iframe',
+      version: 1,
+      type: 'honua-scene-camera-change',
+      detail: {},
+    })).toBe(true);
+    expect(isHonuaSceneIframeMessage({
+      source: 'honua-scene-iframe',
+      version: 1,
+      type: 'honua-scene-layer-toggle',
+      detail: {},
+    })).toBe(false);
+    expect(isHonuaSceneIframeCommand({
+      source: 'honua-scene-host',
+      version: 1,
+      type: 'honua-scene-configure',
+      options: { theme: 'light' },
+    })).toBe(true);
+    expect(isHonuaSceneIframeCommand({
+      source: 'honua-scene-host',
+      version: 1,
+      type: 'honua-scene-configure',
+      options: null,
+    })).toBe(false);
+  });
+
+  it('posts typed configure commands to a scene iframe target', () => {
+    const target = {
+      postMessage: vi.fn<(message: HonuaSceneIframeCommand, targetOrigin: string) => void>(),
+    };
+
+    postHonuaSceneIframeConfigure(target, {
+      metadataUrl: 'https://metadata.example.test/site.json',
+      autoload: false,
+    }, 'https://cdn.honua.dev');
+
+    expect(target.postMessage).toHaveBeenCalledWith({
+      source: 'honua-scene-host',
+      version: 1,
+      type: 'honua-scene-configure',
+      options: {
+        metadataUrl: 'https://metadata.example.test/site.json',
+        autoload: false,
+      },
+    }, 'https://cdn.honua.dev');
+  });
+
+  it('applies configure commands from the declared parent origin and source', () => {
+    const parent = {
+      postMessage: vi.fn<(message: HonuaSceneIframeMessage, targetOrigin: string) => void>(),
+    };
+    const parentSource = parent as unknown as MessageEventSource;
+    const url = new URL('/embed/scene.html', window.location.href);
+    url.searchParams.set('tileset-url', 'https://tiles.example.test/site/tileset.json');
+    url.searchParams.set('theme', 'dark');
+    url.searchParams.set('autoload', 'false');
+    url.searchParams.set('parent-origin', 'https://portal.example.test');
+    window.history.replaceState(null, '', url);
+
+    const runtime = hydrateHonuaSceneIframe({ parent });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-scene-host',
+        version: 1,
+        type: 'honua-scene-configure',
+        options: { theme: 'light' },
+      },
+      origin: 'https://other.example.test',
+      source: parentSource,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-scene-host',
+        version: 1,
+        type: 'honua-scene-configure',
+        options: { height: 900 },
+      },
+      origin: 'https://portal.example.test',
+      source: window,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-scene-host',
+        version: 1,
+        type: 'honua-scene-configure',
+        options: {
+          theme: 'light',
+          autoload: true,
+          height: 1200,
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parentSource,
+    }));
+
+    expect(runtime.element.getAttribute('tileset-url')).toBe('https://tiles.example.test/site/tileset.json');
+    expect(runtime.element.getAttribute('theme')).toBe('light');
+    expect(runtime.element.hasAttribute('autoload')).toBe(true);
+    expect(runtime.element.getAttribute('height')).toBe('1200');
+    expect(runtime.config.options).toMatchObject({
+      tilesetUrl: 'https://tiles.example.test/site/tileset.json',
+      theme: 'light',
+      autoload: true,
+      height: 1200,
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-scene-host',
+        version: 1,
+        type: 'honua-scene-configure',
+        options: {
+          theme: undefined,
+          height: undefined,
+          pitch: -35,
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parentSource,
+    }));
+
+    expect(runtime.element.getAttribute('theme')).toBe('light');
+    expect(runtime.element.getAttribute('height')).toBe('1200');
+    expect(runtime.element.getAttribute('pitch')).toBe('-35');
+    expect(runtime.config.options).toMatchObject({
+      theme: 'light',
+      height: 1200,
+      pitch: -35,
+    });
+  });
+
+  it('subscribes to scene iframe fallback messages with origin and source filtering', () => {
+    const sourceFrame = document.createElement('iframe');
+    document.body.append(sourceFrame);
+    const source = sourceFrame.contentWindow;
+    const listener = vi.fn<(message: HonuaSceneIframeMessage, event: MessageEvent) => void>();
+    const message: HonuaSceneIframeMessage = {
+      source: 'honua-scene-iframe',
+      version: 1,
+      type: 'honua-scene-layer-change',
+      detail: { layerId: 'primary' },
+    };
+    const disconnect = addHonuaSceneIframeMessageListener(listener, {
+      origin: 'https://portal.example.test/admin/embed',
+      source,
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://other.example.test',
+      source,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source: window,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: message,
+      origin: 'https://portal.example.test',
+      source,
+    }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0]?.[0]).toBe(message);
 
     disconnect();
     window.dispatchEvent(new MessageEvent('message', {
