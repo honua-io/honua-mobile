@@ -75,6 +75,38 @@ const snippet = createHonuaMapCdnSnippet({
 });
 ```
 
+After building the package, create the CDN manifest from the generated `dist`
+folder:
+
+```bash
+npm run build --prefix src/Honua.Embed
+npm run cdn:manifest --prefix src/Honua.Embed
+```
+
+`dist/cdn-manifest.json` lists the package name/version, default URLs, and
+top-level JavaScript files with byte size, SHA-256 hash, and SHA-384 SRI
+integrity. It covers `embed.js`, `index.js`, `iframe.js`, `snippets.js`, and
+top-level Vite chunks; Cesium runtime assets under `dist/cesium` are copied for
+hosting but are not expanded into the manifest.
+The publish workflow uploads the built `dist/` directory as a CDN artifact so
+release operators can promote the static bundle separately from npm publishing.
+
+When generating snippets for a CDN-hosted build, read the `embed.js` entry and
+pass its integrity value through the existing helper:
+
+```js
+const manifest = await fetch('https://cdn.honua.dev/cdn-manifest.json').then((response) => response.json());
+const embedEntry = manifest.files.find((file) => file.path === 'embed.js');
+
+const snippet = createHonuaMapCdnSnippet(options, {
+  scriptUrl: embedEntry.url,
+  scriptAttributes: {
+    integrity: embedEntry.integrity,
+    crossOrigin: 'anonymous',
+  },
+});
+```
+
 The generated CDN markup stays white-label; it does not add Honua attribution.
 When `elementName` is customized, the helper emits an inline module import that
 registers the branded tag name from the CDN bundle.
