@@ -341,6 +341,58 @@ const angularIframeComponent = createHonuaMapAngularIframeSnippet({
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 
+## Generated Scene Snippets
+
+```ts
+import { createHonuaSceneSnippet } from '@honua-io/embed';
+
+const snippet = createHonuaSceneSnippet({
+  tilesetUrl: 'https://example.com/tileset.json',
+  terrainUrl: 'https://example.com/terrain',
+  metadataUrl: 'https://example.com/site.metadata.json',
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  height: 1800,
+  heading: 20,
+  pitch: -35,
+  roll: 0,
+  theme: 'dark',
+  autoload: true,
+  cesiumBaseUrl: 'https://cdn.example.com/cesium/',
+}, {
+  elementName: 'city-construction-scene',
+});
+```
+
+Scene snippet helpers target public or externally hosted 3D Tiles, terrain, and
+metadata URLs. They do not create Honua server contracts or SDK scene metadata.
+Custom element names generate a script that calls
+`defineHonuaSceneElement(...)`. `ionToken` is omitted unless
+`includeCredentials: true` is passed.
+
+For CDN distribution, use `createHonuaSceneCdnSnippet`. It emits the CDN module
+script and the same white-label custom element markup. When a custom
+`elementName` is provided, the snippet imports `defineHonuaSceneElement(...)`
+from the CDN bundle and registers that branded tag name.
+
+```ts
+import { createHonuaSceneCdnSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaSceneCdnSnippet({
+  tilesetUrl: 'https://example.com/tileset.json',
+  metadataUrl: 'https://example.com/site.metadata.json',
+  autoload: true,
+}, {
+  scriptUrl: 'https://cdn.honua.dev/embed.js',
+  scriptAttributes: {
+    integrity: 'sha384-...',
+    crossOrigin: 'anonymous',
+  },
+});
+```
+
+Use `applyHonuaSceneOptions(element, options)` to apply the same scene options
+shape to an existing scene element at runtime.
+
 ## Host Extensions
 
 ```ts
