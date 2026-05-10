@@ -115,6 +115,31 @@ Server-side builders that only generate markup can import from
 `@honua-io/embed/snippets`; that subpath avoids loading the browser custom
 element entrypoint.
 
+Embed configurators can route a user-selected output target through
+`createHonuaMapEmbedBuilderSnippet` instead of duplicating switch logic across
+the individual helpers. The default target is `web-component`; supported map
+targets are `web-component`, `cdn`, `iframe`, `react`, `react-iframe`, `vue`,
+`vue-iframe`, `angular`, and `angular-iframe`.
+
+```js
+import { createHonuaMapEmbedBuilderSnippet } from '@honua-io/embed/snippets';
+
+const snippet = createHonuaMapEmbedBuilderSnippet(options, {
+  target: selectedTarget,
+  cdn: {
+    scriptUrl: 'https://cdn.honua.dev/embed.js',
+    scriptAttributes: {
+      integrity: embedEntry.integrity,
+      crossOrigin: 'anonymous',
+    },
+  },
+  iframe: {
+    iframeUrl: 'https://cdn.honua.dev/embed/map.html',
+    parentOrigin: 'https://portal.example.com',
+  },
+});
+```
+
 Runtime hosts can apply the same configuration shape to an existing element:
 
 ```js

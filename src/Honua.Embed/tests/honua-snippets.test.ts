@@ -5,6 +5,7 @@ import {
   createHonuaMapAngularIframeSnippet,
   createHonuaMapAngularSnippet,
   createHonuaMapCdnSnippet,
+  createHonuaMapEmbedBuilderSnippet,
   createHonuaMapIframeSnippet,
   createHonuaMapReactIframeSnippet,
   createHonuaMapReactSnippet,
@@ -464,6 +465,93 @@ describe('honua map snippets', () => {
     expect(iframeSnippet).toContain('<iframe');
     expect(iframeSnippet).toContain('src="/embeds/map.html?basemap=dark"');
     expect(iframeSnippet).toContain('export class CityAssetMapFrameComponent {}');
+  });
+
+  it('dispatches builder map targets to the concrete snippet helpers', () => {
+    const options = {
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      apiKey: 'secret-key',
+      search: true,
+      label: 'City asset map',
+    };
+
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      webComponent: { includeScript: false },
+    })).toBe(createHonuaMapSnippet(options, { includeScript: false }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'cdn',
+      cdn: {
+        scriptUrl: 'https://cdn.example.test/embed.js',
+      },
+    })).toBe(createHonuaMapCdnSnippet(options, {
+      scriptUrl: 'https://cdn.example.test/embed.js',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'iframe',
+      iframe: {
+        iframeUrl: '/embed/map.html',
+      },
+    })).toBe(createHonuaMapIframeSnippet(options, {
+      iframeUrl: '/embed/map.html',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'react',
+      react: {
+        componentName: 'CityAssetMap',
+      },
+    })).toBe(createHonuaMapReactSnippet(options, {
+      componentName: 'CityAssetMap',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'react-iframe',
+      reactIframe: {
+        componentName: 'CityAssetMapFrame',
+      },
+    })).toBe(createHonuaMapReactIframeSnippet(options, {
+      componentName: 'CityAssetMapFrame',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'vue',
+      vue: {
+        includeScript: false,
+      },
+    })).toBe(createHonuaMapVueSnippet(options, {
+      includeScript: false,
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'vue-iframe',
+      vueIframe: {
+        iframeUrl: '/embed/map.html',
+      },
+    })).toBe(createHonuaMapVueIframeSnippet(options, {
+      iframeUrl: '/embed/map.html',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'angular',
+      angular: {
+        componentName: 'CityAssetMapComponent',
+        selector: 'city-asset-map',
+      },
+    })).toBe(createHonuaMapAngularSnippet(options, {
+      componentName: 'CityAssetMapComponent',
+      selector: 'city-asset-map',
+    }));
+    expect(createHonuaMapEmbedBuilderSnippet(options, {
+      target: 'angular-iframe',
+      angularIframe: {
+        componentName: 'CityAssetMapFrameComponent',
+        selector: 'city-asset-map-frame',
+      },
+    })).toBe(createHonuaMapAngularIframeSnippet(options, {
+      componentName: 'CityAssetMapFrameComponent',
+      selector: 'city-asset-map-frame',
+    }));
+  });
+
+  it('rejects unsupported builder map targets at runtime', () => {
+    expect(() => createHonuaMapEmbedBuilderSnippet({}, {
+      target: 'native' as never,
+    })).toThrow('Unsupported Honua map embed builder target: native');
   });
 });
 

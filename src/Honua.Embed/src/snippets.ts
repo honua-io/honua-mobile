@@ -141,6 +141,30 @@ export interface HonuaMapAngularIframeSnippetOptions extends HonuaMapIframeSnipp
   selector?: string;
 }
 
+export type HonuaMapEmbedBuilderTarget =
+  | 'web-component'
+  | 'cdn'
+  | 'iframe'
+  | 'react'
+  | 'react-iframe'
+  | 'vue'
+  | 'vue-iframe'
+  | 'angular'
+  | 'angular-iframe';
+
+export interface HonuaMapEmbedBuilderSnippetOptions {
+  target?: HonuaMapEmbedBuilderTarget;
+  webComponent?: HonuaMapSnippetOptions;
+  cdn?: HonuaMapCdnSnippetOptions;
+  iframe?: HonuaMapIframeSnippetOptions;
+  react?: HonuaMapReactSnippetOptions;
+  reactIframe?: HonuaMapReactIframeSnippetOptions;
+  vue?: HonuaMapVueSnippetOptions;
+  vueIframe?: HonuaMapVueIframeSnippetOptions;
+  angular?: HonuaMapAngularSnippetOptions;
+  angularIframe?: HonuaMapAngularIframeSnippetOptions;
+}
+
 export function applyHonuaMapOptions(
   element: HTMLElement,
   options: HonuaMapEmbedOptions,
@@ -506,6 +530,36 @@ export function createHonuaMapAngularIframeSnippet(
     iframe,
     indent,
   );
+}
+
+export function createHonuaMapEmbedBuilderSnippet(
+  options: HonuaMapEmbedOptions,
+  snippetOptions: HonuaMapEmbedBuilderSnippetOptions = {},
+): string {
+  const target = snippetOptions.target ?? 'web-component';
+
+  switch (target) {
+    case 'web-component':
+      return createHonuaMapSnippet(options, snippetOptions.webComponent);
+    case 'cdn':
+      return createHonuaMapCdnSnippet(options, snippetOptions.cdn);
+    case 'iframe':
+      return createHonuaMapIframeSnippet(options, snippetOptions.iframe);
+    case 'react':
+      return createHonuaMapReactSnippet(options, snippetOptions.react);
+    case 'react-iframe':
+      return createHonuaMapReactIframeSnippet(options, snippetOptions.reactIframe);
+    case 'vue':
+      return createHonuaMapVueSnippet(options, snippetOptions.vue);
+    case 'vue-iframe':
+      return createHonuaMapVueIframeSnippet(options, snippetOptions.vueIframe);
+    case 'angular':
+      return createHonuaMapAngularSnippet(options, snippetOptions.angular);
+    case 'angular-iframe':
+      return createHonuaMapAngularIframeSnippet(options, snippetOptions.angularIframe);
+    default:
+      throw new Error(`Unsupported Honua map embed builder target: ${target}`);
+  }
 }
 
 function createCdnScriptMarkup(
