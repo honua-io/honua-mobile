@@ -288,6 +288,8 @@ public sealed record HonuaNativeArSessionStatus
 
     public string? PackageId { get; init; }
 
+    public string? DeviceModel { get; init; }
+
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
@@ -301,6 +303,11 @@ public sealed record HonuaNativeArSessionStatus
         foreach (var warning in Warnings)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(warning);
+        }
+
+        if (DeviceModel is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(DeviceModel);
         }
 
         if (ConfirmedControlPointCount < 0)
@@ -346,6 +353,8 @@ public sealed record HonuaNativeArEvidenceContext
     public bool IsOnline { get; init; }
 
     public HonuaNativeArRuntime Runtime { get; init; } = HonuaNativeArRuntime.Unknown;
+
+    public string? DeviceModel { get; init; }
 
     public HonuaNativeArReadinessLevel ReadinessLevel { get; init; }
 
@@ -397,6 +406,7 @@ public sealed record HonuaNativeArEvidenceContext
             IsOffline = request.IsOffline,
             IsOnline = status.IsOnline,
             Runtime = status.Runtime,
+            DeviceModel = status.DeviceModel,
             ReadinessLevel = readiness.Level,
             ActiveAnchoringMode = status.ActiveAnchoringMode,
             PackageState = status.PackageState,
