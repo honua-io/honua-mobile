@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addHonuaMapIframeMessageListener,
   hydrateHonuaMapIframe,
+  isHonuaMapIframeCommand,
   isHonuaMapIframeMessage,
   parseHonuaMapIframeConfig,
+  postHonuaMapIframeConfigure,
+  type HonuaMapIframeCommand,
   type HonuaMapIframeMessage,
 } from '../src/iframe';
 
@@ -162,6 +165,202 @@ describe('honua map iframe fallback', () => {
       type: 'unscoped-event',
       detail: {},
     })).toBe(false);
+  });
+
+  it('posts typed configure commands to a map iframe target', () => {
+    const target = {
+      postMessage: vi.fn<(message: HonuaMapIframeCommand, targetOrigin: string) => void>(),
+    };
+
+    postHonuaMapIframeConfigure(target, {
+      basemap: 'satellite',
+      search: true,
+    }, 'https://cdn.honua.dev');
+
+    expect(target.postMessage).toHaveBeenCalledWith({
+      source: 'honua-map-host',
+      version: 1,
+      type: 'honua-map-configure',
+      options: {
+        basemap: 'satellite',
+        search: true,
+      },
+    }, 'https://cdn.honua.dev');
+  });
+
+  it('identifies iframe configure commands by source, version, type, and options', () => {
+    expect(isHonuaMapIframeCommand({
+      source: 'honua-map-host',
+      version: 1,
+      type: 'honua-map-configure',
+      options: {
+        basemap: 'satellite',
+      },
+    })).toBe(true);
+
+    expect(isHonuaMapIframeCommand({
+      source: 'honua-map-iframe',
+      version: 1,
+      type: 'honua-map-configure',
+      options: {},
+    })).toBe(false);
+
+    expect(isHonuaMapIframeCommand({
+      source: 'honua-map-host',
+      version: 1,
+      type: 'honua-map-configure',
+      options: null,
+    })).toBe(false);
+  });
+
+  it('applies configure commands from the declared parent origin and source', () => {
+    const parent = {
+      postMessage: vi.fn<(message: HonuaMapIframeMessage, targetOrigin: string) => void>(),
+    };
+    const parentSource = parent as unknown as MessageEventSource;
+
+    const url = new URL('/embed/map.html', window.location.href);
+    url.searchParams.set('service-url', 'https://services.example.test/FeatureServer');
+    url.searchParams.set('layer-ids', 'assets');
+    url.searchParams.set('search', 'false');
+    url.searchParams.set('--honua-map-accent', '#0f766e');
+    url.searchParams.set('parent-origin', 'https://portal.example.test');
+    window.history.replaceState(null, '', url);
+
+    const runtime = hydrateHonuaMapIframe({ parent });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: 'satellite',
+          search: true,
+        },
+      },
+      origin: 'https://other.example.test',
+      source: parentSource,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: 'dark',
+          identify: true,
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: window,
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: 'streets',
+          search: true,
+          style: {
+            fontFamily: 'Aptos, sans-serif',
+          },
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parentSource,
+    }));
+
+    expect(runtime.element.getAttribute('basemap')).toBe('streets');
+    expect(runtime.element.hasAttribute('search')).toBe(true);
+    expect(runtime.element.hasAttribute('identify')).toBe(false);
+    expect(runtime.element.style.getPropertyValue('--honua-map-font-family')).toBe('Aptos, sans-serif');
+    expect(runtime.config.options).toMatchObject({
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      layerIds: ['assets'],
+      basemap: 'streets',
+      search: true,
+      style: {
+        accent: '#0f766e',
+        fontFamily: 'Aptos, sans-serif',
+      },
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: undefined,
+          search: undefined,
+          style: {
+            fontFamily: undefined,
+            foreground: '#111827',
+          },
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parentSource,
+    }));
+
+    expect(runtime.element.getAttribute('basemap')).toBe('streets');
+    expect(runtime.element.hasAttribute('search')).toBe(true);
+    expect(runtime.element.style.getPropertyValue('--honua-map-font-family')).toBe('Aptos, sans-serif');
+    expect(runtime.element.style.getPropertyValue('--honua-map-foreground')).toBe('#111827');
+    expect(runtime.config.options).toMatchObject({
+      basemap: 'streets',
+      search: true,
+      style: {
+        accent: '#0f766e',
+        fontFamily: 'Aptos, sans-serif',
+        foreground: '#111827',
+      },
+    });
+
+    runtime.disconnect();
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: 'topographic',
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parentSource,
+    }));
+
+    expect(runtime.element.getAttribute('basemap')).toBe('streets');
+  });
+
+  it('does not listen for configure commands when parent-origin is invalid', () => {
+    const parent = {
+      postMessage: vi.fn<(message: HonuaMapIframeMessage, targetOrigin: string) => void>(),
+    };
+
+    const url = new URL('/embed/map.html', window.location.href);
+    url.searchParams.set('parent-origin', 'portal.example.test');
+    window.history.replaceState(null, '', url);
+
+    const runtime = hydrateHonuaMapIframe({ parent });
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        source: 'honua-map-host',
+        version: 1,
+        type: 'honua-map-configure',
+        options: {
+          basemap: 'satellite',
+        },
+      },
+      origin: 'https://portal.example.test',
+      source: parent as unknown as MessageEventSource,
+    }));
+
+    expect(runtime.config.parentOrigin).toBeNull();
+    expect(runtime.element.hasAttribute('basemap')).toBe(false);
   });
 
   it('subscribes to iframe fallback messages with origin and source filtering', () => {
