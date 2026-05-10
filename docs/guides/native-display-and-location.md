@@ -106,8 +106,8 @@ state into the platform adapter.
   app remains responsible for resolving the authoritative scene/package data.
 - `HonuaNativeArEvidenceContext` snapshots the mobile runtime metadata that AR
   field photos, annotations, and reports should carry: scene/package ids,
-  online/offline state, runtime, active anchor mode, package state, accuracy
-  samples, control points, readiness, blockers, and warnings.
+  online/offline state, runtime, device model, active anchor mode, package
+  state, accuracy samples, control points, readiness, blockers, and warnings.
 
 ```csharp
 using Honua.Mobile.Maui;

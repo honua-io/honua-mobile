@@ -121,6 +121,14 @@ public sealed class HonuaNativeSceneAnchoringTests
     }
 
     [Fact]
+    public void Validate_WhenDeviceModelIsBlank_Throws()
+    {
+        var status = CreateStatus(deviceModel: " ");
+
+        Assert.Throws<ArgumentException>(status.Validate);
+    }
+
+    [Fact]
     public void EvaluateReadiness_PrecisionRequiresSurveyQualityControlPointsAndResidual()
     {
         var request = CreateRequest(
@@ -202,6 +210,7 @@ public sealed class HonuaNativeSceneAnchoringTests
                 yawAccuracyDegrees: 3,
                 calibrationResidualMeters: 0.2,
                 confirmedControlPointCount: 3,
+                deviceModel: "Pixel 8 Pro",
                 isOnline: false,
                 updatedAt: capturedAt),
             Status = CreateStatus(
@@ -213,6 +222,7 @@ public sealed class HonuaNativeSceneAnchoringTests
                 yawAccuracyDegrees: 3,
                 calibrationResidualMeters: 0.2,
                 confirmedControlPointCount: 3,
+                deviceModel: "Pixel 8 Pro",
                 isOnline: false,
                 updatedAt: capturedAt),
         };
@@ -233,6 +243,7 @@ public sealed class HonuaNativeSceneAnchoringTests
         Assert.True(evidence.IsOffline);
         Assert.False(evidence.IsOnline);
         Assert.Equal(HonuaNativeArRuntime.AndroidArCore, evidence.Runtime);
+        Assert.Equal("Pixel 8 Pro", evidence.DeviceModel);
         Assert.Equal(HonuaNativeArReadinessLevel.PrecisionInspection, evidence.ReadinessLevel);
         Assert.Equal(HonuaNativeArAnchoringMode.ControlPointCalibration, evidence.ActiveAnchoringMode);
         Assert.Equal(HonuaNativeArScenePackageState.Valid, evidence.PackageState);
@@ -349,6 +360,7 @@ public sealed class HonuaNativeSceneAnchoringTests
         double? yawAccuracyDegrees = null,
         double? calibrationResidualMeters = null,
         int confirmedControlPointCount = 0,
+        string? deviceModel = null,
         bool isOnline = true,
         DateTimeOffset? updatedAt = null)
         => new()
@@ -362,6 +374,7 @@ public sealed class HonuaNativeSceneAnchoringTests
             PackageId = packageId,
             PackageState = packageState,
             ConfirmedControlPointCount = confirmedControlPointCount,
+            DeviceModel = deviceModel,
             IsOnline = isOnline,
             UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow,
             Accuracy = new HonuaNativeArAccuracySample
