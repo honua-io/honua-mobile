@@ -55,7 +55,7 @@ public sealed record MobileExceptionReportContext
 }
 
 /// <summary>
-/// Sanitized mobile exception report stored on device. This is not a server ingestion contract.
+/// Sanitized mobile exception report stored on device and posted to configured ingestion endpoints.
 /// </summary>
 public sealed record MobileExceptionReport
 {
