@@ -83,7 +83,7 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
                 }
                 catch (Exception ex) when (!asset.Required && ex is not OperationCanceledException)
                 {
-                    DeletePartialAsset(stagingDirectory, asset.Path);
+                    DeletePartialAsset(stagingDirectory, asset.Path, asset.Key);
                 }
             }
 
@@ -576,14 +576,26 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         Directory.Move(backupDirectory, readyDirectory);
     }
 
-    private static void DeletePartialAsset(string stagingDirectory, string? assetPath)
+    private static void DeletePartialAsset(string stagingDirectory, string? assetPath, string? assetKey)
     {
         if (string.IsNullOrWhiteSpace(assetPath))
         {
             return;
         }
 
-        var partialPath = Path.Combine(stagingDirectory, assetPath.Replace('/', Path.DirectorySeparatorChar)) + ".partial";
+        string relativePath;
+        try
+        {
+            relativePath = RequireSafeRelativePath(
+                assetPath,
+                string.IsNullOrWhiteSpace(assetKey) ? "<unknown>" : assetKey);
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+
+        var partialPath = BuildPackageFilePath(stagingDirectory, relativePath) + ".partial";
         if (File.Exists(partialPath))
         {
             File.Delete(partialPath);

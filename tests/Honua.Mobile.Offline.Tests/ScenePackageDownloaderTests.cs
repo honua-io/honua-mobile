@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Honua.Mobile.Offline.GeoPackage;
@@ -166,6 +167,29 @@ public sealed class ScenePackageDownloaderTests : IDisposable
         Assert.False(File.Exists(Path.Combine(result.PackageDirectory, "textures", "overview.bin")));
         var record = Assert.Single(await store.ListScenePackagesAsync());
         Assert.Equal(["texture-overview"], record.MissingOptionalAssetKeys);
+    }
+
+    [Theory]
+    [InlineData("absolute")]
+    [InlineData("traversal")]
+    public async Task OptionalAssetCleanup_MaliciousManifestPath_DoesNotDeleteAttackerChosenPartial(string pathKind)
+    {
+        var outputDirectory = Path.Combine(_rootDirectory, "packages");
+        var stagingDirectory = Path.Combine(outputDirectory, "pkg_downtown_honolulu_2026_04.partial");
+        var attackerDirectory = Path.Combine(outputDirectory, "attacker");
+        var attackerPath = Path.Combine(attackerDirectory, "chosen-asset");
+        var attackerPartialPath = attackerPath + ".partial";
+        Directory.CreateDirectory(stagingDirectory);
+        Directory.CreateDirectory(attackerDirectory);
+        await File.WriteAllTextAsync(attackerPartialPath, "do-not-delete");
+        var manifestPath = pathKind == "absolute"
+            ? attackerPath
+            : "../attacker/chosen-asset";
+
+        InvokeOptionalPartialCleanup(stagingDirectory, manifestPath);
+
+        Assert.True(File.Exists(attackerPartialPath));
+        Assert.Equal("do-not-delete", await File.ReadAllTextAsync(attackerPartialPath));
     }
 
     [Fact]
@@ -435,6 +459,16 @@ public sealed class ScenePackageDownloaderTests : IDisposable
 
     private static string Sha256Hex(byte[] payload)
         => Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+
+    private static void InvokeOptionalPartialCleanup(string stagingDirectory, string assetPath)
+    {
+        var method = typeof(ScenePackageDownloader).GetMethod(
+            "DeletePartialAsset",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+        method!.Invoke(null, [stagingDirectory, assetPath, "optional-texture"]);
+    }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
