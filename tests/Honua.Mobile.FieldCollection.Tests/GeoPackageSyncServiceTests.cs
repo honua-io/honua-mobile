@@ -5,6 +5,7 @@ using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.Maui.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using SQLite;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
@@ -270,6 +271,39 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task StoreFeatureAsync_WhenChangeJournalInsertFails_RollsBackFeatureWrite()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.InitializeAsync();
+        InstallFailingChangeRecordInsertTrigger(databasePath);
+
+        await Assert.ThrowsAsync<SQLiteException>(() =>
+            storage.StoreFeatureAsync(CreateFeature("asset-rollback", version: 1)));
+
+        Assert.Null(await storage.GetFeatureAsync("asset-rollback", 1));
+        Assert.Empty(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
+    public async Task DeleteFeatureAsync_WhenChangeJournalInsertFails_RollsBackFeatureDelete()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-delete", version: 1));
+        var pendingChanges = await storage.GetPendingChangesAsync();
+        await storage.MarkChangesAsSynced(pendingChanges.Select(change => change.Id).ToList());
+        InstallFailingChangeRecordInsertTrigger(databasePath);
+
+        await Assert.ThrowsAsync<SQLiteException>(() => storage.DeleteFeatureAsync("asset-delete", 1));
+
+        Assert.NotNull(await storage.GetFeatureAsync("asset-delete", 1));
+        Assert.Empty(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
     public async Task GetOfflineCacheDiagnosticsAsync_SeparatesMetadataFeatureAndOperationState()
     {
         var databasePath = CreateDatabasePath();
@@ -401,6 +435,19 @@ public sealed class GeoPackageSyncServiceTests
     private static string CreateDatabasePath()
     {
         return Path.Combine(Path.GetTempPath(), $"honua-field-tests-{Guid.NewGuid():N}.gpkg");
+    }
+
+    private static void InstallFailingChangeRecordInsertTrigger(string databasePath)
+    {
+        using var connection = new SQLiteConnection(databasePath, SQLiteOpenFlags.ReadWrite);
+        connection.Execute(
+            """
+            CREATE TRIGGER fail_change_record_insert
+            BEFORE INSERT ON change_records
+            BEGIN
+                SELECT RAISE(FAIL, 'change journal insert failed');
+            END;
+            """);
     }
 
     private sealed class FixedResultUploader : IFieldCollectionChangeUploader
