@@ -1,6 +1,7 @@
 using SQLite;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
@@ -21,6 +22,11 @@ namespace Honua.Mobile.FieldCollection.Services.Storage;
 /// </summary>
 public class GeoPackageStorageService : IDisposable
 {
+    private static readonly JsonSerializerOptions SchemaJsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly SQLiteAsyncConnection _connection;
     private readonly WKBWriter _wkbWriter;
     private readonly WKBReader _wkbReader;
@@ -639,7 +645,7 @@ public class GeoPackageStorageService : IDisposable
                 GeometryType = layer.GeometryType.ToString(),
                 SpatialReference = "EPSG:4326",
                 IsEditable = layer.IsEditable,
-                Schema = JsonSerializer.Serialize(layer.Schema),
+                Schema = JsonSerializer.Serialize(layer.Schema, SchemaJsonOptions),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -708,11 +714,143 @@ public class GeoPackageStorageService : IDisposable
             Id = metadata.Id,
             Name = metadata.Name,
             Description = metadata.Description,
-            GeometryType = Enum.Parse<CoreModels.GeometryType>(metadata.GeometryType),
+            GeometryType = ParseGeometryType(metadata.GeometryType),
             IsEditable = metadata.IsEditable,
             IsVisible = true,
-            Schema = JsonSerializer.Deserialize<List<FieldDefinition>>(metadata.Schema ?? "[]") ?? new()
+            Schema = DeserializeLayerSchema(metadata.Schema)
         };
+    }
+
+    private static GeometryType ParseGeometryType(string? value)
+    {
+        if (Enum.TryParse<GeometryType>(value, ignoreCase: true, out var geometryType))
+        {
+            return geometryType;
+        }
+
+        return string.Equals(value, "LineString", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "MultiLineString", StringComparison.OrdinalIgnoreCase)
+            ? GeometryType.Polyline
+            : GeometryType.Unspecified;
+    }
+
+    private static List<FieldDefinition> DeserializeLayerSchema(string? schema)
+    {
+        if (string.IsNullOrWhiteSpace(schema))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<FieldDefinition>>(schema, SchemaJsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return DeserializeLegacyLayerSchema(schema);
+        }
+    }
+
+    private static List<FieldDefinition> DeserializeLegacyLayerSchema(string schema)
+    {
+        using var document = JsonDocument.Parse(schema);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var fields = new List<FieldDefinition>();
+        foreach (var field in document.RootElement.EnumerateArray())
+        {
+            var name = ReadString(field, "Name") ?? ReadString(field, "FieldId");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            fields.Add(new FieldDefinition
+            {
+                FieldId = name,
+                SourceFieldName = name,
+                Label = ReadString(field, "Label") ?? name,
+                HelpText = ReadString(field, "Description"),
+                Required = ReadBoolean(field, "Required"),
+                Type = MapLegacyFieldType(ReadString(field, "Type")),
+                Choices = ReadStringArray(field, "Options")
+                    .Select(option => new Honua.Sdk.Field.Forms.FieldChoice { Value = option, Label = option })
+                    .ToArray(),
+                Validation = new Honua.Sdk.Field.Forms.FieldValidationRule
+                {
+                    RegexPattern = ReadString(field, "Pattern"),
+                    MinNumericValue = ReadDouble(field, "Min"),
+                    MaxNumericValue = ReadDouble(field, "Max"),
+                    MaxLength = ReadInt(field, "MaxLength")
+                }
+            });
+        }
+
+        return fields;
+    }
+
+    private static Honua.Sdk.Field.Forms.FormFieldType MapLegacyFieldType(string? type)
+    {
+        return type?.Trim().ToLowerInvariant() switch
+        {
+            "number" or "numeric" => Honua.Sdk.Field.Forms.FormFieldType.Numeric,
+            "select" or "choice" or "singlechoice" => Honua.Sdk.Field.Forms.FormFieldType.SingleChoice,
+            "date" => Honua.Sdk.Field.Forms.FormFieldType.Date,
+            "datetime" => Honua.Sdk.Field.Forms.FormFieldType.DateTime,
+            "boolean" or "bool" or "yesno" => Honua.Sdk.Field.Forms.FormFieldType.YesNo,
+            "photo" or "image" => Honua.Sdk.Field.Forms.FormFieldType.Photo,
+            "video" => Honua.Sdk.Field.Forms.FormFieldType.Video,
+            "audio" => Honua.Sdk.Field.Forms.FormFieldType.Audio,
+            "file" => Honua.Sdk.Field.Forms.FormFieldType.File,
+            "location" => Honua.Sdk.Field.Forms.FormFieldType.Location,
+            _ => Honua.Sdk.Field.Forms.FormFieldType.Text
+        };
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static bool ReadBoolean(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.True;
+    }
+
+    private static int? ReadInt(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out var value)
+                ? value
+                : null;
+    }
+
+    private static double? ReadDouble(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDouble(out var value)
+                ? value
+                : null;
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Cast<string>()
+                .ToArray()
+            : [];
     }
 
     private static NtsGeometry? ConvertToNtsGeometry(CoreModels.Geometry? geometry)

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Sdk.Abstractions.Features;
 using Microsoft.Extensions.Logging;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
 using StorageBoundingBox = Honua.Mobile.FieldCollection.Services.Storage.Models.BoundingBox;
@@ -43,9 +44,12 @@ public class GeoPackageFeatureService : IFeatureService
         {
             if (spatialFilter != null)
             {
-                return await QueryFeaturesAsync(layerId, new FeatureQuery
+                return await _storage.QueryFeaturesAsync(
+                    layerId,
+                    new StorageSpatialQuery
                 {
-                    SpatialFilter = new SpatialFilter { Geometry = spatialFilter }
+                    Bounds = ConvertToBoundingBox(spatialFilter),
+                    Relationship = StorageSpatialRelationship.Intersects
                 });
             }
 
@@ -71,21 +75,35 @@ public class GeoPackageFeatureService : IFeatureService
         }
     }
 
-    public async Task<List<Feature>> QueryFeaturesAsync(int layerId, FeatureQuery query)
+    public async Task<List<Feature>> QueryFeaturesAsync(int layerId, FeatureQueryRequest query)
     {
         try
         {
-            // Convert FeatureQuery to SpatialQuery for storage layer
             StorageSpatialQuery? spatialQuery = null;
 
-            if (query.SpatialFilter != null)
+            if (query.Bbox != null)
+            {
+                spatialQuery = new StorageSpatialQuery
+                {
+                    Bounds = StorageBoundingBox.FromCoordinates(
+                        query.Bbox.MinX,
+                        query.Bbox.MinY,
+                        query.Bbox.MaxX,
+                        query.Bbox.MaxY),
+                    Relationship = StorageSpatialRelationship.Intersects,
+                    MaxResults = string.IsNullOrWhiteSpace(query.Filter) && string.IsNullOrWhiteSpace(query.OrderBy)
+                        ? query.Limit
+                        : null
+                };
+            }
+            else if (query.SpatialFilter != null)
             {
                 spatialQuery = new StorageSpatialQuery
                 {
                     Bounds = ConvertToBoundingBox(query.SpatialFilter),
                     Relationship = ConvertToSpatialRelationship(query.SpatialFilter.Relationship),
-                    MaxResults = string.IsNullOrWhiteSpace(query.WhereClause) && query.OrderBy?.Any() != true
-                        ? query.MaxResults
+                    MaxResults = string.IsNullOrWhiteSpace(query.Filter) && string.IsNullOrWhiteSpace(query.OrderBy)
+                        ? query.Limit
                         : null
                 };
             }
@@ -93,19 +111,19 @@ public class GeoPackageFeatureService : IFeatureService
             var features = await _storage.QueryFeaturesAsync(layerId, spatialQuery);
 
             // Apply additional filters in memory
-            if (!string.IsNullOrEmpty(query.WhereClause))
+            if (!string.IsNullOrEmpty(query.Filter))
             {
-                features = ApplyWhereClause(features, query.WhereClause);
+                features = ApplyWhereClause(features, query.Filter);
             }
 
-            if (query.OrderBy?.Any() == true)
+            if (!string.IsNullOrWhiteSpace(query.OrderBy))
             {
                 features = ApplyOrderBy(features, query.OrderBy);
             }
 
-            if (query.MaxResults.HasValue)
+            if (query.Limit.HasValue)
             {
-                features = features.Take(query.MaxResults.Value).ToList();
+                features = features.Take(query.Limit.Value).ToList();
             }
 
             return features;
@@ -330,9 +348,17 @@ public class GeoPackageFeatureService : IFeatureService
 
     #region Helper Methods
 
-    private static StorageBoundingBox ConvertToBoundingBox(SpatialFilter spatialFilter)
+    private static StorageBoundingBox ConvertToBoundingBox(FeatureSpatialFilter spatialFilter)
     {
-        if (spatialFilter.Geometry is CoreModels.Point point)
+        var geometry = CoreModels.GeometryJson.FromJsonElement(spatialFilter.Geometry);
+        return geometry == null
+            ? throw new NotSupportedException("SDK spatial filters require a GeoJSON point, line, or polygon geometry.")
+            : ConvertToBoundingBox(geometry);
+    }
+
+    private static StorageBoundingBox ConvertToBoundingBox(CoreModels.Geometry geometry)
+    {
+        if (geometry is CoreModels.Point point)
         {
             var buffer = 0.001; // ~100m buffer for point queries
             return StorageBoundingBox.FromCoordinates(
@@ -340,12 +366,12 @@ public class GeoPackageFeatureService : IFeatureService
                 point.Longitude + buffer, point.Latitude + buffer);
         }
 
-        if (spatialFilter.Geometry is CoreModels.LineString line && line.Coordinates.Count > 0)
+        if (geometry is CoreModels.LineString line && line.Coordinates.Count > 0)
         {
             return ConvertPointsToBoundingBox(line.Coordinates);
         }
 
-        if (spatialFilter.Geometry is CoreModels.Polygon polygon)
+        if (geometry is CoreModels.Polygon polygon)
         {
             var points = polygon.Coordinates.SelectMany(ring => ring).ToList();
             if (points.Count > 0)
@@ -367,16 +393,16 @@ public class GeoPackageFeatureService : IFeatureService
             pointList.Max(point => point.Latitude));
     }
 
-    private static StorageSpatialRelationship ConvertToSpatialRelationship(CoreModels.SpatialRelationship relationship)
+    private static StorageSpatialRelationship ConvertToSpatialRelationship(FeatureSpatialRelationship relationship)
     {
         return relationship switch
         {
-            CoreModels.SpatialRelationship.Intersects => StorageSpatialRelationship.Intersects,
-            CoreModels.SpatialRelationship.Contains => StorageSpatialRelationship.Contains,
-            CoreModels.SpatialRelationship.Within => StorageSpatialRelationship.Within,
-            CoreModels.SpatialRelationship.Overlaps => StorageSpatialRelationship.Overlaps,
-            CoreModels.SpatialRelationship.Touches => StorageSpatialRelationship.Touches,
-            CoreModels.SpatialRelationship.Crosses => StorageSpatialRelationship.Crosses,
+            FeatureSpatialRelationship.Intersects => StorageSpatialRelationship.Intersects,
+            FeatureSpatialRelationship.Contains => StorageSpatialRelationship.Contains,
+            FeatureSpatialRelationship.Within => StorageSpatialRelationship.Within,
+            FeatureSpatialRelationship.Overlaps => StorageSpatialRelationship.Overlaps,
+            FeatureSpatialRelationship.Touches => StorageSpatialRelationship.Touches,
+            FeatureSpatialRelationship.Crosses => StorageSpatialRelationship.Crosses,
             _ => StorageSpatialRelationship.Intersects
         };
     }
@@ -394,22 +420,40 @@ public class GeoPackageFeatureService : IFeatureService
             .ToList();
     }
 
-    private static List<Feature> ApplyOrderBy(List<Feature> features, List<OrderByClause> orderBy)
+    private static List<Feature> ApplyOrderBy(List<Feature> features, string orderBy)
     {
-        // Simple implementation - order by first field
-        if (orderBy.FirstOrDefault() is var firstOrder && firstOrder != null)
+        var firstOrder = ParseFirstOrderBy(orderBy);
+        if (firstOrder == null)
         {
-            if (firstOrder.Ascending)
-            {
-                return features.OrderBy(f => GetFieldValue(f, firstOrder.FieldName)).ToList();
-            }
-            else
-            {
-                return features.OrderByDescending(f => GetFieldValue(f, firstOrder.FieldName)).ToList();
-            }
+            return features;
         }
 
-        return features;
+        return firstOrder.Ascending
+            ? features.OrderBy(f => GetFieldValue(f, firstOrder.FieldName)).ToList()
+            : features.OrderByDescending(f => GetFieldValue(f, firstOrder.FieldName)).ToList();
+    }
+
+    private static OrderByExpression? ParseFirstOrderBy(string orderBy)
+    {
+        var first = orderBy
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(first))
+        {
+            return null;
+        }
+
+        var parts = first.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return null;
+        }
+
+        var ascending = parts.Length < 2 ||
+            !string.Equals(parts[1], "DESC", StringComparison.OrdinalIgnoreCase);
+
+        return new OrderByExpression(parts[0], ascending);
     }
 
     private static object? GetFieldValue(Feature feature, string fieldName)
@@ -705,6 +749,8 @@ public class GeoPackageFeatureService : IFeatureService
     #endregion
 
     private sealed record WherePredicate(string FieldName, string Operator, object? Value);
+
+    private sealed record OrderByExpression(string FieldName, bool Ascending);
 }
 
 /// <summary>

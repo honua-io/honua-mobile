@@ -75,7 +75,7 @@ public partial class MapViewModel : BaseViewModel
             Id = 2,
             Name = "Inspection Routes",
             Description = "Line features for route planning",
-            GeometryType = GeometryType.LineString,
+            GeometryType = GeometryType.Polyline,
             IsVisible = false,
             IsEditable = true,
             Style = new LayerStyle
