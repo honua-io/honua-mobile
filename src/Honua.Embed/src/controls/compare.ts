@@ -2,8 +2,11 @@ import type { HonuaSceneElement } from '../scene';
 import type { HonuaSceneCompareMode } from '../scene-metadata';
 import { HonuaSceneLink } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   resolveControlLayerIds,
   upgradeProperty,
 } from './shared';
@@ -67,7 +70,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneCompareElement extends HTMLElement {
+export class HonuaSceneCompareElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading', 'mode', 'side'];
   }
@@ -79,6 +82,7 @@ export class HonuaSceneCompareElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#link = new HonuaSceneLink({
@@ -261,12 +265,7 @@ export class HonuaSceneCompareElement extends HTMLElement {
 }
 
 export function defineHonuaSceneCompareElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneCompareElement);
-  return HonuaSceneCompareElement;
+  return defineHonuaCustomElement(name, HonuaSceneCompareElement);
 }
 
 declare global {

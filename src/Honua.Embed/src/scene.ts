@@ -22,6 +22,12 @@ import {
   type HonuaSceneMetadata,
   type HonuaSceneViewSpec,
 } from './scene-metadata';
+import {
+  assertHonuaDomAvailable,
+  createHonuaTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
+} from './dom';
 
 export interface HonuaSceneCoordinate {
   latitude: number;
@@ -130,8 +136,7 @@ const DEFAULT_HEIGHT = 1200;
 const DEFAULT_PITCH = -45;
 const ELEMENT_NAME = 'honua-scene';
 
-const sceneTemplate = document.createElement('template');
-sceneTemplate.innerHTML = `
+const sceneTemplate = createHonuaTemplate(`
   <style>
     :host {
       --honua-scene-background: #101820;
@@ -237,9 +242,9 @@ sceneTemplate.innerHTML = `
     <div class="extension-controls" part="extension-controls" data-honua-extension-controls></div>
     <output class="status" part="status"></output>
   </section>
-`;
+`);
 
-export class HonuaSceneElement extends HTMLElement {
+export class HonuaSceneElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return [
       'tileset-url',
@@ -280,6 +285,7 @@ export class HonuaSceneElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(sceneTemplate.content.cloneNode(true));
     this.#extensionHost = createHonuaEmbedExtensionHost({
@@ -1367,13 +1373,7 @@ export class HonuaSceneElement extends HTMLElement {
 }
 
 export function defineHonuaSceneElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-
-  customElements.define(name, HonuaSceneElement);
-  return HonuaSceneElement;
+  return defineHonuaCustomElement(name, HonuaSceneElement);
 }
 
 function readSceneConfig(element: HTMLElement): HonuaSceneConfig {

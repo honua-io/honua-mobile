@@ -5,8 +5,11 @@ import type {
 import type { HonuaSceneLayerMetadata } from '../scene-metadata';
 import { HonuaSceneLink, type HonuaSceneControlErrorDetail } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   upgradeProperty,
 } from './shared';
 
@@ -75,7 +78,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneLayersElement extends HTMLElement {
+export class HonuaSceneLayersElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading'];
   }
@@ -89,6 +92,7 @@ export class HonuaSceneLayersElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#link = new HonuaSceneLink({
@@ -255,12 +259,7 @@ function listLayers(scene: HonuaSceneElement | null): HonuaSceneLayerMetadata[] 
 }
 
 export function defineHonuaSceneLayersElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneLayersElement);
-  return HonuaSceneLayersElement;
+  return defineHonuaCustomElement(name, HonuaSceneLayersElement);
 }
 
 export type { HonuaSceneControlErrorDetail, HonuaSceneLayerChangeDetail };

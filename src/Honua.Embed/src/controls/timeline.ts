@@ -2,8 +2,11 @@ import type { HonuaSceneElement } from '../scene';
 import type { HonuaSceneTimelinePhase } from '../scene-metadata';
 import { HonuaSceneLink } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   resolveControlLayerIds,
   upgradeProperty,
 } from './shared';
@@ -59,7 +62,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneTimelineElement extends HTMLElement {
+export class HonuaSceneTimelineElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading', 'phase'];
   }
@@ -70,6 +73,7 @@ export class HonuaSceneTimelineElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#link = new HonuaSceneLink({
@@ -223,12 +227,7 @@ function formatRange(value: string): string {
 }
 
 export function defineHonuaSceneTimelineElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneTimelineElement);
-  return HonuaSceneTimelineElement;
+  return defineHonuaCustomElement(name, HonuaSceneTimelineElement);
 }
 
 declare global {

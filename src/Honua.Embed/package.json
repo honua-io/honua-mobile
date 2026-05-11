@@ -35,6 +35,7 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && node scripts/copy-cesium-assets.mjs",
     "cdn:manifest": "node scripts/create-cdn-manifest.mjs",
+    "prepack": "npm run build && npm run cdn:manifest",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

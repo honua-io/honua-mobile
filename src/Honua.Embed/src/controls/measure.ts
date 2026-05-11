@@ -1,8 +1,11 @@
 import type { HonuaSceneElement } from '../scene';
 import { HonuaSceneLink } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   upgradeProperty,
 } from './shared';
 
@@ -85,7 +88,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneMeasureElement extends HTMLElement {
+export class HonuaSceneMeasureElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading'];
   }
@@ -99,6 +102,7 @@ export class HonuaSceneMeasureElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#wireControls();
@@ -394,12 +398,7 @@ function toRadians(value: number): number {
 }
 
 export function defineHonuaSceneMeasureElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneMeasureElement);
-  return HonuaSceneMeasureElement;
+  return defineHonuaCustomElement(name, HonuaSceneMeasureElement);
 }
 
 declare global {

@@ -64,17 +64,27 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build
-        run: npm run build
-
-      - name: Generate CDN manifest
-        run: npm run cdn:manifest
-
       - name: Pack npm package
         shell: bash
         run: |
           mkdir -p "${GITHUB_WORKSPACE}/npm-packages"
           npm pack --pack-destination "${GITHUB_WORKSPACE}/npm-packages"
+
+      - name: Verify packed package import
+        shell: bash
+        run: |
+          package="$(find "${GITHUB_WORKSPACE}/npm-packages" -maxdepth 1 -type f -name '*.tgz' | sort | head -n 1)"
+          tmp_dir="$(mktemp -d)"
+
+          npm install "${package}" --prefix "${tmp_dir}" --ignore-scripts
+          cd "${tmp_dir}"
+          node --input-type=module <<'NODE'
+          const embed = await import('@honua-io/embed');
+          if (typeof embed.defineHonuaMapElement !== 'function' ||
+              typeof embed.defineHonuaSceneElement !== 'function') {
+            throw new Error('Packed @honua-io/embed package does not expose expected entrypoints.');
+          }
+          NODE
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v7
