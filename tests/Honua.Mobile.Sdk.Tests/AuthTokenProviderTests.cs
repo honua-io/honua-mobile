@@ -229,6 +229,111 @@ public sealed class AuthTokenProviderTests
     }
 
     [Fact]
+    public async Task RefreshTokenAsync_WithHttpRefreshEndpoint_ThrowsAndDoesNotSendRequest()
+    {
+        var refreshCalls = 0;
+        var store = new InMemoryAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(
+            HonuaAuthScheme.Bearer,
+            "expired-token",
+            "refresh-token",
+            DateTimeOffset.UtcNow.AddMinutes(-5)));
+        var provider = new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(_ =>
+            {
+                refreshCalls++;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            })),
+            new RefreshingAuthTokenProviderOptions
+            {
+                RefreshEndpoint = new Uri("http://auth.honua.test/token/refresh"),
+            });
+
+        var exception = await Assert.ThrowsAsync<HonuaMobileAuthException>(async () => await provider.RefreshTokenAsync());
+
+        var inner = Assert.IsType<InvalidOperationException>(exception.InnerException);
+        Assert.Contains("must use HTTPS", inner.Message);
+        Assert.Equal(0, refreshCalls);
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithRelativeHttpRefreshEndpoint_ThrowsAndDoesNotSendRequest()
+    {
+        var refreshCalls = 0;
+        var store = new InMemoryAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(
+            HonuaAuthScheme.Bearer,
+            "expired-token",
+            "refresh-token",
+            DateTimeOffset.UtcNow.AddMinutes(-5)));
+        var http = new HttpClient(new StubHttpMessageHandler(_ =>
+        {
+            refreshCalls++;
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }))
+        {
+            BaseAddress = new Uri("http://auth.honua.test"),
+        };
+        var provider = new RefreshingAuthTokenProvider(
+            store,
+            http,
+            new RefreshingAuthTokenProviderOptions
+            {
+                RefreshEndpoint = new Uri("/token/refresh", UriKind.Relative),
+            });
+
+        var exception = await Assert.ThrowsAsync<HonuaMobileAuthException>(async () => await provider.RefreshTokenAsync());
+
+        var inner = Assert.IsType<InvalidOperationException>(exception.InnerException);
+        Assert.Contains("must use HTTPS", inner.Message);
+        Assert.Equal(0, refreshCalls);
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5000/token/refresh")]
+    [InlineData("http://127.0.0.1:5000/token/refresh")]
+    public async Task RefreshTokenAsync_WithLoopbackHttpRefreshEndpoint_SendsRequest(string refreshEndpoint)
+    {
+        var refreshCalls = 0;
+        var store = new InMemoryAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(
+            HonuaAuthScheme.Bearer,
+            "expired-token",
+            "refresh-token",
+            DateTimeOffset.UtcNow.AddMinutes(-5)));
+        var provider = new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(request =>
+            {
+                refreshCalls++;
+                Assert.Equal(new Uri(refreshEndpoint), request.RequestUri);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                            "accessToken": "fresh-token",
+                            "refreshToken": "next-refresh-token",
+                            "expiresIn": 3600
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            })),
+            new RefreshingAuthTokenProviderOptions
+            {
+                RefreshEndpoint = new Uri(refreshEndpoint),
+            });
+
+        var token = await provider.RefreshTokenAsync();
+
+        Assert.Equal("fresh-token", token?.AccessToken);
+        Assert.Equal(1, refreshCalls);
+    }
+
+    [Fact]
     public async Task GetTokenAsync_WhenRefreshReturnsProblemDetails_ThrowsMappedAuthException()
     {
         var now = new DateTimeOffset(2026, 5, 6, 12, 0, 0, TimeSpan.Zero);

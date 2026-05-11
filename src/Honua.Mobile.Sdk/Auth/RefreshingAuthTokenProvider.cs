@@ -104,10 +104,13 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
                 return current;
             }
 
+            var refreshEndpoint = ResolveRefreshEndpoint(_options.RefreshEndpoint);
+            EnsureAllowedRefreshEndpoint(refreshEndpoint);
+
             using var content = JsonContent.Create(
                 new RefreshTokenRequest(current.RefreshToken),
                 HonuaMobileAuthJsonContext.Default.RefreshTokenRequest);
-            using var response = await _http.PostAsync(_options.RefreshEndpoint, content, ct).ConfigureAwait(false);
+            using var response = await _http.PostAsync(refreshEndpoint, content, ct).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -231,6 +234,39 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         }
 
         return null;
+    }
+
+    private Uri ResolveRefreshEndpoint(Uri refreshEndpoint)
+    {
+        if (refreshEndpoint.IsAbsoluteUri)
+        {
+            return refreshEndpoint;
+        }
+
+        if (_http.BaseAddress is null)
+        {
+            throw new InvalidOperationException(
+                "RefreshingAuthTokenProvider requires an absolute refresh endpoint or HttpClient.BaseAddress.");
+        }
+
+        return new Uri(_http.BaseAddress, refreshEndpoint);
+    }
+
+    private static void EnsureAllowedRefreshEndpoint(Uri refreshEndpoint)
+    {
+        if (string.Equals(refreshEndpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (string.Equals(refreshEndpoint.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            refreshEndpoint.IsLoopback)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "The Honua auth refresh endpoint must use HTTPS unless it points to a loopback HTTP development endpoint.");
     }
 }
 
