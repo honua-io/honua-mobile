@@ -56,16 +56,22 @@ public static class MauiProgram
         services.AddSingleton<IStorageService, StorageService>();
 
         // Register sync service factory
+        services.AddSingleton<IFieldCollectionChangeUploader, QueuedFieldCollectionChangeUploader>();
+        services.AddSingleton<IFieldCollectionChangePuller, LocalOnlyFieldCollectionChangePuller>();
         services.AddSingleton<ISyncService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
             var authService = provider.GetRequiredService<IAuthenticationService>();
             var connectivityService = provider.GetRequiredService<IConnectivityService>();
+            var changeUploader = provider.GetRequiredService<IFieldCollectionChangeUploader>();
+            var changePuller = provider.GetRequiredService<IFieldCollectionChangePuller>();
             var logger = provider.GetRequiredService<ILogger<GeoPackageSyncService>>();
             var exceptionReporter = provider.GetRequiredService<IMobileExceptionReporter>();
             return databaseService.GetSyncService(
                 authService,
                 connectivityService,
+                changeUploader,
+                changePuller,
                 logger: logger,
                 exceptionReporter: exceptionReporter);
         });

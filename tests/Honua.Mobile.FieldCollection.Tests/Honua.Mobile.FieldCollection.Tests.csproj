@@ -39,6 +39,7 @@
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\FieldCollectionExceptionReporting.cs" Link="App\Services\Diagnostics\FieldCollectionExceptionReporting.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\GeoPackageStorageService.cs" Link="App\Services\Storage\GeoPackageStorageService.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\Models\StorageModels.cs" Link="App\Services\Storage\Models\StorageModels.cs" />
+    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Sync\FieldCollectionSyncTransports.cs" Link="App\Services\Sync\FieldCollectionSyncTransports.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Sync\GeoPackageSyncService.cs" Link="App\Services\Sync\GeoPackageSyncService.cs" />
   </ItemGroup>
 
