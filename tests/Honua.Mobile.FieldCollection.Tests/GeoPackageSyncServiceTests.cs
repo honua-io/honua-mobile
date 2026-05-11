@@ -425,7 +425,7 @@ public sealed class GeoPackageSyncServiceTests
             Geometry = geometry ?? new Point(21.3, -157.8),
             CreatedAt = DateTime.UtcNow.AddMinutes(-10),
             ModifiedAt = DateTime.UtcNow,
-            Attributes = new Dictionary<string, object>
+            Attributes = new Dictionary<string, object?>
             {
                 ["name"] = "local"
             }

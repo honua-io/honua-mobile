@@ -698,7 +698,7 @@ public class GeoPackageStorageService : IDisposable
             Id = localFeature.Id,
             LayerId = localFeature.LayerId,
             Geometry = localFeature.Geometry != null ? ConvertFromNtsGeometry(_wkbReader.Read(localFeature.Geometry)) : null,
-            Attributes = JsonSerializer.Deserialize<Dictionary<string, object>>(localFeature.Attributes ?? "{}") ?? new(),
+            Attributes = JsonSerializer.Deserialize<Dictionary<string, object?>>(localFeature.Attributes ?? "{}") ?? new(),
             CreatedAt = localFeature.CreatedAt,
             ModifiedAt = localFeature.ModifiedAt,
             UpdatedAt = localFeature.ModifiedAt,

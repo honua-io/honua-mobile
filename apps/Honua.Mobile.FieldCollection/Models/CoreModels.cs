@@ -13,7 +13,7 @@ public class Feature
     public string Id { get; set; } = string.Empty;
     public int LayerId { get; set; }
     public Geometry? Geometry { get; set; }
-    public Dictionary<string, object> Attributes { get; set; } = new();
+    public Dictionary<string, object?> Attributes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -90,7 +90,7 @@ public class Feature
         };
     }
 
-    private static object JsonValueToObject(JsonElement value)
+    private static object? JsonValueToObject(JsonElement value)
     {
         return value.ValueKind switch
         {
@@ -99,7 +99,7 @@ public class Feature
             JsonValueKind.Number when value.TryGetDouble(out var number) => number,
             JsonValueKind.True => true,
             JsonValueKind.False => false,
-            JsonValueKind.Null => string.Empty,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
             _ => value.Clone()
         };
     }
@@ -278,37 +278,156 @@ internal static class GeometryJson
 
     public static Geometry? FromJsonElement(JsonElement geometry)
     {
-        if (geometry.ValueKind != JsonValueKind.Object ||
-            !geometry.TryGetProperty("type", out var typeProperty) ||
-            typeProperty.GetString() is not { Length: > 0 } type ||
-            !geometry.TryGetProperty("coordinates", out var coordinates))
+        if (geometry.ValueKind != JsonValueKind.Object)
         {
             return null;
         }
 
-        return type switch
+        return TryReadGeoJson(geometry, out var geoJson)
+            ? geoJson
+            : ReadFeatureServerGeometry(geometry);
+    }
+
+    private static bool TryReadGeoJson(JsonElement geometry, out Geometry? parsedGeometry)
+    {
+        parsedGeometry = null;
+
+        if (!geometry.TryGetProperty("type", out var typeProperty) ||
+            typeProperty.GetString() is not { Length: > 0 } type ||
+            !geometry.TryGetProperty("coordinates", out var coordinates))
         {
-            "Point" => ReadPoint(coordinates),
+            return false;
+        }
+
+        var srid = ReadSrid(geometry);
+        parsedGeometry = type switch
+        {
+            "Point" => ReadPoint(coordinates, srid),
             "LineString" => new LineString
             {
-                Coordinates = coordinates.EnumerateArray()
-                    .Select(ReadPoint)
-                    .Where(point => point != null)
-                    .Cast<Point>()
-                    .ToList()
+                SRID = srid,
+                Coordinates = ReadPointArray(coordinates, srid)
             },
             "Polygon" => new Polygon
             {
-                Coordinates = coordinates.EnumerateArray()
-                    .Select(ring => ring.EnumerateArray()
-                        .Select(ReadPoint)
-                        .Where(point => point != null)
-                        .Cast<Point>()
-                        .ToList())
-                    .ToList()
+                SRID = srid,
+                Coordinates = ReadPointRings(coordinates, srid)
             },
             _ => null
         };
+
+        return true;
+    }
+
+    private static Geometry? ReadFeatureServerGeometry(JsonElement geometry)
+    {
+        var srid = ReadSrid(geometry);
+        if (TryGetDouble(geometry, "x", out var x) &&
+            TryGetDouble(geometry, "y", out var y))
+        {
+            return new Point(y, x, TryGetDouble(geometry, "z", out var z) ? z : null)
+            {
+                SRID = srid
+            };
+        }
+
+        if (geometry.TryGetProperty("paths", out var paths))
+        {
+            var coordinates = ReadFirstPointArray(paths, srid);
+            return coordinates.Count > 0
+                ? new LineString { SRID = srid, Coordinates = coordinates }
+                : null;
+        }
+
+        if (geometry.TryGetProperty("rings", out var rings))
+        {
+            var coordinates = ReadPointRings(rings, srid);
+            return coordinates.Count > 0
+                ? new Polygon { SRID = srid, Coordinates = coordinates }
+                : null;
+        }
+
+        return null;
+    }
+
+    private static List<Point> ReadFirstPointArray(JsonElement paths, int srid)
+    {
+        if (paths.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return paths.EnumerateArray()
+            .Where(path => path.ValueKind == JsonValueKind.Array)
+            .Select(path => ReadPointArray(path, srid))
+            .FirstOrDefault(points => points.Count > 0) ?? [];
+    }
+
+    private static List<List<Point>> ReadPointRings(JsonElement rings, int srid)
+    {
+        if (rings.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return rings.EnumerateArray()
+            .Where(ring => ring.ValueKind == JsonValueKind.Array)
+            .Select(ring => ReadPointArray(ring, srid))
+            .Where(ring => ring.Count > 0)
+            .ToList();
+    }
+
+    private static List<Point> ReadPointArray(JsonElement coordinates, int srid)
+    {
+        if (coordinates.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return coordinates.EnumerateArray()
+            .Select(coordinate => ReadPoint(coordinate, srid))
+            .Where(point => point != null)
+            .Cast<Point>()
+            .ToList();
+    }
+
+    private static int ReadSrid(JsonElement geometry)
+    {
+        if (TryGetInt(geometry, "srid", out var srid))
+        {
+            return srid;
+        }
+
+        if (geometry.TryGetProperty("spatialReference", out var spatialReference))
+        {
+            if (TryGetInt(spatialReference, "latestWkid", out var latestWkid))
+            {
+                return latestWkid;
+            }
+
+            if (TryGetInt(spatialReference, "wkid", out var wkid))
+            {
+                return wkid;
+            }
+        }
+
+        return 4326;
+    }
+
+    private static bool TryGetInt(JsonElement element, string propertyName, out int value)
+    {
+        value = default;
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
+    }
+
+    private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+    {
+        value = default;
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDouble(out value);
     }
 
     private static object ToGeoJson(Geometry geometry)
@@ -343,7 +462,7 @@ internal static class GeometryJson
             : [point.Longitude, point.Latitude];
     }
 
-    private static Point? ReadPoint(JsonElement coordinates)
+    private static Point? ReadPoint(JsonElement coordinates, int srid)
     {
         if (coordinates.ValueKind != JsonValueKind.Array)
         {
@@ -355,8 +474,14 @@ internal static class GeometryJson
             .Select(value => value.GetDouble())
             .ToArray();
 
-        return values.Length >= 2
-            ? new Point(values[1], values[0], values.Length >= 3 ? values[2] : null)
-            : null;
+        if (values.Length < 2)
+        {
+            return null;
+        }
+
+        return new Point(values[1], values[0], values.Length >= 3 ? values[2] : null)
+        {
+            SRID = srid
+        };
     }
 }

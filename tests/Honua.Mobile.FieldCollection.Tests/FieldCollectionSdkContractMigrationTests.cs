@@ -1,7 +1,9 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Field.Forms;
+using System.Text.Json;
 
 namespace Honua.Mobile.FieldCollection.Tests;
 
@@ -48,6 +50,50 @@ public sealed class FieldCollectionSdkContractMigrationTests
         Assert.Equal(-157.8, point.Longitude);
         Assert.Equal(12, point.Altitude);
         Assert.Equal("Pump Station", mobileFeature.Attributes["name"]);
+    }
+
+    [Fact]
+    public void Feature_FromSdkFeatureRecord_PreservesSdkNullAttributes()
+    {
+        var sdkFeature = new FeatureRecord
+        {
+            Id = "asset-null",
+            Attributes =
+            {
+                ["nullable"] = JsonSerializer.SerializeToElement<string?>(null),
+                ["name"] = JsonSerializer.SerializeToElement("Null Test")
+            }
+        };
+
+        var mobileFeature = Feature.FromSdkFeatureRecord(sdkFeature, layerId: 7);
+
+        Assert.True(mobileFeature.Attributes.ContainsKey("nullable"));
+        Assert.Null(mobileFeature.Attributes["nullable"]);
+        Assert.Equal("Null Test", mobileFeature.Attributes["name"]);
+    }
+
+    [Fact]
+    public void Feature_FromSdkFeatureRecord_ReadsFeatureServerGeometry()
+    {
+        var sdkFeature = new FeatureRecord
+        {
+            Id = "asset-feature-server",
+            Geometry = JsonSerializer.SerializeToElement(new
+            {
+                x = -157.8,
+                y = 21.3,
+                z = 12.0,
+                spatialReference = new { wkid = 3857 }
+            })
+        };
+
+        var mobileFeature = Feature.FromSdkFeatureRecord(sdkFeature, layerId: 7);
+
+        var point = Assert.IsType<Point>(mobileFeature.Geometry);
+        Assert.Equal(21.3, point.Latitude);
+        Assert.Equal(-157.8, point.Longitude);
+        Assert.Equal(12, point.Altitude);
+        Assert.Equal(3857, point.SRID);
     }
 
     [Fact]
