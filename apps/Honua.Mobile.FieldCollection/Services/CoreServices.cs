@@ -194,7 +194,7 @@ public class FormService : IFormService
         return new FormData
         {
             LayerId = layerId,
-            Values = new Dictionary<string, object>()
+            Values = new Dictionary<string, object?>()
         };
     }
 }
