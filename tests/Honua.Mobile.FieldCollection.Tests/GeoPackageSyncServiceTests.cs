@@ -267,7 +267,7 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Empty(await sync.GetConflictsAsync());
         var resolvedFeature = await storage.GetFeatureAsync("asset-1", 1);
         Assert.NotNull(resolvedFeature);
-        Assert.Equal("server", resolvedFeature.Attributes["name"].ToString());
+        Assert.Equal("server", resolvedFeature.Attributes["name"]?.ToString());
     }
 
     [Fact]
@@ -425,7 +425,7 @@ public sealed class GeoPackageSyncServiceTests
             Geometry = geometry ?? new Point(21.3, -157.8),
             CreatedAt = DateTime.UtcNow.AddMinutes(-10),
             ModifiedAt = DateTime.UtcNow,
-            Attributes = new Dictionary<string, object>
+            Attributes = new Dictionary<string, object?>
             {
                 ["name"] = "local"
             }

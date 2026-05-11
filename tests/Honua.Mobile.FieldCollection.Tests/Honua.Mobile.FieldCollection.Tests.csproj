@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="coverlet.collector" Version="10.0.0" />
+    <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.60" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
@@ -31,6 +33,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Models\CoreModels.cs" Link="App\Models\CoreModels.cs" />
+    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Models\SdkContractAliases.cs" Link="App\Models\SdkContractAliases.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\CoreServices.cs" Link="App\Services\CoreServices.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Configuration\MobileBuildConfiguration.cs" Link="App\Services\Configuration\MobileBuildConfiguration.cs" />
     <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\IAuthenticationService.cs" Link="App\Services\IAuthenticationService.cs" />

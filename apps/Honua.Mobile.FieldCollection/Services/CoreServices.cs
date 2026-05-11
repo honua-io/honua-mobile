@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Sdk.Field.Forms;
 using Microsoft.Maui.Devices.Sensors;
 using Microsoft.Maui.Networking;
 using Microsoft.Maui.Storage;
@@ -175,16 +176,15 @@ public class FormService : IFormService
 
     public Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)
     {
-        foreach (var field in definition.Fields.Where(f => f.Required))
+        var result = FormValidator.Validate(definition, formData.ToSdkFieldRecord(definition));
+
+        formData.ValidationErrors.Clear();
+        foreach (var error in result.Errors)
         {
-            if (!formData.Values.TryGetValue(field.Name, out var value) ||
-                value == null || string.IsNullOrWhiteSpace(value.ToString()))
-            {
-                return Task.FromResult(false);
-            }
+            formData.ValidationErrors[error.FieldId] = error.Message;
         }
 
-        return Task.FromResult(true);
+        return Task.FromResult(result.IsValid);
     }
 
     public async Task<FormData> CreateEmptyFormAsync(int layerId)
@@ -194,7 +194,7 @@ public class FormService : IFormService
         return new FormData
         {
             LayerId = layerId,
-            Values = new Dictionary<string, object>()
+            Values = new Dictionary<string, object?>()
         };
     }
 }

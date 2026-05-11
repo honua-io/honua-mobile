@@ -1,4 +1,8 @@
 using Microsoft.Maui.Devices.Sensors;
+using System.Globalization;
+using System.Text.Json;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Field.Records;
 
 namespace Honua.Mobile.FieldCollection.Models;
 
@@ -9,7 +13,7 @@ public class Feature
     public string Id { get; set; } = string.Empty;
     public int LayerId { get; set; }
     public Geometry? Geometry { get; set; }
-    public Dictionary<string, object> Attributes { get; set; } = new();
+    public Dictionary<string, object?> Attributes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -56,6 +60,49 @@ public class Feature
     public bool HasAttachments => Attachments.Count > 0;
 
     public int AttachmentsCount => Attachments.Count;
+
+    public FeatureRecord ToSdkFeatureRecord()
+    {
+        return new FeatureRecord
+        {
+            Id = Id,
+            Attributes = Attributes.ToDictionary(
+                attribute => attribute.Key,
+                attribute => JsonSerializer.SerializeToElement(attribute.Value)),
+            Geometry = Geometry == null ? null : GeometryJson.ToJsonElement(Geometry)
+        };
+    }
+
+    public static Feature FromSdkFeatureRecord(FeatureRecord record, int layerId)
+    {
+        return new Feature
+        {
+            Id = record.Id ?? string.Empty,
+            LayerId = layerId,
+            Geometry = record.Geometry.HasValue ? GeometryJson.FromJsonElement(record.Geometry.Value) : null,
+            Attributes = record.Attributes.ToDictionary(
+                attribute => attribute.Key,
+                attribute => JsonValueToObject(attribute.Value)),
+            CreatedAt = DateTime.UtcNow,
+            ModifiedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Version = 1
+        };
+    }
+
+    private static object? JsonValueToObject(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
+            JsonValueKind.Number when value.TryGetDouble(out var number) => number,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => value.Clone()
+        };
+    }
 }
 
 public abstract class Geometry
@@ -93,42 +140,50 @@ public class Polygon : Geometry
     public List<List<Point>> Coordinates { get; set; } = new();
 }
 
-public class FormDefinition
-{
-    public int LayerId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public FieldDefinition[] Fields { get; set; } = Array.Empty<FieldDefinition>();
-    public string Version { get; set; } = "1.0";
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-}
-
-public class FieldDefinition
-{
-    public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // text, number, select, date, textarea, boolean, etc.
-    public string Label { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public bool Required { get; set; }
-    public string? DefaultValue { get; set; }
-    public string[]? Options { get; set; } // For select fields
-    public double? Min { get; set; } // For number fields
-    public double? Max { get; set; } // For number fields
-    public int? MaxLength { get; set; } // For text fields
-    public string? Pattern { get; set; } // Regex validation
-    public Dictionary<string, object> Properties { get; set; } = new();
-}
-
 public class FormData
 {
     public int LayerId { get; set; }
     public string? FeatureId { get; set; }
-    public Dictionary<string, object> Values { get; set; } = new();
+    public Dictionary<string, object?> Values { get; set; } = new();
     public Dictionary<string, string> ValidationErrors { get; set; } = new();
     public bool IsValid => ValidationErrors.Count == 0;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    public FieldRecord ToSdkFieldRecord(FormDefinition? definition = null)
+    {
+        return new FieldRecord
+        {
+            RecordId = FeatureId ?? string.Empty,
+            FormId = definition?.FormId ?? LayerId.ToString(CultureInfo.InvariantCulture),
+            Values = new Dictionary<string, object?>(Values),
+            CreatedAtUtc = ToDateTimeOffset(CreatedAt),
+        };
+    }
+
+    public static FormData FromSdkFieldRecord(FieldRecord record, int layerId)
+    {
+        return new FormData
+        {
+            LayerId = layerId,
+            FeatureId = record.RecordId,
+            Values = new Dictionary<string, object?>(record.Values),
+            CreatedAt = record.CreatedAtUtc.UtcDateTime,
+            UpdatedAt = record.SubmittedAtUtc?.UtcDateTime ?? record.CompletedAtUtc?.UtcDateTime
+        };
+    }
+
+    private static DateTimeOffset ToDateTimeOffset(DateTime value)
+    {
+        if (value == default)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+
+        return value.Kind == DateTimeKind.Unspecified
+            ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
+            : value.ToUniversalTime();
+    }
 }
 
 public class AttachmentInfo
@@ -165,46 +220,6 @@ public class LayerInfo
     public FormDefinition? Form { get; set; }
     public List<FieldDefinition> Schema { get; set; } = new();
     public LayerStyle Style { get; set; } = new();
-}
-
-public class FeatureQuery
-{
-    public SpatialFilter? SpatialFilter { get; set; }
-    public string? WhereClause { get; set; }
-    public List<OrderByClause>? OrderBy { get; set; }
-    public int? MaxResults { get; set; }
-}
-
-public class SpatialFilter
-{
-    public Geometry? Geometry { get; set; }
-    public SpatialRelationship Relationship { get; set; } = SpatialRelationship.Intersects;
-}
-
-public enum SpatialRelationship
-{
-    Intersects,
-    Contains,
-    Within,
-    Overlaps,
-    Touches,
-    Crosses
-}
-
-public class OrderByClause
-{
-    public string FieldName { get; set; } = string.Empty;
-    public bool Ascending { get; set; } = true;
-}
-
-public enum GeometryType
-{
-    Point,
-    LineString,
-    Polygon,
-    MultiPoint,
-    MultiLineString,
-    MultiPolygon
 }
 
 public class LayerStyle
@@ -251,4 +266,222 @@ public class UserSession
     public DateTime LastActivityTime { get; set; }
     public string? ApiKey { get; set; }
     public Dictionary<string, object> Preferences { get; set; } = new();
+}
+
+internal static class GeometryJson
+{
+    public static JsonElement ToJsonElement(Geometry geometry)
+    {
+        var payload = ToGeoJson(geometry);
+        return JsonSerializer.SerializeToElement(payload);
+    }
+
+    public static Geometry? FromJsonElement(JsonElement geometry)
+    {
+        if (geometry.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return TryReadGeoJson(geometry, out var geoJson)
+            ? geoJson
+            : ReadFeatureServerGeometry(geometry);
+    }
+
+    private static bool TryReadGeoJson(JsonElement geometry, out Geometry? parsedGeometry)
+    {
+        parsedGeometry = null;
+
+        if (!geometry.TryGetProperty("type", out var typeProperty) ||
+            typeProperty.GetString() is not { Length: > 0 } type ||
+            !geometry.TryGetProperty("coordinates", out var coordinates))
+        {
+            return false;
+        }
+
+        var srid = ReadSrid(geometry);
+        parsedGeometry = type switch
+        {
+            "Point" => ReadPoint(coordinates, srid),
+            "LineString" => new LineString
+            {
+                SRID = srid,
+                Coordinates = ReadPointArray(coordinates, srid)
+            },
+            "Polygon" => new Polygon
+            {
+                SRID = srid,
+                Coordinates = ReadPointRings(coordinates, srid)
+            },
+            _ => null
+        };
+
+        return true;
+    }
+
+    private static Geometry? ReadFeatureServerGeometry(JsonElement geometry)
+    {
+        var srid = ReadSrid(geometry);
+        if (TryGetDouble(geometry, "x", out var x) &&
+            TryGetDouble(geometry, "y", out var y))
+        {
+            return new Point(y, x, TryGetDouble(geometry, "z", out var z) ? z : null)
+            {
+                SRID = srid
+            };
+        }
+
+        if (geometry.TryGetProperty("paths", out var paths))
+        {
+            var coordinates = ReadFirstPointArray(paths, srid);
+            return coordinates.Count > 0
+                ? new LineString { SRID = srid, Coordinates = coordinates }
+                : null;
+        }
+
+        if (geometry.TryGetProperty("rings", out var rings))
+        {
+            var coordinates = ReadPointRings(rings, srid);
+            return coordinates.Count > 0
+                ? new Polygon { SRID = srid, Coordinates = coordinates }
+                : null;
+        }
+
+        return null;
+    }
+
+    private static List<Point> ReadFirstPointArray(JsonElement paths, int srid)
+    {
+        if (paths.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return paths.EnumerateArray()
+            .Where(path => path.ValueKind == JsonValueKind.Array)
+            .Select(path => ReadPointArray(path, srid))
+            .FirstOrDefault(points => points.Count > 0) ?? [];
+    }
+
+    private static List<List<Point>> ReadPointRings(JsonElement rings, int srid)
+    {
+        if (rings.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return rings.EnumerateArray()
+            .Where(ring => ring.ValueKind == JsonValueKind.Array)
+            .Select(ring => ReadPointArray(ring, srid))
+            .Where(ring => ring.Count > 0)
+            .ToList();
+    }
+
+    private static List<Point> ReadPointArray(JsonElement coordinates, int srid)
+    {
+        if (coordinates.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return coordinates.EnumerateArray()
+            .Select(coordinate => ReadPoint(coordinate, srid))
+            .Where(point => point != null)
+            .Cast<Point>()
+            .ToList();
+    }
+
+    private static int ReadSrid(JsonElement geometry)
+    {
+        if (TryGetInt(geometry, "srid", out var srid))
+        {
+            return srid;
+        }
+
+        if (geometry.TryGetProperty("spatialReference", out var spatialReference))
+        {
+            if (TryGetInt(spatialReference, "latestWkid", out var latestWkid))
+            {
+                return latestWkid;
+            }
+
+            if (TryGetInt(spatialReference, "wkid", out var wkid))
+            {
+                return wkid;
+            }
+        }
+
+        return 4326;
+    }
+
+    private static bool TryGetInt(JsonElement element, string propertyName, out int value)
+    {
+        value = default;
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetInt32(out value);
+    }
+
+    private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+    {
+        value = default;
+        return element.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDouble(out value);
+    }
+
+    private static object ToGeoJson(Geometry geometry)
+    {
+        return geometry switch
+        {
+            Point point => new
+            {
+                type = "Point",
+                coordinates = ToCoordinateArray(point)
+            },
+            LineString line => new
+            {
+                type = "LineString",
+                coordinates = line.Coordinates.Select(ToCoordinateArray).ToArray()
+            },
+            Polygon polygon => new
+            {
+                type = "Polygon",
+                coordinates = polygon.Coordinates
+                    .Select(ring => ring.Select(ToCoordinateArray).ToArray())
+                    .ToArray()
+            },
+            _ => throw new NotSupportedException($"Geometry type {geometry.Type} not supported")
+        };
+    }
+
+    private static double[] ToCoordinateArray(Point point)
+    {
+        return point.Altitude.HasValue
+            ? [point.Longitude, point.Latitude, point.Altitude.Value]
+            : [point.Longitude, point.Latitude];
+    }
+
+    private static Point? ReadPoint(JsonElement coordinates, int srid)
+    {
+        if (coordinates.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var values = coordinates.EnumerateArray()
+            .Where(value => value.ValueKind == JsonValueKind.Number)
+            .Select(value => value.GetDouble())
+            .ToArray();
+
+        if (values.Length < 2)
+        {
+            return null;
+        }
+
+        return new Point(values[1], values[0], values.Length >= 3 ? values[2] : null)
+        {
+            SRID = srid
+        };
+    }
 }
