@@ -5,10 +5,6 @@ name: Android Internal Distribution
 "on":
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "Branch, tag, or commit SHA to build. Leave blank for the workflow branch."
-        required: false
-        type: string
       environment:
         description: "Protected GitHub Environment that stores signing and Play upload secrets."
         required: true
@@ -71,7 +67,7 @@ jobs:
       - name: Checkout selected ref
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_ref || github.ref }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Resolve app target
@@ -112,12 +108,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          source_ref="${{ inputs.source_ref }}"
           version_code="${{ inputs.version_code }}"
-
-          if [[ -z "${source_ref}" ]]; then
-            source_ref="${GITHUB_REF_NAME}"
-          fi
+          workflow_ref="${GITHUB_REF_NAME}"
 
           if [[ -z "${version_code}" ]]; then
             version_code="${GITHUB_RUN_NUMBER}"
@@ -125,11 +117,11 @@ jobs:
 
           commit_sha="$(git rev-parse HEAD)"
           short_sha="$(git rev-parse --short=12 HEAD)"
-          safe_ref="$(printf '%s' "${source_ref}" | tr -c '[:alnum:]._-' '-')"
+          safe_ref="$(printf '%s' "${workflow_ref}" | tr -c '[:alnum:]._-' '-')"
           artifact_base="honua-android-${{ inputs.app_target }}-${{ inputs.channel }}-${{ inputs.artifact_type }}-${version_code}-${short_sha}"
 
           {
-            echo "source_ref=${source_ref}"
+            echo "workflow_ref=${workflow_ref}"
             echo "commit_sha=${commit_sha}"
             echo "short_sha=${short_sha}"
             echo "safe_ref=${safe_ref}"
@@ -397,7 +389,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Environment | \`${{ inputs.environment }}\` |"
             echo "| Channel | \`${{ inputs.channel }}\` |"
-            echo "| Source ref | \`${{ steps.metadata.outputs.source_ref }}\` |"
+            echo "| Workflow ref | \`${{ steps.metadata.outputs.workflow_ref }}\` |"
             echo "| Commit SHA | \`${{ steps.metadata.outputs.commit_sha }}\` |"
             echo "| App target | \`${{ inputs.app_target }}\` |"
             echo "| App project | \`${{ steps.app.outputs.app_project }}\` |"
@@ -424,7 +416,7 @@ jobs:
             echo
             echo "### Rollback or rebuild"
             echo
-            echo "- To rebuild, rerun this workflow with the same source ref and a new version code."
+            echo "- To rebuild, rerun this workflow from the same branch or tag with a new version code."
             echo "- To roll back internal testers, promote a prior internal build in Play Console or rerun this workflow from the prior commit with a higher version code."
             echo "- Production tracks are not modified by this workflow."
           } >> "${GITHUB_STEP_SUMMARY}"

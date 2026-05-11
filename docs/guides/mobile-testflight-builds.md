@@ -94,10 +94,8 @@ repository checks alone:
 ## Running a Build
 
 1. Open GitHub Actions and select `iOS TestFlight`.
-2. Select the workflow branch.
+2. Select the reviewed workflow branch or tag to build.
 3. Fill the dispatch inputs:
-   - `source_ref`: branch, tag, or commit SHA to check out. Leave blank to use
-     the selected workflow ref.
    - `target_environment`: normally `ios-testflight`.
    - `app_target`: `field-collection` or `mobile-app`.
    - `build_number`: optional numeric iOS build number. Leave blank to use the
@@ -106,6 +104,11 @@ repository checks alone:
 4. Start the run and wait for the protected environment approval.
 5. After upload, wait for App Store Connect processing to finish before asking
    testers to install.
+
+The workflow checks out the exact workflow-dispatch commit. It does not accept
+a separate ref override because Apple signing and App Store Connect secrets
+must only run against the reviewed workflow ref approved for the protected
+environment.
 
 The workflow uploads a signed artifact containing:
 
