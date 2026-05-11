@@ -244,6 +244,66 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeatureAsync_WithGeoJsonLineStringGeometry_CreatesRTreeIndexAndSupportsBboxQuery()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "routes",
+            """
+            {
+              "type": "Feature",
+              "properties": { "OBJECTID": 3, "name": "Route" },
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [[-157.86, 21.29], [-157.81, 21.34]]
+              }
+            }
+            """);
+
+        var hits = await store.GetFeaturesAsync("routes", new BoundingBox(-157.9, 21.2, -157.8, 21.4));
+        var misses = await store.GetFeaturesAsync("routes", new BoundingBox(-158.3, 21.7, -158.1, 21.9));
+
+        Assert.Single(hits);
+        Assert.Contains("Route", hits[0], StringComparison.Ordinal);
+        Assert.Empty(misses);
+    }
+
+    [Fact]
+    public async Task UpsertFeatureAsync_WithGeoJsonPolygonGeometry_CreatesRTreeIndexAndSupportsBboxQuery()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeatureAsync(
+            "parcels",
+            """
+            {
+              "type": "Feature",
+              "properties": { "OBJECTID": 4, "name": "Parcel" },
+              "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                  [-157.90, 21.30],
+                  [-157.82, 21.30],
+                  [-157.82, 21.36],
+                  [-157.90, 21.36],
+                  [-157.90, 21.30]
+                ]]
+              }
+            }
+            """);
+
+        var hits = await store.GetFeaturesAsync("parcels", new BoundingBox(-157.88, 21.31, -157.84, 21.34));
+        var misses = await store.GetFeaturesAsync("parcels", new BoundingBox(-158.3, 21.7, -158.1, 21.9));
+
+        Assert.Single(hits);
+        Assert.Contains("Parcel", hits[0], StringComparison.Ordinal);
+        Assert.Empty(misses);
+    }
+
+    [Fact]
     public async Task UpsertFeatureAsync_DefaultsFeatureLayerCrsMetadataToEpsg4326()
     {
         var store = CreateStore();

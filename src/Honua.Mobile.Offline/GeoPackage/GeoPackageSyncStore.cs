@@ -1078,6 +1078,11 @@ ORDER BY f.object_id ASC;
             return geoJsonPointExtent;
         }
 
+        if (TryReadGeoJsonCoordinatesExtent(geometry, out var geoJsonCoordinatesExtent))
+        {
+            return geoJsonCoordinatesExtent;
+        }
+
         return null;
     }
 
@@ -1146,6 +1151,52 @@ ORDER BY f.object_id ASC;
 
         extent = default;
         return false;
+    }
+
+    private static bool TryReadGeoJsonCoordinatesExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (!geometry.TryGetProperty("type", out var type) ||
+            type.ValueKind != JsonValueKind.String ||
+            !geometry.TryGetProperty("coordinates", out var coordinates) ||
+            coordinates.ValueKind != JsonValueKind.Array)
+        {
+            extent = default;
+            return false;
+        }
+
+        var builder = new FeatureExtentBuilder();
+        AccumulateGeoJsonCoordinateExtent(coordinates, ref builder);
+        if (builder.HasValue)
+        {
+            extent = builder.ToFeatureExtent();
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static void AccumulateGeoJsonCoordinateExtent(JsonElement coordinates, ref FeatureExtentBuilder builder)
+    {
+        if (coordinates.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        if (coordinates.GetArrayLength() >= 2 &&
+            coordinates[0].ValueKind == JsonValueKind.Number &&
+            coordinates[1].ValueKind == JsonValueKind.Number &&
+            coordinates[0].TryGetDouble(out var x) &&
+            coordinates[1].TryGetDouble(out var y))
+        {
+            builder.Include(x, y);
+            return;
+        }
+
+        foreach (var item in coordinates.EnumerateArray())
+        {
+            AccumulateGeoJsonCoordinateExtent(item, ref builder);
+        }
     }
 
     private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
@@ -1864,6 +1915,34 @@ LIMIT $limit;
         FeatureSpatialReference? SpatialReference);
 
     private readonly record struct FeatureExtent(double MinX, double MinY, double MaxX, double MaxY);
+
+    private struct FeatureExtentBuilder
+    {
+        private double _minX;
+        private double _minY;
+        private double _maxX;
+        private double _maxY;
+
+        public bool HasValue { get; private set; }
+
+        public void Include(double x, double y)
+        {
+            if (!HasValue)
+            {
+                _minX = _maxX = x;
+                _minY = _maxY = y;
+                HasValue = true;
+                return;
+            }
+
+            _minX = Math.Min(_minX, x);
+            _minY = Math.Min(_minY, y);
+            _maxX = Math.Max(_maxX, x);
+            _maxY = Math.Max(_maxY, y);
+        }
+
+        public readonly FeatureExtent ToFeatureExtent() => new(_minX, _minY, _maxX, _maxY);
+    }
 
     private readonly record struct FeatureSpatialReference(
         int SrsId,

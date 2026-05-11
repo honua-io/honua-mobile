@@ -304,16 +304,19 @@ public class GeoPackageStorageService : IDisposable
         await _dbLock.WaitAsync();
         try
         {
-            var deleted = await _connection.Table<LocalFeature>()
-                .DeleteAsync(f => f.Id == featureId && f.LayerId == layerId);
-
-            if (deleted > 0)
+            var deleted = 0;
+            await ExecuteInImmediateTransactionAsync(async () =>
             {
-                await RecordChange(featureId, layerId, ChangeOperation.Delete);
-                return true;
-            }
+                deleted = await _connection.Table<LocalFeature>()
+                    .DeleteAsync(f => f.Id == featureId && f.LayerId == layerId);
 
-            return false;
+                if (deleted > 0)
+                {
+                    await RecordChange(featureId, layerId, ChangeOperation.Delete);
+                }
+            });
+
+            return deleted > 0;
         }
         finally
         {
@@ -391,14 +394,43 @@ public class GeoPackageStorageService : IDisposable
             SyncStatus = syncStatus
         };
 
-        await _connection.InsertOrReplaceAsync(localFeature);
-
         if (trackChange)
         {
-            await RecordChange(feature.Id, feature.LayerId, operation);
+            await ExecuteInImmediateTransactionAsync(async () =>
+            {
+                await _connection.InsertOrReplaceAsync(localFeature);
+                await RecordChange(feature.Id, feature.LayerId, operation);
+            });
+        }
+        else
+        {
+            await _connection.InsertOrReplaceAsync(localFeature);
         }
 
         return feature.Id;
+    }
+
+    private async Task ExecuteInImmediateTransactionAsync(Func<Task> operation)
+    {
+        await _connection.ExecuteAsync("BEGIN IMMEDIATE");
+        try
+        {
+            await operation();
+            await _connection.ExecuteAsync("COMMIT");
+        }
+        catch
+        {
+            try
+            {
+                await _connection.ExecuteAsync("ROLLBACK");
+            }
+            catch
+            {
+                // Preserve the original write failure.
+            }
+
+            throw;
+        }
     }
 
     #endregion
