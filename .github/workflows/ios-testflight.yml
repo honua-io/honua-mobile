@@ -5,10 +5,6 @@ name: iOS TestFlight
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "Branch, tag, or commit SHA to build. Leave empty to use the selected workflow ref."
-        required: false
-        type: string
       target_environment:
         description: "Protected GitHub Environment that owns iOS signing and App Store Connect secrets."
         required: true
@@ -39,7 +35,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: ios-testflight-${{ inputs.target_environment }}-${{ inputs.app_target }}-${{ inputs.source_ref || github.ref }}
+  group: ios-testflight-${{ inputs.target_environment }}-${{ inputs.app_target }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -63,7 +59,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_ref || github.ref }}
+          ref: ${{ github.sha }}
 
       - name: Resolve checked out commit
         id: checkout_ref
@@ -142,7 +138,6 @@ jobs:
           BUILD_NUMBER_INPUT: ${{ inputs.build_number }}
           CHECKOUT_SHA: ${{ steps.checkout_ref.outputs.commit_sha }}
           RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
-          SOURCE_REF_INPUT: ${{ inputs.source_ref }}
           TARGET_ENVIRONMENT_INPUT: ${{ inputs.target_environment }}
         run: |
           set -euo pipefail
@@ -173,7 +168,7 @@ jobs:
           fi
 
           short_sha="${CHECKOUT_SHA:0:12}"
-          source_name="${SOURCE_REF_INPUT:-${GITHUB_REF_NAME:-detached}}"
+          source_name="${GITHUB_REF_NAME:-detached}"
           if [[ -n "${GITHUB_HEAD_REF:-}" ]]; then
             source_name="${GITHUB_HEAD_REF}"
           fi

@@ -11,8 +11,6 @@ Run **Android Internal Distribution** from the GitHub Actions tab.
 
 Inputs:
 
-- `source_ref`: branch, tag, or commit SHA to build. Leave blank to use the
-  workflow branch selected in the Actions UI.
 - `environment`: protected GitHub Environment that gates signing and upload.
   The default is `android-internal`.
 - `channel`: `internal-testing` for the Play internal testing track, or
@@ -29,12 +27,15 @@ Inputs:
   version code already active for the package.
 - `release_notes`: short tester-facing release summary.
 
-The workflow checks out the selected ref, resolves the selected app target,
-installs the Android MAUI workload, validates the project `ApplicationId`
-against the expected Google Play package name, publishes a signed release
-artifact, calculates a SHA-256 digest, stores the artifact on the workflow run,
-uploads to the selected internal Play channel, and writes a run summary with the
-version, commit SHA, environment, package name, artifact name, and digest.
+The workflow checks out the exact workflow-dispatch commit, resolves the
+selected app target, installs the Android MAUI workload, validates the project
+`ApplicationId` against the expected Google Play package name, publishes a
+signed release artifact, calculates a SHA-256 digest, stores the artifact on the
+workflow run, uploads to the selected internal Play channel, and writes a run
+summary with the version, commit SHA, environment, package name, artifact name,
+and digest. It does not accept a separate ref override because signing and Play
+upload secrets must only run against the reviewed workflow ref approved for the
+protected environment.
 
 Known Android app targets:
 
@@ -122,11 +123,12 @@ version, commit, and digest they should validate.
 
 Internal distribution does not touch production tracks.
 
-To rebuild the same source, rerun the workflow with the same `source_ref` and a
-new `version_code`. To roll testers back, select a prior internal build in Play
-Console when it is still available, or rerun the workflow from the prior commit
-with a higher version code. Tell testers which version name, version code,
-commit SHA, and artifact SHA-256 are expected before they retest.
+To rebuild the same source, rerun the workflow from the same workflow ref and
+commit with a new `version_code`. To roll testers back, select a prior internal
+build in Play Console when it is still available, or rerun the workflow from the
+prior reviewed workflow ref with a higher version code. Tell testers which
+version name, version code, commit SHA, and artifact SHA-256 are expected before
+they retest.
 
 When an uploaded build is bad, stop assigning it to tester groups in Play
 Console or replace it with a newer internal release. Do not promote the internal
