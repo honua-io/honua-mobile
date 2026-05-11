@@ -55,12 +55,22 @@ public class DatabaseService : IDisposable
 
     public async Task<GeoPackageSyncService> GetSyncServiceAsync(
         IAuthenticationService authService,
-        IConnectivityService connectivityService)
+        IConnectivityService connectivityService,
+        IFieldCollectionChangeUploader? changeUploader = null,
+        IFieldCollectionChangePuller? changePuller = null,
+        ILogger<GeoPackageSyncService>? logger = null,
+        IMobileExceptionReporter? exceptionReporter = null)
     {
         await _initLock.WaitAsync();
         try
         {
-            var syncService = GetSyncService(authService, connectivityService);
+            var syncService = GetSyncService(
+                authService,
+                connectivityService,
+                changeUploader,
+                changePuller,
+                logger,
+                exceptionReporter);
             if (_storageService != null && !await _storageService.InitializeAsync())
             {
                 throw new InvalidOperationException("Failed to initialize the GeoPackage database.");

@@ -4,6 +4,7 @@ using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.Maui.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
@@ -32,6 +33,43 @@ public sealed class GeoPackageSyncServiceTests
         Assert.False(result.IsSuccess);
         Assert.Contains("failed to upload", result.ErrorMessage);
         Assert.Single(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WhenUsingQueuedProductionUploader_LeavesChangePendingWithoutConfigurationFailure()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new QueuedFieldCollectionChangeUploader(
+                NullLogger<QueuedFieldCollectionChangeUploader>.Instance));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("failed to upload", result.ErrorMessage);
+        Assert.DoesNotContain("not configured", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WhenUsingLocalOnlyProductionPuller_ReturnsSuccessWithoutRemoteChanges()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        using var sync = CreateSyncService(
+            storage,
+            puller: new LocalOnlyFieldCollectionChangePuller(
+                NullLogger<LocalOnlyFieldCollectionChangePuller>.Instance));
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.ChangesPulled);
     }
 
     [Fact]
