@@ -195,7 +195,7 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
                 authenticated: true));
 
             return Results.Accepted(
-                $"/api/mobile/exceptions/{Uri.EscapeDataString(report.Id)}",
+                $"/api/mobile/exceptions/{System.Uri.EscapeDataString(report.Id)}",
                 new
                 {
                     accepted = true,
