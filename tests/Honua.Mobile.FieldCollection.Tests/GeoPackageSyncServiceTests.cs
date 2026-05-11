@@ -267,7 +267,7 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Empty(await sync.GetConflictsAsync());
         var resolvedFeature = await storage.GetFeatureAsync("asset-1", 1);
         Assert.NotNull(resolvedFeature);
-        Assert.Equal("server", resolvedFeature.Attributes["name"].ToString());
+        Assert.Equal("server", resolvedFeature.Attributes["name"]?.ToString());
     }
 
     [Fact]

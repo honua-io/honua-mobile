@@ -58,7 +58,7 @@ public sealed class FieldCollectionSdkContractMigrationTests
         var sdkFeature = new FeatureRecord
         {
             Id = "asset-null",
-            Attributes =
+            Attributes = new Dictionary<string, JsonElement>
             {
                 ["nullable"] = JsonSerializer.SerializeToElement<string?>(null),
                 ["name"] = JsonSerializer.SerializeToElement("Null Test")
