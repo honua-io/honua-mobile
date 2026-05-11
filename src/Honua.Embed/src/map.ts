@@ -2,6 +2,12 @@ import {
   createHonuaEmbedExtensionHost,
   type HonuaEmbedExtensionHost,
 } from './extensions';
+import {
+  assertHonuaDomAvailable,
+  createHonuaTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
+} from './dom';
 
 export interface HonuaMapCoordinate {
   latitude: number;
@@ -45,8 +51,7 @@ export interface HonuaMapSearchDetail {
 const DEFAULT_ZOOM = 10;
 const ELEMENT_NAME = 'honua-map';
 
-const template = document.createElement('template');
-template.innerHTML = `
+const template = createHonuaTemplate(`
   <style>
     :host {
       --honua-map-background: #f4f7f9;
@@ -324,9 +329,9 @@ template.innerHTML = `
     <output class="popup" part="popup"></output>
     <div class="meta" part="attribution"></div>
   </section>
-`;
+`);
 
-export class HonuaMapElement extends HTMLElement {
+export class HonuaMapElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return [
       'service-url',
@@ -351,6 +356,7 @@ export class HonuaMapElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#extensionHost = createHonuaEmbedExtensionHost({
@@ -524,13 +530,7 @@ export class HonuaMapElement extends HTMLElement {
 }
 
 export function defineHonuaMapElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-
-  customElements.define(name, HonuaMapElement);
-  return HonuaMapElement;
+  return defineHonuaCustomElement(name, HonuaMapElement);
 }
 
 function readConfig(element: HTMLElement): HonuaMapConfig {

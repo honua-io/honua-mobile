@@ -5,8 +5,11 @@ import type {
 } from '../scene-metadata';
 import { HonuaSceneLink } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   upgradeProperty,
 } from './shared';
 
@@ -52,7 +55,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneBookmarksElement extends HTMLElement {
+export class HonuaSceneBookmarksElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading'];
   }
@@ -62,6 +65,7 @@ export class HonuaSceneBookmarksElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#link = new HonuaSceneLink({
@@ -174,12 +178,7 @@ export class HonuaSceneBookmarksElement extends HTMLElement {
 }
 
 export function defineHonuaSceneBookmarksElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneBookmarksElement);
-  return HonuaSceneBookmarksElement;
+  return defineHonuaCustomElement(name, HonuaSceneBookmarksElement);
 }
 
 declare global {

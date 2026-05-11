@@ -1,3 +1,11 @@
+import { createHonuaTemplate } from '../dom';
+
+export {
+  assertHonuaDomAvailable,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
+} from '../dom';
+
 export const CONTROL_BASE_STYLES = `
   <style>
     :host {
@@ -80,9 +88,7 @@ export const CONTROL_BASE_STYLES = `
 `;
 
 export function controlTemplate(html: string): HTMLTemplateElement {
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  return template;
+  return createHonuaTemplate(html);
 }
 
 export function upgradeProperty(element: HTMLElement, propertyName: string): void {

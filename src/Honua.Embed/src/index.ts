@@ -25,8 +25,9 @@ export * from './controls';
 import { defineHonuaMapElement } from './map';
 import { defineHonuaSceneElement } from './scene';
 import { defineHonuaSceneControls } from './controls';
+import { canDefineHonuaCustomElements } from './dom';
 
-if (typeof customElements !== 'undefined') {
+if (canDefineHonuaCustomElements()) {
   defineHonuaMapElement();
   defineHonuaSceneElement();
   defineHonuaSceneControls();

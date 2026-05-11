@@ -5,8 +5,11 @@ import type {
 import type { HonuaSceneInspectorField } from '../scene-metadata';
 import { HonuaSceneLink } from './scene-link';
 import {
+  assertHonuaDomAvailable,
   CONTROL_BASE_STYLES,
   controlTemplate,
+  defineHonuaCustomElement,
+  HonuaHTMLElementBase,
   upgradeProperty,
 } from './shared';
 
@@ -58,7 +61,7 @@ const template = controlTemplate(`
   </section>
 `);
 
-export class HonuaSceneInspectorElement extends HTMLElement {
+export class HonuaSceneInspectorElement extends HonuaHTMLElementBase {
   static get observedAttributes(): string[] {
     return ['for', 'heading'];
   }
@@ -71,6 +74,7 @@ export class HonuaSceneInspectorElement extends HTMLElement {
 
   constructor() {
     super();
+    assertHonuaDomAvailable(ELEMENT_NAME);
     this.#root = this.attachShadow({ mode: 'open' });
     this.#root.append(template.content.cloneNode(true));
     this.#link = new HonuaSceneLink({
@@ -304,12 +308,7 @@ function defaultFields(attributes: Record<string, unknown>): HonuaSceneInspector
 }
 
 export function defineHonuaSceneInspectorElement(name = ELEMENT_NAME): CustomElementConstructor {
-  const existing = customElements.get(name);
-  if (existing) {
-    return existing;
-  }
-  customElements.define(name, HonuaSceneInspectorElement);
-  return HonuaSceneInspectorElement;
+  return defineHonuaCustomElement(name, HonuaSceneInspectorElement);
 }
 
 declare global {
