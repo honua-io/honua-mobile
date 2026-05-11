@@ -2,8 +2,9 @@
 
 Honua mobile exception reporting is opt-in. The mobile implementation provides
 a sanitized local reporting surface, offline queue, bounded upload worker,
-tester consent gates, and an environment kill switch for MAUI/mobile apps. It
-does not define or implement the Honua Server ingestion endpoint.
+tester consent gates, an environment kill switch, and a documented ingestion
+contract for MAUI/mobile apps. The Honua Server implementation remains owned by
+`honua-server`; mobile only posts sanitized reports to the configured endpoint.
 
 ## Enablement
 
@@ -47,7 +48,7 @@ services.AddHonuaMobileExceptionReporting(new MobileExceptionReportingOptions
 {
     Mode = MobileExceptionReportingMode.ServerUpload,
     QueueDirectory = exceptionQueueDirectory,
-    UploadEndpoint = new Uri("https://api.honua.example/mobile/exception-reports"),
+    UploadEndpoint = new Uri("https://api.honua.example/api/mobile/exceptions"),
     MaxUploadBatchSize = 10,
     UploadInitialBackoff = TimeSpan.FromSeconds(30),
     UploadMaxBackoff = TimeSpan.FromMinutes(15),
@@ -104,8 +105,25 @@ use HTTPS unless it is localhost for development. Apps that need approved
 request metadata, such as same-origin authentication headers, should register an
 `IMobileExceptionReportUploadRequestCustomizer` instead of creating a parallel
 exception-report DTO or hardcoded server client. Tenant routing and ingestion
-schema versioning should be added through the uploader boundary once the server
-endpoint contract exists.
+schema versioning should be added through the uploader boundary.
+
+## Server Ingestion Contract
+
+The mobile-owned contract is an authenticated `POST` to
+`/api/mobile/exceptions` with an `application/json` body serialized from the
+sanitized `MobileExceptionReport` shape. FieldCollection attaches its API key
+with `X-API-Key` only when the upload endpoint shares the authenticated Honua
+Server origin. Server implementations should reject unauthenticated uploads,
+accept valid reports with a success response, and leave retry semantics to the
+mobile queue when a non-success response is returned.
+
+The server log or observability entry should preserve searchable fields from the
+report: report id, fingerprint, occurrence and receipt times, source, operation,
+severity, exception type, correlation id, request id, app id, app version, build
+number, commit SHA, branch, environment, platform, OS version, device class, and
+small redacted context/metadata properties. It must not store auth headers,
+tokens, raw attachments, precise location, or form payloads unless an approved
+server retention policy explicitly allows those fields.
 
 The FieldCollection app keeps exception reporting off until both tester consent
 and the environment kill switch allow it. The Settings screen writes
@@ -121,8 +139,7 @@ and stores sanitized reports in the local queue. When
 app also maps the legacy `honua_exception_reporting_mode=Server` preference to
 `ServerUpload`, stamps build/device metadata from the mobile build
 configuration, and attaches its API key only when the configured upload endpoint
-shares the authenticated server origin. Mobile does not assume a server route
-before the ingestion contract is defined.
+shares the authenticated server origin.
 
 Do not flush from a blocking UI path or synchronously during app startup. Start
 flush work from lifecycle/background scheduling code and allow it to stop on
@@ -131,18 +148,18 @@ refresh, or field capture.
 
 ## Server Dependency
 
-Server ingestion is a separate dependency for issue #91. The mobile repo should
-not add a server API client, shared server DTO, or long-lived copied contract for
-that endpoint. The server-side slice needs to define the ingestion route, auth
-requirements, request headers, retention rules, log sink mapping, searchable
-metadata fields, schema versioning, and operational triage behavior. Mobile
-upload work should consume that versioned contract/package once it exists.
+Server ingestion is a separate server-owned implementation dependency. The
+mobile repo should not add a server API client, shared server DTO, or long-lived
+copied contract for that endpoint. Server issue
+[`honua-server#924`](https://github.com/honua-io/honua-server/issues/924)
+tracks the live image auth refresh and exception ingestion endpoint support that
+mobile uses for end-to-end verification.
 
 The mobile server integration suite has loopback coverage for sanitized report
-delivery and opt-in live coverage through
-`HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH`. A live failure leaves the
-report queued, so enabled live tests should fail until the configured server
-route accepts the mobile report and records it in server observability.
+delivery into a server-like log sink with searchable metadata, plus opt-in live
+coverage through `HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH`. A live
+failure leaves the report queued, so enabled live tests fail unless the
+configured server route accepts the mobile report.
 
 Recommended PR body note:
 

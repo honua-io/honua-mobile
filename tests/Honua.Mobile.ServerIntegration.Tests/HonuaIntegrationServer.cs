@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Honua.Mobile.Maui.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -15,8 +17,11 @@ namespace Honua.Mobile.ServerIntegration.Tests;
 
 internal sealed class HonuaIntegrationServer : IAsyncDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly WebApplication _app;
     private readonly ConcurrentQueue<RecordedRequest> _requests = new();
+    private readonly ConcurrentQueue<MobileExceptionLogEntry> _mobileExceptionLogEntries = new();
 
     private HonuaIntegrationServer(WebApplication app)
     {
@@ -26,6 +31,8 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
     public Uri BaseUri { get; private set; } = null!;
 
     public IReadOnlyList<RecordedRequest> Requests => _requests.ToArray();
+
+    public IReadOnlyList<MobileExceptionLogEntry> MobileExceptionLogEntries => _mobileExceptionLogEntries.ToArray();
 
     public static async Task<HonuaIntegrationServer> StartAsync()
     {
@@ -66,7 +73,7 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
             await next(context);
         });
 
-        MapEndpoints(app);
+        MapEndpoints(app, server);
 
         await app.StartAsync();
         var address = app.Services.GetRequiredService<IServer>()
@@ -99,7 +106,7 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
         await _app.DisposeAsync();
     }
 
-    private static void MapEndpoints(IEndpointRouteBuilder app)
+    private static void MapEndpoints(IEndpointRouteBuilder app, HonuaIntegrationServer server)
     {
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
@@ -157,7 +164,45 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
             }
             """));
 
-        app.MapPost("/api/mobile/exceptions", () => Results.Ok(new { accepted = true }));
+        app.MapPost("/api/mobile/exceptions", async (HttpContext context) =>
+        {
+            if (!HasApiKey(context))
+            {
+                return Results.Unauthorized();
+            }
+
+            MobileExceptionReport? report;
+            try
+            {
+                report = await JsonSerializer.DeserializeAsync<MobileExceptionReport>(
+                    context.Request.Body,
+                    JsonOptions,
+                    context.RequestAborted);
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest(new { error = "invalid_mobile_exception_report" });
+            }
+
+            if (report is null)
+            {
+                return Results.BadRequest(new { error = "missing_mobile_exception_report" });
+            }
+
+            server._mobileExceptionLogEntries.Enqueue(MobileExceptionLogEntry.From(
+                report,
+                receivedAtUtc: DateTimeOffset.UtcNow,
+                authenticated: true));
+
+            return Results.Accepted(
+                $"/api/mobile/exceptions/{Uri.EscapeDataString(report.Id)}",
+                new
+                {
+                    accepted = true,
+                    reportId = report.Id,
+                    report.Fingerprint,
+                });
+        });
         app.MapPost("/oauth/token", () => Json("""
             {
               "accessToken": "refreshed-access-token",
@@ -348,4 +393,61 @@ internal sealed record RecordedRequest(
 
     public string? Header(string name)
         => Headers.TryGetValue(name, out var values) ? values.FirstOrDefault() : null;
+}
+
+internal sealed record MobileExceptionLogEntry(
+    string ReportId,
+    string Fingerprint,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset ReceivedAtUtc,
+    string Source,
+    string? Operation,
+    string? CorrelationId,
+    string? RequestId,
+    MobileExceptionSeverity Severity,
+    string ExceptionType,
+    string? AppId,
+    string? AppVersion,
+    string? BuildNumber,
+    string? CommitSha,
+    string? Branch,
+    string? EnvironmentName,
+    string? Platform,
+    string? OsVersion,
+    string? DeviceClass,
+    IReadOnlyDictionary<string, string?> MetadataProperties,
+    IReadOnlyDictionary<string, string?> Context,
+    bool Authenticated)
+{
+    public static MobileExceptionLogEntry From(
+        MobileExceptionReport report,
+        DateTimeOffset receivedAtUtc,
+        bool authenticated)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        return new MobileExceptionLogEntry(
+            report.Id,
+            report.Fingerprint,
+            report.OccurredAtUtc,
+            receivedAtUtc,
+            report.Source,
+            report.Operation,
+            report.CorrelationId,
+            report.RequestId,
+            report.Severity,
+            report.ExceptionType,
+            report.Metadata.AppId,
+            report.Metadata.AppVersion,
+            report.Metadata.BuildNumber,
+            report.Metadata.CommitSha,
+            report.Metadata.Branch,
+            report.Metadata.EnvironmentName,
+            report.Metadata.Platform,
+            report.Metadata.OsVersion,
+            report.Metadata.DeviceClass,
+            report.Metadata.Properties,
+            report.Context,
+            authenticated);
+    }
 }
