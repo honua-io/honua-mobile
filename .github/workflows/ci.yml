@@ -372,8 +372,6 @@ jobs:
             -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
-
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
