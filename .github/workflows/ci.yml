@@ -369,7 +369,6 @@ jobs:
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
