@@ -42,7 +42,6 @@ done
 dotnet build "${PROJECT_PATH}" \
   --configuration "${CONFIGURATION}" \
   --framework "${TARGET_FRAMEWORK}" \
-  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
   /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}" \
   /p:AndroidPackageFormat=apk \
   /p:TreatWarningsAsErrors=true

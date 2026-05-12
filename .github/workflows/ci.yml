@@ -295,12 +295,10 @@ jobs:
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
           dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
       - name: Build MAUI Components
@@ -315,7 +313,6 @@ jobs:
             --configuration Release \
             --framework net10.0-android \
             --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
@@ -323,7 +320,6 @@ jobs:
             --configuration Release \
             --framework net10.0-android \
             --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
@@ -335,7 +331,6 @@ jobs:
             --configuration Release \
             --framework net10.0-android \
             --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
