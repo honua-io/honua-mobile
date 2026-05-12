@@ -320,6 +320,7 @@ jobs:
             --configuration Release \
             --framework net10.0-android \
             --no-restore \
+            --no-dependencies \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
