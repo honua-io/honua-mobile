@@ -312,7 +312,9 @@ jobs:
             -p:TargetFramework=net10.0-android \
             -p:RuntimeIdentifiers=android-x64
 
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            -p:RuntimeIdentifier=android-x64 \
+            -p:RuntimeIdentifiers=android-x64
 
       - name: Build Android Apps
         run: |
@@ -322,9 +324,6 @@ jobs:
             --no-restore \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
-
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            -p:RuntimeIdentifiers=android-x64
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
@@ -535,10 +534,14 @@ jobs:
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64 `
             -p:Platform=x64
 
           dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64 `
             -p:Platform=x64
 
       - name: Build Reference App (Windows)
