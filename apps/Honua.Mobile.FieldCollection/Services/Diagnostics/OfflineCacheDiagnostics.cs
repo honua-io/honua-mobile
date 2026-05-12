@@ -109,7 +109,15 @@ public static partial class DiagnosticRedactor
             return RedactSensitiveText(value);
         }
 
-        return uri.GetLeftPart(UriPartial.Path);
+        var builder = new UriBuilder(uri)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+
+        return builder.Uri.GetLeftPart(UriPartial.Path);
     }
 
     public static string RedactSensitiveText(string? value)
@@ -173,16 +181,21 @@ public static partial class DiagnosticRedactor
 
     private static bool IsSensitiveName(string name)
     {
-        return name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("apiKey", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("authorization", StringComparison.OrdinalIgnoreCase);
+        var normalized = string.Concat(name
+            .Where(char.IsLetterOrDigit))
+            .ToLowerInvariant();
+
+        return normalized.Contains("token", StringComparison.Ordinal) ||
+            normalized.Contains("secret", StringComparison.Ordinal) ||
+            normalized.Contains("password", StringComparison.Ordinal) ||
+            normalized.Contains("apikey", StringComparison.Ordinal) ||
+            normalized.Contains("accesskey", StringComparison.Ordinal) ||
+            normalized.Contains("authorization", StringComparison.Ordinal);
     }
 
     [GeneratedRegex("Bearer\\s+[A-Za-z0-9._~+/=-]+", RegexOptions.IgnoreCase)]
     private static partial Regex BearerTokenRegex();
 
-    [GeneratedRegex("(?i)(api[_-]?key|token|password|secret|authorization)([\"'\\s:=]+)[^,\"'\\s}]+")]
+    [GeneratedRegex("(?i)(x[_-]?api[_-]?key|api[_-]?key|access[_-]?key|token|password|secret|authorization)([\"'\\s:=]+)[^,\"'\\s}]+")]
     private static partial Regex SecretPairRegex();
 }

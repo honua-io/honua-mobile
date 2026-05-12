@@ -125,6 +125,7 @@ public static partial class MobileExceptionRedactor
         var normalized = NormalizeKey(key);
         return normalized.Contains("token", StringComparison.Ordinal) ||
             normalized.Contains("apikey", StringComparison.Ordinal) ||
+            normalized.Contains("accesskey", StringComparison.Ordinal) ||
             normalized.Contains("authorization", StringComparison.Ordinal) ||
             normalized.Contains("credential", StringComparison.Ordinal) ||
             normalized.Contains("password", StringComparison.Ordinal) ||
@@ -178,10 +179,10 @@ public static partial class MobileExceptionRedactor
     [GeneratedRegex(@"\b(?<scheme>bearer|basic)\s+[A-Za-z0-9._~+/=-]+", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
     private static partial Regex BearerOrBasicRegex();
 
-    [GeneratedRegex(@"\b(?<key>access[_-]?token|refresh[_-]?token|token|api[_-]?key|apikey|password|passwd|secret|client[_-]?secret|credential)\b\s*[:=]\s*(?<quote>[""']?)[^\s,;&""']+(?<quote2>[""']?)", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
+    [GeneratedRegex(@"\b(?<key>access[_-]?token|refresh[_-]?token|token|x[_-]?api[_-]?key|api[_-]?key|apikey|access[_-]?key|accesskey|password|passwd|secret|client[_-]?secret|credential)\b\s*[:=]\s*(?<quote>[""']?)[^\s,;&""']+(?<quote2>[""']?)", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
     private static partial Regex SensitiveKeyValueRegex();
 
-    [GeneratedRegex(@"(?<prefix>[?&;](?:access[_-]?token|refresh[_-]?token|token|api[_-]?key|apikey|password|secret|client[_-]?secret|sig|signature|code|key)=)[^&#\s]+", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
+    [GeneratedRegex(@"(?<prefix>[?&;](?:access[_-]?token|refresh[_-]?token|token|x[_-]?api[_-]?key|api[_-]?key|apikey|access[_-]?key|accesskey|password|secret|client[_-]?secret|sig|signature|code|key)=)[^&#\s]+", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
     private static partial Regex SensitiveQueryStringRegex();
 
     [GeneratedRegex(@"\b(?<key>lat(?:itude)?|lon(?:gitude)?|lng)\s*[:=]\s*-?\d{1,3}(?:\.\d{4,})?\b", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
