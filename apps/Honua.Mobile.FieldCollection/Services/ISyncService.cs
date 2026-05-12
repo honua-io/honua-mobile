@@ -5,6 +5,7 @@ namespace Honua.Mobile.FieldCollection.Services;
 public interface ISyncService : INotifyPropertyChanged
 {
     bool IsSyncing { get; }
+    bool IsRemoteSyncConfigured { get; }
     DateTime? LastSyncTime { get; }
     SyncStatus Status { get; }
     int PendingChangesCount { get; }
@@ -109,6 +110,8 @@ public class SyncService : ISyncService
     private int _pendingChangesCount;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool IsRemoteSyncConfigured => false;
 
     public bool IsSyncing
     {

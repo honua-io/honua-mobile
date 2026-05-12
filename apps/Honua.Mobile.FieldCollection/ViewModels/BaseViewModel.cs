@@ -214,6 +214,12 @@ public partial class MainViewModel : BaseViewModel
     [RelayCommand]
     private async Task QuickSync()
     {
+        if (!_syncService.IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
+            return;
+        }
+
         if (!IsOnline)
         {
             await ShowError("No Connection", "Please check your internet connection and try again.");

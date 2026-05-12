@@ -30,6 +30,12 @@ public partial class SyncCenterViewModel : BaseViewModel
     private bool isOnline;
 
     [ObservableProperty]
+    private bool isRemoteSyncConfigured;
+
+    [ObservableProperty]
+    private bool canRunSyncOperations;
+
+    [ObservableProperty]
     private SyncStatistics? lastSyncStatistics;
 
     [ObservableProperty]
@@ -64,10 +70,13 @@ public partial class SyncCenterViewModel : BaseViewModel
         // Subscribe to service events
         _syncService.PropertyChanged += OnSyncServicePropertyChanged;
         _connectivityService.ConnectivityChanged += OnConnectivityChanged;
+        _authService.PropertyChanged += OnAuthServicePropertyChanged;
 
         // Initialize properties
         UpdateFromSyncService();
         IsOnline = _connectivityService.IsConnected;
+        UpdateSyncActionState();
+        UpdateSyncStatusMessage();
     }
 
     private void OnSyncServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -78,22 +87,49 @@ public partial class SyncCenterViewModel : BaseViewModel
     private void OnConnectivityChanged(object? sender, bool isConnected)
     {
         IsOnline = isConnected;
+        UpdateSyncActionState();
         UpdateSyncStatusMessage();
+    }
+
+    private void OnAuthServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated))
+        {
+            UpdateSyncActionState();
+            UpdateSyncStatusMessage();
+        }
     }
 
     private void UpdateFromSyncService()
     {
         IsSyncing = _syncService.IsSyncing;
+        IsRemoteSyncConfigured = _syncService.IsRemoteSyncConfigured;
         SyncStatus = _syncService.Status;
         PendingChangesCount = _syncService.PendingChangesCount;
         LastSyncTime = _syncService.LastSyncTime;
 
+        UpdateSyncActionState();
         UpdateSyncStatusMessage();
+    }
+
+    private void UpdateSyncActionState()
+    {
+        CanRunSyncOperations =
+            IsRemoteSyncConfigured &&
+            IsOnline &&
+            _authService.IsAuthenticated &&
+            !IsSyncing;
     }
 
     private void UpdateSyncStatusMessage()
     {
-        if (!IsOnline)
+        if (!IsRemoteSyncConfigured)
+        {
+            SyncStatusMessage = PendingChangesCount > 0
+                ? $"Remote sync not configured - {PendingChangesCount} changes remain on this device"
+                : "Remote sync not configured";
+        }
+        else if (!IsOnline)
         {
             SyncStatusMessage = "Offline - sync unavailable";
         }
@@ -131,6 +167,12 @@ public partial class SyncCenterViewModel : BaseViewModel
         if (IsSyncing)
         {
             await ShowMessage("Sync In Progress", "A sync operation is already running.");
+            return;
+        }
+
+        if (!IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
             return;
         }
 
@@ -209,6 +251,12 @@ public partial class SyncCenterViewModel : BaseViewModel
     [RelayCommand]
     private async Task PullChangesOnly()
     {
+        if (!IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build.");
+            return;
+        }
+
         if (!IsOnline || !_authService.IsAuthenticated)
         {
             await ShowError("Cannot Pull", "Please check your connection and authentication.");
@@ -232,6 +280,12 @@ public partial class SyncCenterViewModel : BaseViewModel
     [RelayCommand]
     private async Task PushChangesOnly()
     {
+        if (!IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
+            return;
+        }
+
         if (!IsOnline || !_authService.IsAuthenticated)
         {
             await ShowError("Cannot Push", "Please check your connection and authentication.");

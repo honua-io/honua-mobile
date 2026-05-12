@@ -3,7 +3,9 @@ using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models
 
 namespace Honua.Mobile.FieldCollection.Services.Sync;
 
-internal sealed class QueuedFieldCollectionChangeUploader : IFieldCollectionChangeUploader
+internal sealed class QueuedFieldCollectionChangeUploader :
+    IFieldCollectionChangeUploader,
+    IFieldCollectionRemoteSyncCapability
 {
     private readonly ILogger<QueuedFieldCollectionChangeUploader>? _logger;
 
@@ -11,6 +13,8 @@ internal sealed class QueuedFieldCollectionChangeUploader : IFieldCollectionChan
     {
         _logger = logger;
     }
+
+    public bool IsRemoteSyncConfigured => false;
 
     public Task<bool> UploadChangeAsync(StorageChangeRecord change, CancellationToken cancellationToken = default)
     {
@@ -26,7 +30,9 @@ internal sealed class QueuedFieldCollectionChangeUploader : IFieldCollectionChan
     }
 }
 
-internal sealed class LocalOnlyFieldCollectionChangePuller : IFieldCollectionChangePuller
+internal sealed class LocalOnlyFieldCollectionChangePuller :
+    IFieldCollectionChangePuller,
+    IFieldCollectionRemoteSyncCapability
 {
     private readonly ILogger<LocalOnlyFieldCollectionChangePuller>? _logger;
 
@@ -34,6 +40,8 @@ internal sealed class LocalOnlyFieldCollectionChangePuller : IFieldCollectionCha
     {
         _logger = logger;
     }
+
+    public bool IsRemoteSyncConfigured => false;
 
     public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
         long sinceGeneration,

@@ -109,6 +109,7 @@ public class DiagnosticService
         var diagnostics = new SyncDiagnostics
         {
             IsSyncing = _syncService.IsSyncing,
+            IsRemoteSyncConfigured = _syncService.IsRemoteSyncConfigured,
             LastSyncTime = _syncService.LastSyncTime,
             PendingChanges = _syncService.PendingChangesCount,
             SyncStatus = _syncService.Status.ToString(),
@@ -370,6 +371,7 @@ public class ConnectivityDiagnostics
 public class SyncDiagnostics
 {
     public bool IsSyncing { get; set; }
+    public bool IsRemoteSyncConfigured { get; set; }
     public DateTime? LastSyncTime { get; set; }
     public int PendingChanges { get; set; }
     public string SyncStatus { get; set; } = string.Empty;
