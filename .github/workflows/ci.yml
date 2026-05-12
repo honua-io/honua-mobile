@@ -319,15 +319,12 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
-            --no-restore \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-android \
-            --no-restore \
-            --no-dependencies \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
@@ -338,7 +335,6 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
-            --no-restore \
             /p:RuntimeIdentifiers=android-x64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
@@ -456,14 +452,12 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-ios \
-            --no-restore \
             /p:RuntimeIdentifier=iossimulator-x64 \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-ios \
-            --no-restore \
             /p:RuntimeIdentifier=iossimulator-x64 \
             /p:TreatWarningsAsErrors=true
 
@@ -475,7 +469,6 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-ios \
-            --no-restore \
             /p:RuntimeIdentifier=ios-arm64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
@@ -550,7 +543,6 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0 `
-            --no-restore `
             /p:RuntimeIdentifier=win-x64 `
             /p:RuntimeIdentifiers=win-x64
 
@@ -559,7 +551,6 @@ jobs:
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0 `
-            --no-restore `
             /p:RuntimeIdentifier=win-x64 `
             /p:RuntimeIdentifiers=win-x64
 
