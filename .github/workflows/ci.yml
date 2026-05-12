@@ -307,11 +307,13 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
+            --no-restore \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-android \
+            --no-restore \
             /p:TreatWarningsAsErrors=true
 
       - name: Android trim smoke
@@ -321,6 +323,7 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
+            --no-restore \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
             /p:TreatWarningsAsErrors=true \
@@ -423,12 +426,14 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-ios \
+            --no-restore \
             /p:RuntimeIdentifier=iossimulator-x64 \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-ios \
+            --no-restore \
             /p:RuntimeIdentifier=iossimulator-x64 \
             /p:TreatWarningsAsErrors=true
 
@@ -440,6 +445,7 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-ios \
+            --no-restore \
             /p:RuntimeIdentifier=ios-arm64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
@@ -499,13 +505,15 @@ jobs:
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
-            --framework net10.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0 `
+            --no-restore
 
       - name: Build Field Collection App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
-            --framework net10.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0 `
+            --no-restore
 
   grpc-validation:
     name: gRPC Protocol Validation
