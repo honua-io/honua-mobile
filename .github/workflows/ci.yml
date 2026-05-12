@@ -11,7 +11,7 @@ permissions:
 
 env:
   DOTNET_VERSION: '10.0.x'  # Current repo targets net10
-  IOS_DOTNET_VERSION: '10.0.100'
+  MAUI_DOTNET_VERSION: '10.0.100'
   NODE_VERSION: '24.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
@@ -275,7 +275,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -289,7 +289,7 @@ jobs:
 
       - name: Install MAUI workload
         run: |
-          dotnet workload install maui-android
+          dotnet workload install maui-android --skip-manifest-update
 
       - name: Restore
         run: |
@@ -368,7 +368,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.IOS_DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -476,14 +476,14 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --skip-manifest-update
 
       - name: Restore
         run: |
