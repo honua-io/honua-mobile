@@ -39,9 +39,14 @@ until [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; do
   sleep 1
 done
 
+dotnet restore "${PROJECT_PATH}" \
+  --framework "${TARGET_FRAMEWORK}" \
+  /p:AndroidSupportedAbis="${ANDROID_SUPPORTED_ABIS}"
+
 dotnet build "${PROJECT_PATH}" \
   --configuration "${CONFIGURATION}" \
   --framework "${TARGET_FRAMEWORK}" \
+  --no-restore \
   /p:AndroidSupportedAbis="${ANDROID_SUPPORTED_ABIS}" \
   /p:AndroidPackageFormat=apk \
   /p:TreatWarningsAsErrors=true
