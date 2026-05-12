@@ -6,5 +6,6 @@
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/$(HonuaSdkDotNetTrainTag)</HonuaSdkDotNetTrainReleaseUrl>
     <HonuaSdkDotNetTrainReleaseCommit>9d264e358099dc20a30b9247013b61d1fba0b0a9</HonuaSdkDotNetTrainReleaseCommit>
     <HonuaSdkDotNetTrainReleasePublishedAt>2026-04-30T23:32:50Z</HonuaSdkDotNetTrainReleasePublishedAt>
+    <MauiVersion>10.0.60</MauiVersion>
   </PropertyGroup>
 </Project>
