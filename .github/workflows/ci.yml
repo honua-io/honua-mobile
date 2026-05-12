@@ -506,8 +506,15 @@ jobs:
 
       - name: Restore
         run: |
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
+            -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64
+
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
+            -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64
 
       - name: Build MAUI Components (Windows)
         run: |
@@ -519,14 +526,18 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0 `
-            --no-restore
+            --no-restore `
+            /p:RuntimeIdentifier=win-x64 `
+            /p:RuntimeIdentifiers=win-x64
 
       - name: Build Field Collection App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0 `
-            --no-restore
+            --no-restore `
+            /p:RuntimeIdentifier=win-x64 `
+            /p:RuntimeIdentifiers=win-x64
 
   grpc-validation:
     name: gRPC Protocol Validation
