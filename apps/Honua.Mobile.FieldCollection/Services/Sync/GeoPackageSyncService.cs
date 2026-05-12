@@ -37,6 +37,14 @@ public interface IFieldCollectionChangePuller
 }
 
 /// <summary>
+/// Marks sync transports that intentionally do not connect to a remote field sync endpoint.
+/// </summary>
+public interface IFieldCollectionRemoteSyncCapability
+{
+    bool IsRemoteSyncConfigured { get; }
+}
+
+/// <summary>
 /// Real implementation of sync service with GeoPackage-based delta sync
 /// Implements last-write-wins conflict resolution with manual merge support
 /// </summary>
@@ -75,6 +83,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     [ObservableProperty]
     private string? syncMessage;
 
+    public bool IsRemoteSyncConfigured { get; }
+
     public GeoPackageSyncService(
         GeoPackageStorageService storage,
         IAuthenticationService authService,
@@ -91,6 +101,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         _changePuller = changePuller ?? new UnconfiguredFieldCollectionChangePuller();
         _exceptionReporter = exceptionReporter ?? new NoOpMobileExceptionReporter();
         _logger = logger;
+        IsRemoteSyncConfigured =
+            IsConfiguredRemoteTransport(_changeUploader) &&
+            IsConfiguredRemoteTransport(_changePuller);
 
         // Update pending changes count periodically
         _pendingChangesTask = Task.Run(() => UpdatePendingChangesAsync(_pendingChangesCancellation.Token));
@@ -133,13 +146,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> SyncAsync()
     {
-        if (!await CanSyncAsync())
+        var unavailableReason = GetSyncUnavailableReason();
+        if (unavailableReason != null)
         {
-            return new SyncResult
-            {
-                IsSuccess = false,
-                ErrorMessage = "Cannot sync - check authentication and connectivity"
-            };
+            return SyncUnavailableResult("sync", unavailableReason);
         }
 
         await _syncLock.WaitAsync();
@@ -251,13 +261,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> PullChangesAsync()
     {
-        if (!await CanSyncAsync())
+        var unavailableReason = GetSyncUnavailableReason();
+        if (unavailableReason != null)
         {
-            return new SyncResult
-            {
-                IsSuccess = false,
-                ErrorMessage = "Cannot pull changes - check authentication and connectivity"
-            };
+            return SyncUnavailableResult("pull changes", unavailableReason);
         }
 
         await _syncLock.WaitAsync();
@@ -351,13 +358,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> PushChangesAsync()
     {
-        if (!await CanSyncAsync())
+        var unavailableReason = GetSyncUnavailableReason();
+        if (unavailableReason != null)
         {
-            return new SyncResult
-            {
-                IsSuccess = false,
-                ErrorMessage = "Cannot push changes - check authentication and connectivity"
-            };
+            return SyncUnavailableResult("push changes", unavailableReason);
         }
 
         await _syncLock.WaitAsync();
@@ -908,9 +912,40 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     #region Helper Methods
 
-    private Task<bool> CanSyncAsync()
+    private static bool IsConfiguredRemoteTransport(object transport)
     {
-        return Task.FromResult(_connectivityService.IsConnected && _authService.IsAuthenticated);
+        return transport is not IFieldCollectionRemoteSyncCapability capability ||
+            capability.IsRemoteSyncConfigured;
+    }
+
+    private string? GetSyncUnavailableReason()
+    {
+        if (!IsRemoteSyncConfigured)
+        {
+            return "remote field sync is not configured";
+        }
+
+        if (!_connectivityService.IsConnected)
+        {
+            return "the device is offline";
+        }
+
+        if (!_authService.IsAuthenticated)
+        {
+            return "authentication is required";
+        }
+
+        return null;
+    }
+
+    private static SyncResult SyncUnavailableResult(string operation, string reason)
+    {
+        return new SyncResult
+        {
+            IsSuccess = false,
+            ErrorMessage = $"Cannot {operation} - {reason}",
+            CompletedAt = DateTime.UtcNow
+        };
     }
 
     public Task CancelSyncAsync()
@@ -955,8 +990,12 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     #endregion
 }
 
-internal sealed class UnconfiguredFieldCollectionChangeUploader : IFieldCollectionChangeUploader
+internal sealed class UnconfiguredFieldCollectionChangeUploader :
+    IFieldCollectionChangeUploader,
+    IFieldCollectionRemoteSyncCapability
 {
+    public bool IsRemoteSyncConfigured => false;
+
     public Task<bool> UploadChangeAsync(StorageChangeRecord change, CancellationToken cancellationToken = default)
     {
         throw new InvalidOperationException(
@@ -964,8 +1003,12 @@ internal sealed class UnconfiguredFieldCollectionChangeUploader : IFieldCollecti
     }
 }
 
-internal sealed class UnconfiguredFieldCollectionChangePuller : IFieldCollectionChangePuller
+internal sealed class UnconfiguredFieldCollectionChangePuller :
+    IFieldCollectionChangePuller,
+    IFieldCollectionRemoteSyncCapability
 {
+    public bool IsRemoteSyncConfigured => false;
+
     public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
         long sinceGeneration,
         CancellationToken cancellationToken = default)

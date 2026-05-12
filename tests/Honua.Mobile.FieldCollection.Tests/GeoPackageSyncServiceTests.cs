@@ -37,7 +37,7 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
-    public async Task PushChangesAsync_WhenUsingQueuedProductionUploader_LeavesChangePendingWithoutConfigurationFailure()
+    public async Task PushChangesAsync_WhenUsingQueuedProductionUploader_ReturnsConfigurationFailureAndLeavesChangePending()
     {
         var databasePath = CreateDatabasePath();
         await using var cleanup = new DatabaseCleanup(databasePath);
@@ -51,13 +51,13 @@ public sealed class GeoPackageSyncServiceTests
         var result = await sync.PushChangesAsync();
 
         Assert.False(result.IsSuccess);
-        Assert.Contains("failed to upload", result.ErrorMessage);
-        Assert.DoesNotContain("not configured", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(sync.IsRemoteSyncConfigured);
+        Assert.Contains("remote field sync is not configured", result.ErrorMessage);
         Assert.Single(await storage.GetPendingChangesAsync());
     }
 
     [Fact]
-    public async Task PullChangesAsync_WhenUsingLocalOnlyProductionPuller_ReturnsSuccessWithoutRemoteChanges()
+    public async Task PullChangesAsync_WhenUsingLocalOnlyProductionPuller_ReturnsConfigurationFailure()
     {
         var databasePath = CreateDatabasePath();
         await using var cleanup = new DatabaseCleanup(databasePath);
@@ -69,8 +69,9 @@ public sealed class GeoPackageSyncServiceTests
 
         var result = await sync.PullChangesAsync();
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(0, result.ChangesPulled);
+        Assert.False(result.IsSuccess);
+        Assert.False(sync.IsRemoteSyncConfigured);
+        Assert.Contains("remote field sync is not configured", result.ErrorMessage);
     }
 
     [Fact]
