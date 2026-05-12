@@ -44,10 +44,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj" Condition="Exists('..\..\..\sdk\dotnet\Honua.Mobile.AR\Honua.Mobile.AR.csproj')" />
-  </ItemGroup>
-
-  <ItemGroup>
     <MauiAsset Include="Resources\**" />
     <MauiFont Include="Fonts\**" />
     <MauiImage Include="Images\**" />
