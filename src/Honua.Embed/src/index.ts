@@ -3,6 +3,7 @@ export * from './scene';
 export * from './scene-metadata';
 export * from './scene-package-cache';
 export * from './display-adapter';
+export * from './builder';
 export type {
   HonuaEmbedConfigByTarget,
   HonuaEmbedContribution,

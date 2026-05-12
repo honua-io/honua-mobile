@@ -154,6 +154,57 @@ applyHonuaMapOptions(document.querySelector('honua-map'), {
 });
 ```
 
+## Embed Builder State
+
+Admin portals can build a live configurator with the typed builder helpers. The
+helpers normalize catalog layers, remove disabled or unknown selections, validate
+service URLs and map extents, apply preview attributes, and generate snippets
+through the existing web component, CDN, iframe, React, Vue, and Angular target
+helpers.
+
+```js
+import {
+  applyHonuaMapBuilderState,
+  createHonuaMapBuilderState,
+} from '@honua-io/embed';
+
+const state = createHonuaMapBuilderState({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  availableLayers: [
+    { id: 'assets', label: 'Assets', defaultSelected: true },
+    { id: 'work-orders', label: 'Work orders' },
+  ],
+  selectedLayerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  interactive: true,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  target: 'cdn',
+  cdn: {
+    scriptUrl: 'https://cdn.honua.dev/embed.js',
+    scriptAttributes: {
+      integrity: embedEntry.integrity,
+      crossOrigin: 'anonymous',
+    },
+  },
+});
+
+applyHonuaMapBuilderState(document.querySelector('honua-map'), state);
+
+if (state.canGenerateSnippet) {
+  console.log(state.snippet);
+}
+```
+
+Builder warnings can be shown inline without blocking snippet generation. Errors
+leave `state.snippet` null until the admin fixes required fields such as service
+URL, coordinate ranges, or custom element names. API keys are kept out of
+generated snippets unless credentials are explicitly enabled for the selected
+target.
+
 For hosts that cannot use web components, generate an iframe fallback with the
 same option shape. Map options are serialized into the iframe URL query string,
 and `apiKey` is omitted unless `includeCredentials: true` is set. The npm/CDN
