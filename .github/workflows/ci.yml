@@ -291,7 +291,18 @@ jobs:
         run: |
           dotnet workload install maui-android --skip-manifest-update
 
-      - name: Restore
+      - name: Restore MAUI Components
+        run: |
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
+
+      - name: Build MAUI Components
+        run: |
+          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:TreatWarningsAsErrors=true
+
+      - name: Restore Android Apps
         run: |
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
             -p:RuntimeIdentifier=android-x64 \
@@ -316,15 +327,6 @@ jobs:
           dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             -p:TargetFramework=net10.0-android \
             -p:RuntimeIdentifiers=android-x64
-
-      - name: Build MAUI Components
-        run: |
-          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            --configuration Release \
-            --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
-            /p:RuntimeIdentifiers=android-x64 \
-            /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
         run: |
@@ -437,12 +439,20 @@ jobs:
             echo "actool_available=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Restore
+      - name: Restore MAUI Components
         run: |
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            -p:RuntimeIdentifier=iossimulator-x64 \
-            -p:RuntimeIdentifiers=iossimulator-x64
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
+      - name: Build MAUI Components
+        run: |
+          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:TreatWarningsAsErrors=true
+
+      - name: Restore iOS Apps
+        if: steps.ios_tools.outputs.actool_available == 'true'
+        run: |
           dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             -p:TargetFramework=net10.0-ios \
             -p:RuntimeIdentifier=iossimulator-x64 \
@@ -451,15 +461,6 @@ jobs:
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-ios \
             '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
-
-      - name: Build MAUI Components
-        run: |
-          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
-            --configuration Release \
-            --no-restore \
-            /p:RuntimeIdentifier=iossimulator-x64 \
-            /p:RuntimeIdentifiers=iossimulator-x64 \
-            /p:TreatWarningsAsErrors=true
 
       - name: Build iOS Apps
         if: steps.ios_tools.outputs.actool_available == 'true'
@@ -532,7 +533,17 @@ jobs:
       - name: Install MAUI workload
         run: dotnet workload install maui --skip-manifest-update
 
-      - name: Restore
+      - name: Restore MAUI Components
+        run: |
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
+
+      - name: Build MAUI Components (Windows)
+        run: |
+          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
+            --configuration Release `
+            --no-restore
+
+      - name: Restore Windows Apps
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
@@ -543,14 +554,6 @@ jobs:
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
             -p:RuntimeIdentifier=win-x64 `
             -p:RuntimeIdentifiers=win-x64
-
-      - name: Build MAUI Components (Windows)
-        run: |
-          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
-            --configuration Release `
-            --no-restore `
-            /p:RuntimeIdentifier=win-x64 `
-            /p:RuntimeIdentifiers=win-x64
 
       - name: Build Reference App (Windows)
         run: |
