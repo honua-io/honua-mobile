@@ -11,7 +11,7 @@ permissions:
 
 env:
   DOTNET_VERSION: '10.0.x'  # Current repo targets net10
-  IOS_DOTNET_VERSION: '10.0.100'
+  MAUI_DOTNET_VERSION: '10.0.100'
   NODE_VERSION: '24.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
@@ -275,7 +275,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -289,17 +289,61 @@ jobs:
 
       - name: Install MAUI workload
         run: |
-          dotnet workload install maui-android
+          dotnet workload install maui-android --skip-manifest-update
 
-      - name: Restore
+      - name: Restore MAUI Components
         run: |
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-android
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-android
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
+            --no-restore \
+            /p:TreatWarningsAsErrors=true
+
+      - name: Restore Android Apps
+        run: |
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            -p:TargetFramework=net10.0-android \
+            -p:RuntimeIdentifiers=android-x64
+
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
+            -p:TargetFramework=net10.0-android \
+            -p:RuntimeIdentifiers=android-x64
+
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            -p:RuntimeIdentifier=android-x64 \
+            -p:RuntimeIdentifiers=android-x64
+
+      - name: Build Android Project References
+        run: |
+          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
+            /p:TreatWarningsAsErrors=true
+
+          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
+            /p:TreatWarningsAsErrors=true
+
+          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
+            /p:TreatWarningsAsErrors=true
+
+          dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
@@ -307,11 +351,16 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
+            --no-restore \
+            /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-android \
+            --no-restore \
+            --no-dependencies \
+            /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Android trim smoke
@@ -321,6 +370,8 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
             /p:TreatWarningsAsErrors=true \
@@ -368,7 +419,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.IOS_DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -406,16 +457,30 @@ jobs:
             echo "actool_available=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Restore
+      - name: Restore MAUI Components
         run: |
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-ios
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-ios
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
+            --no-restore \
             /p:TreatWarningsAsErrors=true
+
+      - name: Restore iOS Apps
+        if: steps.ios_tools.outputs.actool_available == 'true'
+        run: |
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
+            -p:TargetFramework=net10.0-ios \
+            -p:RuntimeIdentifier=iossimulator-x64 \
+            -p:RuntimeIdentifiers=iossimulator-x64
+
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            -p:TargetFramework=net10.0-ios \
+            '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
+
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build iOS Apps
         if: steps.ios_tools.outputs.actool_available == 'true'
@@ -476,36 +541,56 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.MAUI_DOTNET_VERSION }}
 
       - name: Configure GitHub Packages
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --skip-manifest-update
 
-      - name: Restore
+      - name: Restore MAUI Components
         run: |
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-windows10.0.19041.0
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build MAUI Components (Windows)
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
-            --configuration Release
+            --configuration Release `
+            --no-restore
+
+      - name: Restore Windows Apps
+        run: |
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
+            -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64 `
+            -p:Platform=x64
+
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
+            -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:RuntimeIdentifiers=win-x64 `
+            -p:Platform=x64
+
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build Reference App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
-            --framework net10.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0 `
+            --no-restore `
+            /p:Platform=x64
 
       - name: Build Field Collection App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
-            --framework net10.0-windows10.0.19041.0
+            --framework net10.0-windows10.0.19041.0 `
+            --no-restore `
+            /p:Platform=x64
 
   grpc-validation:
     name: gRPC Protocol Validation

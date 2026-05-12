@@ -7,13 +7,16 @@ public sealed class MobileExceptionRedactorTests
     [Fact]
     public void RedactText_RemovesTokensCredentialsAndPreciseCoordinates()
     {
-        var text = "GET https://alice:secret@example.test/sync?api_key=key-123&layer=sites Authorization: Bearer raw-token password=hunter2 lat=21.30691 lon=-157.85830";
+        var text = "GET https://alice:secret@example.test/sync?api_key=key-123&access-key=access-query&layer=sites Authorization: Bearer raw-token x-api-key=header-secret access_key=access-secret password=hunter2 lat=21.30691 lon=-157.85830";
 
         var redacted = MobileExceptionRedactor.RedactText(text, new MobileExceptionReportingOptions());
 
         Assert.NotNull(redacted);
         Assert.DoesNotContain("alice:secret", redacted);
         Assert.DoesNotContain("key-123", redacted);
+        Assert.DoesNotContain("access-query", redacted);
+        Assert.DoesNotContain("header-secret", redacted);
+        Assert.DoesNotContain("access-secret", redacted);
         Assert.DoesNotContain("raw-token", redacted);
         Assert.DoesNotContain("hunter2", redacted);
         Assert.DoesNotContain("21.30691", redacted);
@@ -28,6 +31,8 @@ public sealed class MobileExceptionRedactorTests
         var properties = new Dictionary<string, object?>
         {
             ["apiKey"] = "test-api-key",
+            ["x-api-key"] = "header-secret",
+            ["access-key"] = "access-secret",
             ["latitude"] = 21.3069,
             ["formPayload"] = "{\"owner\":\"Kai\"}",
             ["attachmentBytes"] = "raw-bytes",
@@ -37,6 +42,8 @@ public sealed class MobileExceptionRedactorTests
         var redacted = MobileExceptionRedactor.RedactProperties(properties, new MobileExceptionReportingOptions());
 
         Assert.Equal(MobileExceptionRedactor.RedactedValue, redacted["apiKey"]);
+        Assert.Equal(MobileExceptionRedactor.RedactedValue, redacted["x-api-key"]);
+        Assert.Equal(MobileExceptionRedactor.RedactedValue, redacted["access-key"]);
         Assert.Equal(MobileExceptionRedactor.PreciseLocationRedactedValue, redacted["latitude"]);
         Assert.Equal(MobileExceptionRedactor.FormPayloadRedactedValue, redacted["formPayload"]);
         Assert.Equal(MobileExceptionRedactor.AttachmentContentRedactedValue, redacted["attachmentBytes"]);
