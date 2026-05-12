@@ -306,11 +306,11 @@ jobs:
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifiers=android-x64
+            -p:AndroidSupportedAbis=x86_64
 
           dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifiers=android-x64
+            -p:AndroidSupportedAbis=x86_64
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
@@ -319,13 +319,13 @@ jobs:
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
-            /p:RuntimeIdentifiers=android-x64 \
+            /p:AndroidSupportedAbis=x86_64 \
             /p:TreatWarningsAsErrors=true
 
           dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-android \
-            /p:RuntimeIdentifiers=android-x64 \
+            /p:AndroidSupportedAbis=x86_64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Android trim smoke
@@ -335,7 +335,7 @@ jobs:
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net10.0-android \
-            /p:RuntimeIdentifiers=android-x64 \
+            /p:AndroidSupportedAbis=x86_64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
             /p:TreatWarningsAsErrors=true \
@@ -535,8 +535,6 @@ jobs:
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
             -p:RuntimeIdentifier=win-x64 `
             -p:RuntimeIdentifiers=win-x64
-
-          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build Reference App (Windows)
         run: |
