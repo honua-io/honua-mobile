@@ -394,6 +394,48 @@ const angularIframeComponent = createHonuaMapAngularIframeSnippet({
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 
+## Embed Builder State
+
+Admin portals can use the builder helpers to power a live configurator without
+hand-assembling layer selections, preview attributes, validation, and snippets.
+The state helper consumes catalog layer options, normalizes the selected layer
+ids, reports warnings/errors for the host UI, and delegates final snippet output
+to the existing web component, CDN, iframe, React, Vue, or Angular generators.
+
+```ts
+import {
+  applyHonuaMapBuilderState,
+  createHonuaMapBuilderState,
+} from '@honua-io/embed';
+
+const state = createHonuaMapBuilderState({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  availableLayers: [
+    { id: 'assets', label: 'Assets', defaultSelected: true },
+    { id: 'work-orders', label: 'Work orders' },
+  ],
+  selectedLayerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  interactive: true,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  target: 'cdn',
+  cdn: {
+    scriptUrl: 'https://cdn.honua.dev/embed.js',
+  },
+});
+
+applyHonuaMapBuilderState(document.querySelector('honua-map'), state);
+console.log(state.issues, state.snippet);
+```
+
+`state.issues` contains warning/error objects suitable for form validation.
+Credentials are omitted from generated snippets unless `includeCredentials` is
+explicitly enabled for the selected target.
+
 ## Generated Scene Snippets
 
 ```ts
