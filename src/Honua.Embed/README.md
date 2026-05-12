@@ -436,6 +436,35 @@ console.log(state.issues, state.snippet);
 Credentials are omitted from generated snippets unless `includeCredentials` is
 explicitly enabled for the selected target.
 
+## Embed Builder Element
+
+Use `<honua-map-builder>` when an admin portal needs a complete, framework-free
+configurator surface. It renders source, layer, view, branding, and output
+controls, keeps a live `<honua-map>` preview in sync, emits
+`honua-map-builder-change`, and writes the generated snippet into a readonly
+textarea.
+
+```html
+<script type="module">
+  import '@honua-io/embed';
+</script>
+
+<honua-map-builder
+  service-url="https://services.honua.example/FeatureServer"
+  layer-ids="assets,work-orders"
+  center="21.3069,-157.8583"
+  zoom="12"
+  interactive
+  identify
+  target="cdn"
+  script-url="https://cdn.honua.dev/embed.js">
+</honua-map-builder>
+```
+
+Layer catalogs can be supplied through the `availableLayers` property or an
+`available-layers` JSON attribute. The generated output omits `api-key` unless
+the admin explicitly enables credential output.
+
 ## Generated Scene Snippets
 
 ```ts

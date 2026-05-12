@@ -205,6 +205,32 @@ URL, coordinate ranges, or custom element names. API keys are kept out of
 generated snippets unless credentials are explicitly enabled for the selected
 target.
 
+Admin portals can also mount the packaged builder element. It uses the same
+state helpers, renders a live preview and generated snippet, and emits
+`honua-map-builder-change` whenever the configuration changes.
+
+```html
+<script type="module">
+  import '@honua-io/embed';
+</script>
+
+<honua-map-builder
+  service-url="https://services.honua.example/FeatureServer"
+  layer-ids="assets,work-orders"
+  center="21.3069,-157.8583"
+  zoom="12"
+  interactive
+  identify
+  target="iframe"
+  iframe-url="https://cdn.honua.dev/embed/map.html"
+  parent-origin="https://portal.example.com">
+</honua-map-builder>
+```
+
+Set the `availableLayers` property, or the `available-layers` JSON attribute,
+when the portal has a catalog response. Disabled or unavailable selections are
+reported as builder warnings and are removed from generated output.
+
 For hosts that cannot use web components, generate an iframe fallback with the
 same option shape. Map options are serialized into the iframe URL query string,
 and `apiKey` is omitted unless `includeCredentials: true` is set. The npm/CDN

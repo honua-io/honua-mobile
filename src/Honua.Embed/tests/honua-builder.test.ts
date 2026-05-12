@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyHonuaMapBuilderState,
   createHonuaMapBuilderSnippet,
   createHonuaMapBuilderState,
+  defineHonuaMapBuilderElement,
+  type HonuaMapBuilderElement,
 } from '../src/index';
 
 describe('honua map builder', () => {
@@ -119,5 +121,89 @@ describe('honua map builder', () => {
     expect(() => createHonuaMapBuilderSnippet({
       serviceUrl: '',
     })).toThrow('A service URL is required before generating an embed snippet.');
+  });
+
+  it('renders an admin builder element with live preview and credential-safe output', () => {
+    defineHonuaMapBuilderElement();
+    const element = document.createElement('honua-map-builder') as HonuaMapBuilderElement;
+    element.availableLayers = [
+      { id: 'assets', label: 'Assets', description: 'Field assets', defaultSelected: true },
+      { id: 'drafts', label: 'Drafts', disabled: true },
+    ];
+    element.setAttribute('service-url', 'https://services.example.test/FeatureServer');
+    element.setAttribute('api-key', 'secret-browser-key');
+    element.setAttribute('layer-ids', 'assets,drafts');
+    element.setAttribute('interactive', '');
+    element.setAttribute('search', '');
+    document.body.append(element);
+
+    expect(element.state.canGenerateSnippet).toBe(true);
+    expect(element.state.selectedLayerIds).toEqual(['assets']);
+    expect(element.state.issues.map((issue) => issue.code)).toContain('credentials-omitted');
+    expect(element.shadowRoot!.querySelector('honua-map')!.getAttribute('layer-ids')).toBe('assets');
+    expect(element.shadowRoot!.querySelector<HTMLTextAreaElement>('[name="snippet"]')!.value)
+      .not.toContain('secret-browser-key');
+  });
+
+  it('initializes catalog default selections when layer ids are not explicit', () => {
+    defineHonuaMapBuilderElement();
+    const element = document.createElement('honua-map-builder') as HonuaMapBuilderElement;
+    element.availableLayers = [
+      { id: 'assets', label: 'Assets', defaultSelected: true },
+      { id: 'work-orders', label: 'Work orders' },
+    ];
+    element.setAttribute('service-url', 'https://services.example.test/FeatureServer');
+    document.body.append(element);
+
+    expect(element.state.selectedLayerIds).toEqual(['assets']);
+    expect(element.shadowRoot!.querySelector<HTMLInputElement>('input[name="selectedLayer"]')!.checked)
+      .toBe(true);
+    expect(element.shadowRoot!.querySelector<HTMLTextAreaElement>('[name="snippet"]')!.value)
+      .toContain('layer-ids="assets"');
+  });
+
+  it('preserves catalog metadata when restoring a captured builder value', () => {
+    defineHonuaMapBuilderElement();
+    const element = document.createElement('honua-map-builder') as HonuaMapBuilderElement;
+    element.value = {
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      availableLayers: [
+        { id: 'assets', label: 'Assets', description: 'Field assets' },
+        { id: 'drafts', label: 'Drafts', disabled: true },
+      ],
+      selectedLayerIds: ['assets'],
+    };
+    document.body.append(element);
+
+    expect(element.availableLayers).toEqual([
+      expect.objectContaining({ id: 'assets', label: 'Assets' }),
+      expect.objectContaining({ id: 'drafts', disabled: true }),
+    ]);
+    expect(element.shadowRoot!.querySelector('[data-layer-text]')!.hasAttribute('hidden')).toBe(true);
+    expect([...element.shadowRoot!.querySelectorAll('.layer-option')].map((item) => item.textContent))
+      .toEqual(['AssetsField assets', 'Drafts']);
+  });
+
+  it('updates builder output target from the element form', () => {
+    defineHonuaMapBuilderElement();
+    const element = document.createElement('honua-map-builder') as HonuaMapBuilderElement;
+    element.value = {
+      serviceUrl: 'https://services.example.test/FeatureServer',
+      layerIds: ['assets'],
+      label: 'Asset map',
+    };
+    document.body.append(element);
+    const listener = vi.fn();
+    element.addEventListener('honua-map-builder-change', listener);
+
+    const target = element.shadowRoot!.querySelector<HTMLSelectElement>('[name="target"]')!;
+    const iframeUrl = element.shadowRoot!.querySelector<HTMLInputElement>('[name="iframeUrl"]')!;
+    target.value = 'iframe';
+    iframeUrl.value = 'https://cdn.example.test/embed/map.html';
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(element.state.snippet).toContain('<iframe');
+    expect(element.state.snippet).toContain('https://cdn.example.test/embed/map.html');
+    expect(listener).toHaveBeenCalled();
   });
 });
