@@ -322,6 +322,8 @@ jobs:
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
             --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
@@ -437,14 +439,26 @@ jobs:
 
       - name: Restore
         run: |
-          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj -p:TargetFramework=net10.0-ios
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj -p:TargetFramework=net10.0-ios
+          dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            -p:RuntimeIdentifier=iossimulator-x64 \
+            -p:RuntimeIdentifiers=iossimulator-x64
+
+          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
+            -p:TargetFramework=net10.0-ios \
+            -p:RuntimeIdentifier=iossimulator-x64 \
+            -p:RuntimeIdentifiers=iossimulator-x64
+
+          dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            -p:TargetFramework=net10.0-ios \
+            '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
 
       - name: Build MAUI Components
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
             --no-restore \
+            /p:RuntimeIdentifier=iossimulator-x64 \
+            /p:RuntimeIdentifiers=iossimulator-x64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Build iOS Apps
@@ -534,7 +548,9 @@ jobs:
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
             --configuration Release `
-            --no-restore
+            --no-restore `
+            /p:RuntimeIdentifier=win-x64 `
+            /p:RuntimeIdentifiers=win-x64
 
       - name: Build Reference App (Windows)
         run: |
