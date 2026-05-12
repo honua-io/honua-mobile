@@ -321,6 +321,7 @@ jobs:
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
+            --no-restore \
             /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
@@ -443,6 +444,7 @@ jobs:
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             --configuration Release \
+            --no-restore \
             /p:TreatWarningsAsErrors=true
 
       - name: Build iOS Apps
@@ -531,7 +533,8 @@ jobs:
       - name: Build MAUI Components (Windows)
         run: |
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj `
-            --configuration Release
+            --configuration Release `
+            --no-restore
 
       - name: Build Reference App (Windows)
         run: |
