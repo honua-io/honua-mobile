@@ -7,6 +7,7 @@ PROJECT_DIR="$(dirname "${PROJECT_PATH}")"
 PACKAGE_ID="${HONUA_MOBILE_PLATFORM_SMOKE_PACKAGE_ID:-io.honua.mobile.platformsmoke}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
 TARGET_FRAMEWORK="net10.0-android"
+RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-android-x64}"
 CONFIG_FILE="honua-mobile-platform-smoke-config.json"
 RESULT_FILE="honua-mobile-platform-smoke-result.json"
 
@@ -41,6 +42,9 @@ done
 dotnet build "${PROJECT_PATH}" \
   --configuration "${CONFIGURATION}" \
   --framework "${TARGET_FRAMEWORK}" \
+  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
+  /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}" \
+  /p:AndroidPackageFormat=apk \
   /p:TreatWarningsAsErrors=true
 
 apk_path="$(find "${PROJECT_DIR}/bin/${CONFIGURATION}/${TARGET_FRAMEWORK}" -type f \( -name "*Signed.apk" -o -name "*.apk" \) | head -n 1)"
