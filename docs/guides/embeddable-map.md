@@ -85,9 +85,10 @@ npm run cdn:manifest --prefix src/Honua.Embed
 
 `dist/cdn-manifest.json` lists the package name/version, default URLs, and
 top-level JavaScript files with byte size, SHA-256 hash, and SHA-384 SRI
-integrity. It covers `embed.js`, `index.js`, `iframe.js`, `snippets.js`, and
-top-level Vite chunks; Cesium runtime assets under `dist/cesium` are copied for
-hosting but are not expanded into the manifest.
+integrity. It covers core entries such as `embed.js`, `index.js`, `iframe.js`,
+and `snippets.js`, plus React/Vue wrapper entries and top-level Vite chunks;
+Cesium runtime assets under `dist/cesium` are copied for hosting but are not
+expanded into the manifest.
 The publish workflow uploads the built `dist/` directory as a CDN artifact so
 release operators can promote the static bundle separately from npm publishing.
 
@@ -344,6 +345,86 @@ const angularComponent = createHonuaMapAngularSnippet({
   selector: 'city-asset-map',
 });
 ```
+
+When teams want maintained wrapper entry points instead of generated source,
+import the optional peer packages directly from the `@honua-io/embed` subpaths.
+The wrappers bind typed props/events to the underlying custom elements and keep
+the core package framework-agnostic. The Angular subpath is partial-compiled for
+Angular application builds and should be processed by the Angular linker in the
+host application.
+
+```tsx
+import { HonuaMap, HonuaMapBuilder } from '@honua-io/embed/react';
+
+export function CityAssetEmbed() {
+  return (
+    <>
+      <HonuaMap
+        serviceUrl="https://services.honua.example/FeatureServer"
+        layerIds={['assets', 'work-orders']}
+        search
+        identify
+        label="City asset map"
+        themeStyle={{ accent: '#0f766e' }}
+        onIdentify={(detail) => console.log(detail.x, detail.y)}
+      />
+      <HonuaMapBuilder
+        serviceUrl="https://services.honua.example/FeatureServer"
+        target="web-component"
+        onChange={(detail) => console.log(detail.state.issues)}
+      />
+    </>
+  );
+}
+```
+
+```vue
+<script setup lang="ts">
+import { HonuaMap } from '@honua-io/embed/vue';
+
+const layerIds = ['assets', 'work-orders'];
+</script>
+
+<template>
+  <HonuaMap
+    service-url="https://services.honua.example/FeatureServer"
+    :layer-ids="layerIds"
+    search
+    identify
+    label="City asset map"
+    @config-change="(config) => console.log(config.zoom)"
+  />
+</template>
+```
+
+```ts
+import { Component } from '@angular/core';
+import { HonuaMapComponent } from '@honua-io/embed/angular';
+
+@Component({
+  selector: 'city-asset-map',
+  standalone: true,
+  imports: [HonuaMapComponent],
+  template: `
+    <honua-map-wrapper
+      [serviceUrl]="'https://services.honua.example/FeatureServer'"
+      [layerIds]="['assets', 'work-orders']"
+      [search]="true"
+      [identify]="true"
+      [label]="'City asset map'"
+      (identifyEvent)="handleIdentify($event)">
+    </honua-map-wrapper>
+  `,
+})
+export class CityAssetMapComponent {
+  handleIdentify(detail: { x: number; y: number }) {
+    console.log(detail.x, detail.y);
+  }
+}
+```
+
+Use the wrapper `themeStyle` prop for Honua CSS custom properties. Framework
+native `style` bindings remain available for host layout concerns.
 
 ## Integration Events
 

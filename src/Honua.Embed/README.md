@@ -260,11 +260,12 @@ npm run cdn:manifest
 
 The manifest records the package name/version, default CDN URLs, and each
 top-level JavaScript entry's byte size, SHA-256 hash, and SHA-384 SRI value. It
-includes `embed.js`, `index.js`, `iframe.js`, `snippets.js`, and top-level Vite
-chunks, but does not enumerate the copied Cesium asset tree. Use the manifest
-entry for the hosted script when emitting CDN snippets. The publish workflow
-also uploads the built `dist/` directory as a CDN artifact for operators that
-promote static assets separately from the npm package.
+includes core entries such as `embed.js`, `index.js`, `iframe.js`, and
+`snippets.js`, plus React/Vue wrapper entries and top-level Vite chunks. It does
+not enumerate the copied Cesium asset tree. Use the manifest entry for the
+hosted script when emitting CDN snippets. The publish workflow also uploads the
+built `dist/` directory as a CDN artifact for operators that promote static
+assets separately from the npm package.
 
 ```ts
 const manifest = await fetch('https://cdn.honua.dev/cdn-manifest.json').then((response) => response.json());
@@ -390,6 +391,88 @@ const angularIframeComponent = createHonuaMapAngularIframeSnippet({
   parentOrigin: 'https://portal.example.com',
 });
 ```
+
+Framework hosts that want package entry points instead of generated source can
+import typed wrappers from `@honua-io/embed/react`, `@honua-io/embed/vue`, or
+`@honua-io/embed/angular`. React, Vue, and Angular are optional peer
+dependencies and are not bundled into the core custom element entrypoint. The
+Angular subpath is partial-compiled for Angular application builds and should be
+processed by the Angular linker in the host application.
+
+```tsx
+import { HonuaMap, HonuaMapBuilder } from '@honua-io/embed/react';
+
+export function AssetMap() {
+  return (
+    <>
+      <HonuaMap
+        serviceUrl="https://services.honua.example/FeatureServer"
+        layerIds={['assets', 'work-orders']}
+        search
+        identify
+        label="City asset map"
+        themeStyle={{ accent: '#0f766e' }}
+        onSearch={(detail) => console.log(detail.query)}
+      />
+      <HonuaMapBuilder
+        serviceUrl="https://services.honua.example/FeatureServer"
+        target="cdn"
+        scriptUrl="https://cdn.honua.dev/embed.js"
+        onChange={(detail) => console.log(detail.state.snippet)}
+      />
+    </>
+  );
+}
+```
+
+```vue
+<script setup lang="ts">
+import { HonuaMap } from '@honua-io/embed/vue';
+
+const layers = ['assets', 'work-orders'];
+</script>
+
+<template>
+  <HonuaMap
+    service-url="https://services.honua.example/FeatureServer"
+    :layer-ids="layers"
+    search
+    identify
+    label="City asset map"
+    @search="(detail) => console.log(detail.query)"
+  />
+</template>
+```
+
+```ts
+import { Component } from '@angular/core';
+import { HonuaMapComponent } from '@honua-io/embed/angular';
+
+@Component({
+  selector: 'asset-map',
+  standalone: true,
+  imports: [HonuaMapComponent],
+  template: `
+    <honua-map-wrapper
+      [serviceUrl]="'https://services.honua.example/FeatureServer'"
+      [layerIds]="['assets', 'work-orders']"
+      [search]="true"
+      [identify]="true"
+      [label]="'City asset map'"
+      (searchEvent)="handleSearch($event)">
+    </honua-map-wrapper>
+  `,
+})
+export class AssetMapComponent {
+  handleSearch(detail: { query: string }) {
+    console.log(detail.query);
+  }
+}
+```
+
+The wrapper prop names follow the typed embed option shape. Use `themeStyle` for
+Honua CSS custom properties so framework-native `style` bindings remain
+available for layout.
 
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.

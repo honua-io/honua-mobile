@@ -26,6 +26,18 @@
     "./iframe": {
       "types": "./dist/iframe.d.ts",
       "import": "./dist/iframe.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.ts",
+      "import": "./dist/vue.js"
+    },
+    "./angular": {
+      "types": "./dist/angular/angular.d.ts",
+      "import": "./dist/angular/angular.js"
     }
   },
   "files": [
@@ -33,7 +45,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && node scripts/copy-cesium-assets.mjs",
+    "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && npm run build:angular && node scripts/copy-cesium-assets.mjs",
+    "build:angular": "ngc -p tsconfig.angular.json && node scripts/bundle-angular-entry.mjs",
     "cdn:manifest": "node scripts/create-cdn-manifest.mjs",
     "prepack": "npm run build && npm run cdn:manifest",
     "test": "vitest run",
@@ -49,11 +62,35 @@
     "gis"
   ],
   "license": "Apache-2.0",
+  "peerDependencies": {
+    "@angular/core": ">=17 <22",
+    "react": ">=18 <20",
+    "vue": ">=3.4 <4"
+  },
+  "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@angular/compiler": "^21.2.12",
+    "@angular/compiler-cli": "^21.2.12",
+    "@angular/core": "^21.2.12",
+    "@types/react": "^19.2.14",
     "happy-dom": "^20.0.10",
+    "react": "^19.2.6",
+    "rxjs": "^7.8.2",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "vue": "^3.5.34",
+    "zone.js": "^0.16.2"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.2",

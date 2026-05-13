@@ -19,4 +19,19 @@ describe('server-side package imports', () => {
 
     expect(() => defineHonuaMapElement()).toThrow(/requires a browser DOM/);
   });
+
+  it('can import framework wrapper entry points without browser globals', async () => {
+    expect(globalThis.document).toBeUndefined();
+    expect(globalThis.HTMLElement).toBeUndefined();
+
+    const [react, vue, angular] = await Promise.all([
+      import('../src/react'),
+      import('../src/vue'),
+      import('../src/angular'),
+    ]);
+
+    expect(react.HonuaMap).toBeTruthy();
+    expect(vue.HonuaMap.name).toBe('HonuaMap');
+    expect(angular.HonuaEmbedModule).toBeTypeOf('function');
+  });
 });

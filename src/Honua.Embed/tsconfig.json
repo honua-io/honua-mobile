@@ -6,6 +6,7 @@
     "lib": ["DOM", "ES2022"],
     "declaration": true,
     "declarationMap": true,
+    "experimentalDecorators": true,
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",
