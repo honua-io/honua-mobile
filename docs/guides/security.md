@@ -17,21 +17,25 @@ Never embed API keys directly in your code:
 public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
-    builder.Services.AddHonuaMobile(options =>
+    builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
-        options.ApiKey = "sk-1234567890abcdef"; // Exposed in compiled app
+        BaseUri = new Uri("https://api.honua.io"),
+        ApiKey = "sk-1234567890abcdef", // Exposed in compiled app
     });
     return builder.Build();
 }
 
-// ✅ Good: Use secure storage or configuration
+// ✅ Good: Use platform auth + secure storage. Token is hydrated through
+// IAuthTokenProvider, never embedded in HonuaMobileClientOptions.
 public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
-    builder.Services.AddHonuaMobile(options =>
-    {
-        options.ApiKey = GetSecureApiKey(); // Retrieved from secure storage
-    });
+    builder.Services
+        .AddHonuaMobilePlatformAuth()
+        .AddHonuaMobileSdk(new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.io"),
+        });
     return builder.Build();
 }
 

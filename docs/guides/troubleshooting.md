@@ -370,11 +370,12 @@ public static MauiApp CreateMauiApp()
     builder.Logging.AddDebug();
     builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
-    builder.Services.AddHonuaMobile(options =>
-    {
-        options.EnableDetailedLogging = true;
-        options.LogLevel = LogLevel.Debug;
-    });
+    builder.Services
+        .AddHonuaMobilePlatformAuth()
+        .AddHonuaMobileSdk(new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.io"),
+        });
 
     return builder.Build();
 }
@@ -443,7 +444,9 @@ public void DebugFeatureState(Feature feature)
 **Solution**:
 ```csharp
 // Ensure all services are registered
-builder.Services.AddHonuaMobile(options => { ... });
+builder.Services
+    .AddHonuaMobilePlatformAuth()
+    .AddHonuaMobileSdk(new HonuaMobileClientOptions { BaseUri = new Uri("https://api.honua.io") });
 
 // For custom services
 builder.Services.AddSingleton<IMyService, MyService>();
@@ -465,7 +468,14 @@ var channel = GrpcChannel.ForAddress("https://api.example.com", new GrpcChannelO
 
 // Use cancellation tokens properly
 using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-await _client.QueryFeaturesAsync("service", 0, query, cts.Token);
+var request = new QueryFeaturesRequest
+{
+    ServiceId = "service",
+    LayerId = 0,
+    Where = "1=1",
+    OutFields = new[] { "*" },
+};
+using var features = await _client.QueryFeaturesAsync(request, cts.Token);
 ```
 
 ### "SSL connection could not be established"
@@ -499,7 +509,7 @@ public string GetEnvironmentInfo()
         Platform: {DeviceInfo.Platform}
         Version: {DeviceInfo.VersionString}
         Model: {DeviceInfo.Model}
-        SDK Version: {typeof(IHonuaMobileClient).Assembly.GetName().Version}
+        SDK Version: {typeof(HonuaMobileClient).Assembly.GetName().Version}
         .NET Version: {Environment.Version}
         """;
 }

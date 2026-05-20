@@ -60,11 +60,16 @@ public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
     builder
-        .UseMauiApp<App>()
-        .AddHonuaMobile(options =>
+        .UseMauiApp<App>();
+
+    builder.Services
+        .AddHonuaMobilePlatformAuth()
+        .AddHonuaMobileSdk(new HonuaMobileClientOptions
         {
-            // Configure your options
-        })
+            BaseUri = new Uri("https://api.honua.io"),
+        });
+
+    builder
         .ConfigureFonts(fonts =>
         {
             fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
