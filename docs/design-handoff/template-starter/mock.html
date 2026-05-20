@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Template Starter MainPage - Honua FieldCollector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --color-primary: #2E8B57;
+    --color-secondary: #3F51B5;
+    --color-gray-100: #F5F5F5;
+    --color-gray-200: #EEEEEE;
+    --color-gray-300: #E0E0E0;
+    --color-gray-500: #9E9E9E;
+    --color-gray-600: #757575;
+    --color-gray-800: #424242;
+    --color-on-surface: #212121;
+    --color-white: #FFFFFF;
+    --color-background: #FFFFFF;
+    --color-status-bar: #1F5F3F;
+    --color-loc-light: #E3F2FD;
+    --color-tab-strip: #F5F5F5;
+    --color-green-literal: #16A34A; /* corresponds to XAML "Green" literal in stats / toast */
+    --radius-sm: 8px;
+    --radius-md: 10px;
+    --shadow-common: 0 2px 8px rgba(0,0,0,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--color-gray-200); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--color-on-surface); }
+  body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .device { width: 390px; height: 844px; background: var(--color-background); border-radius: 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.25); overflow: hidden; display: grid; grid-template-rows: 28px 56px 1fr; }
+  .status-bar { background: var(--color-status-bar); color: var(--color-white); font-size: 11px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; }
+  .nav-bar { background: var(--color-primary); color: var(--color-white); display: flex; align-items: center; padding: 0 16px; font-size: 17px; font-weight: 700; }
+  main { display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+  .gps-strip {
+    background: var(--color-loc-light);
+    padding: 10px 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px;
+  }
+  .gps-strip strong { color: var(--color-primary); }
+  .tab-strip {
+    background: var(--color-tab-strip);
+    height: 60px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    align-items: center; text-align: center;
+    font-size: 14px; font-weight: 700;
+    border-bottom: 1px solid var(--color-gray-200);
+  }
+  .tab-strip .item { padding: 8px; color: var(--color-gray-600); }
+  .tab-strip .item.active { color: var(--color-primary); border-bottom: 3px solid var(--color-primary); }
+  .tab-strip .item.stats.active { color: var(--color-green-literal); border-bottom-color: var(--color-green-literal); }
+  .tab-body { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .welcome {
+    background: var(--color-primary);
+    color: var(--color-white);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    text-align: center;
+    box-shadow: var(--shadow-common);
+  }
+  .welcome h1 { margin: 0; font-size: 20px; }
+  .welcome p { margin: 5px 0 0 0; font-size: 14px; }
+  .form {
+    background: var(--color-gray-100);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    display: grid; gap: 12px;
+  }
+  .form .row { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .form input, .form select, .form textarea { background: var(--color-white); border: 1px solid var(--color-gray-300); border-radius: var(--radius-sm); padding: 10px 12px; font-family: inherit; font-size: 14px; }
+  .form .progress { height: 4px; background: var(--color-gray-300); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .form .progress > span { display: block; height: 100%; background: var(--color-primary); width: 40%; }
+  .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { border: 0; cursor: pointer; padding: 12px 14px; border-radius: var(--radius-sm); color: var(--color-white); font-size: 14px; font-family: inherit; }
+  .btn-secondary { background: var(--color-secondary); }
+  .btn-outline { background: transparent; color: var(--color-primary); border: 1px solid var(--color-primary); }
+  .sync-strip {
+    background: var(--color-tab-strip);
+    padding: 10px 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px;
+    border-top: 1px solid var(--color-gray-200);
+  }
+</style>
+</head>
+<body>
+  <div class="device">
+    <header class="status-bar"><span>9:41</span><span>FieldCollector</span><span>100%</span></header>
+    <nav class="nav-bar">YOUR_COMPANY_NAME Field Collection</nav>
+    <main>
+      <div class="gps-strip" role="status">
+        <span><strong>📍 GPS</strong> 3.2 m accuracy</span>
+        <span>40.7128, -74.0060</span>
+      </div>
+      <div>
+        <div class="tab-strip">
+          <div class="item active">📝 Collect</div>
+          <div class="item">🗺️ Map</div>
+          <div class="item stats">📊 Stats</div>
+        </div>
+        <div class="tab-body">
+          <section class="welcome">
+            <h1>🚀 Field Data Collection</h1>
+            <p>Professional data collection that competes with Fulcrum & Survey123</p>
+          </section>
+
+          <section class="form" aria-label="Field site inspection form">
+            <div class="row"><label>Site name</label><input type="text" value="Site 04 - Inlet" /></div>
+            <div class="row"><label>Inspector</label><input type="text" value="Mike McDougall" /></div>
+            <div class="row"><label>Condition</label>
+              <select><option>Good</option><option selected>Fair</option><option>Poor</option></select>
+            </div>
+            <div class="row"><label>Notes</label><textarea rows="3">Sediment buildup along inlet, sched. clean.</textarea></div>
+            <div>
+              <span style="font-size: 12px; color: var(--color-gray-600);">Form progress</span>
+              <div class="progress"><span></span></div>
+            </div>
+          </section>
+
+          <div class="quick-actions">
+            <button class="btn btn-secondary">📷 Quick Photo</button>
+            <button class="btn btn-outline">🗺️ View Map</button>
+          </div>
+        </div>
+      </div>
+      <div class="sync-strip" role="status">
+        <span>🔄 Synced 2 minutes ago</span>
+        <span style="color: var(--color-primary); font-weight: 700;">Sync now</span>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MapPage - Honua FieldCollection</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --color-primary: #2E8B57;
+    --color-primary-dark: #1F5F3F;
+    --color-secondary: #3F51B5;
+    --color-white: #FFFFFF;
+    --color-gray-100: #F5F5F5;
+    --color-gray-200: #EEEEEE;
+    --color-gray-300: #E0E0E0;
+    --color-gray-600: #757575;
+    --color-on-surface: #212121;
+    --color-background: #FFFFFF;
+    --color-surface: #FAFAFA;
+    --color-status-bar: #1F5F3F;
+    --radius-sm: 8px;
+    --shadow-common: 0 2px 8px rgba(0,0,0,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--color-gray-200); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--color-on-surface); }
+  body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .device { width: 390px; height: 844px; background: var(--color-background); border-radius: 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.25); overflow: hidden; display: grid; grid-template-rows: 28px 56px 1fr 64px; }
+  .status-bar { background: var(--color-status-bar); color: var(--color-white); font-size: 11px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; }
+  .nav-bar { background: var(--color-primary); color: var(--color-white); display: flex; align-items: center; padding: 0 16px; font-size: 17px; font-weight: 700; }
+  main { position: relative; overflow: hidden; }
+  .map-canvas {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(120deg, #2c5d3a 0%, #3a7148 25%, #5d8866 50%, #87a187 75%, #b4c8af 100%);
+    overflow: hidden;
+  }
+  .map-canvas::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .map-pin {
+    position: absolute;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-white), var(--shadow-common);
+  }
+  .user-dot {
+    position: absolute;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--color-secondary);
+    box-shadow: 0 0 0 4px rgba(63, 81, 181, 0.25), 0 0 0 8px rgba(63,81,181,0.12);
+  }
+  .map-controls {
+    position: absolute;
+    top: 10px; right: 10px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .icon-btn {
+    width: 50px; height: 50px;
+    border: 0; border-radius: var(--radius-sm);
+    color: var(--color-white);
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: var(--shadow-common);
+    font-family: inherit;
+  }
+  .icon-btn.primary { background: var(--color-primary); }
+  .icon-btn.secondary { background: var(--color-secondary); }
+  .capture-overlay {
+    position: absolute;
+    top: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--color-primary);
+    color: var(--color-white);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: var(--shadow-common);
+    font-size: 14px;
+  }
+  .capture-overlay .cancel-btn {
+    background: var(--color-secondary);
+    color: var(--color-white);
+    border: 0; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 13px;
+    font-family: inherit; cursor: pointer;
+  }
+  .bottom-panel {
+    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    background: var(--color-white);
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    box-shadow: var(--shadow-common);
+    display: grid; gap: 10px;
+  }
+  .layer-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
+  .layer-row label { font-weight: 700; font-size: 14px; }
+  .picker {
+    background: var(--color-surface);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--color-on-surface);
+    font-size: 16px;
+  }
+  .picker .caret { color: var(--color-gray-600); }
+  .layer-info {
+    display: flex; flex-wrap: wrap; gap: 20px;
+    align-items: center; font-size: 12px; color: var(--color-on-surface);
+    margin-top: 10px;
+  }
+  .layer-info .chip { display: inline-flex; gap: 5px; align-items: center; }
+  .checkbox {
+    width: 18px; height: 18px; border: 2px solid var(--color-primary); border-radius: 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--color-primary); color: var(--color-white); font-size: 12px;
+  }
+  .tab-bar { background: var(--color-primary); color: var(--color-white); display: grid; grid-template-columns: repeat(4,1fr); }
+  .tab-bar .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; gap: 4px; color: var(--color-gray-300); }
+  .tab-bar .tab.active { color: var(--color-white); font-weight: 700; }
+  .tab-bar .glyph { width: 22px; height: 22px; border-radius: 6px; background: rgba(255,255,255,0.15); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="device">
+    <header class="status-bar"><span>9:41</span><span>FieldCollection</span><span>100%</span></header>
+    <nav class="nav-bar">Map</nav>
+    <main>
+      <div class="map-canvas" aria-label="Map view (Hybrid)">
+        <div class="map-pin" style="top: 28%; left: 30%;"></div>
+        <div class="map-pin" style="top: 42%; left: 58%;"></div>
+        <div class="map-pin" style="top: 52%; left: 38%;"></div>
+        <div class="map-pin" style="top: 35%; left: 72%;"></div>
+        <div class="map-pin" style="top: 60%; left: 64%;"></div>
+        <div class="user-dot" style="top: 48%; left: 47%;"></div>
+      </div>
+
+      <div class="capture-overlay" role="status">
+        <span>📍 Tap on the map to add a feature</span>
+        <button class="cancel-btn">Cancel</button>
+      </div>
+
+      <div class="map-controls">
+        <button class="icon-btn primary" title="Zoom to current location">📍</button>
+        <button class="icon-btn primary" title="Zoom to features">🎯</button>
+        <button class="icon-btn secondary" title="Add new feature">📐</button>
+      </div>
+
+      <div class="bottom-panel">
+        <div class="layer-row">
+          <label>Layer:</label>
+          <div class="picker"><span>Field Sites</span><span class="caret">v</span></div>
+          <button class="icon-btn secondary" style="width: 44px; height: 44px; font-size: 16px;">⚙️</button>
+        </div>
+        <div class="layer-info">
+          <span class="chip">📊 12 features</span>
+          <span class="chip">🎨 Point</span>
+          <span class="chip"><span class="checkbox">✓</span> Visible</span>
+        </div>
+      </div>
+    </main>
+    <nav class="tab-bar">
+      <div class="tab active"><span class="glyph">M</span><span>Map</span></div>
+      <div class="tab"><span class="glyph">R</span><span>Records</span></div>
+      <div class="tab"><span class="glyph">S</span><span>Sync</span></div>
+      <div class="tab"><span class="glyph">C</span><span>Settings</span></div>
+    </nav>
+  </div>
+</body>
+</html>
