@@ -3,7 +3,7 @@ using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models
 
 namespace Honua.Mobile.FieldCollection.Services.Sync;
 
-internal sealed class QueuedFieldCollectionChangeUploader :
+public sealed class QueuedFieldCollectionChangeUploader :
     IFieldCollectionChangeUploader,
     IFieldCollectionRemoteSyncCapability
 {
@@ -30,7 +30,7 @@ internal sealed class QueuedFieldCollectionChangeUploader :
     }
 }
 
-internal sealed class LocalOnlyFieldCollectionChangePuller :
+public sealed class LocalOnlyFieldCollectionChangePuller :
     IFieldCollectionChangePuller,
     IFieldCollectionRemoteSyncCapability
 {

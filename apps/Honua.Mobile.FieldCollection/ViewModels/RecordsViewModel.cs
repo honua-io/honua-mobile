@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using System.Collections.ObjectModel;
+using GeometryType = Honua.Sdk.Abstractions.Features.FeatureSpatialGeometryType;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 

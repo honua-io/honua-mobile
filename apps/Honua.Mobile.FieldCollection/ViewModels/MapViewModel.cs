@@ -4,6 +4,7 @@ using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using System.Collections.ObjectModel;
 using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
+using GeometryType = Honua.Sdk.Abstractions.Features.FeatureSpatialGeometryType;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 
