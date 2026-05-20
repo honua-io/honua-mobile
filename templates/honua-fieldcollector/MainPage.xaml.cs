@@ -1,32 +1,19 @@
 using Microsoft.Extensions.Logging;
-<!--#if (enableIoT)-->
-using Honua.Mobile.IoT;
-<!--#endif-->
 
 namespace HonuaFieldCollector;
 
 public partial class MainPage : ContentPage
 {
     private readonly ILogger<MainPage> _logger;
-<!--#if (enableIoT)-->
-    private readonly IIoTSensorService _sensorService;
-<!--#endif-->
 
     private int _recordsCollected = 0;
     private int _photosCollected = 0;
     private readonly List<ActivityItem> _recentActivity = new();
 
-    public MainPage(ILogger<MainPage> logger
-<!--#if (enableIoT)-->
-        , IIoTSensorService sensorService
-<!--#endif-->
-        )
+    public MainPage(ILogger<MainPage> logger)
     {
         InitializeComponent();
         _logger = logger;
-<!--#if (enableIoT)-->
-        _sensorService = sensorService;
-<!--#endif-->
 
         InitializeApp();
     }
@@ -45,15 +32,6 @@ public partial class MainPage : ContentPage
 
             // Add welcome activity
             AddActivity("🚀", "App Started", "Ready for field data collection");
-
-<!--#if (enableIoT)-->
-            // Start sensor discovery if enabled
-            if (_sensorService != null)
-            {
-                await _sensorService.StartSensorDiscoveryAsync(SensorType.Environmental);
-                AddActivity("🤖", "Sensor Discovery", "Scanning for IoT sensors");
-            }
-<!--#endif-->
 
             _logger.LogInformation("App initialization complete");
         }
@@ -184,58 +162,6 @@ public partial class MainPage : ContentPage
     }
 
     #endregion
-
-<!--#if (enableIoT)-->
-    #region IoT Sensor Events
-
-    private async void OnSensorConnected(object sender, SensorConnectedEventArgs e)
-    {
-        AddActivity("🤖", "Sensor Connected", $"{e.SensorName} ({e.SensorType})");
-
-        await DisplayAlert("Sensor Connected! 🤖",
-            $"Successfully connected to {e.SensorName}\n" +
-            $"Type: {e.SensorType}\n" +
-            $"Capabilities: {string.Join(", ", e.Capabilities)}",
-            "OK");
-    }
-
-    private void OnSensorDataReceived(object sender, SensorDataEventArgs e)
-    {
-        _logger.LogDebug("Sensor data received: {SensorName} = {Value} {Unit}",
-            e.SensorName, e.Value, e.Unit);
-
-        // Update form fields if sensor data is configured
-        DataForm.UpdateSensorField(e.SensorName, e.Value, e.Unit);
-    }
-
-    #endregion
-<!--#endif-->
-
-<!--#if (enableAR)-->
-    #region AR Events
-
-    private async void OnARSessionStarted(object sender, ARSessionEventArgs e)
-    {
-        AddActivity("🥽", "AR Started", "Augmented reality session active");
-
-        await DisplayAlert("AR Active! 🥽",
-            "Augmented reality is now active.\n" +
-            "Point your camera at infrastructure to see overlays.",
-            "OK");
-    }
-
-    private async void OnARUtilitySelected(object sender, ARUtilityEventArgs e)
-    {
-        await DisplayAlert("Utility Info",
-            $"Type: {e.Utility.Type}\n" +
-            $"Depth: {e.Utility.DepthMeters:F1}m\n" +
-            $"Material: {e.Utility.Material}\n" +
-            $"Install Date: {e.Utility.InstallDate:yyyy}",
-            "OK");
-    }
-
-    #endregion
-<!--#endif-->
 
     #region Sync Events
 

@@ -102,59 +102,6 @@
                                        FeatureSelected="OnMapFeatureSelected" />
                 </TabViewItem>
 
-<!--#if (enableIoT)-->
-                <!-- IoT Sensors Tab -->
-                <TabViewItem Text="🤖 Sensors"
-                            TextColor="Orange"
-                            TextColorSelected="Orange">
-                    <ScrollView>
-                        <StackLayout Padding="20" Spacing="15">
-
-                            <!-- Sensor Discovery -->
-                            <Frame BackgroundColor="Orange"
-                                  CornerRadius="10"
-                                  Padding="20"
-                                  HasShadow="True">
-                                <StackLayout>
-                                    <Label Text="🔍 IoT Sensor Discovery"
-                                          FontSize="18"
-                                          FontAttributes="Bold"
-                                          TextColor="White"
-                                          HorizontalOptions="Center" />
-                                    <Label Text="Automatically connect to Bluetooth LE environmental sensors"
-                                          FontSize="14"
-                                          TextColor="White"
-                                          HorizontalOptions="Center"
-                                          Margin="0,5,0,0" />
-                                </StackLayout>
-                            </Frame>
-
-                            <!-- Sensor List -->
-                            <honua:HonuaSensorList x:Name="SensorList"
-                                                  AutoDiscovery="true"
-                                                  SensorTypes="Environmental,Air Quality"
-                                                  SensorConnected="OnSensorConnected"
-                                                  SensorDataReceived="OnSensorDataReceived" />
-
-                        </StackLayout>
-                    </ScrollView>
-                </TabViewItem>
-<!--#endif-->
-
-<!--#if (enableAR)-->
-                <!-- AR View Tab -->
-                <TabViewItem Text="🥽 AR"
-                            TextColor="Purple"
-                            TextColorSelected="Purple">
-                    <honua:HonuaARViewer x:Name="ARViewer"
-                                        EnableUtilityVisualization="true"
-                                        EnableInfrastructureOverlay="true"
-                                        MaxRenderDistance="100"
-                                        UtilitySelected="OnARUtilitySelected"
-                                        ARSessionStarted="OnARSessionStarted" />
-                </TabViewItem>
-<!--#endif-->
-
                 <!-- Statistics Tab -->
                 <TabViewItem Text="📊 Stats"
                             TextColor="Green"

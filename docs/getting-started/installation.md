@@ -42,10 +42,6 @@ dotnet new list | grep honua
 
 Available templates:
 - `honua-fieldcollector` - Complete field data collection app
-- `honua-photosurvey` - Simple photo survey application
-- `honua-iotmonitor` - IoT sensor monitoring app
-- `honua-assetinspection` - Asset inspection with AR
-- `honua-minimal` - Minimal SDK integration
 
 Create a new project:
 ```bash
@@ -245,7 +241,7 @@ public static class MauiProgram
                 <key>NSExceptionRequiresForwardSecrecy</key>
                 <false/>
                 <key>NSExceptionMinimumTLSVersion</key>
-                <string>TLSv1.0</string>
+                <string>TLSv1.2</string>
                 <key>NSIncludesSubdomains</key>
                 <true/>
             </dict>

@@ -247,44 +247,6 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 - Windows: MapControl, Camera, Geolocation APIs
 - Consistent UX across all platforms
 
-## Advanced 5-Minute Add-Ons
-
-### Add IoT Sensor Integration (2 minutes)
-
-```csharp
-// In MauiProgram.cs, enable IoT
-config.EnableIoTSensors = true;
-
-// In your form schema, add sensor field:
-// { "id": "temperature", "type": "sensor", "sensorType": "environmental" }
-```
-
-**Result**: Bluetooth LE environmental sensors automatically discovered and integrated!
-
-### Add Map Visualization (2 minutes)
-
-Add to MainPage.xaml above the form:
-
-```xml
-<honua:HonuaMapView Grid.Row="1"
-                   HeightRequest="200"
-                   ShowToolbar="true"
-                   ShowCollectedFeatures="true"
-                   EnableSpatialQuery="true" />
-```
-
-**Result**: Interactive map showing all collected data points!
-
-### Add Augmented Reality (3 minutes)
-
-```xml
-<honua:HonuaARViewer Grid.Row="1"
-                    EnableUtilityVisualization="true"
-                    MaxRenderDistance="100" />
-```
-
-**Result**: AR visualization of underground utilities and infrastructure!
-
 ## Testing Your App
 
 ### Demo Data Collection

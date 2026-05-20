@@ -7,9 +7,6 @@ using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
 using SdkOfflineSyncEngineOptions = Honua.Sdk.Offline.OfflineSyncEngineOptions;
-<!--#if (enableIoT)-->
-using Honua.Mobile.IoT;
-<!--#endif-->
 
 namespace HonuaFieldCollector;
 

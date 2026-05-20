@@ -40,18 +40,6 @@
       "replaces": "YOUR_API_KEY_HERE",
       "description": "Your Honua API key"
     },
-    "enableIoT": {
-      "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "description": "Enable IoT sensor integration"
-    },
-    "enableAR": {
-      "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "description": "Enable Augmented Reality features"
-    },
     "companyName": {
       "type": "parameter",
       "datatype": "text",

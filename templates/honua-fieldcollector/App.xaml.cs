@@ -116,26 +116,6 @@ public partial class App : Application
                 _logger.LogInformation("Honua mobile client registered for online sync");
             }
 
-<!--#if (enableIoT)-->
-            // Start IoT sensor discovery
-            var iotService = services.GetService<Honua.Mobile.IoT.IIoTSensorService>();
-            if (iotService != null)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await iotService.StartSensorDiscoveryAsync(Honua.Mobile.IoT.SensorType.Environmental);
-                        _logger.LogInformation("IoT sensor discovery started");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "IoT sensor discovery failed");
-                    }
-                });
-            }
-<!--#endif-->
-
             _logger.LogDebug("Service warmup completed");
         }
         catch (Exception ex)
