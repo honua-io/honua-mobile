@@ -37,9 +37,12 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private readonly HonuaOgcFeaturesClient _ogcFeaturesClient;
     private readonly HonuaMobileClientOptions _options;
     private readonly IAuthTokenProvider? _authTokenProvider;
-    private readonly object _grpcClientSync = new();
+    private readonly Uri _baseUri;
+    private readonly TimeSpan _requestTimeout;
+    private readonly ProductInfoHeaderValue _userAgent;
     private readonly bool _canUseGrpcEndpoint;
-    private HonuaGrpcClient? _grpcClient;
+    private readonly Lazy<HonuaGrpcClient> _grpcClient;
+    private int _disposed;
 
     /// <summary>
     /// Initializes a new <see cref="HonuaMobileClient"/> with the supplied HTTP client and options.
@@ -64,10 +67,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _authTokenProvider = authTokenProvider ?? options.AuthTokenProvider;
-        _http.BaseAddress = options.BaseUri;
-        _http.Timeout = options.Timeout;
-        _http.DefaultRequestHeaders.UserAgent.Clear();
-        _http.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
+        _baseUri = options.BaseUri;
+        _requestTimeout = options.Timeout;
+        _userAgent = options.UserAgent;
 
         _sdkHttp = new HttpClient(
             new AuthenticatedSdkHttpMessageHandler(_http, ApplyHttpAuthenticationAsync),
@@ -76,12 +78,18 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             BaseAddress = options.BaseUri,
             Timeout = options.Timeout,
         };
+        _sdkHttp.DefaultRequestHeaders.UserAgent.Clear();
+        _sdkHttp.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
 
         _featureServerClient = new HonuaFeatureServerClient(_sdkHttp);
         _ogcFeaturesClient = new HonuaOgcFeaturesClient(_sdkHttp);
 
         var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
         _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
+
+        _grpcClient = new Lazy<HonuaGrpcClient>(
+            () => new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions())),
+            LazyThreadSafetyMode.ExecutionAndPublication);
 
         Routing = new HonuaRoutingClient(_sdkHttp, BuildGeoServicesRoutingOptions(options));
         Scenes = new HonuaSceneClient(_sdkHttp, BuildSceneClientOptions(options));
@@ -235,6 +243,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         if (CanUseGrpcForQueries)
         {
             var yieldedGrpcPage = false;
+            var grpcSucceeded = false;
             await using var grpcEnumerator = QueryFeaturesGrpcPagesAsync(request, ct).GetAsyncEnumerator(ct);
 
             while (true)
@@ -244,11 +253,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 {
                     if (!await grpcEnumerator.MoveNextAsync().ConfigureAwait(false))
                     {
-                        if (yieldedGrpcPage)
-                        {
-                            yield break;
-                        }
-
+                        grpcSucceeded = true;
                         break;
                     }
 
@@ -261,6 +266,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
                 yieldedGrpcPage = true;
                 yield return nextPage!;
+            }
+
+            if (grpcSucceeded)
+            {
+                yield break;
             }
         }
 
@@ -547,10 +557,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        lock (_grpcClientSync)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
-            _grpcClient?.Dispose();
-            _grpcClient = null;
+            return;
+        }
+
+        if (_grpcClient.IsValueCreated)
+        {
+            _grpcClient.Value.Dispose();
         }
 
         _sdkHttp.Dispose();
@@ -717,6 +731,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         if (CanUseGrpcForQueries)
         {
             var yieldedGrpcPage = false;
+            var grpcSucceeded = false;
             await using var grpcEnumerator = GetGrpcClient().QueryPagesAsync(request, ct).GetAsyncEnumerator(ct);
 
             while (true)
@@ -726,11 +741,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 {
                     if (!await grpcEnumerator.MoveNextAsync().ConfigureAwait(false))
                     {
-                        if (yieldedGrpcPage)
-                        {
-                            yield break;
-                        }
-
+                        grpcSucceeded = true;
                         break;
                     }
 
@@ -743,6 +754,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
                 yieldedGrpcPage = true;
                 yield return nextPage!;
+            }
+
+            if (grpcSucceeded)
+            {
+                yield break;
             }
         }
 
@@ -1141,28 +1157,58 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         HttpContent? content,
         CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(method, BuildUri(relativePath, query));
+        using var request = new HttpRequestMessage(method, BuildAbsoluteUri(relativePath, query));
         request.Content = content;
+        request.Headers.UserAgent.Clear();
+        request.Headers.UserAgent.Add(_userAgent);
         await ApplyHttpAuthenticationAsync(request, ct).ConfigureAwait(false);
 
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-        var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        // Apply per-request timeout via a linked cancellation token so the caller's
+        // HttpClient (potentially owned by IHttpClientFactory) is not mutated.
+        using var timeoutCts = new CancellationTokenSource(_requestTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
-            throw new HonuaMobileApiException(
-                response.StatusCode,
-                $"Honua mobile request failed with status {(int)response.StatusCode} {response.ReasonPhrase}",
-                raw);
+            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TaskCanceledException("Honua mobile request timed out.");
         }
 
         try
         {
-            return JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+            if (!response.IsSuccessStatusCode)
+            {
+                var raw = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
+                throw new HonuaMobileApiException(
+                    response.StatusCode,
+                    $"Honua mobile request failed with status {(int)response.StatusCode} {response.ReasonPhrase}",
+                    raw);
+            }
+
+            if (response.Content.Headers.ContentLength == 0)
+            {
+                return JsonDocument.Parse("{}");
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+            try
+            {
+                return await JsonDocument.ParseAsync(stream, default, linkedCts.Token).ConfigureAwait(false);
+            }
+            catch (JsonException ex)
+            {
+                // Preserve the prior contract: whitespace-only bodies parse as an empty object,
+                // anything else surfaces as a HonuaMobileApiException with the invalid payload.
+                throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
+            }
         }
-        catch (JsonException ex)
+        finally
         {
-            throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
+            response.Dispose();
         }
     }
 
@@ -1221,10 +1267,12 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     internal HonuaGrpcClient GetGrpcClient()
     {
-        lock (_grpcClientSync)
+        if (Volatile.Read(ref _disposed) != 0)
         {
-            return _grpcClient ??= new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions()));
+            throw new ObjectDisposedException(nameof(HonuaMobileClient));
         }
+
+        return _grpcClient.Value;
     }
 
     internal HonuaGrpcClientOptions BuildGrpcClientOptions()
@@ -1311,12 +1359,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             return request.RequestUri;
         }
 
-        if (_http.BaseAddress is null)
-        {
-            throw new InvalidOperationException("HonuaMobileClient requires an absolute BaseUri.");
-        }
-
-        return new Uri(_http.BaseAddress, request.RequestUri);
+        return new Uri(_baseUri, request.RequestUri);
     }
 
     private void EnsureSecureTransport(Uri targetUri)
@@ -1354,6 +1397,12 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         return new Uri($"{relativePath}?{queryText}", UriKind.Relative);
     }
 
+    private Uri BuildAbsoluteUri(string relativePath, IReadOnlyDictionary<string, string?>? query)
+    {
+        var relative = BuildUri(relativePath, query);
+        return relative.IsAbsoluteUri ? relative : new Uri(_baseUri, relative);
+    }
+
     private static HonuaMobileApiException ToMobileApiException(string provider, HonuaFeatureServerException ex)
         => new(
             ex.StatusCode,
@@ -1381,14 +1430,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            using var forwarded = await CloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            // Forward via a stream-wrapping clone so large request bodies (e.g. attachment
+            // uploads) are not buffered into a byte[] before being sent.
+            using var forwarded = CloneRequestForForwarding(request);
             await _authenticate(forwarded, cancellationToken).ConfigureAwait(false);
             return await _inner.SendAsync(forwarded, cancellationToken).ConfigureAwait(false);
         }
 
-        private static async Task<HttpRequestMessage> CloneRequestAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        private static HttpRequestMessage CloneRequestForForwarding(HttpRequestMessage request)
         {
             var clone = new HttpRequestMessage(request.Method, request.RequestUri)
             {
@@ -1403,8 +1452,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
             if (request.Content is not null)
             {
-                var bytes = await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                clone.Content = new ByteArrayContent(bytes);
+                clone.Content = new StreamForwardingContent(request.Content);
                 foreach (var header in request.Content.Headers)
                 {
                     clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
@@ -1412,6 +1460,35 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             }
 
             return clone;
+        }
+
+        private sealed class StreamForwardingContent : HttpContent
+        {
+            private readonly HttpContent _inner;
+
+            public StreamForwardingContent(HttpContent inner)
+            {
+                _inner = inner;
+            }
+
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+                => _inner.CopyToAsync(stream, context, CancellationToken.None);
+
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken)
+                => _inner.CopyToAsync(stream, context, cancellationToken);
+
+            protected override bool TryComputeLength(out long length)
+            {
+                var headerLength = _inner.Headers.ContentLength;
+                if (headerLength.HasValue)
+                {
+                    length = headerLength.Value;
+                    return true;
+                }
+
+                length = 0;
+                return false;
+            }
         }
     }
 }
