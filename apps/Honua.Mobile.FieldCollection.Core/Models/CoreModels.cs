@@ -268,7 +268,7 @@ public class UserSession
     public Dictionary<string, object> Preferences { get; set; } = new();
 }
 
-internal static class GeometryJson
+public static class GeometryJson
 {
     public static JsonElement ToJsonElement(Geometry geometry)
     {

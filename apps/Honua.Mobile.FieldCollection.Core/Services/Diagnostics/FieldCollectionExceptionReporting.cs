@@ -8,13 +8,13 @@ namespace Honua.Mobile.FieldCollection.Services.Diagnostics;
 
 public static class FieldCollectionExceptionReporting
 {
-    internal const string ModePreferenceKey = "honua_exception_reporting_mode";
-    internal const string EndpointPreferenceKey = "honua_exception_reporting_endpoint";
-    internal const string QueuePathPreferenceKey = "honua_exception_reporting_queue_path";
-    internal const string TesterConsentPreferenceKey = "honua_exception_reporting_tester_consent";
-    internal const string EnvironmentEnabledPreferenceKey = "honua_exception_reporting_environment_enabled";
+    public const string ModePreferenceKey = "honua_exception_reporting_mode";
+    public const string EndpointPreferenceKey = "honua_exception_reporting_endpoint";
+    public const string QueuePathPreferenceKey = "honua_exception_reporting_queue_path";
+    public const string TesterConsentPreferenceKey = "honua_exception_reporting_tester_consent";
+    public const string EnvironmentEnabledPreferenceKey = "honua_exception_reporting_environment_enabled";
 
-    internal readonly record struct PreferenceUpdate(
+    public readonly record struct PreferenceUpdate(
         bool ShouldWriteModeAndConsent,
         bool TesterConsent,
         MobileExceptionReportingMode Mode);
@@ -36,7 +36,7 @@ public static class FieldCollectionExceptionReporting
             Preferences.Default.Get(EnvironmentEnabledPreferenceKey, true));
     }
 
-    internal static PreferenceUpdate CreatePreferenceUpdate(
+    public static PreferenceUpdate CreatePreferenceUpdate(
         bool enableExceptionReporting,
         bool environmentAllowsReporting,
         string? endpointValue)
@@ -162,7 +162,7 @@ public static class FieldCollectionExceptionReporting
     }
 }
 
-internal sealed class FieldCollectionExceptionReportAuthHeader : IMobileExceptionReportUploadRequestCustomizer
+public sealed class FieldCollectionExceptionReportAuthHeader : IMobileExceptionReportUploadRequestCustomizer
 {
     private readonly IAuthenticationService _authService;
 

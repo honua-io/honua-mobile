@@ -8,17 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="coverlet.collector" Version="10.0.0" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
-    <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.60" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
-    <PackageReference Include="NetTopologySuite" Version="2.6.0" />
-    <PackageReference Include="NetTopologySuite.IO.SqlServerBytes" Version="2.1.0" />
-    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-    <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
@@ -28,22 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\apps\Honua.Mobile.FieldCollection.Core\Honua.Mobile.FieldCollection.Core.csproj" />
     <ProjectReference Include="..\..\src\Honua.Mobile.Maui\Honua.Mobile.Maui.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Models\CoreModels.cs" Link="App\Models\CoreModels.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Models\SdkContractAliases.cs" Link="App\Models\SdkContractAliases.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\CoreServices.cs" Link="App\Services\CoreServices.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Configuration\MobileBuildConfiguration.cs" Link="App\Services\Configuration\MobileBuildConfiguration.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\IAuthenticationService.cs" Link="App\Services\IAuthenticationService.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\ISyncService.cs" Link="App\Services\ISyncService.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\OfflineCacheDiagnostics.cs" Link="App\Services\Diagnostics\OfflineCacheDiagnostics.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Diagnostics\FieldCollectionExceptionReporting.cs" Link="App\Services\Diagnostics\FieldCollectionExceptionReporting.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\GeoPackageStorageService.cs" Link="App\Services\Storage\GeoPackageStorageService.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Storage\Models\StorageModels.cs" Link="App\Services\Storage\Models\StorageModels.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Sync\FieldCollectionSyncTransports.cs" Link="App\Services\Sync\FieldCollectionSyncTransports.cs" />
-    <Compile Include="..\..\apps\Honua.Mobile.FieldCollection\Services\Sync\GeoPackageSyncService.cs" Link="App\Services\Sync\GeoPackageSyncService.cs" />
   </ItemGroup>
 
 </Project>
