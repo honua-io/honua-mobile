@@ -312,6 +312,10 @@ jobs:
             -p:TargetFramework=net10.0-android \
             -p:RuntimeIdentifiers=android-x64
 
+          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
+            -p:RuntimeIdentifier=android-x64 \
+            -p:RuntimeIdentifiers=android-x64
+
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
@@ -340,6 +344,13 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
           dotnet build src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
+            --configuration Release \
+            --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
+            /p:RuntimeIdentifiers=android-x64 \
+            /p:TreatWarningsAsErrors=true
+
+          dotnet build apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
             --configuration Release \
             --no-restore \
             /p:RuntimeIdentifier=android-x64 \
@@ -480,6 +491,8 @@ jobs:
             -p:TargetFramework=net10.0-ios \
             '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
 
+          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj
+
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build iOS Apps
@@ -572,6 +585,9 @@ jobs:
             -p:TargetFramework=net10.0-windows10.0.19041.0 `
             -p:RuntimeIdentifier=win-x64 `
             -p:RuntimeIdentifiers=win-x64 `
+            -p:Platform=x64
+
+          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj `
             -p:Platform=x64
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
