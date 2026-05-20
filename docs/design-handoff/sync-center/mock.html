@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SyncCenterPage - Honua FieldCollection</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --color-primary: #2E8B57;
+    --color-primary-dark: #1F5F3F;
+    --color-secondary: #3F51B5;
+    --color-tertiary: #FF5722;
+    --color-warning: #FF9800;
+    --color-danger: #F44336;
+    --color-success: #4CAF50;
+    --color-info: #2196F3;
+    --color-white: #FFFFFF;
+    --color-gray-100: #F5F5F5;
+    --color-gray-200: #EEEEEE;
+    --color-gray-300: #E0E0E0;
+    --color-gray-600: #757575;
+    --color-on-surface: #212121;
+    --color-background: #FFFFFF;
+    --color-surface: #FAFAFA;
+    --color-status-bar: #1F5F3F;
+    --radius-sm: 8px;
+    --shadow-common: 0 2px 8px rgba(0,0,0,0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--color-gray-200); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--color-on-surface); }
+  body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .device { width: 390px; height: 844px; background: var(--color-background); border-radius: 32px; box-shadow: 0 24px 64px rgba(0,0,0,0.25); overflow: hidden; display: grid; grid-template-rows: 28px 56px 1fr 64px; }
+  .status-bar { background: var(--color-status-bar); color: var(--color-white); font-size: 11px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; }
+  .nav-bar { background: var(--color-primary); color: var(--color-white); display: flex; align-items: center; padding: 0 16px; font-size: 17px; font-weight: 700; }
+  main { overflow-y: auto; padding: 20px; background: var(--color-background); display: flex; flex-direction: column; gap: 20px; }
+  .card { background: var(--color-white); border: 1px solid var(--color-gray-200); border-radius: var(--radius-sm); padding: 16px; box-shadow: var(--shadow-common); }
+  .section-header { font-size: 18px; font-weight: 700; color: var(--color-primary); margin: 0; }
+  .section-header.warn { color: var(--color-warning); }
+  .row-status { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; margin-top: 10px; }
+  .status-msg { font-size: 16px; font-weight: 700; }
+  .info-line { display: flex; gap: 10px; font-size: 14px; align-items: center; margin-top: 6px; }
+  .online { color: var(--color-success); }
+  .actions { display: flex; flex-direction: column; gap: 5px; }
+  .icon-btn { width: 60px; height: 40px; border: 0; border-radius: var(--radius-sm); color: var(--color-white); font-size: 16px; font-family: inherit; cursor: pointer; }
+  .icon-btn.primary { background: var(--color-primary); }
+  .icon-btn.danger { background: var(--color-tertiary); }
+  .progress { margin-top: 10px; height: 4px; background: var(--color-gray-200); border-radius: 2px; overflow: hidden; }
+  .progress > span { display: block; height: 100%; background: var(--color-primary); width: 35%; }
+  .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 10px 0; }
+  .btn { border: 0; cursor: pointer; padding: 12px 16px; border-radius: var(--radius-sm); color: var(--color-white); font-size: 14px; font-family: inherit; }
+  .btn-secondary { background: var(--color-secondary); }
+  .btn-primary { background: var(--color-primary); }
+  .caption { font-size: 12px; color: var(--color-gray-600); }
+  .stats-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .stat .value { font-size: 18px; font-weight: 700; text-align: center; }
+  .stat .label { font-size: 12px; text-align: center; color: var(--color-gray-600); }
+  .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; font-size: 13px; }
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .metric .value { font-size: 16px; font-weight: 700; text-align: center; }
+  .metric .label { font-size: 11px; text-align: center; }
+  .source-row { display: grid; grid-template-columns: 1fr auto; padding: 6px 0; border-top: 1px solid var(--color-gray-200); }
+  .conflict-row { display: grid; grid-template-columns: 1fr auto; padding: 10px 0; border-top: 1px solid var(--color-gray-200); align-items: center; }
+  .history-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--color-gray-200); align-items: center; }
+  .history-row .icon { font-size: 16px; }
+  .small-emph { font-size: 14px; font-weight: 700; }
+  .text-muted { font-size: 12px; color: var(--color-gray-600); }
+  .right-stack { text-align: right; font-size: 12px; }
+  .tab-bar { background: var(--color-primary); color: var(--color-white); display: grid; grid-template-columns: repeat(4,1fr); }
+  .tab-bar .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; gap: 4px; color: var(--color-gray-300); }
+  .tab-bar .tab.active { color: var(--color-white); font-weight: 700; }
+  .tab-bar .glyph { width: 22px; height: 22px; border-radius: 6px; background: rgba(255,255,255,0.15); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="device">
+    <header class="status-bar"><span>9:41</span><span>FieldCollection</span><span>100%</span></header>
+    <nav class="nav-bar">Sync Center</nav>
+    <main>
+      <section class="card">
+        <h2 class="section-header">Sync Status</h2>
+        <div class="row-status">
+          <div>
+            <div class="status-msg">Syncing - 7 pending changes</div>
+            <div class="info-line">🌐 <span class="online">Online</span></div>
+            <div class="info-line">📝 7 pending changes</div>
+            <div class="info-line">🕒 Last sync: 05/20 09:14</div>
+          </div>
+          <div class="actions">
+            <button class="icon-btn primary">🔄</button>
+            <button class="icon-btn danger">⏹️</button>
+          </div>
+        </div>
+        <div class="progress"><span></span></div>
+      </section>
+
+      <section class="card">
+        <h2 class="section-header">Sync Operations</h2>
+        <div class="ops-grid">
+          <button class="btn btn-secondary">⬇️ Pull Only</button>
+          <button class="btn btn-secondary">⬆️ Push Only</button>
+        </div>
+        <div class="caption">⬇️ Pull: Download latest changes from server</div>
+        <div class="caption">⬆️ Push: Upload local changes to server</div>
+      </section>
+
+      <section class="card">
+        <h2 class="section-header">Last Sync Statistics</h2>
+        <div class="stats-3">
+          <div class="stat"><div class="value">42</div><div class="label">Downloaded</div></div>
+          <div class="stat"><div class="value">7</div><div class="label">Uploaded</div></div>
+          <div class="stat"><div class="value">01:18</div><div class="label">Duration</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+          <h2 class="section-header">Offline Diagnostics</h2>
+          <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;">Refresh</button>
+        </div>
+        <div class="kv-grid">
+          <div><strong>Package: hwy-east-2026</strong></div>
+          <div>Size: 184 MB</div>
+          <div>Metadata: OK</div>
+          <div>Features: 1,204</div>
+          <div>Local gen: 88</div>
+          <div>Server gen: 91</div>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric"><div class="value">7</div><div class="label">Pending</div></div>
+          <div class="metric"><div class="value">2</div><div class="label">Claimed</div></div>
+          <div class="metric"><div class="value">112</div><div class="label">Succeeded</div></div>
+          <div class="metric"><div class="value">1</div><div class="label">Failed</div></div>
+          <div class="metric"><div class="value">0</div><div class="label">Retry</div></div>
+          <div class="metric"><div class="value">2</div><div class="label">Conflict</div></div>
+        </div>
+        <div style="margin-top: 10px;">
+          <div class="source-row"><div><div class="small-emph">Culverts</div><div class="text-muted">Source 12</div></div><div>812 features</div></div>
+          <div class="source-row"><div><div class="small-emph">Headwalls</div><div class="text-muted">Source 13</div></div><div>312 features</div></div>
+          <div class="source-row"><div><div class="small-emph">Crews</div><div class="text-muted">Source 14</div></div><div>80 features</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="section-header warn">⚠️ Sync Conflicts</h2>
+        <div class="conflict-row">
+          <div>
+            <div class="small-emph">Culverts</div>
+            <div class="text-muted">Local edit conflicts with server change on attribute "condition"</div>
+          </div>
+          <button class="btn btn-primary">Resolve</button>
+        </div>
+        <div class="conflict-row">
+          <div>
+            <div class="small-emph">Headwalls</div>
+            <div class="text-muted">Server-deleted feature was edited locally</div>
+          </div>
+          <button class="btn btn-primary">Resolve</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="section-header warn">Conflict Review</h2>
+        <div style="margin-top: 10px;">
+          <div style="padding: 6px 0; border-top: 1px solid var(--color-gray-200);">
+            <div style="display: flex; justify-content: space-between;"><span class="small-emph">Feature 9871</span><span class="text-muted">version-mismatch</span></div>
+            <div class="text-muted">Source 12 - Operation 8c1...</div>
+            <div class="text-muted">Server generation moved ahead while edit was queued.</div>
+            <div class="text-muted">Local: condition="Poor"</div>
+            <div class="text-muted">Server: condition="Fair"</div>
+            <div style="text-align:right; margin-top: 6px;"><button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">Review</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+          <h2 class="section-header">Recent Sync History</h2>
+          <button class="btn btn-secondary" style="font-size: 12px; padding: 8px 12px;">View All</button>
+        </div>
+        <div class="history-row"><span class="icon">✅</span><div><div class="small-emph">Full Sync</div><div class="text-muted">05/20 09:14</div></div><div class="right-stack"><div>⬇️42</div><div>⬆️7</div></div></div>
+        <div class="history-row"><span class="icon">⚠️</span><div><div class="small-emph">Push Sync</div><div class="text-muted">05/19 18:02</div></div><div class="right-stack"><div>⬇️0</div><div>⬆️5</div></div></div>
+        <div class="history-row"><span class="icon">❌</span><div><div class="small-emph">Full Sync</div><div class="text-muted">05/19 07:48</div></div><div class="right-stack"><div>⬇️0</div><div>⬆️0</div></div></div>
+      </section>
+    </main>
+    <nav class="tab-bar">
+      <div class="tab"><span class="glyph">M</span><span>Map</span></div>
+      <div class="tab"><span class="glyph">R</span><span>Records</span></div>
+      <div class="tab active"><span class="glyph">S</span><span>Sync</span></div>
+      <div class="tab"><span class="glyph">C</span><span>Settings</span></div>
+    </nav>
+  </div>
+</body>
+</html>
