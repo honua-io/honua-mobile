@@ -312,9 +312,7 @@ jobs:
             -p:TargetFramework=net10.0-android \
             -p:RuntimeIdentifiers=android-x64
 
-          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
-            -p:RuntimeIdentifier=android-x64 \
-            -p:RuntimeIdentifiers=android-x64
+          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
             -p:RuntimeIdentifier=android-x64 \
@@ -353,8 +351,6 @@ jobs:
           dotnet build apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
             --configuration Release \
             --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
-            /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
       - name: Build Android Apps
