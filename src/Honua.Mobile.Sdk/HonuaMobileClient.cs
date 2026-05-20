@@ -16,7 +16,7 @@ using Honua.Sdk.OgcFeatures.Exceptions;
 using Honua.Sdk.Scenes;
 using Microsoft.Extensions.Options;
 
-// SDK-owned conversion shims (live in honua-sdk-dotnet train >= 0.1.17-alpha.2).
+// SDK-owned conversion shims (live in honua-sdk-dotnet train >= 0.1.17-alpha.1).
 // Aliased so the call-site identifiers stay close to the original local mappings.
 using FeatureServerRequestConverters = Honua.Sdk.GeoServices.FeatureServer.Conversion.RequestConverters;
 using GrpcRequestConverters = Honua.Sdk.Grpc.Conversion.MobileRequestConverters;
