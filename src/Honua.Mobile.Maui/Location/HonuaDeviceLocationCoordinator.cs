@@ -10,6 +10,13 @@ public sealed class HonuaDeviceLocationCoordinator
     private readonly IHonuaBackgroundLocationProvider? _backgroundProvider;
     private readonly IHonuaGeofenceMonitor? _geofenceMonitor;
 
+    /// <summary>
+    /// Initializes a new <see cref="HonuaDeviceLocationCoordinator"/>.
+    /// </summary>
+    /// <param name="permissions">Platform location permission adapter.</param>
+    /// <param name="locationProvider">Platform one-shot location adapter.</param>
+    /// <param name="backgroundProvider">Optional platform background location adapter.</param>
+    /// <param name="geofenceMonitor">Optional platform geofence monitor.</param>
     public HonuaDeviceLocationCoordinator(
         IHonuaDeviceLocationPermissionService permissions,
         IHonuaDeviceLocationProvider locationProvider,
@@ -87,6 +94,12 @@ public sealed class HonuaDeviceLocationCoordinator
         await _geofenceMonitor.StartMonitoringAsync(request, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Determines whether a permission status satisfies the requested location access scope.
+    /// </summary>
+    /// <param name="status">Current platform permission status.</param>
+    /// <param name="access">Requested location access scope.</param>
+    /// <returns><see langword="true"/> when the status grants the requested scope.</returns>
     public static bool PermissionAllows(
         HonuaLocationPermissionStatus status,
         HonuaLocationAccess access)

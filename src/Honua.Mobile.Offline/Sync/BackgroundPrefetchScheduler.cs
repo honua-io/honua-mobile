@@ -30,7 +30,9 @@ public sealed class BackgroundPrefetchScheduler : IAsyncDisposable
     }
 
     /// <summary>
-    /// Number of prefetch tasks currently tracked by the scheduler.
+    /// Number of prefetch tasks currently tracked by the scheduler. Pure read of
+    /// the tracked list; callers that need to drop completed entries should call
+    /// <see cref="Prune"/> first.
     /// </summary>
     public int RunningCount
     {
@@ -38,9 +40,19 @@ public sealed class BackgroundPrefetchScheduler : IAsyncDisposable
         {
             lock (_sync)
             {
-                PruneCompletedTasks();
                 return _runningTasks.Count;
             }
+        }
+    }
+
+    /// <summary>
+    /// Drops completed tasks from the tracked list. Safe to call from any thread.
+    /// </summary>
+    public void Prune()
+    {
+        lock (_sync)
+        {
+            PruneCompletedTasks();
         }
     }
 

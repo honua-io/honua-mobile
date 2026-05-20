@@ -67,6 +67,47 @@ applyHonuaMapOptions(document.querySelector('honua-map'), {
 });
 ```
 
+## Embed Builder State
+
+Admin portals can build a live configurator with the typed builder helpers. The
+helpers normalize catalog layers, remove disabled or unknown selections, validate
+service URLs and map extents, apply preview attributes, and generate snippets
+with credentials omitted by default.
+
+```js
+import {
+  applyHonuaMapBuilderState,
+  createHonuaMapBuilderState,
+} from '@honua-io/embed';
+
+const state = createHonuaMapBuilderState({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  availableLayers: [
+    { id: 'assets', label: 'Assets', defaultSelected: true },
+    { id: 'work-orders', label: 'Work orders' },
+  ],
+  selectedLayerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  interactive: true,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  elementName: 'city-asset-map',
+});
+
+applyHonuaMapBuilderState(document.querySelector('honua-map'), state);
+
+if (state.canGenerateSnippet) {
+  console.log(state.snippet);
+}
+```
+
+Builder warnings can be shown inline without blocking snippet generation. Errors
+leave `state.snippet` null until the admin fixes required fields such as service
+URL, coordinate ranges, or custom element name.
+
 ## Integration Events
 
 ```js
@@ -128,6 +169,30 @@ const layer = createHonuaGeoJsonLayer(featureCollection, {
   id: 'honua-work-orders',
 });
 ```
+
+Streaming feature feeds can use the same renderer-neutral source descriptor and
+apply upsert/delete events into the adapter's GeoJSON layer state:
+
+```js
+display.setFeatureStreamEvent({
+  type: 'upsert',
+  sequence: event.sequence,
+  source: sourceDescriptor,
+  feature: event.feature,
+});
+
+display.setFeatureStreamEvent({
+  type: 'delete',
+  source: sourceDescriptor,
+  objectIds: [event.objectId],
+});
+```
+
+Converted features keep Honua picking metadata in `properties.__honua`,
+including the source id, source descriptor, feature id, object id, and stream
+sequence when present. Host apps can read that metadata from deck.gl picking
+callbacks without binding renderer-neutral source descriptors to MapLibre or
+deck.gl-specific contracts.
 
 ## Host Extensions
 

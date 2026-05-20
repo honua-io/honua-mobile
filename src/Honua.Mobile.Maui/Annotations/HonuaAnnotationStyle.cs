@@ -17,20 +17,24 @@ public sealed record HonuaAnnotationStyle
 
     public double TextSize { get; init; } = 14;
 
+    /// <summary>Default annotation style instance.</summary>
     public static HonuaAnnotationStyle Default { get; } = new();
 
+    /// <summary>Returns a copy of the style with the supplied fill color applied.</summary>
     public HonuaAnnotationStyle SetFillColor(string fillColor)
     {
         ValidateColor(fillColor, nameof(fillColor));
         return this with { FillColor = fillColor };
     }
 
+    /// <summary>Returns a copy of the style with the supplied stroke color applied.</summary>
     public HonuaAnnotationStyle SetStrokeColor(string strokeColor)
     {
         ValidateColor(strokeColor, nameof(strokeColor));
         return this with { StrokeColor = strokeColor };
     }
 
+    /// <summary>Returns a copy of the style with the supplied stroke width applied.</summary>
     public HonuaAnnotationStyle SetStrokeWidth(double strokeWidth)
     {
         if (strokeWidth <= 0 || double.IsNaN(strokeWidth) || double.IsInfinity(strokeWidth))
@@ -41,6 +45,7 @@ public sealed record HonuaAnnotationStyle
         return this with { StrokeWidth = strokeWidth };
     }
 
+    /// <summary>Returns a copy of the style with the supplied opacity applied.</summary>
     public HonuaAnnotationStyle SetOpacity(double opacity)
     {
         if (opacity is < 0 or > 1 || double.IsNaN(opacity) || double.IsInfinity(opacity))
@@ -51,6 +56,7 @@ public sealed record HonuaAnnotationStyle
         return this with { Opacity = opacity };
     }
 
+    /// <summary>Validates the style invariants, throwing on invalid color or numeric values.</summary>
     public void Validate()
     {
         ValidateColor(StrokeColor, nameof(StrokeColor));

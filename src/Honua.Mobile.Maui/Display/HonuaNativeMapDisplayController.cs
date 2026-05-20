@@ -10,6 +10,11 @@ public sealed class HonuaNativeMapDisplayController
     private readonly IHonuaNativeMapAdapter _adapter;
     private readonly IHonuaFeatureQueryClient _featureQueryClient;
 
+    /// <summary>
+    /// Initializes a new <see cref="HonuaNativeMapDisplayController"/>.
+    /// </summary>
+    /// <param name="adapter">Platform native map renderer adapter.</param>
+    /// <param name="featureQueryClient">SDK feature query client used for feature-backed layers.</param>
     public HonuaNativeMapDisplayController(
         IHonuaNativeMapAdapter adapter,
         IHonuaFeatureQueryClient featureQueryClient)

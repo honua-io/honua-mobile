@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Reflection;
 using Honua.Mobile.Sdk.Auth;
 
 namespace Honua.Mobile.Sdk;
@@ -8,6 +9,14 @@ namespace Honua.Mobile.Sdk;
 /// </summary>
 public sealed class HonuaMobileClientOptions
 {
+    private static readonly string SdkAssemblyVersion =
+        typeof(HonuaMobileClientOptions).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+    private static readonly ProductInfoHeaderValue DefaultUserAgent =
+        new("honua-mobile-sdk", SdkAssemblyVersion);
+
+    private readonly ProductInfoHeaderValue? _userAgent;
+
     /// <summary>
     /// Base URI for the Honua REST API. Defaults to <c>https://api.honua.io</c>.
     /// </summary>
@@ -66,9 +75,13 @@ public sealed class HonuaMobileClientOptions
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// User-Agent product header sent with every request. Defaults to <c>honua-mobile-sdk/0.1.0</c>.
+    /// User-Agent product header sent with every request. Defaults to <c>honua-mobile-sdk/&lt;assembly-version&gt;</c>.
     /// </summary>
-    public ProductInfoHeaderValue UserAgent { get; init; } = new("honua-mobile-sdk", "0.1.0");
+    public ProductInfoHeaderValue UserAgent
+    {
+        get => _userAgent ?? DefaultUserAgent;
+        init => _userAgent = value;
+    }
 
     /// <summary>
     /// GeoServices-compatible NAServer service id used by routing APIs.

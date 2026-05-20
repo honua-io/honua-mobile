@@ -236,10 +236,16 @@ public sealed class MobileExceptionReporter : IMobileExceptionReporter
             OccurredAtUtc = DateTimeOffset.UtcNow,
             AppVersion = SafeAppVersion(),
             ExceptionType = exception.GetType().FullName ?? exception.GetType().Name,
-            Message = Truncate(exception.Message, _options.MaxMessageLength),
-            StackTrace = Truncate(exception.StackTrace, _options.MaxStackTraceLength),
+            Message = Truncate(
+                DiagnosticRedactor.RedactSensitiveText(exception.Message),
+                _options.MaxMessageLength),
+            StackTrace = Truncate(
+                DiagnosticRedactor.RedactSensitiveText(exception.StackTrace),
+                _options.MaxStackTraceLength),
             InnerExceptionType = exception.InnerException?.GetType().FullName,
-            InnerExceptionMessage = Truncate(exception.InnerException?.Message, _options.MaxMessageLength),
+            InnerExceptionMessage = Truncate(
+                DiagnosticRedactor.RedactSensitiveText(exception.InnerException?.Message),
+                _options.MaxMessageLength),
             Context = SanitizeContext(context)
         };
     }
@@ -265,16 +271,16 @@ public sealed class MobileExceptionReporter : IMobileExceptionReporter
 
         return context
             .Where(item => !LooksSensitive(item.Key))
-            .ToDictionary(item => item.Key, item => item.Value);
+            .ToDictionary(
+                item => item.Key,
+                item => item.Value == null
+                    ? null
+                    : DiagnosticRedactor.RedactSensitiveText(item.Value));
     }
 
     private static bool LooksSensitive(string key)
     {
-        return key.Contains("token", StringComparison.OrdinalIgnoreCase) ||
-            key.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
-            key.Contains("password", StringComparison.OrdinalIgnoreCase) ||
-            key.Contains("apiKey", StringComparison.OrdinalIgnoreCase) ||
-            key.Contains("api_key", StringComparison.OrdinalIgnoreCase);
+        return DiagnosticRedactor.IsSensitiveName(key);
     }
 
     private static string? Truncate(string? value, int maxLength)

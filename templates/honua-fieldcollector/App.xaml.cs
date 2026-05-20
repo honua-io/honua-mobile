@@ -1,17 +1,21 @@
 using Microsoft.Extensions.Logging;
+using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace namespace;
+namespace HonuaFieldCollector;
 
 public partial class App : Application
 {
     private readonly ILogger<App> _logger;
+    private readonly SemaphoreSlim _lifecycleSyncLock = new(1, 1);
 
-    public App(ILogger<App> logger)
+    public App(ILogger<App> logger, MainPage mainPage)
     {
         InitializeComponent();
         _logger = logger;
 
-        MainPage = new AppShell();
+        MainPage = mainPage;
 
         // Handle global exceptions
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
@@ -63,24 +67,11 @@ public partial class App : Application
         // Save any pending data
         _ = Task.Run(async () =>
         {
-            try
-            {
-                // Auto-save drafts and sync if possible
-                var services = Handler?.MauiContext?.Services;
-                if (services != null)
-                {
-                    var client = services.GetService<Honua.Mobile.Core.IHonuaClient>();
-                    await client?.SavePendingChangesAsync()!;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error saving data on sleep");
-            }
+            await TryRunLifecycleSyncAsync("sleep");
         });
     }
 
-    protected override async void OnResume()
+    protected override void OnResume()
     {
         base.OnResume();
         _logger.LogInformation("App resuming from background");
@@ -88,7 +79,7 @@ public partial class App : Application
         // Resume operations
         try
         {
-            await ResumeOperationsAsync();
+            _ = ResumeOperationsAsync();
         }
         catch (Exception ex)
         {
@@ -104,43 +95,12 @@ public partial class App : Application
             var services = Handler?.MauiContext?.Services;
             if (services == null) return;
 
-            // Warm up Honua client
-            var honuaClient = services.GetService<Honua.Mobile.Core.IHonuaClient>();
+            // Warm up Honua client registration
+            var honuaClient = services.GetService<HonuaMobileClient>();
             if (honuaClient != null)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await honuaClient.TestConnectionAsync();
-                        _logger.LogInformation("Honua client connection verified");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Honua client connection failed - will work offline");
-                    }
-                });
+                _logger.LogInformation("Honua mobile client registered for online sync");
             }
-
-<!--#if (enableIoT)-->
-            // Start IoT sensor discovery
-            var iotService = services.GetService<Honua.Mobile.IoT.IIoTSensorService>();
-            if (iotService != null)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await iotService.StartSensorDiscoveryAsync(Honua.Mobile.IoT.SensorType.Environmental);
-                        _logger.LogInformation("IoT sensor discovery started");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "IoT sensor discovery failed");
-                    }
-                });
-            }
-<!--#endif-->
 
             _logger.LogDebug("Service warmup completed");
         }
@@ -157,33 +117,75 @@ public partial class App : Application
             var services = Handler?.MauiContext?.Services;
             if (services == null) return;
 
-            // Check for pending sync
-            var syncService = services.GetService<Honua.Mobile.Storage.ISyncManager>();
-            if (syncService != null)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var pendingCount = await syncService.GetPendingChangesCountAsync();
-                        if (pendingCount > 0)
-                        {
-                            _logger.LogInformation("Resuming sync for {PendingCount} changes", pendingCount);
-                            await syncService.SyncAsync();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Background sync failed");
-                    }
-                });
-            }
+            await TryRunLifecycleSyncAsync("resume");
 
             _logger.LogDebug("Resume operations completed");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Resume operations failed");
+        }
+    }
+
+    private async Task TryRunLifecycleSyncAsync(string reason)
+    {
+        try
+        {
+            var services = Handler?.MauiContext?.Services;
+            if (services == null)
+            {
+                return;
+            }
+
+            var orchestrator = services.GetService<BackgroundSyncOrchestrator>();
+            if (orchestrator != null)
+            {
+                var result = await orchestrator.RunOnceIfOnlineAsync();
+                if (result == null)
+                {
+                    _logger.LogDebug("Lifecycle sync skipped while offline during {Reason}", reason);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "Lifecycle sync during {Reason} inspected {Loaded} queued edit(s), succeeded {Succeeded}, failed {Failed}",
+                    reason,
+                    result.Loaded,
+                    result.Succeeded,
+                    result.Failed);
+                return;
+            }
+
+            var syncRunner = services.GetService<IOfflineSyncRunner>();
+            if (syncRunner == null)
+            {
+                return;
+            }
+
+            if (!await _lifecycleSyncLock.WaitAsync(0))
+            {
+                _logger.LogDebug("Lifecycle sync skipped during {Reason} because another sync is running", reason);
+                return;
+            }
+
+            try
+            {
+                var result = await syncRunner.SyncAsync();
+                _logger.LogInformation(
+                    "Lifecycle sync during {Reason} inspected {Loaded} queued edit(s), succeeded {Succeeded}, failed {Failed}",
+                    reason,
+                    result.Loaded,
+                    result.Succeeded,
+                    result.Failed);
+            }
+            finally
+            {
+                _lifecycleSyncLock.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Lifecycle sync failed during {Reason}", reason);
         }
     }
 

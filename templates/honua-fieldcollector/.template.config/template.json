@@ -29,7 +29,7 @@
     "serverEndpoint": {
       "type": "parameter",
       "datatype": "text",
-      "defaultValue": "https://demo.honua.com",
+      "defaultValue": "https://api.honua.io",
       "replaces": "HONUA_SERVER_ENDPOINT",
       "description": "Your Honua server endpoint URL"
     },
@@ -40,17 +40,12 @@
       "replaces": "YOUR_API_KEY_HERE",
       "description": "Your Honua API key"
     },
-    "enableIoT": {
+    "applicationId": {
       "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "description": "Enable IoT sensor integration"
-    },
-    "enableAR": {
-      "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "description": "Enable Augmented Reality features"
+      "datatype": "text",
+      "defaultValue": "com.companyname.honuafieldcollector",
+      "replaces": "com.companyname.honuafieldcollector",
+      "description": "Final Android/iOS/Windows app identifier"
     },
     "companyName": {
       "type": "parameter",

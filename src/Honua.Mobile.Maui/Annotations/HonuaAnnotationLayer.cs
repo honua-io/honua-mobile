@@ -9,34 +9,41 @@ public sealed class HonuaAnnotationLayer
     private readonly Dictionary<string, HonuaAnnotation> _annotations = new(StringComparer.Ordinal);
     private HonuaAnnotationStyle _defaultStyle = HonuaAnnotationStyle.Default;
 
+    /// <summary>Default style applied to annotations created without an explicit style.</summary>
     public HonuaAnnotationStyle DefaultStyle => _defaultStyle;
 
+    /// <summary>Snapshot of all annotations currently stored in the layer.</summary>
     public IReadOnlyList<HonuaAnnotation> Annotations => _annotations.Values.ToArray();
 
+    /// <summary>Updates the default fill color used for subsequent annotations.</summary>
     public HonuaAnnotationLayer SetFillColor(string fillColor)
     {
         _defaultStyle = _defaultStyle.SetFillColor(fillColor);
         return this;
     }
 
+    /// <summary>Updates the default stroke color used for subsequent annotations.</summary>
     public HonuaAnnotationLayer SetStrokeColor(string strokeColor)
     {
         _defaultStyle = _defaultStyle.SetStrokeColor(strokeColor);
         return this;
     }
 
+    /// <summary>Updates the default stroke width used for subsequent annotations.</summary>
     public HonuaAnnotationLayer SetStrokeWidth(double strokeWidth)
     {
         _defaultStyle = _defaultStyle.SetStrokeWidth(strokeWidth);
         return this;
     }
 
+    /// <summary>Updates the default opacity used for subsequent annotations.</summary>
     public HonuaAnnotationLayer SetOpacity(double opacity)
     {
         _defaultStyle = _defaultStyle.SetOpacity(opacity);
         return this;
     }
 
+    /// <summary>Draws a point annotation at the supplied coordinate.</summary>
     public HonuaAnnotation DrawPoint(
         HonuaMapCoordinate coordinate,
         string? id = null,
@@ -52,6 +59,7 @@ public sealed class HonuaAnnotationLayer
             metadata));
     }
 
+    /// <summary>Draws a polyline annotation from the supplied coordinate sequence.</summary>
     public HonuaAnnotation DrawPolyline(
         IEnumerable<HonuaMapCoordinate> coordinates,
         string? id = null,
@@ -67,6 +75,7 @@ public sealed class HonuaAnnotationLayer
             metadata));
     }
 
+    /// <summary>Draws a polygon annotation from the supplied coordinate sequence.</summary>
     public HonuaAnnotation DrawPolygon(
         IEnumerable<HonuaMapCoordinate> coordinates,
         string? id = null,
@@ -82,6 +91,7 @@ public sealed class HonuaAnnotationLayer
             metadata));
     }
 
+    /// <summary>Draws a text annotation anchored at the supplied coordinate.</summary>
     public HonuaAnnotation DrawText(
         HonuaMapCoordinate coordinate,
         string text,
@@ -103,6 +113,7 @@ public sealed class HonuaAnnotationLayer
             metadata));
     }
 
+    /// <summary>Adds a pre-built annotation to the layer.</summary>
     public HonuaAnnotation AddAnnotation(HonuaAnnotation annotation)
     {
         ArgumentNullException.ThrowIfNull(annotation);
@@ -118,6 +129,7 @@ public sealed class HonuaAnnotationLayer
         return stored;
     }
 
+    /// <summary>Replaces an existing annotation with the supplied value, preserving the original creation time.</summary>
     public HonuaAnnotation UpdateAnnotation(HonuaAnnotation annotation)
     {
         ArgumentNullException.ThrowIfNull(annotation);
@@ -138,6 +150,7 @@ public sealed class HonuaAnnotationLayer
         return updated;
     }
 
+    /// <summary>Updates an annotation by id using the supplied transform.</summary>
     public HonuaAnnotation UpdateAnnotation(string annotationId, Func<HonuaAnnotation, HonuaAnnotation> update)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(annotationId);
@@ -157,12 +170,14 @@ public sealed class HonuaAnnotationLayer
         return UpdateAnnotation(updated);
     }
 
+    /// <summary>Removes the annotation with the given id, returning <see langword="true"/> when it existed.</summary>
     public bool RemoveAnnotation(string annotationId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(annotationId);
         return _annotations.Remove(annotationId);
     }
 
+    /// <summary>Returns the annotations whose bounds intersect the supplied bounding box.</summary>
     public IReadOnlyList<HonuaAnnotation> GetAnnotationsInBounds(HonuaAnnotationBounds bounds)
     {
         return _annotations.Values
@@ -170,6 +185,7 @@ public sealed class HonuaAnnotationLayer
             .ToArray();
     }
 
+    /// <summary>Returns the annotations matching the supplied type.</summary>
     public IReadOnlyList<HonuaAnnotation> GetAnnotationsByType(HonuaAnnotationType type)
     {
         return _annotations.Values
@@ -177,6 +193,7 @@ public sealed class HonuaAnnotationLayer
             .ToArray();
     }
 
+    /// <summary>Removes all annotations from the layer.</summary>
     public void Clear() => _annotations.Clear();
 
     private HonuaAnnotation CreateAnnotation(

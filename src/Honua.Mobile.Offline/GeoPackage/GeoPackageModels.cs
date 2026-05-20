@@ -1,4 +1,5 @@
 using Honua.Sdk.Abstractions.Scenes;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.Offline.GeoPackage;
 
@@ -97,15 +98,6 @@ public sealed class OfflineEditOperation
     /// </summary>
     public int AttemptCount { get; init; }
 }
-
-/// <summary>
-/// A geographic bounding box defined by longitude/latitude extents.
-/// </summary>
-/// <param name="MinLongitude">Western boundary in decimal degrees.</param>
-/// <param name="MinLatitude">Southern boundary in decimal degrees.</param>
-/// <param name="MaxLongitude">Eastern boundary in decimal degrees.</param>
-/// <param name="MaxLatitude">Northern boundary in decimal degrees.</param>
-public sealed record BoundingBox(double MinLongitude, double MinLatitude, double MaxLongitude, double MaxLatitude);
 
 /// <summary>
 /// Metadata for a downloaded offline map area package stored in the local GeoPackage.

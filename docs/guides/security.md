@@ -17,9 +17,10 @@ Never embed API keys directly in your code:
 public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
-    builder.Services.AddHonuaMobile(options =>
+    builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
-        options.ApiKey = "sk-1234567890abcdef"; // Exposed in compiled app
+        BaseUri = new Uri("https://your-honua-server.com"),
+        ApiKey = "sk-1234567890abcdef", // Exposed in compiled app
     });
     return builder.Build();
 }
@@ -28,9 +29,10 @@ public static MauiApp CreateMauiApp()
 public static MauiApp CreateMauiApp()
 {
     var builder = MauiApp.CreateBuilder();
-    builder.Services.AddHonuaMobile(options =>
+    builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
-        options.ApiKey = GetSecureApiKey(); // Retrieved from secure storage
+        BaseUri = new Uri("https://your-honua-server.com"),
+        ApiKey = GetSecureApiKey(), // Retrieved from secure storage
     });
     return builder.Build();
 }

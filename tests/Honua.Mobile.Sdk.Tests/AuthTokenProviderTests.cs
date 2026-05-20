@@ -2,7 +2,7 @@ using System.Net;
 using System.Text;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
-using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.Abstractions.Features;
 
 namespace Honua.Mobile.Sdk.Tests;
 

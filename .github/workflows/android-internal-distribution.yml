@@ -1,0 +1,345 @@
+---
+# yamllint disable rule:line-length
+name: Android Internal Distribution
+
+"on":
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Branch, tag, or commit SHA to build. Leave blank for the workflow branch."
+        required: false
+        type: string
+      environment:
+        description: "Protected GitHub Environment that stores signing and Play upload secrets."
+        required: true
+        default: android-internal
+        type: environment
+      channel:
+        description: "Internal distribution channel."
+        required: true
+        default: internal-testing
+        type: choice
+        options:
+          - internal-testing
+          - internal-app-sharing
+      artifact_type:
+        description: "Android release artifact to build and upload."
+        required: true
+        default: aab
+        type: choice
+        options:
+          - aab
+          - apk
+      app_project:
+        description: "MAUI app project to publish."
+        required: true
+        default: apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj
+        type: string
+      version_name:
+        description: "ApplicationDisplayVersion override for this internal build."
+        required: true
+        default: 0.1.0-internal
+        type: string
+      version_code:
+        description: "ApplicationVersion override. Must increase for Play track uploads."
+        required: false
+        type: string
+      release_notes:
+        description: "Tester-facing release summary."
+        required: false
+        default: "Internal validation build."
+        type: string
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  TARGET_FRAMEWORK: net10.0-android
+
+jobs:
+  distribute:
+    name: Build, Sign, and Upload Android Internal Build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve build metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_ref="${{ inputs.source_ref }}"
+          version_code="${{ inputs.version_code }}"
+
+          if [[ -z "${source_ref}" ]]; then
+            source_ref="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ -z "${version_code}" ]]; then
+            version_code="${GITHUB_RUN_NUMBER}"
+          fi
+
+          commit_sha="$(git rev-parse HEAD)"
+          short_sha="$(git rev-parse --short=12 HEAD)"
+          safe_ref="$(printf '%s' "${source_ref}" | tr -c '[:alnum:]._-' '-')"
+          artifact_base="honua-android-${{ inputs.channel }}-${{ inputs.artifact_type }}-${version_code}-${short_sha}"
+
+          {
+            echo "source_ref=${source_ref}"
+            echo "commit_sha=${commit_sha}"
+            echo "short_sha=${short_sha}"
+            echo "safe_ref=${safe_ref}"
+            echo "version_code=${version_code}"
+            echo "artifact_base=${artifact_base}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate protected environment inputs
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          ANDROID_PACKAGE_NAME: ${{ secrets.ANDROID_PACKAGE_NAME }}
+          APP_PROJECT: ${{ inputs.app_project }}
+          CHANNEL: ${{ inputs.channel }}
+          ARTIFACT_TYPE: ${{ inputs.artifact_type }}
+        run: |
+          bash scripts/validate-android-store-prereqs.sh \
+            --project "${APP_PROJECT}" \
+            --package-name "${ANDROID_PACKAGE_NAME}" \
+            --channel "${CHANNEL}" \
+            --artifact-type "${ARTIFACT_TYPE}"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install Android MAUI workload
+        shell: bash
+        run: dotnet workload install maui-android
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ github.repository }}-${{ runner.os }}-nuget-
+
+      - name: Configure GitHub Packages
+        shell: bash
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Restore app project
+        shell: bash
+        run: dotnet restore "${{ inputs.app_project }}" -f "${TARGET_FRAMEWORK}"
+
+      - name: Decode Android signing keystore
+        id: signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/android-signing"
+          keystore_path="${RUNNER_TEMP}/android-signing/honua-internal.keystore"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          chmod 600 "${keystore_path}"
+          echo "keystore_path=${keystore_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish signed Android release artifact
+        id: publish
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          output_dir="${GITHUB_WORKSPACE}/artifacts/android"
+          mkdir -p "${output_dir}"
+
+          dotnet publish "${{ inputs.app_project }}" \
+            --configuration Release \
+            --framework "${TARGET_FRAMEWORK}" \
+            --no-restore \
+            -p:AndroidPackageFormat="${{ inputs.artifact_type }}" \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore="${{ steps.signing.outputs.keystore_path }}" \
+            -p:AndroidSigningKeyAlias="${ANDROID_KEY_ALIAS}" \
+            -p:AndroidSigningStorePass="${ANDROID_KEYSTORE_PASSWORD}" \
+            -p:AndroidSigningKeyPass="${ANDROID_KEY_PASSWORD}" \
+            -p:ApplicationDisplayVersion="${{ inputs.version_name }}" \
+            -p:ApplicationVersion="${{ steps.metadata.outputs.version_code }}"
+
+          mapfile -t candidates < <(find "$(dirname "${{ inputs.app_project }}")/bin/Release/${TARGET_FRAMEWORK}" \
+            -type f -name "*.${{ inputs.artifact_type }}" | sort)
+
+          if (( ${#candidates[@]} == 0 )); then
+            echo "::error::No .${{ inputs.artifact_type }} artifact was produced."
+            exit 1
+          fi
+
+          artifact_path="${candidates[-1]}"
+          final_path="${output_dir}/${{ steps.metadata.outputs.artifact_base }}.${{ inputs.artifact_type }}"
+          cp "${artifact_path}" "${final_path}"
+
+          sha256="$(sha256sum "${final_path}" | awk '{print $1}')"
+          {
+            echo "artifact_path=${final_path}"
+            echo "artifact_name=$(basename "${final_path}")"
+            echo "sha256=${sha256}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload signed artifact to workflow run
+        id: upload-artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.metadata.outputs.artifact_base }}
+          path: ${{ steps.publish.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write Google Play service account
+        id: play-service-account
+        shell: bash
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          account_path="${RUNNER_TEMP}/google-play-service-account.json"
+          printf '%s' "${GOOGLE_PLAY_SERVICE_ACCOUNT_JSON}" > "${account_path}"
+          chmod 600 "${account_path}"
+          echo "account_path=${account_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Prepare Google Play release notes
+        shell: bash
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          mkdir -p whatsnew
+          printf '%s\n' "${RELEASE_NOTES}" > whatsnew/whatsnew-en-US
+
+      - name: Upload to Google Play internal testing
+        if: ${{ inputs.channel == 'internal-testing' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ steps.play-service-account.outputs.account_path }}
+          packageName: ${{ secrets.ANDROID_PACKAGE_NAME }}
+          releaseFiles: ${{ steps.publish.outputs.artifact_path }}
+          track: internal
+          status: completed
+          releaseName: ${{ inputs.version_name }} (${{ steps.metadata.outputs.version_code }})
+          whatsNewDirectory: whatsnew
+
+      - name: Prepare fastlane internal app sharing
+        if: ${{ inputs.channel == 'internal-app-sharing' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fastlane
+          cat > fastlane/Fastfile <<'FASTFILE'
+          default_platform(:android)
+
+          platform :android do
+            lane :internal_app_sharing do
+              package_name = ENV.fetch("ANDROID_PACKAGE_NAME")
+              json_key = ENV.fetch("GOOGLE_PLAY_JSON_KEY")
+              artifact_path = ENV.fetch("ANDROID_ARTIFACT_PATH")
+
+              options = {
+                package_name: package_name,
+                json_key: json_key
+              }
+
+              if artifact_path.end_with?(".aab")
+                options[:aab] = artifact_path
+              else
+                options[:apk] = artifact_path
+              end
+
+              url = upload_to_play_store_internal_app_sharing(**options)
+              File.write(ENV.fetch("INTERNAL_APP_SHARING_LINK_PATH"), url.to_s)
+            end
+          end
+          FASTFILE
+
+      - name: Setup Ruby for fastlane
+        if: ${{ inputs.channel == 'internal-app-sharing' }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Upload to Google Play Internal App Sharing
+        if: ${{ inputs.channel == 'internal-app-sharing' }}
+        shell: bash
+        env:
+          ANDROID_ARTIFACT_PATH: ${{ steps.publish.outputs.artifact_path }}
+          ANDROID_PACKAGE_NAME: ${{ secrets.ANDROID_PACKAGE_NAME }}
+          GOOGLE_PLAY_JSON_KEY: ${{ steps.play-service-account.outputs.account_path }}
+          INTERNAL_APP_SHARING_LINK_PATH: ${{ runner.temp }}/internal-app-sharing-link.txt
+        run: |
+          set -euo pipefail
+          gem install fastlane --no-document
+          fastlane android internal_app_sharing
+          if [[ -s "${INTERNAL_APP_SHARING_LINK_PATH}" ]]; then
+            echo "INTERNAL_APP_SHARING_LINK=$(cat "${INTERNAL_APP_SHARING_LINK_PATH}")" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Write release summary
+        shell: bash
+        env:
+          TESTER_LINK: ${{ vars.GOOGLE_PLAY_TESTER_LINK }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Android internal distribution"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Environment | \`${{ inputs.environment }}\` |"
+            echo "| Channel | \`${{ inputs.channel }}\` |"
+            echo "| Source ref | \`${{ steps.metadata.outputs.source_ref }}\` |"
+            echo "| Commit SHA | \`${{ steps.metadata.outputs.commit_sha }}\` |"
+            echo "| App project | \`${{ inputs.app_project }}\` |"
+            echo "| Version name | \`${{ inputs.version_name }}\` |"
+            echo "| Version code | \`${{ steps.metadata.outputs.version_code }}\` |"
+            echo "| Artifact | \`${{ steps.publish.outputs.artifact_name }}\` |"
+            echo "| Artifact SHA-256 | \`${{ steps.publish.outputs.sha256 }}\` |"
+            echo "| Workflow artifact digest | \`${{ steps.upload-artifact.outputs.artifact-digest }}\` |"
+            echo "| Release notes | ${RELEASE_NOTES//$'\n'/ } |"
+            echo
+            echo "### Tester install"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${{ inputs.channel }}" == "internal-app-sharing" && -n "${INTERNAL_APP_SHARING_LINK:-}" ]]; then
+            echo "${INTERNAL_APP_SHARING_LINK}" >> "${GITHUB_STEP_SUMMARY}"
+          elif [[ -n "${TESTER_LINK}" ]]; then
+            echo "${TESTER_LINK}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "Open Google Play Console > Testing > Internal testing and install the latest internal release assigned to your tester group." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+          {
+            echo
+            echo "### Rollback or rebuild"
+            echo
+            echo "- To rebuild, rerun this workflow with the same source ref and a new version code."
+            echo "- To roll back internal testers, promote a prior internal build in Play Console or rerun this workflow from the prior commit with a higher version code."
+            echo "- Production tracks are not modified by this workflow."
+          } >> "${GITHUB_STEP_SUMMARY}"

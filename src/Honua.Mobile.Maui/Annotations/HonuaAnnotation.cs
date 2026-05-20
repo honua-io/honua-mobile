@@ -23,6 +23,7 @@ public sealed record HonuaAnnotation
 
     public HonuaAnnotationBounds Bounds => HonuaAnnotationBounds.FromCoordinates(Coordinates);
 
+    /// <summary>Returns a copy of the annotation with a new style applied.</summary>
     public HonuaAnnotation WithStyle(HonuaAnnotationStyle style)
     {
         ArgumentNullException.ThrowIfNull(style);

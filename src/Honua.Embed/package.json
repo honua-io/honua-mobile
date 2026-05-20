@@ -39,17 +39,33 @@
     "gis"
   ],
   "license": "Apache-2.0",
-  "devDependencies": {
-    "happy-dom": "^20.0.10",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.10",
-    "vitest": "^4.0.15"
-  },
-  "dependencies": {
+  "peerDependencies": {
     "@deck.gl/core": "^9.3.2",
     "@deck.gl/layers": "^9.3.2",
     "@deck.gl/mapbox": "^9.3.2",
     "cesium": "^1.141.0",
     "maplibre-gl": "^5.24.0"
+  },
+  "peerDependenciesMeta": {
+    "@deck.gl/core": { "optional": true },
+    "@deck.gl/layers": { "optional": true },
+    "@deck.gl/mapbox": { "optional": true },
+    "cesium": { "optional": true },
+    "maplibre-gl": { "optional": true }
+  },
+  "devDependencies": {
+    "@deck.gl/core": "^9.3.2",
+    "@deck.gl/layers": "^9.3.2",
+    "@deck.gl/mapbox": "^9.3.2",
+    "cesium": "^1.141.0",
+    "happy-dom": "^20.0.10",
+    "maplibre-gl": "^5.24.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.0.15"
+  },
+  "overrides": {
+    "protobufjs": "^8.2.0",
+    "ws": "^8.20.1"
   }
 }

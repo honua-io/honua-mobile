@@ -370,10 +370,10 @@ public static MauiApp CreateMauiApp()
     builder.Logging.AddDebug();
     builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
-    builder.Services.AddHonuaMobile(options =>
+    builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
     {
-        options.EnableDetailedLogging = true;
-        options.LogLevel = LogLevel.Debug;
+        BaseUri = new Uri("https://your-honua-server.com"),
+        // Configure additional options as needed
     });
 
     return builder.Build();
@@ -443,7 +443,7 @@ public void DebugFeatureState(Feature feature)
 **Solution**:
 ```csharp
 // Ensure all services are registered
-builder.Services.AddHonuaMobile(options => { ... });
+builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions { /* ... */ });
 
 // For custom services
 builder.Services.AddSingleton<IMyService, MyService>();

@@ -5,8 +5,8 @@ This guide will help you install and configure the Honua Mobile SDK for .NET dev
 ## Prerequisites
 
 ### Development Environment
-- **Visual Studio 2022** version 17.8 or later with .NET MAUI workload
-- **.NET 8.0** SDK or later
+- **Visual Studio** or a current IDE with the .NET MAUI workload
+- **.NET 10.0** SDK or later
 - **Git** for version control
 
 ### Platform Requirements
@@ -42,10 +42,6 @@ dotnet new list | grep honua
 
 Available templates:
 - `honua-fieldcollector` - Complete field data collection app
-- `honua-photosurvey` - Simple photo survey application
-- `honua-iotmonitor` - IoT sensor monitoring app
-- `honua-assetinspection` - Asset inspection with AR
-- `honua-minimal` - Minimal SDK integration
 
 Create a new project:
 ```bash
@@ -67,10 +63,10 @@ dotnet build
    - Install these packages:
 
 ```xml
-<PackageReference Include="Honua.Mobile.Core" Version="1.0.0" />
-<PackageReference Include="Honua.Mobile.Storage" Version="1.0.0" />
-<PackageReference Include="Honua.Mobile.IoT" Version="1.0.0" />
-<PackageReference Include="Honua.Mobile.Maui" Version="1.0.0" />
+<PackageReference Include="Honua.Mobile.Field" Version="0.1.0-alpha.1" />
+<PackageReference Include="Honua.Mobile.Maui" Version="0.1.0-alpha.1" />
+<PackageReference Include="Honua.Mobile.Offline" Version="0.1.0-alpha.1" />
+<PackageReference Include="Honua.Mobile.Sdk" Version="0.1.0-alpha.1" />
 ```
 
 ### Method 3: .NET CLI
@@ -81,10 +77,10 @@ dotnet new maui -n MyHonuaApp
 cd MyHonuaApp
 
 # Add Honua packages
-dotnet add package Honua.Mobile.Core
-dotnet add package Honua.Mobile.Storage
-dotnet add package Honua.Mobile.IoT
-dotnet add package Honua.Mobile.Maui
+dotnet add package Honua.Mobile.Field --version 0.1.0-alpha.1
+dotnet add package Honua.Mobile.Maui --version 0.1.0-alpha.1
+dotnet add package Honua.Mobile.Offline --version 0.1.0-alpha.1
+dotnet add package Honua.Mobile.Sdk --version 0.1.0-alpha.1
 
 # Restore packages
 dotnet restore
@@ -94,10 +90,10 @@ dotnet restore
 
 ```powershell
 # In Visual Studio Package Manager Console
-Install-Package Honua.Mobile.Core
-Install-Package Honua.Mobile.Storage
-Install-Package Honua.Mobile.IoT
-Install-Package Honua.Mobile.Maui
+Install-Package Honua.Mobile.Field -Version 0.1.0-alpha.1
+Install-Package Honua.Mobile.Maui -Version 0.1.0-alpha.1
+Install-Package Honua.Mobile.Offline -Version 0.1.0-alpha.1
+Install-Package Honua.Mobile.Sdk -Version 0.1.0-alpha.1
 ```
 
 ## Configuration
@@ -105,39 +101,55 @@ Install-Package Honua.Mobile.Maui
 ### 1. Update MauiProgram.cs
 
 ```csharp
-using Honua.Mobile.Core;
-using Honua.Mobile.Storage;
-using Honua.Mobile.IoT;
 using Honua.Mobile.Maui;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
 
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
+        var offlineDb = Path.Combine(FileSystem.Current.AppDataDirectory, "fielddata.gpkg");
 
-        builder
-            .UseMauiApp<App>()
-            .UseHonuaMobileSDK(config =>
+        builder.UseMauiApp<App>();
+
+        builder.Services
+            .AddHonuaMobileSdk(new HonuaMobileClientOptions
             {
-                // Required: Your Honua server endpoint
-                config.ServerEndpoint = "https://your-honua-server.com";
-
-                // Required: API key for authentication
-                config.ApiKey = "your-api-key-here";
-
-                // Optional: Enable offline storage (recommended)
-                config.EnableOfflineStorage = true;
-
-                // Optional: Enable IoT sensor support
-                config.EnableIoTSensors = true;
-
-                // Optional: Configure logging
-                config.LogLevel = LogLevel.Information;
-
-                // Optional: Sync settings
-                config.AutoSyncInterval = TimeSpan.FromMinutes(5);
-                config.MaxRetryAttempts = 3;
+                BaseUri = new Uri("https://your-honua-server.com"),
+                ApiKey = "your-api-key-here",
+            })
+            .AddHonuaMobileFieldCollection()
+            .AddHonuaSdkGeoPackageOfflineSync(
+                new GeoPackageSyncStoreOptions { DatabasePath = offlineDb },
+                new OfflinePackageManifest
+                {
+                    PackageId = "mobile-offline-field-ops-v1",
+                    Sources =
+                    [
+                        new OfflineSourceDescriptor
+                        {
+                            SourceId = "mobile_offline_demo/FeatureServer/68910",
+                            Source = new SourceDescriptor
+                            {
+                                Id = "mobile-offline-field-sites",
+                                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+                            },
+                            Where = "1=1",
+                            OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+                            ReturnGeometry = true,
+                            PageSize = 100,
+                        },
+                    ],
+                })
+            .AddHonuaBackgroundSync(new BackgroundSyncOrchestratorOptions
+            {
+                SyncInterval = TimeSpan.FromMinutes(5),
             });
 
         // Register additional services if needed
@@ -229,7 +241,7 @@ public static class MauiProgram
                 <key>NSExceptionRequiresForwardSecrecy</key>
                 <false/>
                 <key>NSExceptionMinimumTLSVersion</key>
-                <string>TLSv1.0</string>
+                <string>TLSv1.2</string>
                 <key>NSIncludesSubdomains</key>
                 <true/>
             </dict>
@@ -308,18 +320,18 @@ Create a simple test page to verify everything is working:
 
 ```csharp
 // TestPage.xaml.cs
-using Honua.Mobile.Core;
+using Honua.Mobile.Offline.Sync;
 
 namespace MyHonuaApp.Pages;
 
 public partial class TestPage : ContentPage
 {
-    private readonly IHonuaClient _client;
+    private readonly IOfflineSyncRunner _syncRunner;
 
-    public TestPage(IHonuaClient client)
+    public TestPage(IOfflineSyncRunner syncRunner)
     {
         InitializeComponent();
-        _client = client;
+        _syncRunner = syncRunner;
     }
 
     private async void OnTestConnectionClicked(object sender, EventArgs e)
@@ -328,19 +340,9 @@ public partial class TestPage : ContentPage
         {
             StatusLabel.Text = "Testing connection...";
 
-            // Test basic connectivity
-            var isConnected = await _client.TestConnectionAsync();
-
-            if (isConnected)
-            {
-                StatusLabel.Text = "✅ Connection successful!";
-                StatusLabel.TextColor = Colors.Green;
-            }
-            else
-            {
-                StatusLabel.Text = "❌ Connection failed";
-                StatusLabel.TextColor = Colors.Red;
-            }
+            var result = await _syncRunner.SyncAsync();
+            StatusLabel.Text = $"Sync runner ready: {result.Loaded} queued edits inspected.";
+            StatusLabel.TextColor = Colors.Green;
         }
         catch (Exception ex)
         {
@@ -384,9 +386,9 @@ public partial class TestPage : ContentPage
 dotnet build
 
 # Run on specific platform
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS (macOS only)
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS (macOS only)
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 ## Troubleshooting

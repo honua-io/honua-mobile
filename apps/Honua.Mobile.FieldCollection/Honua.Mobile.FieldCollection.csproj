@@ -11,8 +11,6 @@
         <RootNamespace>Honua.Mobile.FieldCollection</RootNamespace>
         <UseMaui>true</UseMaui>
         <SingleProject>true</SingleProject>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
 
         <!-- Display Version Info -->
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
@@ -62,19 +60,19 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
-        <PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
-        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
-        <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
+        <PackageReference Include="Microsoft.Maui.Controls" />
+        <PackageReference Include="Microsoft.Maui.Controls.Compatibility" />
+        <PackageReference Include="Microsoft.Extensions.Http" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="CommunityToolkit.Maui" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Microsoft.Maui.Controls.Maps" />
 
         <!-- SQLite and GeoPackage support -->
-        <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-        <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.8" />
-        <PackageReference Include="NetTopologySuite" Version="2.6.0" />
-        <PackageReference Include="NetTopologySuite.IO.SqlServerBytes" Version="2.1.0" />
+        <PackageReference Include="sqlite-net-pcl" />
+        <PackageReference Include="SQLitePCLRaw.bundle_green" />
+        <PackageReference Include="NetTopologySuite" />
+        <PackageReference Include="NetTopologySuite.IO.SqlServerBytes" />
     </ItemGroup>
 
     <!-- Development Dependency: Include Mobile SDK projects when building locally -->
@@ -87,10 +85,10 @@
 
     <!-- Production Dependency: Use NuGet packages when SDK projects don't exist -->
     <ItemGroup Condition="!Exists('../../src/')">
-        <PackageReference Include="Honua.Mobile.Sdk" Version="1.0.0-preview.1" />
-        <PackageReference Include="Honua.Mobile.Field" Version="1.0.0-preview.1" />
-        <PackageReference Include="Honua.Mobile.Offline" Version="1.0.0-preview.1" />
-        <PackageReference Include="Honua.Mobile.Maui" Version="1.0.0-preview.1" />
+        <PackageReference Include="Honua.Mobile.Sdk" />
+        <PackageReference Include="Honua.Mobile.Field" />
+        <PackageReference Include="Honua.Mobile.Offline" />
+        <PackageReference Include="Honua.Mobile.Maui" />
     </ItemGroup>
 
 </Project>

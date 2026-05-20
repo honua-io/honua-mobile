@@ -3,6 +3,7 @@ using System.Text;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Microsoft.Data.Sqlite;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.Offline.Tests;
 

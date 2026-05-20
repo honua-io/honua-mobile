@@ -94,11 +94,14 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
                     $"Scene package '{request.Manifest.PackageId}' did not pass final validation: {FormatIssues(finalValidation)}");
             }
 
-            var manifestPath = await WriteManifestAsync(stagingDirectory, request.Manifest, ct).ConfigureAwait(false);
-            manifestPath = Path.Combine(readyDirectory, "manifest.json");
+            await WriteManifestAsync(stagingDirectory, request.Manifest, ct).ConfigureAwait(false);
 
             var state = request.Manifest.Validate(utcNow, downloadedAssetKeys).State;
             var storedBytes = SumDownloadedAssetBytes(request.Manifest, downloadedAssetKeys);
+            // The manifest is written into the staging directory above, then the staging directory
+            // is atomically moved to readyDirectory by PromotePackageAsync; the final location of the
+            // manifest is therefore readyDirectory/manifest.json.
+            var manifestPath = Path.Combine(readyDirectory, "manifest.json");
             var catalogRecord = BuildCatalogRecord(
                 request.Manifest,
                 readyDirectory,
@@ -361,7 +364,7 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
         }
     }
 
-    private static async Task<string> WriteManifestAsync(
+    private static async Task WriteManifestAsync(
         string stagingDirectory,
         HonuaScenePackageManifest manifest,
         CancellationToken ct)
@@ -373,7 +376,6 @@ public sealed class ScenePackageDownloader : IHonuaScenePackageDownloader
             manifest,
             HonuaMobileScenePackageJsonContext.Default.HonuaScenePackageManifest,
             ct).ConfigureAwait(false);
-        return manifestPath;
     }
 
     private static ScenePackageRecord BuildCatalogRecord(

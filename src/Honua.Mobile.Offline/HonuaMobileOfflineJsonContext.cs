@@ -8,7 +8,7 @@ using Honua.Sdk.Offline.Abstractions;
 namespace Honua.Mobile.Offline;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(BoundingBox))]
+[JsonSerializable(typeof(Honua.Sdk.Geometry.GeographicBoundingBox))]
 [JsonSerializable(typeof(HonuaSceneBounds))]
 [JsonSerializable(typeof(OfflineOperationPayload))]
 [JsonSerializable(typeof(OfflineSyncCheckpoint))]

@@ -1,0 +1,97 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      Allow individual projects to override centrally-managed versions
+      only when explicitly needed (e.g., conditional platform packages).
+    -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Honua first-party SDK packages.
+         0.1.17-alpha.2 is the local-feed bridge build that contains the
+         mobile-shim migrations (DTOs, GeographicBoundingBox, ReplicaSyncClient,
+         transport mappings) plus the public-converter follow-up. Restore from
+         /home/makani/local-nuget-feed until the next published alpha includes
+         the same set. -->
+    <PackageVersion Include="Honua.Sdk.Abstractions" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Field" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.GeoServices" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Geometry" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Grpc" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Offline" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Offline.Abstractions" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.OgcFeatures" Version="0.1.17-alpha.2" />
+    <PackageVersion Include="Honua.Sdk.Scenes" Version="0.1.17-alpha.2" />
+
+    <!-- Honua.Mobile.* (matches src/ packed versions; was 1.0.0-preview.1 in FieldCollection) -->
+    <PackageVersion Include="Honua.Mobile.Sdk" Version="0.1.0-alpha.1" />
+    <PackageVersion Include="Honua.Mobile.Field" Version="0.1.0-alpha.1" />
+    <PackageVersion Include="Honua.Mobile.Offline" Version="0.1.0-alpha.1" />
+    <PackageVersion Include="Honua.Mobile.Maui" Version="0.1.0-alpha.1" />
+
+    <!--
+      .NET Extensions: bumped to 10.0.7 to satisfy transitive
+      requirements from Microsoft.Extensions.Http 10.0.7
+      (drags Microsoft.Extensions.Diagnostics 10.0.7, which in turn
+      requires Microsoft.Extensions.Configuration >= 10.0.7).
+      Logging.Debug stays at 10.0.0 because no transitive forces
+      a higher minimum and that is the version apps already used.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+
+    <!-- MAUI - keyed off $(MauiVersion) so the workload pins them. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
+    <!--
+      Microsoft.Maui.Essentials must align with the MAUI workload
+      version. Microsoft.Maui.Controls 10.0.20 (via Controls.Core /
+      Maui.Core) demands Essentials >= 10.0.20, so we key it off
+      $(MauiVersion) for forward-compatibility.
+    -->
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="$(MauiVersion)" />
+
+    <!-- CommunityToolkit (drift resolved to 9.1.0 / 8.3.2) -->
+    <PackageVersion Include="CommunityToolkit.Maui" Version="9.1.0" />
+    <PackageVersion Include="CommunityToolkit.Maui.Camera" Version="1.0.4" />
+    <PackageVersion Include="CommunityToolkit.Maui.Maps" Version="2.0.1" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+
+    <!-- Storage / GIS -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="NetTopologySuite" Version="2.6.0" />
+    <PackageVersion Include="NetTopologySuite.IO.SqlServerBytes" Version="2.1.0" />
+    <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_green" Version="2.1.8" />
+
+    <!--
+      gRPC / serialization
+      Grpc.Net.Client bumped from 2.59.0 to 2.76.0 to satisfy
+      Honua.Sdk.Grpc 0.1.8-alpha.1's transitive minimum.
+    -->
+    <PackageVersion Include="Grpc.Net.Client" Version="2.76.0" />
+    <PackageVersion Include="System.Text.Json" Version="9.0.0" />
+
+    <!-- Platform bindings (Android / iOS) -->
+    <PackageVersion Include="Xamarin.Google.Android.Maps" Version="18.2.0" />
+    <PackageVersion Include="Xamarin.GooglePlayServices.Location" Version="118.0.0.4" />
+    <PackageVersion Include="Xamarin.iOS.MapKit" Version="16.4.0.128" />
+
+    <!-- Test tooling -->
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

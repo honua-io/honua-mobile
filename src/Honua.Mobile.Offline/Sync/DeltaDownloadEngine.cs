@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
+using Honua.Sdk.Offline.Abstractions;
 
 namespace Honua.Mobile.Offline.Sync;
 
@@ -65,7 +66,7 @@ public sealed class DeltaDownloadEngine
         {
             var layerKey = layerChange.LayerId.ToString(CultureInfo.InvariantCulture);
 
-            if (layerChange.AddFeaturesJson is { Length: > 0 })
+            if (layerChange.AddFeaturesJson is { Count: > 0 })
             {
                 foreach (var featureJson in layerChange.AddFeaturesJson)
                 {
@@ -74,7 +75,7 @@ public sealed class DeltaDownloadEngine
                 }
             }
 
-            if (layerChange.UpdateFeaturesJson is { Length: > 0 })
+            if (layerChange.UpdateFeaturesJson is { Count: > 0 })
             {
                 foreach (var featureJson in layerChange.UpdateFeaturesJson)
                 {
@@ -83,7 +84,7 @@ public sealed class DeltaDownloadEngine
                 }
             }
 
-            if (layerChange.DeleteIds is { Length: > 0 })
+            if (layerChange.DeleteIds is { Count: > 0 })
             {
                 foreach (var objectId in layerChange.DeleteIds)
                 {

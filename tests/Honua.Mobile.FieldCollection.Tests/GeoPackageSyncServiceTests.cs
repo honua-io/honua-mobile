@@ -1,9 +1,12 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
+using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
+using StorageConflictType = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictType;
 
 namespace Honua.Mobile.FieldCollection.Tests;
 
@@ -100,6 +103,87 @@ public sealed class GeoPackageSyncServiceTests
         var resolvedFeature = await storage.GetFeatureAsync("asset-1", 1);
         Assert.NotNull(resolvedFeature);
         Assert.Equal("server", resolvedFeature.Attributes["name"].ToString());
+    }
+
+    [Fact]
+    public async Task GetOfflineCacheDiagnosticsAsync_SeparatesMetadataFeatureAndOperationState()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.CreateLayerAsync(new LayerInfo
+        {
+            Id = 1,
+            Name = "Assets",
+            GeometryType = GeometryType.Point,
+            IsEditable = true
+        });
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        var pendingChanges = await storage.GetPendingChangesAsync();
+        await storage.MarkChangesAsSynced([pendingChanges[0].Id]);
+        await storage.StoreConflictAsync(new StorageConflictRecord
+        {
+            Id = "conflict-1",
+            FeatureId = "asset-1",
+            LayerId = 1,
+            ConflictType = StorageConflictType.UpdateUpdate,
+            LocalVersion = 2,
+            ServerVersion = 3,
+            LocalData = """{"attributes":{"name":"local","apiKey":"secret-local"}}""",
+            ServerData = """{"attributes":{"name":"server","authorization":"Bearer secret-token"}}""",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var diagnostics = await storage.GetOfflineCacheDiagnosticsAsync();
+
+        Assert.Equal("honua-field-tests-", diagnostics.PackageId[..18]);
+        Assert.Equal("Available", diagnostics.MetadataCache.Status);
+        Assert.Equal("Available", diagnostics.FeatureCache.Status);
+        Assert.Equal(1, diagnostics.MetadataCache.SourceCount);
+        Assert.Equal(1, diagnostics.FeatureCache.TotalFeatureCount);
+        Assert.Equal(1, diagnostics.Operations.SucceededCount);
+        Assert.Equal(1, diagnostics.Operations.ConflictCount);
+        var conflict = Assert.Single(diagnostics.ConflictReview);
+        Assert.Equal("1", conflict.SourceId);
+        Assert.Contains("[redacted]", conflict.LocalState);
+        Assert.Contains("[redacted]", conflict.ServerState);
+        Assert.DoesNotContain("secret-token", conflict.ServerState);
+    }
+
+    [Fact]
+    public async Task DeferConflictAsync_MarksManualReviewAndKeepsConflictVisible()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreConflictAsync(new StorageConflictRecord
+        {
+            Id = "conflict-1",
+            FeatureId = "asset-1",
+            LayerId = 1,
+            ConflictType = StorageConflictType.UpdateUpdate,
+            LocalVersion = 2,
+            ServerVersion = 3,
+            LocalData = """{"attributes":{"name":"local"}}""",
+            ServerData = """{"attributes":{"name":"server"}}""",
+            CreatedAt = DateTime.UtcNow
+        });
+        using var sync = CreateSyncService(storage);
+
+        Assert.True(await sync.DeferConflictAsync("conflict-1"));
+
+        var stored = await storage.GetConflictAsync("conflict-1");
+        Assert.NotNull(stored);
+        Assert.Equal(
+            Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictResolution.Manual,
+            stored.Resolution);
+        Assert.Null(stored.ResolvedAt);
+        Assert.Single(await sync.GetConflictsAsync());
+
+        var diagnostics = await storage.GetOfflineCacheDiagnosticsAsync();
+        var conflict = Assert.Single(diagnostics.ConflictReview);
+        Assert.Equal("Deferred", conflict.Status);
+        Assert.Equal(1, diagnostics.Operations.ConflictCount);
     }
 
     private static GeoPackageSyncService CreateSyncService(

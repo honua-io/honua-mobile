@@ -188,10 +188,12 @@ public sealed class HonuaAnnotationLayerTests
     public void AddHonuaScenePackageDownload_RegistersDownloader()
     {
         var storePath = Path.Combine(Path.GetTempPath(), $"honua-scene-package-di-{Guid.NewGuid():N}.gpkg");
+#pragma warning disable CS0618 // exercising back-compat AddHonuaGeoPackageOfflineSync registration
         using var services = new ServiceCollection()
             .AddHonuaGeoPackageOfflineSync(new GeoPackageSyncStoreOptions { DatabasePath = storePath })
             .AddHonuaScenePackageDownload()
             .BuildServiceProvider();
+#pragma warning restore CS0618
 
         var downloader = services.GetRequiredService<IHonuaScenePackageDownloader>();
 

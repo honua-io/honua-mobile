@@ -1,0 +1,64 @@
+# yamllint disable rule:line-length rule:truthy
+---
+name: Android Store Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Protected GitHub Environment containing Android signing and Play secrets."
+        required: true
+        default: android-internal
+        type: environment
+      app_project:
+        description: "MAUI app project whose ApplicationId must match ANDROID_PACKAGE_NAME."
+        required: true
+        default: apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj
+        type: string
+      channel:
+        description: "Target Google Play channel to validate for."
+        required: true
+        default: internal-testing
+        type: choice
+        options:
+          - internal-testing
+          - internal-app-sharing
+      artifact_type:
+        description: "Android artifact format expected by the store workflow."
+        required: true
+        default: aab
+        type: choice
+        options:
+          - aab
+          - apk
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Android Store Prerequisites
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate protected environment and app identifiers
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_PACKAGE_NAME: ${{ secrets.ANDROID_PACKAGE_NAME }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          APP_PROJECT: ${{ inputs.app_project }}
+          CHANNEL: ${{ inputs.channel }}
+          ARTIFACT_TYPE: ${{ inputs.artifact_type }}
+        run: |
+          bash scripts/validate-android-store-prereqs.sh \
+            --project "${APP_PROJECT}" \
+            --package-name "${ANDROID_PACKAGE_NAME}" \
+            --channel "${CHANNEL}" \
+            --artifact-type "${ARTIFACT_TYPE}"

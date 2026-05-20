@@ -4,7 +4,6 @@ using System.Text.Json;
 using Honua.Mobile.Offline;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 
 namespace Honua.Mobile.Offline.Sync;
@@ -60,9 +59,16 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
         }
-        catch (ArgumentNullException ex) when (string.Equals(ex.ParamName, "source", StringComparison.Ordinal))
+        catch (ArgumentNullException ex)
         {
-            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
+            // Defensive catch for the documented case where the SDK's
+            // FeatureServer adapter throws ArgumentNullException while mapping a
+            // malformed/empty applyEdits response envelope. The SDK does not
+            // currently expose a typed exception for this; surface it as a
+            // fatal payload error rather than letting it propagate as a raw
+            // framework exception. This intentionally avoids matching on
+            // ParamName, which is brittle across SDK versions.
+            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"applyEdits response payload is malformed: {ex.Message}" };
         }
         catch (ArgumentException ex)
         {

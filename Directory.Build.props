@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+    Shared MSBuild properties for every project in the repository.
+    Project-specific properties (TargetFramework, OutputType, UseMaui,
+    package metadata, etc.) remain in their individual csproj files.
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <!--
+    MAUI workload version. The MAUI workload installs its own runtime
+    via the workload manifest, but several csprojs reference packages
+    that key off $(MauiVersion). Declare a default so the property is
+    always bound and reproducible; override in a CI matrix if needed.
+  -->
+  <PropertyGroup>
+    <MauiVersion Condition="'$(MauiVersion)' == ''">10.0.20</MauiVersion>
+  </PropertyGroup>
+
+  <!--
+    Test projects routinely import xUnit fixtures and link sources from
+    app projects. The strict warnings-as-errors policy below applies to
+    src/ projects; test projects relax a handful of analyzer rules that
+    are noisy in test code but uninteresting (test scaffolding is not
+    production code).
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <!--
+      CA1416: Platform-specific API usage (test xUnit theories often
+              probe MAUI Essentials APIs across TFMs).
+      CA1707: Underscores in test method names are idiomatic for xUnit.
+      CA1861: Constant array arguments in [InlineData] cannot be hoisted.
+      CA2007: ConfigureAwait in test code is unnecessary (no SyncContext).
+      xUnit1031: Blocking task operations in test fixtures.
+    -->
+    <NoWarn>$(NoWarn);CA1416;CA1707;CA1861;CA2007;xUnit1031</NoWarn>
+  </PropertyGroup>
+
+</Project>

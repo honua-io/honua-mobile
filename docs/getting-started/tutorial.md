@@ -31,26 +31,54 @@ cd MyFieldApp
 Open `MauiProgram.cs` and configure your server connection:
 
 ```csharp
+using Honua.Mobile.Maui;
+using Honua.Mobile.Offline.GeoPackage;
+using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
+        var offlineDb = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-fieldcollector.gpkg");
 
         builder
             .UseMauiApp<App>()
-            .UseHonuaMobileSDK(config =>
+            .ConfigureFonts(fonts => fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular"));
+
+        builder.Services
+            .AddHonuaMobileSdk(new HonuaMobileClientOptions
             {
-                // 🔥 Replace with your Honua server
-                config.ServerEndpoint = "https://demo.honua.com";
-
-                // 🔑 Get your free API key at demo.honua.com
-                config.ApiKey = "your-api-key-here";
-
-                // ✅ Enable powerful features
-                config.EnableOfflineStorage = true;
-                config.EnableIoTSensors = false; // Start simple
-            });
+                BaseUri = new Uri("https://api.honua.io"),
+                ApiKey = "your-api-key-here",
+            })
+            .AddHonuaMobileFieldCollection()
+            .AddHonuaSdkGeoPackageOfflineSync(
+                new GeoPackageSyncStoreOptions { DatabasePath = offlineDb },
+                new OfflinePackageManifest
+                {
+                    PackageId = "mobile-offline-field-ops-v1",
+                    DisplayName = "Mobile Offline Field Operations",
+                    Sources =
+                    [
+                        new OfflineSourceDescriptor
+                        {
+                            SourceId = "mobile_offline_demo/FeatureServer/68910",
+                            Source = new SourceDescriptor
+                            {
+                                Id = "mobile-offline-field-sites",
+                                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+                            },
+                            Where = "1=1",
+                            OutFields = ["objectid", "globalid", "site_name", "status", "priority", "assigned_to", "inspection_date", "sync_version", "offline_action", "notes"],
+                            ReturnGeometry = true,
+                            PageSize = 100,
+                        },
+                    ],
+                });
 
         return builder.Build();
     }
@@ -58,9 +86,10 @@ public static class MauiProgram
 ```
 
 **💡 No Server Yet?** Use our demo server:
-- **Endpoint**: `https://demo.honua.com`
+- **Endpoint**: `https://api.honua.io`
 - **API Key**: `demo_key_field_collection_2026`
-- **Form ID**: `site_inspection` (pre-configured demo form)
+- **Service**: `mobile_offline_demo` (pre-configured offline field operations fixture)
+- **Editable layer**: `68910`
 
 ## Step 3: Build the Data Collection UI (90 seconds)
 
@@ -86,7 +115,7 @@ Replace `MainPage.xaml` content:
         <!-- 📝 Dynamic Data Collection Form -->
         <ScrollView Grid.Row="1">
             <honua:HonuaFeatureForm x:Name="DataForm"
-                                   FormId="site_inspection"
+                                   FormId="field-site-inspection"
                                    AllowDrafts="true"
                                    ShowProgress="true"
                                    FormSubmitted="OnDataCollected"
@@ -111,8 +140,6 @@ Replace `MainPage.xaml` content:
 Update `MainPage.xaml.cs` with event handlers:
 
 ```csharp
-using Honua.Mobile.Core.Events;
-
 namespace MyFieldApp;
 
 public partial class MainPage : ContentPage
@@ -124,12 +151,12 @@ public partial class MainPage : ContentPage
         InitializeComponent();
     }
 
-    private async void OnDataCollected(object sender, FormSubmittedEventArgs e)
+    private async void OnDataCollected(object sender, EventArgs e)
     {
         _recordsCollected++;
 
         // 🎉 Data automatically includes GPS, photos, sensor readings!
-        var formData = e.FormData;
+        var formData = ReadFormData(e);
 
         // Show success message
         await DisplayAlert("Success! 🎉",
@@ -142,10 +169,10 @@ public partial class MainPage : ContentPage
         // 🔄 Form automatically syncs to server and clears for next record
     }
 
-    private void OnValidationChanged(object sender, FormValidationEventArgs e)
+    private void OnValidationChanged(object sender, EventArgs e)
     {
         // Real-time validation feedback
-        if (!e.IsValid)
+        if (!ReadProperty<bool>(e, "IsValid"))
         {
             // Form automatically shows validation errors
         }
@@ -158,6 +185,17 @@ public partial class MainPage : ContentPage
             .SelectMany(x => x)
             .Count(x => x.ToString().Contains("photo"));
     }
+
+    private static Dictionary<string, object> ReadFormData(EventArgs args)
+    {
+        return ReadProperty<Dictionary<string, object>>(args, "FormData") ?? [];
+    }
+
+    private static T? ReadProperty<T>(object source, string propertyName)
+    {
+        var value = source.GetType().GetProperty(propertyName)?.GetValue(source);
+        return value is T typed ? typed : default;
+    }
 }
 ```
 
@@ -168,9 +206,9 @@ public partial class MainPage : ContentPage
 dotnet build
 
 # Run on your preferred platform
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS (Mac only)
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS (Mac only)
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 **🎉 Congratulations!** You now have a professional field data collection app!
@@ -211,18 +249,6 @@ dotnet build -t:Run -f net8.0-windows     # Windows
 
 ## Advanced 5-Minute Add-Ons
 
-### Add IoT Sensor Integration (2 minutes)
-
-```csharp
-// In MauiProgram.cs, enable IoT
-config.EnableIoTSensors = true;
-
-// In your form schema, add sensor field:
-// { "id": "temperature", "type": "sensor", "sensorType": "environmental" }
-```
-
-**Result**: Bluetooth LE environmental sensors automatically discovered and integrated!
-
 ### Add Map Visualization (2 minutes)
 
 Add to MainPage.xaml above the form:
@@ -236,16 +262,6 @@ Add to MainPage.xaml above the form:
 ```
 
 **Result**: Interactive map showing all collected data points!
-
-### Add Augmented Reality (3 minutes)
-
-```xml
-<honua:HonuaARViewer Grid.Row="1"
-                    EnableUtilityVisualization="true"
-                    MaxRenderDistance="100" />
-```
-
-**Result**: AR visualization of underground utilities and infrastructure!
 
 ## Testing Your App
 
@@ -261,11 +277,11 @@ Add to MainPage.xaml above the form:
 
 ```bash
 # Check your server dashboard at:
-# https://demo.honua.com/dashboard
+# https://api.honua.io/dashboard
 
 # Or query via API:
 curl -H "X-API-Key: your-api-key" \
-     https://demo.honua.com/api/v1/features/site_inspection
+     "https://api.honua.io/rest/services/mobile_offline_demo/FeatureServer/68910/query?where=1%3D1&outFields=*&f=json"
 ```
 
 ## Compare to Competition

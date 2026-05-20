@@ -1,8 +1,8 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Threading;
 using Honua.Mobile.Sdk.Auth;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.GeoServices;
@@ -13,6 +13,9 @@ using Honua.Sdk.Grpc;
 using Honua.Sdk.OgcFeatures;
 using Honua.Sdk.OgcFeatures.Exceptions;
 using Honua.Sdk.Scenes;
+using FeatureServerRequestConverters = Honua.Sdk.GeoServices.FeatureServer.Conversion.RequestConverters;
+using GrpcRequestConverters = Honua.Sdk.Grpc.Conversion.MobileRequestConverters;
+using OgcRequestConverters = Honua.Sdk.OgcFeatures.Conversion.RequestConverters;
 using Microsoft.Extensions.Options;
 
 namespace Honua.Mobile.Sdk;
@@ -32,7 +35,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private readonly IAuthTokenProvider? _authTokenProvider;
     private readonly object _grpcClientSync = new();
     private readonly bool _canUseGrpcEndpoint;
-    private HonuaGrpcClient? _grpcClient;
+    private readonly Uri? _baseUri;
+    private readonly TimeSpan _requestTimeout;
+    private readonly ProductInfoHeaderValue _userAgent;
+    private Lazy<HonuaGrpcClient> _grpcClient;
+    private int _disposed;
 
     /// <summary>
     /// Initializes a new <see cref="HonuaMobileClient"/> with the supplied HTTP client and options.
@@ -57,18 +64,26 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _authTokenProvider = authTokenProvider ?? options.AuthTokenProvider;
-        _http.BaseAddress = options.BaseUri;
-        _http.Timeout = options.Timeout;
-        _http.DefaultRequestHeaders.UserAgent.Clear();
-        _http.DefaultRequestHeaders.UserAgent.Add(options.UserAgent);
 
+        // Do NOT mutate the injected HttpClient (it may be pooled by IHttpClientFactory).
+        // Capture configuration locally and apply per-request where needed.
+        _baseUri = options.BaseUri;
+        _requestTimeout = options.Timeout;
+        _userAgent = options.UserAgent;
+
+        // The SDK-owned HttpClient backs internal sub-clients (FeatureServer, OGC, Routing,
+        // Scenes). It wraps the caller-supplied HttpClient via AuthenticatedSdkHttpMessageHandler
+        // so we share the caller's transport pipeline (mocks/handlers in tests, IHttpClientFactory
+        // pooled handlers in production) without mutating the caller's HttpClient instance.
         _sdkHttp = new HttpClient(
-            new AuthenticatedSdkHttpMessageHandler(_http, ApplyHttpAuthenticationAsync),
+            new AuthenticatedSdkHttpMessageHandler(_http, ApplyHttpAuthenticationAsync, _userAgent),
             disposeHandler: true)
         {
             BaseAddress = options.BaseUri,
             Timeout = options.Timeout,
         };
+        _sdkHttp.DefaultRequestHeaders.UserAgent.Clear();
+        _sdkHttp.DefaultRequestHeaders.UserAgent.Add(_userAgent);
 
         _featureServerClient = new HonuaFeatureServerClient(_sdkHttp);
         _ogcFeaturesClient = new HonuaOgcFeaturesClient(_sdkHttp);
@@ -76,9 +91,16 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         var grpcAddress = options.GrpcEndpoint ?? options.BaseUri;
         _canUseGrpcEndpoint = grpcAddress.Scheme is "http" or "https";
 
+        _grpcClient = CreateGrpcClientLazy();
+
         Routing = new HonuaRoutingClient(_sdkHttp, BuildGeoServicesRoutingOptions(options));
         Scenes = new HonuaSceneClient(_sdkHttp, BuildSceneClientOptions(options));
     }
+
+    private Lazy<HonuaGrpcClient> CreateGrpcClientLazy()
+        => new(
+            () => new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions())),
+            LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Routing and network-analysis client for directions, service areas, closest facility, and route optimization.
@@ -191,6 +213,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The query parameters including service ID, layer, WHERE clause, and output fields.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the query result with features, fields, and metadata.</returns>
+    /// <remarks>
+    /// The caller takes ownership of the returned <see cref="JsonDocument"/> and must dispose it
+    /// to release pooled buffers (typically via <c>using</c>). TODO: switch this surface to return
+    /// a cloned <see cref="JsonElement"/> to remove the disposal contract.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> QueryFeaturesAsync(QueryFeaturesRequest request, CancellationToken ct = default)
@@ -218,6 +245,10 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The query parameters.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>An async sequence of <see cref="JsonDocument"/> pages.</returns>
+    /// <remarks>
+    /// The caller takes ownership of each yielded <see cref="JsonDocument"/> and must dispose it to
+    /// release pooled buffers.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     public async IAsyncEnumerable<JsonDocument> QueryFeaturesStreamAsync(
         QueryFeaturesRequest request,
@@ -267,6 +298,10 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The edit payload including adds, updates, and deletes.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing per-feature edit results.</returns>
+    /// <remarks>
+    /// The caller takes ownership of the returned <see cref="JsonDocument"/> and must dispose it to
+    /// release pooled buffers.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> ApplyEditsAsync(ApplyEditsRequest request, CancellationToken ct = default)
@@ -403,13 +438,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> describing available collections.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> GetOgcCollectionsAsync(CancellationToken ct = default)
     {
         try
         {
             var collections = await _ogcFeaturesClient.ListCollectionsAsync(ct).ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(collections);
+            return OgcRequestConverters.ToJsonDocument(collections);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -423,6 +459,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">Parameters including collection ID, CQL filter, limit, and offset.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the matched items.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> GetOgcItemsAsync(OgcItemsRequest request, CancellationToken ct = default)
@@ -432,9 +469,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .GetItemsAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcItemsParams(request), ct)
+                .GetItemsAsync(request.CollectionId, OgcRequestConverters.ToOgcItemsParams(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -448,6 +485,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The collection ID and GeoJSON feature to create.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the server response for the created item.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> CreateOgcItemAsync(OgcCreateItemRequest request, CancellationToken ct = default)
@@ -457,9 +495,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .CreateItemAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .CreateItemAsync(request.CollectionId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -473,6 +511,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The collection ID, feature ID, and full replacement feature.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> ReplaceOgcItemAsync(OgcReplaceItemRequest request, CancellationToken ct = default)
@@ -482,9 +521,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .UpdateItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .UpdateItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -498,6 +537,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The collection ID, feature ID, and merge-patch document.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> PatchOgcItemAsync(OgcPatchItemRequest request, CancellationToken ct = default)
@@ -507,9 +547,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .PatchItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToJsonElement(request.Patch), ct)
+                .PatchItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToJsonElement(request.Patch), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -523,6 +563,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <param name="request">The collection ID and feature ID to delete.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="JsonDocument"/> containing the server response.</returns>
+    /// <remarks>The caller owns and must dispose the returned <see cref="JsonDocument"/>.</remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> DeleteOgcItemAsync(OgcDeleteItemRequest request, CancellationToken ct = default)
@@ -536,10 +577,17 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         lock (_grpcClientSync)
         {
-            _grpcClient?.Dispose();
-            _grpcClient = null;
+            if (_grpcClient.IsValueCreated)
+            {
+                _grpcClient.Value.Dispose();
+            }
         }
 
         _sdkHttp.Dispose();
@@ -571,9 +619,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
         var response = await GetGrpcClient()
-            .QueryFeaturesAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .QueryFeaturesAsync(GrpcRequestConverters.ToGrpcQueryRequest(request), ct)
             .ConfigureAwait(false);
-        return SdkGrpcTransportMappings.ToJsonDocument(response);
+        return GrpcRequestConverters.ToJsonDocument(response);
     }
 
     private async IAsyncEnumerable<JsonDocument> QueryFeaturesGrpcPagesAsync(
@@ -581,19 +629,19 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         [EnumeratorCancellation] CancellationToken ct)
     {
         await foreach (var page in GetGrpcClient()
-            .QueryFeaturesStreamAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .QueryFeaturesStreamAsync(GrpcRequestConverters.ToGrpcQueryRequest(request), ct)
             .ConfigureAwait(false))
         {
-            yield return SdkGrpcTransportMappings.ToJsonDocument(page);
+            yield return GrpcRequestConverters.ToJsonDocument(page);
         }
     }
 
     private async Task<JsonDocument> ApplyEditsGrpcAsync(ApplyEditsRequest request, CancellationToken ct)
     {
         var response = await GetGrpcClient()
-            .ApplyEditsAsync(SdkGrpcTransportMappings.ToGrpcApplyEditsRequest(request), ct)
+            .ApplyEditsAsync(GrpcRequestConverters.ToGrpcApplyEditsRequest(request), ct)
             .ConfigureAwait(false);
-        return SdkGrpcTransportMappings.ToJsonDocument(response);
+        return GrpcRequestConverters.ToJsonDocument(response);
     }
 
     private async Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
@@ -601,9 +649,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _featureServerClient
-                .QueryAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerQueryParams(request), ct)
+                .QueryAsync(request.ServiceId, request.LayerId, FeatureServerRequestConverters.ToFeatureServerQueryParams(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return FeatureServerRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaFeatureServerException ex)
         {
@@ -620,16 +668,16 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 HttpMethod.Post,
                 path,
                 query: null,
-                new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
+                new FormUrlEncodedContent(FeatureServerRequestConverters.ToFeatureServerEditFormParameters(request)),
                 ct).ConfigureAwait(false);
         }
 
         try
         {
             var response = await _featureServerClient
-                .ApplyEditsAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerEditRequest(request), ct)
+                .ApplyEditsAsync(request.ServiceId, request.LayerId, FeatureServerRequestConverters.ToFeatureServerEditRequest(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return FeatureServerRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaFeatureServerException ex)
         {
@@ -705,7 +753,8 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     {
         if (CanUseGrpcForQueries)
         {
-            var yieldedGrpcPage = false;
+            var grpcSucceeded = false;
+            var grpcFailed = false;
             await using var grpcEnumerator = GetGrpcClient().QueryPagesAsync(request, ct).GetAsyncEnumerator(ct);
 
             while (true)
@@ -715,23 +764,28 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 {
                     if (!await grpcEnumerator.MoveNextAsync().ConfigureAwait(false))
                     {
-                        if (yieldedGrpcPage)
-                        {
-                            yield break;
-                        }
-
+                        grpcSucceeded = true;
                         break;
                     }
 
                     nextPage = grpcEnumerator.Current;
                 }
-                catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure && !yieldedGrpcPage)
+                catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure && !grpcSucceeded)
                 {
+                    grpcFailed = true;
                     break;
                 }
 
-                yieldedGrpcPage = true;
+                grpcSucceeded = true;
                 yield return nextPage!;
+            }
+
+            // If gRPC produced any page (or completed cleanly with zero pages), do not
+            // duplicate by falling through to REST. Only run REST as a fallback when the
+            // gRPC stream failed before yielding any page.
+            if (!grpcFailed)
+            {
+                yield break;
             }
         }
 
@@ -810,29 +864,64 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         HttpContent? content,
         CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(method, BuildUri(relativePath, query));
+        using var request = new HttpRequestMessage(method, BuildAbsoluteOrRelativeUri(relativePath, query));
         request.Content = content;
+
+        // Apply per-request headers so we never mutate the caller-supplied HttpClient
+        // (which may be pooled by IHttpClientFactory).
+        request.Headers.UserAgent.Clear();
+        request.Headers.UserAgent.Add(_userAgent);
         await ApplyHttpAuthenticationAsync(request, ct).ConfigureAwait(false);
 
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-        var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        // Apply the configured timeout per request rather than mutating HttpClient.Timeout.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (_requestTimeout > TimeSpan.Zero && _requestTimeout != System.Threading.Timeout.InfiniteTimeSpan)
+        {
+            timeoutCts.CancelAfter(_requestTimeout);
+        }
+
+        using var response = await _http.SendAsync(request, timeoutCts.Token).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
+            // Buffer only the (already-bounded) error payload to surface a useful message.
+            var errorBody = await response.Content.ReadAsStringAsync(timeoutCts.Token).ConfigureAwait(false);
             throw new HonuaMobileApiException(
                 response.StatusCode,
                 $"Honua mobile request failed with status {(int)response.StatusCode} {response.ReasonPhrase}",
-                raw);
+                errorBody);
+        }
+
+        // Stream the body directly into JsonDocument.ParseAsync to avoid the
+        // double-allocation incurred by ReadAsStringAsync + JsonDocument.Parse on large
+        // feature payloads.
+        await using var contentStream = await response.Content.ReadAsStreamAsync(timeoutCts.Token).ConfigureAwait(false);
+        if (contentStream.CanSeek && contentStream.Length == 0)
+        {
+            return JsonDocument.Parse("{}");
         }
 
         try
         {
-            return JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
+            return await JsonDocument.ParseAsync(contentStream, default, timeoutCts.Token).ConfigureAwait(false);
         }
         catch (JsonException ex)
         {
             throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
         }
+    }
+
+    private Uri BuildAbsoluteOrRelativeUri(string relativePath, IReadOnlyDictionary<string, string?>? query)
+    {
+        var relative = BuildUri(relativePath, query);
+        if (_http.BaseAddress is not null || _baseUri is null)
+        {
+            return relative;
+        }
+
+        // The injected HttpClient has no BaseAddress (because we deliberately don't mutate
+        // it). Compose an absolute URI from the configured BaseUri for transport.
+        return new Uri(_baseUri, relative);
     }
 
     private async ValueTask ApplyHttpAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
@@ -890,10 +979,21 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
     internal HonuaGrpcClient GetGrpcClient()
     {
-        lock (_grpcClientSync)
+        if (Volatile.Read(ref _disposed) != 0)
         {
-            return _grpcClient ??= new HonuaGrpcClient(Options.Create(BuildGrpcClientOptions()));
+            throw new ObjectDisposedException(nameof(HonuaMobileClient));
         }
+
+        // Lazy<T> with ExecutionAndPublication guarantees single-construction even
+        // under concurrent access. We re-check the disposed flag after materialization
+        // to avoid resurrecting a value that races with Dispose().
+        var client = _grpcClient.Value;
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(nameof(HonuaMobileClient));
+        }
+
+        return client;
     }
 
     internal HonuaGrpcClientOptions BuildGrpcClientOptions()
@@ -980,12 +1080,13 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             return request.RequestUri;
         }
 
-        if (_http.BaseAddress is null)
+        var baseAddress = _http.BaseAddress ?? _baseUri;
+        if (baseAddress is null)
         {
             throw new InvalidOperationException("HonuaMobileClient requires an absolute BaseUri.");
         }
 
-        return new Uri(_http.BaseAddress, request.RequestUri);
+        return new Uri(baseAddress, request.RequestUri);
     }
 
     private void EnsureSecureTransport(Uri targetUri)
@@ -1035,29 +1136,48 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             $"{provider} request failed with status {(int)ex.StatusCode} {ex.Message}",
             ex.ResponseBody);
 
+    // Forwards SDK sub-client requests through the caller-supplied HttpClient so we share
+    // its transport pipeline (test stubs, IHttpClientFactory pooled handlers, etc.). We
+    // forward via a separate HttpClient because we have no other access to its handler
+    // pipeline; the alternative (a pure DelegatingHandler over a fresh HttpClientHandler)
+    // would bypass the caller's configured pipeline entirely.
+    //
+    // The previous implementation buffered every request body into a byte[] via
+    // ReadAsByteArrayAsync, which caused OOM for large uploads. This implementation
+    // shallow-clones the request and wraps the original content via StreamForwardingContent
+    // so the body streams once from its source. Auth headers and User-Agent are applied to
+    // the cloned request.
     private sealed class AuthenticatedSdkHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpClient _inner;
         private readonly Func<HttpRequestMessage, CancellationToken, ValueTask> _authenticate;
+        private readonly ProductInfoHeaderValue _userAgent;
 
         public AuthenticatedSdkHttpMessageHandler(
             HttpClient inner,
-            Func<HttpRequestMessage, CancellationToken, ValueTask> authenticate)
+            Func<HttpRequestMessage, CancellationToken, ValueTask> authenticate,
+            ProductInfoHeaderValue userAgent)
         {
             _inner = inner;
             _authenticate = authenticate;
+            _userAgent = userAgent;
         }
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
-            using var forwarded = await CloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            // A given HttpRequestMessage can only be sent through HttpClient.SendAsync once
+            // (HttpClient marks it as sent), so we clone before forwarding. The clone
+            // wraps — rather than buffers — the original content stream.
+            var forwarded = CloneWithoutBufferingContent(request);
+            forwarded.Headers.UserAgent.Clear();
+            forwarded.Headers.UserAgent.Add(_userAgent);
             await _authenticate(forwarded, cancellationToken).ConfigureAwait(false);
             return await _inner.SendAsync(forwarded, cancellationToken).ConfigureAwait(false);
         }
 
-        private static async Task<HttpRequestMessage> CloneRequestAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        private static HttpRequestMessage CloneWithoutBufferingContent(HttpRequestMessage request)
         {
             var clone = new HttpRequestMessage(request.Method, request.RequestUri)
             {
@@ -1072,8 +1192,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
 
             if (request.Content is not null)
             {
-                var bytes = await request.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                clone.Content = new ByteArrayContent(bytes);
+                clone.Content = new StreamForwardingContent(request.Content);
                 foreach (var header in request.Content.Headers)
                 {
                     clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
@@ -1081,6 +1200,37 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             }
 
             return clone;
+        }
+    }
+
+    // HttpContent that defers serialization to an inner HttpContent, so large request
+    // bodies stream through to the transport instead of being buffered into a byte[].
+    private sealed class StreamForwardingContent : HttpContent
+    {
+        private readonly HttpContent _inner;
+
+        public StreamForwardingContent(HttpContent inner)
+        {
+            _inner = inner;
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+            => _inner.CopyToAsync(stream);
+
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context, CancellationToken cancellationToken)
+            => _inner.CopyToAsync(stream, cancellationToken);
+
+        protected override bool TryComputeLength(out long length)
+        {
+            var contentLength = _inner.Headers.ContentLength;
+            if (contentLength.HasValue)
+            {
+                length = contentLength.Value;
+                return true;
+            }
+
+            length = 0;
+            return false;
         }
     }
 }

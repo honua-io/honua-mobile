@@ -1,3 +1,5 @@
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.Offline.GeoPackage;
 
 /// <summary>

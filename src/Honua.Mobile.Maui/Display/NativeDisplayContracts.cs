@@ -28,9 +28,11 @@ public sealed record HonuaNativeMapProjection
 
     public string DisplayCrs { get; init; } = WebMercator;
 
+    /// <summary>Returns <see langword="true"/> when source and display CRS differ.</summary>
     public bool RequiresProjection =>
         !string.Equals(SourceCrs, DisplayCrs, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Validates the projection invariants.</summary>
     public void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(SourceCrs);
@@ -63,6 +65,7 @@ public sealed record HonuaNativeMapLayer
 
     public IReadOnlyDictionary<string, object?> RendererHints { get; init; } = new Dictionary<string, object?>();
 
+    /// <summary>Validates the layer invariants.</summary>
     public void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
@@ -84,6 +87,7 @@ public sealed record HonuaNativeMapScene
 
     public IReadOnlyList<HonuaAnnotation> Annotations { get; init; } = [];
 
+    /// <summary>Validates the scene invariants, including layer uniqueness.</summary>
     public void Validate()
     {
         ArgumentNullException.ThrowIfNull(Layers);
@@ -116,6 +120,7 @@ public sealed record HonuaNativeMapViewState
 
     public double? ScaleDenominator { get; init; }
 
+    /// <summary>Validates the viewport invariants.</summary>
     public void Validate()
     {
         ArgumentNullException.ThrowIfNull(Extent);
@@ -151,14 +156,18 @@ public sealed record HonuaNativeMapViewState
 /// </summary>
 public interface IHonuaNativeMapAdapter
 {
+    /// <summary>Applies the supplied scene to the native renderer.</summary>
     Task ApplySceneAsync(HonuaNativeMapScene scene, CancellationToken ct = default);
 
+    /// <summary>Sets the current native viewport.</summary>
     Task SetViewAsync(HonuaNativeMapViewState view, CancellationToken ct = default);
 
+    /// <summary>Renders the queried features for a layer.</summary>
     Task RenderFeaturesAsync(
         HonuaNativeMapLayer layer,
         FeatureQueryResult features,
         CancellationToken ct = default);
 
+    /// <summary>Renders the supplied annotations on the native canvas.</summary>
     Task RenderAnnotationsAsync(IReadOnlyList<HonuaAnnotation> annotations, CancellationToken ct = default);
 }

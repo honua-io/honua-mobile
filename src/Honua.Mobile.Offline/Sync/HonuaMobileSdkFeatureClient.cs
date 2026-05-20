@@ -8,6 +8,7 @@ namespace Honua.Mobile.Offline.Sync;
 /// <summary>
 /// Backward-compatible offline namespace shim for the SDK feature adapter.
 /// </summary>
+[Obsolete("Use Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient instead. This shim will be removed after migration.", error: false)]
 public sealed class HonuaMobileSdkFeatureClient :
     IHonuaFeatureQueryClient,
     IHonuaFeatureEditClient,

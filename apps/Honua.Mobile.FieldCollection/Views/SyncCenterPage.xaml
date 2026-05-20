@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:diagnostics="clr-namespace:Honua.Mobile.FieldCollection.Services.Diagnostics"
              xmlns:services="clr-namespace:Honua.Mobile.FieldCollection.Services"
              xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels"
              x:Class="Honua.Mobile.FieldCollection.Views.SyncCenterPage"
@@ -133,6 +134,97 @@
                     </VerticalStackLayout>
                 </Frame>
 
+                <!-- Offline Diagnostics -->
+                <Frame Style="{StaticResource CardFrameStyle}"
+                       IsVisible="{Binding OfflineCacheDiagnostics, Converter={StaticResource IsNotNullConverter}}">
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0"
+                                   Text="Offline Diagnostics"
+                                   Style="{StaticResource SectionHeaderStyle}" />
+                            <Button Grid.Column="1"
+                                    Text="Refresh"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding LoadOfflineDiagnosticsCommand}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                            <Label Grid.Row="0" Grid.Column="0"
+                                   Text="{Binding OfflineCacheDiagnostics.PackageId, StringFormat='Package: {0}'}"
+                                   FontSize="13" FontAttributes="Bold"
+                                   LineBreakMode="TailTruncation" />
+                            <Label Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding OfflineCacheDiagnostics.PackageSizeDisplay, StringFormat='Size: {0}'}"
+                                   FontSize="13" />
+                            <Label Grid.Row="1" Grid.Column="0"
+                                   Text="{Binding OfflineCacheDiagnostics.MetadataCache.Status, StringFormat='Metadata: {0}'}"
+                                   FontSize="13" />
+                            <Label Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding OfflineCacheDiagnostics.FeatureCache.TotalFeatureCount, StringFormat='Features: {0}'}"
+                                   FontSize="13" />
+                            <Label Grid.Row="2" Grid.Column="0"
+                                   Text="{Binding OfflineCacheDiagnostics.LocalGeneration, StringFormat='Local gen: {0}'}"
+                                   FontSize="13" />
+                            <Label Grid.Row="2" Grid.Column="1"
+                                   Text="{Binding OfflineCacheDiagnostics.ServerGeneration, StringFormat='Server gen: {0}'}"
+                                   FontSize="13" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                            <StackLayout Grid.Row="0" Grid.Column="0">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.PendingCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Pending" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                            <StackLayout Grid.Row="0" Grid.Column="1">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.ClaimedCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Claimed" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                            <StackLayout Grid.Row="0" Grid.Column="2">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.SucceededCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Succeeded" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                            <StackLayout Grid.Row="1" Grid.Column="0">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.FailedCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Failed" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                            <StackLayout Grid.Row="1" Grid.Column="1">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.RetryCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Retry" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                            <StackLayout Grid.Row="1" Grid.Column="2">
+                                <Label Text="{Binding OfflineCacheDiagnostics.Operations.ConflictCount}"
+                                       FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" />
+                                <Label Text="Conflict" FontSize="11" HorizontalOptions="Center" />
+                            </StackLayout>
+                        </Grid>
+
+                        <CollectionView ItemsSource="{Binding OfflineSources}"
+                                        IsVisible="{Binding OfflineSources.Count, Converter={StaticResource IntToBoolConverter}}"
+                                        MaximumHeightRequest="180">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="diagnostics:OfflineSourceDiagnostics">
+                                    <Grid ColumnDefinitions="*,Auto" Padding="4" ColumnSpacing="8">
+                                        <StackLayout Grid.Column="0">
+                                            <Label Text="{Binding DisplayName}" FontSize="13" FontAttributes="Bold" />
+                                            <Label Text="{Binding SourceId, StringFormat='Source {0}'}"
+                                                   FontSize="11" TextColor="{StaticResource Gray600}" />
+                                        </StackLayout>
+                                        <Label Grid.Column="1"
+                                               Text="{Binding FeatureCount, StringFormat='{0} features'}"
+                                               FontSize="12"
+                                               VerticalOptions="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Frame>
+
                 <!-- Active Conflicts -->
                 <Frame Style="{StaticResource CardFrameStyle}"
                        IsVisible="{Binding ActiveConflicts.Count, Converter={StaticResource IntToBoolConverter}}">
@@ -158,6 +250,51 @@
                                                 Command="{Binding Source={RelativeSource AncestorType={x:Type vm:SyncCenterViewModel}}, Path=ResolveConflictCommand}"
                                                 CommandParameter="{Binding .}" />
                                     </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Conflict Review Diagnostics -->
+                <Frame Style="{StaticResource CardFrameStyle}"
+                       IsVisible="{Binding ConflictReviewItems.Count, Converter={StaticResource IntToBoolConverter}}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Conflict Review" Style="{StaticResource SectionHeaderStyle}"
+                               TextColor="{StaticResource Warning}" />
+
+                        <CollectionView ItemsSource="{Binding ConflictReviewItems}"
+                                        MaximumHeightRequest="260">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="diagnostics:OfflineConflictReviewItem">
+                                    <VerticalStackLayout Padding="6" Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Label Grid.Column="0"
+                                                   Text="{Binding FeatureId, StringFormat='Feature {0}'}"
+                                                   FontSize="13" FontAttributes="Bold" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding Status}"
+                                                   FontSize="12" />
+                                        </Grid>
+                                        <Label Text="{Binding OperationId, StringFormat='Operation {0}'}"
+                                               FontSize="11"
+                                               TextColor="{StaticResource Gray600}"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Reason}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray600}" />
+                                        <Label Text="{Binding LocalState, StringFormat='Local: {0}'}"
+                                               FontSize="11"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding ServerState, StringFormat='Server: {0}'}"
+                                               FontSize="11"
+                                               LineBreakMode="TailTruncation" />
+                                        <Button Text="Review"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                HorizontalOptions="End"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:SyncCenterViewModel}}, Path=ReviewConflictCommand}"
+                                                CommandParameter="{Binding .}" />
+                                    </VerticalStackLayout>
                                 </DataTemplate>
                             </CollectionView.ItemTemplate>
                         </CollectionView>

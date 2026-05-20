@@ -30,22 +30,6 @@ This template creates a complete field data collection application with:
 - Layer management and visualization
 - Spatial query tools
 
-<!--#if (enableIoT)-->
-### 🤖 **IoT Sensor Integration** (Enabled)
-- Bluetooth LE environmental sensors
-- Auto-discovery and connection
-- Real-time sensor data integration with forms
-- Support for temperature, humidity, air quality sensors
-<!--#endif-->
-
-<!--#if (enableAR)-->
-### 🥽 **Augmented Reality** (Enabled)
-- AR visualization of underground utilities
-- Infrastructure overlay on camera feed
-- Interactive 3D models with distance measurement
-- Photo capture with AR overlay
-<!--#endif-->
-
 ### 🔄 **Intelligent Sync & Offline**
 - True offline-first architecture
 - Automatic sync when network available
@@ -62,16 +46,36 @@ This template creates a complete field data collection application with:
 
 ### 1. Configure Your Server
 
-Update the server connection in `MauiProgram.cs`:
+Update the server connection and offline package manifest in `MauiProgram.cs`:
 
 ```csharp
-config.ServerEndpoint = "https://your-honua-server.com";
-config.ApiKey = "your-api-key-here";
+builder.Services
+    .AddHonuaMobileSdk(new HonuaMobileClientOptions
+    {
+        BaseUri = new Uri("https://api.honua.io"),
+        ApiKey = "your-api-key-here",
+    })
+    .AddHonuaSdkGeoPackageOfflineSync(
+        new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-fieldcollector.gpkg"),
+            DefaultFeatureCacheTtl = TimeSpan.FromDays(7),
+        },
+        CreateOfflinePackageManifest());
 ```
+
+The template uses the SDK-backed offline path by default. `Honua.Sdk.Offline`
+owns the portable package manifest and sync engine; the mobile app still owns
+GeoPackage storage, native file placement, connectivity, permissions, and
+background scheduling.
+
+The checked-in manifest targets the cloud/staging fixture from
+`honua-server#895`: service `mobile_offline_demo`, editable layer `68910`, and
+readonly context layer `68920`.
 
 ### 2. Customize Your Form
 
-The app is configured to use form ID `"site_inspection"`. To use your own form:
+The app is configured to use form ID `"field-site-inspection"`. To use your own form:
 
 1. Create a form schema on your Honua server
 2. Update the `FormId` in `MainPage.xaml`:
@@ -97,9 +101,9 @@ dotnet build
 dotnet build -c Release
 
 # Deploy to device
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 ## 📱 Platform Support
@@ -141,12 +145,6 @@ Add custom form fields by extending the schema on your server. The app supports:
 - Checkboxes and switches
 - Digital signatures
 - Barcode/QR scanning
-<!--#if (enableIoT)-->
-- IoT sensor readings
-<!--#endif-->
-<!--#if (enableAR)-->
-- AR measurements and annotations
-<!--#endif-->
 
 ### Adding New Pages
 
@@ -165,41 +163,14 @@ public partial class CustomPage : ContentPage
 }
 ```
 
-2. Add navigation in `AppShell.xaml`:
-
-```xml
-<ShellContent Title="Custom" Icon="custom.png" Route="custom" ContentTemplate="{DataTemplate local:CustomPage}" />
-```
-
-### Advanced Features
-
-<!--#if (enableIoT)-->
-#### IoT Sensor Configuration
-
-Configure sensor types in `MauiProgram.cs`:
+2. Register and navigate to the page from your existing view:
 
 ```csharp
-config.IoT.SensorTypes = new[]
-{
-    SensorType.Environmental,
-    SensorType.AirQuality,
-    SensorType.Noise,
-    SensorType.Custom
-};
+builder.Services.AddTransient<CustomPage>();
+
+await Navigation.PushAsync(
+    Handler.MauiContext.Services.GetRequiredService<CustomPage>());
 ```
-<!--#endif-->
-
-<!--#if (enableAR)-->
-#### AR Configuration
-
-Customize AR settings:
-
-```csharp
-config.AR.MaxRenderDistance = 200; // meters
-config.AR.EnableUtilityVisualization = true;
-config.AR.EnableInfrastructureOverlay = true;
-```
-<!--#endif-->
 
 ## 🔧 Development Tips
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Honua.Mobile.Offline.GeoPackage;
 using Microsoft.Data.Sqlite;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -219,7 +220,11 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     [Fact]
     public async Task InitializeAsync_HandlesDatabasePathsWithConnectionStringCharacters()
     {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-mobile-{Guid.NewGuid():N};Mode=Memory.gpkg");
+        // Use connection-string delimiter characters that are legal in filenames on
+        // every supported platform (Windows forbids ';' and '"', macOS forbids ':').
+        // '=' and ' ' are both legal in filenames everywhere yet meaningful inside
+        // a SQLite connection string, which exercises the same escaping path.
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-mobile-{Guid.NewGuid():N} Mode=Memory.gpkg");
 
         try
         {

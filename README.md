@@ -24,8 +24,31 @@ Current mobile SDK roadmap coordination is tracked from
 // In MauiProgram.cs
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
-using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+using SdkOfflineSyncEngineOptions = Honua.Sdk.Offline.OfflineSyncEngineOptions;
+
+var offlineManifest = new OfflinePackageManifest
+{
+    PackageId = "mobile-offline-field-ops-v1",
+    Sources =
+    [
+        new OfflineSourceDescriptor
+        {
+            SourceId = "mobile_offline_demo/FeatureServer/68910",
+            Source = new SourceDescriptor
+            {
+                Id = "mobile-offline-field-sites",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+            },
+            Where = "1=1",
+            ReturnGeometry = true,
+            PageSize = 100,
+        },
+    ],
+};
 
 builder.Services
     .AddHonuaMobileAuth()
@@ -40,14 +63,15 @@ builder.Services
     .AddHonuaScenes()
     .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
-    .AddHonuaGeoPackageOfflineSync(
+    .AddHonuaSdkGeoPackageOfflineSync(
         new GeoPackageSyncStoreOptions
         {
             DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-offline.gpkg"),
         },
-        new OfflineSyncEngineOptions
+        offlineManifest,
+        new SdkOfflineSyncEngineOptions
         {
-            ConflictStrategy = SyncConflictStrategy.ClientWins,
+            ConflictStrategy = OfflineConflictStrategy.ClientWins,
             BatchSize = 50,
         })
     .AddHonuaMapAreaDownload()
@@ -144,22 +168,21 @@ var terrainUrl = scene.TerrainUrl;
 ```
 src/
   Honua.Embed/                Embeddable map web component package
-    tests/                    Web component DOM behavior tests (17 tests)
+    tests/                    Web component DOM behavior tests
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Field/         SDK field workflow adapters
   Honua.Mobile.Offline/       GeoPackage sync engine
   Honua.Mobile.Maui/          MAUI platform integration
-  Honua.Mobile.IoT/           IoT sensor abstractions (interface-only, future)
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (79 tests)
-  Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
-  Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
-  Honua.Mobile.ServerIntegration.Tests/ Loopback Honua server integration surface (8 tests)
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location (32 tests)
-  Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query (7 tests)
+  Honua.Mobile.Sdk.Tests/             HTTP client, transport security, gRPC translation, routing, scenes
+  Honua.Mobile.Field.Tests/           SDK field adapter validation, calculated fields, workflow
+  Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics
+  Honua.Mobile.ServerIntegration.Tests/ Loopback Honua server integration surface
+  Honua.Mobile.Offline.Tests/         Sync engine, conflicts, map download, GeoPackage
+  Honua.Mobile.Maui.Tests/            MAUI integration helpers, map annotations, native display, location
+  Honua.Mobile.Smoke.Tests/           End-to-end smoke paths and optional live Honua query
 proto/
   honua/v1/                   gRPC protocol definitions
 ```
@@ -193,9 +216,6 @@ for provisioning Honua locally.
 Production-ready foundation for offline sync, forms, and gRPC transport.
 .NET test coverage across SDK, Field, FieldCollection, server integration,
 Offline, MAUI, and Smoke projects, plus DOM tests for the embeddable map package.
-
-The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
-no implementation yet.
 
 ## Documentation
 

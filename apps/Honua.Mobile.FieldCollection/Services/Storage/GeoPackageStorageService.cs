@@ -1,7 +1,9 @@
 using SQLite;
+using System.Globalization;
 using System.Text.Json;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
@@ -534,6 +536,28 @@ public class GeoPackageStorageService : IDisposable
         }
     }
 
+    public async Task MarkConflictDeferredAsync(string conflictId, string? reason)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE conflict_records
+                SET resolution = ?, resolved_data = ?, resolved_at = NULL
+                WHERE id = ? AND resolved_at IS NULL
+                """,
+                StorageConflictResolution.Manual,
+                reason,
+                conflictId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     #endregion
 
     #region Spatial Queries
@@ -767,6 +791,141 @@ public class GeoPackageStorageService : IDisposable
         }
     }
 
+    public async Task<OfflineCacheDiagnostics> GetOfflineCacheDiagnosticsAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var fileInfo = new FileInfo(_databasePath);
+            var metadataRows = await _connection.Table<LayerMetadata>().ToListAsync();
+            var featureRows = await _connection.QueryAsync<LayerFeatureCount>(
+                "SELECT layer_id AS layer_id, COUNT(*) AS feature_count FROM local_features GROUP BY layer_id ORDER BY layer_id");
+            var operationCounts = await _connection.QueryAsync<OperationStatusCount>(
+                "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM change_records GROUP BY sync_status");
+            var unresolvedConflictCount = await _connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM conflict_records WHERE resolved_at IS NULL");
+            var conflicts = await _connection.QueryAsync<ConflictRecord>(
+                "SELECT * FROM conflict_records WHERE resolved_at IS NULL ORDER BY created_at LIMIT 10");
+            var latestSession = await _connection.QueryAsync<SyncSession>(
+                "SELECT * FROM sync_sessions ORDER BY COALESCE(end_time, start_time) DESC LIMIT 1");
+
+            var featureCounts = featureRows.ToDictionary(row => row.LayerId, row => row.FeatureCount);
+            var metadataSources = metadataRows
+                .OrderBy(row => row.Id)
+                .Select(row => new OfflineSourceDiagnostics
+                {
+                    SourceId = row.Id.ToString(CultureInfo.InvariantCulture),
+                    DisplayName = string.IsNullOrWhiteSpace(row.Name) ? $"Layer {row.Id}" : row.Name,
+                    FeatureCount = featureCounts.GetValueOrDefault(row.Id),
+                    LastSyncTime = row.LastSync,
+                    SourceUrl = DiagnosticRedactor.RedactUrl(row.ServerUrl)
+                })
+                .ToList();
+
+            var featureSources = featureCounts
+                .OrderBy(row => row.Key)
+                .Select(row =>
+                {
+                    var metadata = metadataRows.FirstOrDefault(layer => layer.Id == row.Key);
+                    return new OfflineSourceDiagnostics
+                    {
+                        SourceId = row.Key.ToString(CultureInfo.InvariantCulture),
+                        DisplayName = metadata == null || string.IsNullOrWhiteSpace(metadata.Name)
+                            ? $"Layer {row.Key}"
+                            : metadata.Name,
+                        FeatureCount = row.Value,
+                        LastSyncTime = metadata?.LastSync,
+                        SourceUrl = DiagnosticRedactor.RedactUrl(metadata?.ServerUrl)
+                    };
+                })
+                .ToList();
+
+            var operations = MapOperationCounts(operationCounts, unresolvedConflictCount);
+            var session = latestSession.FirstOrDefault();
+            var lastSyncTimes = metadataRows
+                .Select(row => row.LastSync)
+                .Concat(latestSession.Select(row => (DateTime?)(row.EndTime ?? row.StartTime)))
+                .Where(value => value.HasValue)
+                .ToList();
+            var lastSyncTime = lastSyncTimes.Count == 0 ? null : lastSyncTimes.Max();
+            var metadataCreatedTimes = metadataRows.Select(row => row.CreatedAt).ToList();
+
+            return new OfflineCacheDiagnostics
+            {
+                PackageId = Path.GetFileNameWithoutExtension(_databasePath),
+                PackageFileName = DiagnosticRedactor.RedactPath(_databasePath),
+                PackageSizeBytes = fileInfo.Exists ? fileInfo.Length : 0,
+                LastSyncTime = lastSyncTime,
+                LocalGeneration = session?.LocalGeneration,
+                ServerGeneration = session?.ServerGeneration,
+                MetadataCache = new MetadataCacheDiagnostics
+                {
+                    Status = metadataRows.Count == 0 ? "Missing" : "Available",
+                    SourceCount = metadataRows.Count,
+                    LastUpdatedUtc = metadataCreatedTimes.Count == 0 ? null : metadataCreatedTimes.Max(),
+                    Sources = metadataSources
+                },
+                FeatureCache = new FeatureCacheDiagnostics
+                {
+                    Status = featureRows.Count == 0 ? "Empty" : "Available",
+                    SourceCount = featureRows.Count,
+                    TotalFeatureCount = featureRows.Sum(row => row.FeatureCount),
+                    SizeBytes = fileInfo.Exists ? fileInfo.Length : 0,
+                    Sources = featureSources
+                },
+                Operations = operations,
+                ConflictReview = conflicts.Select(MapConflictReviewItem).ToList()
+            };
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static OfflineOperationDiagnostics MapOperationCounts(
+        IEnumerable<OperationStatusCount> counts,
+        int unresolvedConflictCount)
+    {
+        var byStatus = counts.ToDictionary(row => row.SyncStatus, row => row.ItemCount);
+        return new OfflineOperationDiagnostics
+        {
+            PendingCount = byStatus.GetValueOrDefault(StorageSyncStatus.PendingUpload) +
+                byStatus.GetValueOrDefault(StorageSyncStatus.PendingDownload),
+            ClaimedCount = 0,
+            SucceededCount = byStatus.GetValueOrDefault(StorageSyncStatus.Synced),
+            FailedCount = byStatus.GetValueOrDefault(StorageSyncStatus.Error),
+            RetryCount = 0,
+            ConflictCount = unresolvedConflictCount + byStatus.GetValueOrDefault(StorageSyncStatus.Conflict)
+        };
+    }
+
+    private static OfflineConflictReviewItem MapConflictReviewItem(ConflictRecord conflict)
+    {
+        return new OfflineConflictReviewItem
+        {
+            ConflictId = conflict.Id,
+            OperationId = conflict.Id,
+            SourceId = conflict.LayerId.ToString(CultureInfo.InvariantCulture),
+            FeatureId = conflict.FeatureId,
+            ConflictType = conflict.ConflictType.ToString(),
+            Status = conflict.Resolution == StorageConflictResolution.Manual && conflict.ResolvedAt == null
+                ? "Deferred"
+                : "Needs review",
+            Reason = $"Local v{conflict.LocalVersion} conflicts with server v{conflict.ServerVersion}.",
+            LocalState = DiagnosticRedactor.RedactJson(conflict.LocalData),
+            ServerState = DiagnosticRedactor.RedactJson(conflict.ServerData),
+            DetectedAtUtc = conflict.CreatedAt,
+            ResolutionActions =
+            [
+                "AcceptLocal",
+                "AcceptServer",
+                "Manual"
+            ]
+        };
+    }
+
     public async Task CompactAsync()
     {
         await EnsureInitializedAsync();
@@ -810,4 +969,22 @@ internal sealed class TableColumnInfo
 
     [Column("pk")]
     public int PrimaryKey { get; set; }
+}
+
+internal sealed class LayerFeatureCount
+{
+    [Column("layer_id")]
+    public int LayerId { get; set; }
+
+    [Column("feature_count")]
+    public int FeatureCount { get; set; }
+}
+
+internal sealed class OperationStatusCount
+{
+    [Column("sync_status")]
+    public StorageSyncStatus SyncStatus { get; set; }
+
+    [Column("item_count")]
+    public int ItemCount { get; set; }
 }

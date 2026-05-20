@@ -80,6 +80,16 @@ const DEFAULT_HEIGHT = 1200;
 const DEFAULT_PITCH = -45;
 const ELEMENT_NAME = 'honua-scene';
 
+const ISO_8601_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+const SAFE_BASE_URL_SCHEMES = new Set(['http:', 'https:', 'blob:']);
+
+interface ActiveIonTokenRegistration {
+  element: HonuaSceneElement;
+  token: string;
+}
+
+let activeIonTokenRegistration: ActiveIonTokenRegistration | null = null;
+
 const sceneTemplate = document.createElement('template');
 sceneTemplate.innerHTML = `
   <style>
@@ -219,6 +229,7 @@ export class HonuaSceneElement extends HTMLElement {
   #assetResolver: HonuaScenePackageAssetResolverInput | null = null;
   readonly #extensionHost: HonuaEmbedExtensionHost<'scene'>;
   #loadVersion = 0;
+  #cesiumWidgetsLink: HTMLLinkElement | null = null;
 
   constructor() {
     super();
@@ -267,6 +278,11 @@ export class HonuaSceneElement extends HTMLElement {
     this.#loadVersion += 1;
     this.#extensionHost.disconnect();
     this.#destroyCesium();
+    this.#removeCesiumStyles();
+
+    if (activeIonTokenRegistration?.element === this) {
+      activeIonTokenRegistration = null;
+    }
   }
 
   attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
@@ -455,7 +471,18 @@ export class HonuaSceneElement extends HTMLElement {
       };
     }
 
-    if (isExpired(config.packageExpiresAtUtc)) {
+    const expiryState = evaluatePackageExpiry(config.packageExpiresAtUtc);
+    if (expiryState === 'invalid') {
+      this.#emitLoadError(
+        'package-cache',
+        `The offline scene package expiry '${config.packageExpiresAtUtc}' is not a valid ISO-8601 UTC timestamp.`,
+        undefined,
+        'invalid-package',
+      );
+      return null;
+    }
+
+    if (expiryState === 'expired') {
       this.#emitLoadError(
         'package-cache',
         'The offline scene package has expired and must be refreshed before rendering.',
@@ -587,21 +614,56 @@ export class HonuaSceneElement extends HTMLElement {
   }
 
   #configureCesiumAssets(cesium: CesiumModule, config: HonuaSceneConfig): void {
-    const baseUrl = config.cesiumBaseUrl ?? defaultCesiumBaseUrl();
+    const baseUrl = this.#resolveSafeCesiumBaseUrl(config);
     (cesium.buildModuleUrl as BuildModuleUrl).setBaseUrl?.(baseUrl);
 
     if (typeof window !== 'undefined') {
       (window as Window & { CESIUM_BASE_URL?: string }).CESIUM_BASE_URL = baseUrl;
     }
 
-    cesium.Ion.defaultAccessToken = config.ionToken ?? '';
+    // Cesium exposes Ion.defaultAccessToken as a module-global; multiple
+    // <honua-scene> elements that use different tokens collide. Only set the
+    // global when a token is supplied so removing the attribute (or mounting
+    // a second widget without one) no longer clobbers another widget's token.
+    if (config.ionToken) {
+      const previous = activeIonTokenRegistration;
+      if (previous && previous.element !== this && previous.token !== config.ionToken) {
+        console.warn(
+          '[honua-scene] Cesium Ion.defaultAccessToken is a module global; the token set by another mounted <honua-scene> is being overwritten.',
+        );
+      }
+      cesium.Ion.defaultAccessToken = config.ionToken;
+      activeIonTokenRegistration = { element: this, token: config.ionToken };
+    } else if (activeIonTokenRegistration?.element === this) {
+      // We previously owned the token. Release ownership but do not clear the
+      // global string — another widget on the page may still depend on it.
+      activeIonTokenRegistration = null;
+    }
+  }
+
+  #resolveSafeCesiumBaseUrl(config: HonuaSceneConfig): string {
+    if (!config.cesiumBaseUrl) {
+      return defaultCesiumBaseUrl();
+    }
+
+    if (isSafeCesiumBaseUrl(config.cesiumBaseUrl)) {
+      return config.cesiumBaseUrl;
+    }
+
+    console.warn(
+      `[honua-scene] Ignoring unsafe cesium-base-url '${config.cesiumBaseUrl}'; only http(s), blob, or same-origin URLs are permitted.`,
+    );
+    return defaultCesiumBaseUrl();
   }
 
   #appendCesiumStyles(config: HonuaSceneConfig): void {
-    const href = `${config.cesiumBaseUrl ?? defaultCesiumBaseUrl()}Widgets/widgets.css`;
-    const existing = this.#root.querySelector<HTMLLinkElement>('link[data-cesium-widgets]');
+    const baseUrl = this.#resolveSafeCesiumBaseUrl(config);
+    const href = `${baseUrl}Widgets/widgets.css`;
+    const existing = this.#cesiumWidgetsLink
+      ?? this.#root.querySelector<HTMLLinkElement>('link[data-cesium-widgets]');
     if (existing) {
       existing.href = href;
+      this.#cesiumWidgetsLink = existing;
       return;
     }
 
@@ -610,6 +672,14 @@ export class HonuaSceneElement extends HTMLElement {
     link.href = href;
     link.dataset.cesiumWidgets = 'true';
     this.#root.append(link);
+    this.#cesiumWidgetsLink = link;
+  }
+
+  #removeCesiumStyles(): void {
+    const link = this.#cesiumWidgetsLink
+      ?? this.#root.querySelector<HTMLLinkElement>('link[data-cesium-widgets]');
+    link?.remove();
+    this.#cesiumWidgetsLink = null;
   }
 
   #render(): void {
@@ -742,13 +812,48 @@ function hasSceneData(config: HonuaSceneConfig): boolean {
   );
 }
 
-function isExpired(expiresAtUtc: string | null): boolean {
+type PackageExpiryState = 'none' | 'valid' | 'expired' | 'invalid';
+
+function evaluatePackageExpiry(expiresAtUtc: string | null): PackageExpiryState {
   if (!expiresAtUtc) {
+    return 'none';
+  }
+
+  if (!ISO_8601_PATTERN.test(expiresAtUtc)) {
+    return 'invalid';
+  }
+
+  const expiresAt = new Date(expiresAtUtc).getTime();
+  if (!Number.isFinite(expiresAt)) {
+    return 'invalid';
+  }
+
+  return expiresAt <= Date.now() ? 'expired' : 'valid';
+}
+
+function isSafeCesiumBaseUrl(rawUrl: string): boolean {
+  const value = rawUrl.trim();
+  if (!value) {
     return false;
   }
 
-  const expiresAt = Date.parse(expiresAtUtc);
-  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+  // Allow same-origin absolute paths and relative paths (no scheme).
+  if (value.startsWith('/') && !value.startsWith('//')) {
+    return true;
+  }
+
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    // No scheme present; treat as relative/same-origin path.
+    return true;
+  }
+
+  const base = typeof location === 'undefined' ? 'http://localhost' : location.href;
+  try {
+    const parsed = new URL(value, base);
+    return SAFE_BASE_URL_SCHEMES.has(parsed.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function emptyToNull(value: string | null): string | null {

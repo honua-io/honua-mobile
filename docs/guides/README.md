@@ -10,8 +10,12 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Embeddable Map](embeddable-map.md) | Framework-agnostic `<honua-map>` web component for ISV integrations |
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
 | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) | Server, SDK, platform, offline, and edition dependencies for scene and AR work |
+| [Mobile Android Internal Distribution](mobile-android-internal-distribution.md) | Protected Android signing, Google Play internal testing, Internal App Sharing, and store preflight |
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
+| [Mobile DevOps Builds](mobile-devops-builds.md) | Phone-installable artifacts, release metadata, and app-store workflow entry points |
 | [Mobile SDK Backlog Roadmap](mobile-sdk-backlog-roadmap.md) | Epic #1 backlog sequencing, acceptance matrix, dependencies, and closure readiness |
+| [Mobile Store Prerequisites](mobile-store-prereqs.md) | Google Play, App Store Connect, signing, secret, owner, and rotation requirements |
+| [Mobile TestFlight Builds](mobile-testflight-builds.md) | iOS TestFlight signing, App Store Connect upload, tester install, and rollback path |
 | [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, Mapsui evaluation, and device location/geofencing lifecycle |
 | [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |

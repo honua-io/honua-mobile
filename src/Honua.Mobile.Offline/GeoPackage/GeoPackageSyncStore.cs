@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Honua.Mobile.Offline;
 using Honua.Sdk.Abstractions.Scenes;
 using Microsoft.Data.Sqlite;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.Offline.GeoPackage;
 
@@ -16,6 +17,8 @@ namespace Honua.Mobile.Offline.GeoPackage;
 public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
 {
     private readonly GeoPackageSyncStoreOptions _options;
+    private readonly SemaphoreSlim _initializeLock = new(1, 1);
+    private bool _initialized;
 
     /// <summary>
     /// Initializes a new <see cref="GeoPackageSyncStore"/> with the specified options.
@@ -30,6 +33,30 @@ public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
     /// <inheritdoc />
     public async Task InitializeAsync(CancellationToken ct = default)
     {
+        if (_initialized)
+        {
+            return;
+        }
+
+        await _initializeLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            await InitializeCoreAsync(ct).ConfigureAwait(false);
+            _initialized = true;
+        }
+        finally
+        {
+            _initializeLock.Release();
+        }
+    }
+
+    private async Task InitializeCoreAsync(CancellationToken ct)
+    {
         if (_options.AutoCreateDirectory)
         {
             var directory = Path.GetDirectoryName(_options.DatabasePath);
@@ -41,6 +68,7 @@ public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         var sql = @"
 CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys (
@@ -196,6 +224,7 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -252,6 +281,7 @@ ON CONFLICT(operation_id) DO UPDATE SET
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
@@ -328,6 +358,7 @@ ORDER BY priority ASC, created_at_utc ASC;
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM honua_sync_queue WHERE status IN ('pending', 'retry');";
@@ -340,6 +371,7 @@ ORDER BY priority ASC, created_at_utc ASC;
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM honua_sync_queue WHERE operation_id = $operation_id;";
@@ -352,6 +384,7 @@ ORDER BY priority ASC, created_at_utc ASC;
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -370,6 +403,7 @@ WHERE operation_id = $operation_id;
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -393,6 +427,7 @@ WHERE operation_id = $operation_id;
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -415,6 +450,7 @@ ON CONFLICT(cursor_key) DO UPDATE SET
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT cursor_value FROM honua_sync_state WHERE cursor_key = $cursor_key LIMIT 1;";
@@ -431,6 +467,7 @@ ON CONFLICT(cursor_key) DO UPDATE SET
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         var bbox = HonuaMobileOfflineJson.Serialize(mapArea.BoundingBox);
 
@@ -463,6 +500,7 @@ ON CONFLICT(area_id) DO UPDATE SET
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT area_id, name, bbox_json, min_zoom, max_zoom, geopackage_path, updated_at_utc FROM honua_map_areas ORDER BY name ASC;";
@@ -496,6 +534,7 @@ ON CONFLICT(area_id) DO UPDATE SET
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         var extent = scenePackage.Extent is null
             ? null
@@ -589,6 +628,7 @@ ON CONFLICT(package_id) DO UPDATE SET
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -632,6 +672,7 @@ ORDER BY scene_id ASC, package_id ASC;
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM honua_scene_packages WHERE package_id = $package_id;";
@@ -649,12 +690,12 @@ ORDER BY scene_id ASC, package_id ASC;
         using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.upsert", ActivityKind.Internal);
         activity?.SetTag("layer_key", layerKey);
 
-        var objectId = ExtractObjectId(featureJson);
-        var extent = ExtractFeatureExtent(featureJson);
+        var (objectId, extent) = ExtractObjectIdAndExtent(featureJson);
         var expiresAtUtc = ResolveFeatureExpiresAtUtc(layerKey);
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
@@ -710,6 +751,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
@@ -750,6 +792,7 @@ ON CONFLICT(layer_key, object_id) DO UPDATE SET
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -792,6 +835,7 @@ ORDER BY object_id ASC;
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = @"
@@ -844,6 +888,7 @@ ORDER BY f.object_id ASC;
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ApplyConnectionPragmasAsync(connection, ct).ConfigureAwait(false);
 
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
@@ -907,70 +952,32 @@ ORDER BY f.object_id ASC;
         return _options.TimeProvider.GetUtcNow().Add(ttl.Value);
     }
 
-    private static FeatureExtent? ExtractFeatureExtent(string featureJson)
+    private static (long ObjectId, FeatureExtent? Extent) ExtractObjectIdAndExtent(string featureJson)
     {
         using var doc = JsonDocument.Parse(featureJson);
         var root = doc.RootElement;
+
+        var objectId = ReadObjectIdFromRoot(root);
+
         var geometry = root.TryGetProperty("geometry", out var geometryElement)
             ? geometryElement
             : root;
 
+        FeatureExtent? extent = null;
         if (TryReadPointExtent(geometry, out var pointExtent))
         {
-            return pointExtent;
+            extent = pointExtent;
         }
-
-        if (TryReadEnvelopeExtent(geometry, out var envelopeExtent))
+        else if (TryReadEnvelopeExtent(geometry, out var envelopeExtent))
         {
-            return envelopeExtent;
+            extent = envelopeExtent;
         }
 
-        return null;
+        return (objectId, extent);
     }
 
-    private static bool TryReadPointExtent(JsonElement geometry, out FeatureExtent extent)
+    private static long ReadObjectIdFromRoot(JsonElement root)
     {
-        if (TryGetDouble(geometry, "x", out var x) && TryGetDouble(geometry, "y", out var y))
-        {
-            extent = new FeatureExtent(x, y, x, y);
-            return true;
-        }
-
-        extent = default;
-        return false;
-    }
-
-    private static bool TryReadEnvelopeExtent(JsonElement geometry, out FeatureExtent extent)
-    {
-        if (TryGetDouble(geometry, "xmin", out var minX) &&
-            TryGetDouble(geometry, "ymin", out var minY) &&
-            TryGetDouble(geometry, "xmax", out var maxX) &&
-            TryGetDouble(geometry, "ymax", out var maxY))
-        {
-            extent = new FeatureExtent(minX, minY, maxX, maxY);
-            return true;
-        }
-
-        extent = default;
-        return false;
-    }
-
-    private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
-    {
-        if (element.TryGetProperty(propertyName, out var property) && property.TryGetDouble(out value))
-        {
-            return true;
-        }
-
-        value = 0;
-        return false;
-    }
-
-    private static long ExtractObjectId(string featureJson)
-    {
-        using var doc = JsonDocument.Parse(featureJson);
-        var root = doc.RootElement;
-
         if (root.TryGetProperty("attributes", out var attributes))
         {
             if (attributes.TryGetProperty("OBJECTID", out var oid) && oid.TryGetInt64(out var id))
@@ -1015,6 +1022,44 @@ ORDER BY f.object_id ASC;
         }
 
         throw new InvalidOperationException("Feature JSON does not contain a recognizable object ID field (OBJECTID, objectid, ObjectID, or FID).");
+    }
+
+    private static bool TryReadPointExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (TryGetDouble(geometry, "x", out var x) && TryGetDouble(geometry, "y", out var y))
+        {
+            extent = new FeatureExtent(x, y, x, y);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static bool TryReadEnvelopeExtent(JsonElement geometry, out FeatureExtent extent)
+    {
+        if (TryGetDouble(geometry, "xmin", out var minX) &&
+            TryGetDouble(geometry, "ymin", out var minY) &&
+            TryGetDouble(geometry, "xmax", out var maxX) &&
+            TryGetDouble(geometry, "ymax", out var maxY))
+        {
+            extent = new FeatureExtent(minX, minY, maxX, maxY);
+            return true;
+        }
+
+        extent = default;
+        return false;
+    }
+
+    private static bool TryGetDouble(JsonElement element, string propertyName, out double value)
+    {
+        if (element.TryGetProperty(propertyName, out var property) && property.TryGetDouble(out value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private static async Task ExecuteTransactionCommandAsync(SqliteConnection connection, string sql, CancellationToken ct)
@@ -1352,8 +1397,24 @@ LIMIT $limit;
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = _options.DatabasePath,
+            // Microsoft.Data.Sqlite supports a connection pool keyed on the
+            // connection string; enabling it avoids reopening the file for every
+            // short-lived per-method connection used by this store.
+            Pooling = true,
         };
 
         return new SqliteConnection(builder.ToString());
+    }
+
+    private static async Task ApplyConnectionPragmasAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        // foreign_keys is a per-connection PRAGMA in SQLite and must be applied
+        // to every connection. busy_timeout reduces the chance of SQLITE_BUSY
+        // under the per-call open pattern used by this store. WAL mode is a
+        // database-wide setting, but applying it via PRAGMA on each open is a
+        // cheap no-op once it has been set.
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
+        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 }

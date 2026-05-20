@@ -215,7 +215,7 @@ describe('honua-scene', () => {
     element.setAttribute('package-id', 'pkg-downtown');
     element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
     element.setAttribute('terrain-asset', 'terrain/layer.json');
-    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
     element.setAttribute('autoload', 'false');
     const resolver = vi.fn((request) => `https://cache.example.test/${request.packageId}/${request.path}`);
     element.packageAssetResolver = resolver;
@@ -318,7 +318,7 @@ describe('honua-scene', () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');
     element.setAttribute('tileset-url', 'https://data.example.test/tileset.json');
-    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
     element.setAttribute('autoload', 'false');
     document.body.append(element);
 
@@ -338,7 +338,7 @@ describe('honua-scene', () => {
     const element = document.createElement('honua-scene');
     element.setAttribute('package-id', 'pkg-downtown');
     element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
-    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
     element.setAttribute('autoload', 'false');
     element.packageAssetResolver = () => 'https://cache.example.test/tileset.json';
     document.body.append(element);
@@ -373,7 +373,7 @@ describe('honua-scene', () => {
     });
     const element = document.createElement('honua-scene');
     element.setAttribute('terrain-url', 'https://data.example.test/terrain');
-    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
     element.setAttribute('autoload', 'false');
     document.body.append(element);
 
@@ -387,11 +387,11 @@ describe('honua-scene', () => {
     webgl.mockRestore();
   });
 
-  it('clears the Cesium Ion token when the attribute is removed', async () => {
+  it('does not reset the Cesium Ion module-global token when the attribute is removed', async () => {
     const webgl = mockWebGl();
     const element = document.createElement('honua-scene');
     element.setAttribute('tileset-url', 'https://data.example.test/tileset.json');
-    element.setAttribute('cesium-base-url', 'data:text/css,');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
     element.setAttribute('ion-token', 'first-token');
     element.setAttribute('autoload', 'false');
     document.body.append(element);
@@ -399,10 +399,70 @@ describe('honua-scene', () => {
     await element.load();
     expect(cesium.Ion.defaultAccessToken).toBe('first-token');
 
+    // Removing the attribute should release ownership but leave the
+    // module-global token intact so other mounted widgets continue to work.
     element.removeAttribute('ion-token');
     await element.load();
 
-    expect(cesium.Ion.defaultAccessToken).toBe('');
+    expect(cesium.Ion.defaultAccessToken).toBe('first-token');
+    webgl.mockRestore();
+  });
+
+  it('rejects unsafe cesium-base-url schemes and falls back to the default base url', async () => {
+    const webgl = mockWebGl();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/tileset.json');
+    element.setAttribute('cesium-base-url', 'javascript:alert(1)');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+
+    const link = element.shadowRoot!.querySelector<HTMLLinkElement>('link[data-cesium-widgets]');
+    expect(link).not.toBeNull();
+    expect(link!.href.startsWith('javascript:')).toBe(false);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    webgl.mockRestore();
+  });
+
+  it('removes the Cesium widgets stylesheet on disconnect', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('tileset-url', 'https://data.example.test/tileset.json');
+    element.setAttribute('cesium-base-url', '/assets/cesium/');
+    element.setAttribute('autoload', 'false');
+    document.body.append(element);
+
+    await element.load();
+    expect(element.shadowRoot!.querySelector('link[data-cesium-widgets]')).not.toBeNull();
+
+    element.remove();
+    expect(element.shadowRoot!.querySelector('link[data-cesium-widgets]')).toBeNull();
+    webgl.mockRestore();
+  });
+
+  it('rejects non-ISO-8601 package expiry strings with invalid-package', async () => {
+    const webgl = mockWebGl();
+    const element = document.createElement('honua-scene');
+    element.setAttribute('package-id', 'pkg-bad-expiry');
+    element.setAttribute('tileset-asset', 'tilesets/buildings/tileset.json');
+    element.setAttribute('package-expires-at', 'not a real timestamp');
+    element.setAttribute('autoload', 'false');
+    element.packageAssetResolver = () => 'https://cache.example.test/tileset.json';
+    document.body.append(element);
+
+    const listener = vi.fn();
+    element.addEventListener('honua-scene-load-error', listener);
+
+    await element.load();
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      source: 'package-cache',
+      code: 'invalid-package',
+    });
     webgl.mockRestore();
   });
 });

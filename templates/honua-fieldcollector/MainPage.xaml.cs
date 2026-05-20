@@ -1,36 +1,19 @@
 using Microsoft.Extensions.Logging;
-using Honua.Mobile.Core;
-using Honua.Mobile.Core.Events;
-<!--#if (enableIoT)-->
-using Honua.Mobile.IoT;
-<!--#endif-->
 
-namespace namespace;
+namespace HonuaFieldCollector;
 
 public partial class MainPage : ContentPage
 {
     private readonly ILogger<MainPage> _logger;
-    private readonly IHonuaClient _honuaClient;
-<!--#if (enableIoT)-->
-    private readonly IIoTSensorService _sensorService;
-<!--#endif-->
 
     private int _recordsCollected = 0;
     private int _photosCollected = 0;
     private readonly List<ActivityItem> _recentActivity = new();
 
-    public MainPage(ILogger<MainPage> logger, IHonuaClient honuaClient
-<!--#if (enableIoT)-->
-        , IIoTSensorService sensorService
-<!--#endif-->
-        )
+    public MainPage(ILogger<MainPage> logger)
     {
         InitializeComponent();
         _logger = logger;
-        _honuaClient = honuaClient;
-<!--#if (enableIoT)-->
-        _sensorService = sensorService;
-<!--#endif-->
 
         InitializeApp();
     }
@@ -45,19 +28,10 @@ public partial class MainPage : ContentPage
             RecentActivityList.ItemsSource = _recentActivity;
 
             // Load initial form
-            await DataForm.LoadFormSchemaAsync("site_inspection");
+            await DataForm.LoadFormSchemaAsync("field-site-inspection");
 
             // Add welcome activity
             AddActivity("🚀", "App Started", "Ready for field data collection");
-
-<!--#if (enableIoT)-->
-            // Start sensor discovery if enabled
-            if (_sensorService != null)
-            {
-                await _sensorService.StartSensorDiscoveryAsync(SensorType.Environmental);
-                AddActivity("🤖", "Sensor Discovery", "Scanning for IoT sensors");
-            }
-<!--#endif-->
 
             _logger.LogInformation("App initialization complete");
         }
@@ -71,21 +45,22 @@ public partial class MainPage : ContentPage
 
     #region Form Events
 
-    private async void OnDataCollected(object sender, FormSubmittedEventArgs e)
+    private async void OnDataCollected(object sender, EventArgs e)
     {
         try
         {
             _recordsCollected++;
+            var formData = ReadFormData(e);
 
             // Count photos in collected data
-            var photos = CountPhotosInFormData(e.FormData);
+            var photos = CountPhotosInFormData(formData);
             _photosCollected += photos;
 
             // Update statistics
             UpdateStatistics();
 
             // Add to recent activity
-            var location = GetLocationFromFormData(e.FormData);
+            var location = GetLocationFromFormData(formData);
             AddActivity("📝", $"Record #{_recordsCollected}",
                 $"Collected at {location} • {photos} photos");
 
@@ -97,12 +72,12 @@ public partial class MainPage : ContentPage
                 $"Record #{_recordsCollected} saved successfully!\n\n" +
                 $"📍 Location: {location}\n" +
                 $"📷 Photos: {photos} attached\n" +
-                $"📊 Total fields: {e.FormData.Count}",
+                $"📊 Total fields: {formData.Count}",
                 "View Details", "Continue");
 
             if (showDetails)
             {
-                await ShowDataDetails(e.FormData);
+                await ShowDataDetails(formData);
             }
 
             _logger.LogInformation("Data collection completed: Record {RecordNumber}", _recordsCollected);
@@ -114,25 +89,29 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private void OnValidationChanged(object sender, FormValidationEventArgs e)
+    private void OnValidationChanged(object sender, EventArgs e)
     {
         // Real-time validation feedback is handled by the form component
-        _logger.LogDebug("Form validation changed: Valid={IsValid}", e.IsValid);
+        _logger.LogDebug("Form validation changed: Valid={IsValid}", ReadProperty<bool>(e, "IsValid"));
     }
 
-    private void OnFormLoadingChanged(object sender, FormLoadingEventArgs e)
+    private void OnFormLoadingChanged(object sender, EventArgs e)
     {
-        ShowLoading(e.IsLoading, e.IsLoading ? "Loading form..." : "");
+        var isLoading = ReadProperty<bool>(e, "IsLoading");
+        ShowLoading(isLoading, isLoading ? "Loading form..." : "");
     }
 
     #endregion
 
     #region Location Events
 
-    private void OnLocationUpdated(object sender, LocationUpdatedEventArgs e)
+    private void OnLocationUpdated(object sender, EventArgs e)
     {
+        var location = ReadProperty<object>(e, "Location");
         _logger.LogDebug("Location updated: Lat={Latitude}, Lon={Longitude}, Accuracy={Accuracy}m",
-            e.Location.Latitude, e.Location.Longitude, e.Location.Accuracy);
+            ReadProperty<double>(location, "Latitude"),
+            ReadProperty<double>(location, "Longitude"),
+            ReadProperty<double>(location, "Accuracy"));
     }
 
     private async void OnLocationTapped(object sender, TappedEventArgs e)
@@ -166,83 +145,33 @@ public partial class MainPage : ContentPage
         AddActivity("🗺️", "Map Opened", "Viewing collected data on map");
     }
 
-    private void OnMapLayerClicked(object sender, LayerClickedEventArgs e)
+    private void OnMapLayerClicked(object sender, EventArgs e)
     {
-        _logger.LogInformation("Map layer clicked: {LayerName}", e.LayerName);
+        _logger.LogInformation("Map layer clicked: {LayerName}", ReadProperty<string>(e, "LayerName"));
     }
 
-    private async void OnMapFeatureSelected(object sender, FeatureSelectedEventArgs e)
+    private async void OnMapFeatureSelected(object sender, EventArgs e)
     {
+        var feature = ReadProperty<object>(e, "Feature");
+        var attributes = ReadProperty<IReadOnlyDictionary<string, object>>(feature, "Attributes");
         await DisplayAlert("Feature Selected",
-            $"Feature ID: {e.Feature.Id}\n" +
-            $"Layer: {e.Feature.LayerName}\n" +
-            $"Attributes: {e.Feature.Attributes.Count} fields",
+            $"Feature ID: {ReadProperty<string>(feature, "Id")}\n" +
+            $"Layer: {ReadProperty<string>(feature, "LayerName")}\n" +
+            $"Attributes: {attributes?.Count ?? 0} fields",
             "OK");
     }
 
     #endregion
-
-<!--#if (enableIoT)-->
-    #region IoT Sensor Events
-
-    private async void OnSensorConnected(object sender, SensorConnectedEventArgs e)
-    {
-        AddActivity("🤖", "Sensor Connected", $"{e.SensorName} ({e.SensorType})");
-
-        await DisplayAlert("Sensor Connected! 🤖",
-            $"Successfully connected to {e.SensorName}\n" +
-            $"Type: {e.SensorType}\n" +
-            $"Capabilities: {string.Join(", ", e.Capabilities)}",
-            "OK");
-    }
-
-    private void OnSensorDataReceived(object sender, SensorDataEventArgs e)
-    {
-        _logger.LogDebug("Sensor data received: {SensorName} = {Value} {Unit}",
-            e.SensorName, e.Value, e.Unit);
-
-        // Update form fields if sensor data is configured
-        DataForm.UpdateSensorField(e.SensorName, e.Value, e.Unit);
-    }
-
-    #endregion
-<!--#endif-->
-
-<!--#if (enableAR)-->
-    #region AR Events
-
-    private async void OnARSessionStarted(object sender, ARSessionEventArgs e)
-    {
-        AddActivity("🥽", "AR Started", "Augmented reality session active");
-
-        await DisplayAlert("AR Active! 🥽",
-            "Augmented reality is now active.\n" +
-            "Point your camera at infrastructure to see overlays.",
-            "OK");
-    }
-
-    private async void OnARUtilitySelected(object sender, ARUtilityEventArgs e)
-    {
-        await DisplayAlert("Utility Info",
-            $"Type: {e.Utility.Type}\n" +
-            $"Depth: {e.Utility.DepthMeters:F1}m\n" +
-            $"Material: {e.Utility.Material}\n" +
-            $"Install Date: {e.Utility.InstallDate:yyyy}",
-            "OK");
-    }
-
-    #endregion
-<!--#endif-->
 
     #region Sync Events
 
-    private void OnSyncCompleted(object sender, SyncCompletedEventArgs e)
+    private void OnSyncCompleted(object sender, EventArgs e)
     {
         AddActivity("🔄", "Sync Complete",
-            $"↓{e.DownloadedRecords} ↑{e.UploadedRecords}");
+            $"↓{ReadProperty<int>(e, "DownloadedRecords")} ↑{ReadProperty<int>(e, "UploadedRecords")}");
     }
 
-    private async void OnSyncConflict(object sender, SyncConflictEventArgs e)
+    private async void OnSyncConflict(object sender, EventArgs e)
     {
         var action = await DisplayActionSheet("Sync Conflict",
             "Cancel", null,
@@ -253,13 +182,13 @@ public partial class MainPage : ContentPage
         switch (action)
         {
             case "Use Server Version":
-                await e.ResolveWithServerVersion();
+                await InvokeAsync(e, "ResolveWithServerVersion");
                 break;
             case "Keep Local Version":
-                await e.ResolveWithLocalVersion();
+                await InvokeAsync(e, "ResolveWithLocalVersion");
                 break;
             case "Merge Changes":
-                await e.ShowMergeDialog();
+                await InvokeAsync(e, "ShowMergeDialog");
                 break;
         }
     }
@@ -303,7 +232,7 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private int CountPhotosInFormData(Dictionary<string, object> formData)
+    private int CountPhotosInFormData(IReadOnlyDictionary<string, object> formData)
     {
         return formData.Values
             .OfType<List<object>>()
@@ -311,7 +240,7 @@ public partial class MainPage : ContentPage
             .Count(x => x.ToString()?.Contains("photo", StringComparison.OrdinalIgnoreCase) == true);
     }
 
-    private string GetLocationFromFormData(Dictionary<string, object> formData)
+    private string GetLocationFromFormData(IReadOnlyDictionary<string, object> formData)
     {
         if (formData.TryGetValue("location", out var location) && location != null)
         {
@@ -320,7 +249,7 @@ public partial class MainPage : ContentPage
         return "No location";
     }
 
-    private async Task ShowDataDetails(Dictionary<string, object> formData)
+    private async Task ShowDataDetails(IReadOnlyDictionary<string, object> formData)
     {
         var details = string.Join("\n", formData
             .Take(10) // Show first 10 fields
@@ -349,6 +278,35 @@ public partial class MainPage : ContentPage
         LoadingOverlay.IsVisible = isLoading;
         LoadingIndicator.IsRunning = isLoading;
         LoadingMessage.Text = message;
+    }
+
+    private static Dictionary<string, object> ReadFormData(EventArgs args)
+    {
+        return ReadProperty<Dictionary<string, object>>(args, "FormData") ??
+            ReadProperty<IReadOnlyDictionary<string, object>>(args, "FormData")?.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value) ??
+            [];
+    }
+
+    private static T? ReadProperty<T>(object? source, string propertyName)
+    {
+        if (source == null)
+        {
+            return default;
+        }
+
+        var value = source.GetType().GetProperty(propertyName)?.GetValue(source);
+        return value is T typed ? typed : default;
+    }
+
+    private static async Task InvokeAsync(object source, string methodName)
+    {
+        var result = source.GetType().GetMethod(methodName)?.Invoke(source, null);
+        if (result is Task task)
+        {
+            await task;
+        }
     }
 
     #endregion

@@ -56,6 +56,7 @@ public sealed record HonuaDeviceLocation
 
     public IReadOnlyDictionary<string, object?> Metadata { get; init; } = new Dictionary<string, object?>();
 
+    /// <summary>Validates the location fix invariants.</summary>
     public void Validate()
     {
         if (AccuracyMeters is < 0)
@@ -90,6 +91,7 @@ public sealed record HonuaDeviceLocationRequest
 
     public bool AllowReducedAccuracy { get; init; } = true;
 
+    /// <summary>Validates the request invariants.</summary>
     public void Validate()
     {
         if (Timeout <= TimeSpan.Zero)
@@ -121,6 +123,7 @@ public sealed record HonuaBackgroundLocationOptions
 
     public IReadOnlyDictionary<string, object?> Metadata { get; init; } = new Dictionary<string, object?>();
 
+    /// <summary>Validates the background location option invariants.</summary>
     public void Validate()
     {
         if (MinimumInterval <= TimeSpan.Zero)
@@ -158,6 +161,7 @@ public sealed record HonuaGeofenceRegion
 
     public IReadOnlyDictionary<string, object?> Metadata { get; init; } = new Dictionary<string, object?>();
 
+    /// <summary>Validates the geofence region invariants.</summary>
     public void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
@@ -190,6 +194,7 @@ public sealed record HonuaGeofenceMonitoringRequest
 
     public bool ReplaceExisting { get; init; } = true;
 
+    /// <summary>Validates the geofence monitoring request invariants.</summary>
     public void Validate()
     {
         ArgumentNullException.ThrowIfNull(Regions);
@@ -242,10 +247,12 @@ public sealed record HonuaGeofenceTransition
 /// </summary>
 public interface IHonuaDeviceLocationPermissionService
 {
+    /// <summary>Checks the current platform permission status for the requested access scope.</summary>
     ValueTask<HonuaLocationPermissionStatus> CheckPermissionAsync(
         HonuaLocationAccess access,
         CancellationToken ct = default);
 
+    /// <summary>Requests the platform permission for the supplied access scope.</summary>
     ValueTask<HonuaLocationPermissionStatus> RequestPermissionAsync(
         HonuaLocationAccess access,
         CancellationToken ct = default);
@@ -256,6 +263,7 @@ public interface IHonuaDeviceLocationPermissionService
 /// </summary>
 public interface IHonuaDeviceLocationProvider
 {
+    /// <summary>Acquires a single device location fix using the supplied request options.</summary>
     ValueTask<HonuaDeviceLocation?> GetCurrentLocationAsync(
         HonuaDeviceLocationRequest request,
         CancellationToken ct = default);
@@ -266,6 +274,7 @@ public interface IHonuaDeviceLocationProvider
 /// </summary>
 public interface IHonuaBackgroundLocationSession : IAsyncDisposable
 {
+    /// <summary>Stable identifier of the background session.</summary>
     string SessionId { get; }
 }
 
@@ -274,6 +283,7 @@ public interface IHonuaBackgroundLocationSession : IAsyncDisposable
 /// </summary>
 public interface IHonuaBackgroundLocationProvider
 {
+    /// <summary>Starts a native background location session with the supplied options.</summary>
     ValueTask<IHonuaBackgroundLocationSession> StartUpdatesAsync(
         HonuaBackgroundLocationOptions options,
         CancellationToken ct = default);
@@ -284,12 +294,15 @@ public interface IHonuaBackgroundLocationProvider
 /// </summary>
 public interface IHonuaGeofenceMonitor
 {
+    /// <summary>Raised when the platform reports a geofence transition.</summary>
     event EventHandler<HonuaGeofenceTransition>? Transitioned;
 
+    /// <summary>Begins monitoring the supplied geofence regions.</summary>
     ValueTask StartMonitoringAsync(
         HonuaGeofenceMonitoringRequest request,
         CancellationToken ct = default);
 
+    /// <summary>Stops monitoring the supplied region ids.</summary>
     ValueTask StopMonitoringAsync(
         IReadOnlyList<string> regionIds,
         CancellationToken ct = default);

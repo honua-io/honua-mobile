@@ -9,6 +9,11 @@ export default defineConfig({
       fileName: () => 'index.js',
     },
     rollupOptions: {
+      external: [
+        'cesium',
+        'maplibre-gl',
+        /^@deck\.gl\//,
+      ],
       output: {
         assetFileNames: '[name][extname]',
         chunkFileNames: '[name]-[hash].js',

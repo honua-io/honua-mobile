@@ -1,5 +1,6 @@
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
+using Honua.Sdk.Offline.Abstractions;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -298,7 +299,7 @@ public sealed class DeltaDownloadEngineTests : IDisposable
 
         public int UnregisterCallCount { get; private set; }
 
-        public Task<CreateReplicaResult> CreateReplicaAsync(string serviceId, string replicaName, int[]? layerIds = null, CancellationToken ct = default)
+        public Task<CreateReplicaResult> CreateReplicaAsync(string serviceId, string replicaName, IReadOnlyList<int>? layerIds = null, CancellationToken ct = default)
         {
             CreateReplicaCallCount++;
             return Task.FromResult(CreateReplicaResponse);

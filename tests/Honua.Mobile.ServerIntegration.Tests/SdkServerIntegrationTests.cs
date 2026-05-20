@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
@@ -81,7 +80,7 @@ public sealed class SdkServerIntegrationTests
             LayerId = 0,
             Adds =
             [
-                new FeatureServerFeature
+                new FeatureEditFeature
                 {
                     Attributes = new Dictionary<string, JsonElement>
                     {
@@ -314,9 +313,9 @@ public sealed class SdkServerIntegrationTests
         return new HonuaMobileClient(new HttpClient(), options);
     }
 
-    private static OgcFeature CreateOgcFeature(string id, string name)
+    private static JsonElement CreateOgcFeature(string id, string name)
     {
-        return new OgcFeature
+        return JsonSerializer.SerializeToElement(new OgcFeature
         {
             Id = JsonSerializer.SerializeToElement(id),
             Properties = new Dictionary<string, JsonElement>
@@ -328,6 +327,6 @@ public sealed class SdkServerIntegrationTests
                 type = "Point",
                 coordinates = new[] { -157.8, 21.3 },
             }),
-        };
+        });
     }
 }

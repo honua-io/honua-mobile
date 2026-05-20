@@ -2,6 +2,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
@@ -449,12 +450,17 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         return conflicts.Select(conflict => new ConflictInfo
         {
             Id = conflict.Id,
+            OperationId = conflict.Id,
             FeatureId = conflict.FeatureId,
+            SourceId = conflict.LayerId.ToString(),
             LayerName = $"Layer {conflict.LayerId}",
             Type = MapConflictType(conflict.ConflictType),
             DetectedAt = conflict.CreatedAt,
             LocalVersion = conflict.LocalData,
-            ServerVersion = conflict.ServerData
+            ServerVersion = conflict.ServerData,
+            FailureReason = $"Local v{conflict.LocalVersion} conflicts with server v{conflict.ServerVersion}.",
+            RedactedLocalVersion = DiagnosticRedactor.RedactJson(conflict.LocalData),
+            RedactedServerVersion = DiagnosticRedactor.RedactJson(conflict.ServerData)
         });
     }
 
@@ -501,6 +507,20 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             default:
                 return false;
         }
+    }
+
+    public async Task<bool> DeferConflictAsync(string conflictId)
+    {
+        var conflict = await _storage.GetConflictAsync(conflictId);
+        if (conflict == null || conflict.ResolvedAt != null)
+        {
+            return false;
+        }
+
+        await _storage.MarkConflictDeferredAsync(
+            conflictId,
+            "Deferred for manual review from sync center.");
+        return true;
     }
 
     private Task AutoResolveConflictsAsync(StorageSyncSession session)

@@ -3,6 +3,7 @@ using System.Text;
 using System.Buffers;
 using Microsoft.Data.Sqlite;
 using Honua.Mobile.Offline.GeoPackage;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.Offline.MapAreas;
 
@@ -183,13 +184,25 @@ ON CONFLICT(layer_key) DO UPDATE SET
 
     private static string ApplyTemplate(string sourceUrl, MapAreaDownloadRequest request)
     {
-        return sourceUrl
+        var result = sourceUrl
             .Replace("{minLon}", request.BoundingBox.MinLongitude.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{minLat}", request.BoundingBox.MinLatitude.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{maxLon}", request.BoundingBox.MaxLongitude.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{maxLat}", request.BoundingBox.MaxLatitude.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{minZoom}", request.MinZoom.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{maxZoom}", request.MaxZoom.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+
+        if (!Uri.TryCreate(result, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            var scheme = uri?.Scheme ?? "<unparseable>";
+            // Do not include the full URL in the message: it may contain templated
+            // bounding-box parameters or secrets injected by callers.
+            throw new InvalidOperationException(
+                $"Map area layer source URL must be an absolute http(s):// URI; got scheme '{scheme}'.");
+        }
+
+        return result;
     }
 
     private static string BuildPackagePath(string outputDirectory, string areaId)

@@ -1,9 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <PackageId>Honua.Mobile.Sdk</PackageId>
     <PackageVersion>0.1.0-alpha.1</PackageVersion>
     <Authors>Honua</Authors>
@@ -22,11 +20,11 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.GeoServices" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Grpc" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.OgcFeatures" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Scenes" Version="0.1.8-alpha.1" />
+    <PackageReference Include="Honua.Sdk.Abstractions" />
+    <PackageReference Include="Honua.Sdk.GeoServices" />
+    <PackageReference Include="Honua.Sdk.Grpc" />
+    <PackageReference Include="Honua.Sdk.OgcFeatures" />
+    <PackageReference Include="Honua.Sdk.Scenes" />
   </ItemGroup>
 
 </Project>

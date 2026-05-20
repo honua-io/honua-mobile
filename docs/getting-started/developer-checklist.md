@@ -11,9 +11,9 @@ Welcome to Honua Mobile SDK development! This checklist ensures you have everyth
   - [Download Visual Studio](https://visualstudio.microsoft.com/downloads/)
   - ✅ .NET Multi-platform App UI development workload
   - ✅ Azure development workload (for cloud features)
-- [ ] **.NET 8.0 SDK** or later
-  - [Download .NET](https://dotnet.microsoft.com/download/dotnet/8.0)
-  - Verify: `dotnet --version` should show 8.0 or higher
+- [ ] **.NET 10.0 SDK** or later
+  - [Download .NET](https://dotnet.microsoft.com/download/dotnet/10.0)
+  - Verify: `dotnet --version` should show 10.0 or higher
 - [ ] **Git** for version control
   - [Download Git](https://git-scm.com/)
 
@@ -43,10 +43,6 @@ dotnet new list | grep honua
 **Expected Output:**
 ```
 honua-fieldcollector    Field Data Collection App    C#    MAUI/Mobile/Geospatial
-honua-photosurvey       Photo Survey App             C#    MAUI/Mobile/Photo
-honua-iotmonitor        IoT Monitoring App           C#    MAUI/Mobile/IoT
-honua-assetinspection   Asset Inspection App         C#    MAUI/Mobile/AR
-honua-minimal           Minimal SDK Integration      C#    MAUI/Mobile
 ```
 
 ### ✅ Step 3: Create Your First App
@@ -72,17 +68,20 @@ Build succeeded.
 Edit `MauiProgram.cs` to use demo server:
 
 ```csharp
-config.ServerEndpoint = "https://demo.honua.com";
-config.ApiKey = "demo_key_field_collection_2026";
+builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
+{
+    BaseUri = new Uri("https://api.honua.io"),
+    ApiKey = "demo_key_field_collection_2026",
+});
 ```
 
 ### ✅ Step 5: Test Your Setup
 
 ```bash
 # Run on your preferred platform
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS (macOS only)
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS (macOS only)
+dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ```
 
 **Success Indicators:**
@@ -152,22 +151,7 @@ Update your app to use the custom form:
 <honua:HonuaFeatureForm FormId="my_custom_form" ... />
 ```
 
-### ✅ Step 8: Enable Advanced Features
-
-**IoT Sensor Integration:**
-```csharp
-// In MauiProgram.cs
-config.EnableIoTSensors = true;
-config.IoT.SensorTypes = new[] { SensorType.Environmental };
-```
-
-**Augmented Reality:**
-```csharp
-config.EnableAugmentedReality = true;
-config.AR.MaxRenderDistance = 100;
-```
-
-### ✅ Step 9: Configure App Branding
+### ✅ Step 8: Configure App Branding
 
 **Update App Identity:**
 ```xml
@@ -187,7 +171,7 @@ config.AR.MaxRenderDistance = 100;
 - Replace files in `Resources/AppIcon/`
 - Use 1024x1024 PNG format for source
 
-### ✅ Step 10: Set Up CI/CD (Optional)
+### ✅ Step 9: Set Up CI/CD (Optional)
 
 **GitHub Actions Workflow:**
 ```yaml
@@ -205,7 +189,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Restore dependencies
       run: dotnet restore
@@ -271,14 +255,16 @@ MyFieldApp/
 public async Task QueryFeatures_WithValidQuery_ReturnsFeatures()
 {
     // Arrange
-    var client = new Mock<IHonuaClient>();
-    var query = new FeatureQueryBuilder().Build();
+    var runner = new Mock<IOfflineSyncRunner>();
+    runner
+        .Setup(service => service.SyncAsync(It.IsAny<CancellationToken>()))
+        .ReturnsAsync(new SyncRunResult { Loaded = 0 });
 
     // Act
-    var result = await client.Object.QueryFeaturesAsync("service", 1, query);
+    var result = await runner.Object.SyncAsync();
 
     // Assert
-    Assert.IsNotNull(result);
+    Assert.AreEqual(0, result.Loaded);
 }
 ```
 

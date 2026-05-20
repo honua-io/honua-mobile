@@ -2,7 +2,9 @@ using Microsoft.Maui.Devices.Sensors;
 
 namespace Honua.Mobile.FieldCollection.Models;
 
-// Core domain models for the field collection app
+// FieldCollection presentation/runtime models retained for the MAUI app. New
+// provider-neutral geometry, schema, validation, or record workflow contracts
+// should come from Honua.Sdk.* packages instead of expanding this file.
 
 public class Feature
 {

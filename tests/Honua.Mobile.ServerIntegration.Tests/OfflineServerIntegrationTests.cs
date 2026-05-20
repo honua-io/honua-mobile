@@ -6,6 +6,8 @@ using Honua.Mobile.Offline.ScenePackages;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Scenes;
+using Honua.Sdk.Offline;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 

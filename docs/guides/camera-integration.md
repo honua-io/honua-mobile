@@ -61,14 +61,16 @@ public static MauiApp CreateMauiApp()
     var builder = MauiApp.CreateBuilder();
     builder
         .UseMauiApp<App>()
-        .AddHonuaMobile(options =>
-        {
-            // Configure your options
-        })
         .ConfigureFonts(fonts =>
         {
             fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
         });
+
+    builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
+    {
+        BaseUri = new Uri("https://your-honua-server.com"),
+        // Configure additional options
+    });
 
     // Camera service is automatically registered
     return builder.Build();

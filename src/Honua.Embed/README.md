@@ -8,6 +8,21 @@ Framework-agnostic web components for embedding Honua map and 3D scene views in 
 npm install @honua-io/embed
 ```
 
+`cesium`, `maplibre-gl`, and the `@deck.gl/*` packages are declared as optional
+peer dependencies and are not bundled into `dist/index.js`. Install only the
+peers you actually use:
+
+```bash
+# 3D scenes (<honua-scene>)
+npm install cesium
+
+# 2D maps and the display adapter
+npm install maplibre-gl @deck.gl/core @deck.gl/layers @deck.gl/mapbox
+```
+
+Hosts that only render `<honua-map>` can omit `cesium`, and hosts that only
+render `<honua-scene>` can omit MapLibre/deck.gl.
+
 ## Map Use
 
 ```html
@@ -161,6 +176,42 @@ Custom element names generate a script that calls `defineHonuaMapElement(...)`.
 Use `applyHonuaMapOptions(element, options)` to apply the same options shape to
 an existing map element at runtime.
 
+## Embed Builder State
+
+Admin portals can use the builder helpers to power a live configurator without
+hand-assembling layer selections, preview attributes, validation, and snippets.
+
+```ts
+import {
+  applyHonuaMapBuilderState,
+  createHonuaMapBuilderState,
+} from '@honua-io/embed';
+
+const state = createHonuaMapBuilderState({
+  serviceUrl: 'https://services.honua.example/FeatureServer',
+  availableLayers: [
+    { id: 'assets', label: 'Assets', defaultSelected: true },
+    { id: 'work-orders', label: 'Work orders' },
+  ],
+  selectedLayerIds: ['assets', 'work-orders'],
+  center: { latitude: 21.3069, longitude: -157.8583 },
+  zoom: 12,
+  interactive: true,
+  search: true,
+  identify: true,
+  label: 'City asset map',
+}, {
+  elementName: 'city-asset-map',
+});
+
+applyHonuaMapBuilderState(document.querySelector('honua-map'), state);
+console.log(state.snippet);
+```
+
+`state.issues` contains warning/error objects suitable for form validation.
+Credentials are omitted from generated snippets unless `includeCredentials` is
+explicitly enabled in snippet options.
+
 ## Host Extensions
 
 ```ts
@@ -208,3 +259,25 @@ honua-scene {
 ```
 
 This package provides embeddable APIs, accessibility shells, theming, and integration events. Follow-on work can connect the 2D map surface to Honua feature/query endpoints and wire `<honua-scene>` to Honua-hosted scene registries, terrain services, and generated 3D Tiles.
+
+## Cesium Ion Token Scope
+
+`Cesium.Ion.defaultAccessToken` is a module-level global. Only one ion token can
+be active per page at a time. When multiple `<honua-scene>` elements are
+mounted concurrently with different `ion-token` attributes, the most recently
+mounted element wins and a `console.warn` is emitted. Removing the `ion-token`
+attribute releases that element's claim on the global but does not clear the
+underlying token string, so other mounted widgets continue to work.
+
+## Content Security Policy
+
+The web components render inline `<style>` blocks inside their shadow roots.
+Hosts that ship a strict CSP must allow inline styles for the page, for example
+by adding `style-src 'unsafe-inline'` or by serving a nonce-aware build.
+
+When `<honua-scene>` is configured with a `cesium-base-url` pointing at a CDN
+or asset host, that origin must be allow-listed in `script-src`,
+`connect-src`, and `worker-src` so Cesium can load its Workers, Assets, and
+Widgets bundles. Only `http(s):`, `blob:`, and same-origin paths are accepted
+for `cesium-base-url`; unsafe schemes (`javascript:`, `data:`, etc.) are
+ignored and a `console.warn` is logged.

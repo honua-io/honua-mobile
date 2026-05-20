@@ -161,6 +161,7 @@ public static class HonuaMobileServiceCollectionExtensions
     /// <param name="syncOptions">Sync engine options; defaults are used when <see langword="null"/>.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="storeOptions"/> is <see langword="null"/>.</exception>
+    [Obsolete("Use AddHonuaSdkGeoPackageOfflineSync(...) instead. This overload will be removed in 0.2.0.", error: false)]
     public static IServiceCollection AddHonuaGeoPackageOfflineSync(
         this IServiceCollection services,
         GeoPackageSyncStoreOptions storeOptions,
@@ -212,7 +213,9 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton<IConnectivityStateProvider, AlwaysOnlineConnectivityStateProvider>();
         services.AddSingleton<GeoPackageSdkOfflineStoreAdapter>();
         services.AddSingleton<SdkFeatureClient>();
+#pragma warning disable CS0618 // shim registered for back-compat; removed alongside the type
         services.AddSingleton<HonuaMobileSdkFeatureClient>();
+#pragma warning restore CS0618
         services.AddSingleton<IHonuaFeatureQueryClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureEditClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureAttachmentClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
@@ -238,7 +241,7 @@ public static class HonuaMobileServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="BackgroundSyncOrchestrator"/> for periodic background sync.
-    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// Requires <see cref="AddHonuaSdkGeoPackageOfflineSync"/> (or the obsolete <c>AddHonuaGeoPackageOfflineSync</c>) to be called first.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="options">Orchestrator options; defaults are used when <see langword="null"/>.</param>
@@ -282,7 +285,7 @@ public static class HonuaMobileServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="IMapAreaDownloader"/> for downloading offline map area packages.
-    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// Requires <see cref="AddHonuaSdkGeoPackageOfflineSync"/> (or the obsolete <c>AddHonuaGeoPackageOfflineSync</c>) to be called first.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>
@@ -304,7 +307,7 @@ public static class HonuaMobileServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="IHonuaScenePackageDownloader"/> for downloading immutable offline 3D scene packages.
-    /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
+    /// Requires <see cref="AddHonuaSdkGeoPackageOfflineSync"/> (or the obsolete <c>AddHonuaGeoPackageOfflineSync</c>) to be called first.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>

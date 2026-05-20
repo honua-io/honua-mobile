@@ -5,6 +5,11 @@ namespace Honua.Mobile.Maui.Annotations;
 /// </summary>
 public readonly record struct HonuaMapCoordinate
 {
+    /// <summary>
+    /// Initializes a new <see cref="HonuaMapCoordinate"/> in WGS84.
+    /// </summary>
+    /// <param name="latitude">Latitude in degrees, between -90 and 90.</param>
+    /// <param name="longitude">Longitude in degrees, between -180 and 180.</param>
     public HonuaMapCoordinate(double latitude, double longitude)
     {
         if (double.IsNaN(latitude) || double.IsInfinity(latitude) || latitude is < -90 or > 90)

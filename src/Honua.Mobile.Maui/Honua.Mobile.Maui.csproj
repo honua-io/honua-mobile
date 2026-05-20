@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
@@ -7,18 +7,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Honua.Sdk.Abstractions" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Field" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="0.1.8-alpha.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
+    <PackageReference Include="Honua.Sdk.Abstractions" />
+    <PackageReference Include="Honua.Sdk.Field" />
+    <PackageReference Include="Honua.Sdk.Offline" />
+    <PackageReference Include="Honua.Sdk.Offline.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <PackageId>Honua.Mobile.Maui</PackageId>
     <PackageVersion>0.1.0-alpha.1</PackageVersion>
     <Authors>Honua</Authors>
