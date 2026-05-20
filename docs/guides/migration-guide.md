@@ -142,7 +142,7 @@ cd MyFieldApp
 // FulcrumMigrationService.cs
 public class FulcrumMigrationService
 {
-    private readonly IHonuaClient _honuaClient;
+    private readonly HonuaMobileClient _honuaClient;
 
     public async Task MigrateDataAsync(string fulcrumExportFile)
     {
@@ -518,16 +518,18 @@ public async Task<IEnumerable<Feature>> QueryFeaturesAsync()
 **After (Honua):**
 ```csharp
 // Simple Honua data access
-public async Task<IEnumerable<Feature>> QueryFeaturesAsync()
+public async Task<JsonDocument> QueryFeaturesAsync()
 {
-    var query = new FeatureQueryBuilder()
-        .Where("status", "active")
-        .WithinDistance(latitude, longitude, 1000)
-        .IncludeGeometry()
-        .Build();
+    var request = new QueryFeaturesRequest
+    {
+        ServiceId = "service",
+        LayerId = 1,
+        Where = "status = 'active'",
+        OutFields = new[] { "*" },
+        ReturnGeometry = true,
+    };
 
-    var result = await _honuaClient.QueryFeaturesAsync("service", 1, query);
-    return result.Features;
+    return await _honuaClient.QueryFeaturesAsync(request);
 }
 ```
 

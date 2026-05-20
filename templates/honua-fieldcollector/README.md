@@ -30,22 +30,6 @@ This template creates a complete field data collection application with:
 - Layer management and visualization
 - Spatial query tools
 
-<!--#if (enableIoT)-->
-### 🤖 **IoT Sensor Integration** (Enabled)
-- Bluetooth LE environmental sensors
-- Auto-discovery and connection
-- Real-time sensor data integration with forms
-- Support for temperature, humidity, air quality sensors
-<!--#endif-->
-
-<!--#if (enableAR)-->
-### 🥽 **Augmented Reality** (Enabled)
-- AR visualization of underground utilities
-- Infrastructure overlay on camera feed
-- Interactive 3D models with distance measurement
-- Photo capture with AR overlay
-<!--#endif-->
-
 ### 🔄 **Intelligent Sync & Offline**
 - True offline-first architecture
 - Automatic sync when network available
@@ -161,12 +145,6 @@ Add custom form fields by extending the schema on your server. The app supports:
 - Checkboxes and switches
 - Digital signatures
 - Barcode/QR scanning
-<!--#if (enableIoT)-->
-- IoT sensor readings
-<!--#endif-->
-<!--#if (enableAR)-->
-- AR measurements and annotations
-<!--#endif-->
 
 ### Adding New Pages
 
@@ -193,36 +171,6 @@ builder.Services.AddTransient<CustomPage>();
 await Navigation.PushAsync(
     Handler.MauiContext.Services.GetRequiredService<CustomPage>());
 ```
-
-### Advanced Features
-
-<!--#if (enableIoT)-->
-#### IoT Sensor Configuration
-
-Configure sensor types in `MauiProgram.cs`:
-
-```csharp
-config.IoT.SensorTypes = new[]
-{
-    SensorType.Environmental,
-    SensorType.AirQuality,
-    SensorType.Noise,
-    SensorType.Custom
-};
-```
-<!--#endif-->
-
-<!--#if (enableAR)-->
-#### AR Configuration
-
-Customize AR settings:
-
-```csharp
-config.AR.MaxRenderDistance = 200; // meters
-config.AR.EnableUtilityVisualization = true;
-config.AR.EnableInfrastructureOverlay = true;
-```
-<!--#endif-->
 
 ## 🔧 Development Tips
 

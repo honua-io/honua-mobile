@@ -56,15 +56,4 @@
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
 	</ItemGroup>
 
-	<!-- Conditional Dependencies -->
-<!--#if (enableAR)-->
-	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
-		<PackageReference Include="Honua.Mobile.AR.iOS" Version="1.0.0" />
-	</ItemGroup>
-
-	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
-		<PackageReference Include="Honua.Mobile.AR.Android" Version="1.0.0" />
-	</ItemGroup>
-<!--#endif-->
-
 </Project>
