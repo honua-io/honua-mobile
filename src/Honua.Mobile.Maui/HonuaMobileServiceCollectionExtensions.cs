@@ -241,14 +241,21 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers the GeoPackage-based offline sync stack: <see cref="IGeoPackageSyncStore"/>,
-    /// <see cref="OfflineSyncEngine"/>, and <see cref="IOfflineSyncRunner"/>.
+    /// Registers the legacy mobile-owned GeoPackage offline sync stack:
+    /// <see cref="IGeoPackageSyncStore"/>, <see cref="OfflineSyncEngine"/>, and
+    /// <see cref="IOfflineSyncRunner"/>.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="storeOptions">GeoPackage store configuration (database path, etc.).</param>
     /// <param name="syncOptions">Sync engine options; defaults are used when <see langword="null"/>.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> or <paramref name="storeOptions"/> is <see langword="null"/>.</exception>
+    [Obsolete(
+        "Use AddHonuaSdkGeoPackageOfflineSync, which registers the SDK-owned " +
+        "offline sync engine with mobile GeoPackage storage adapters. This " +
+        "legacy overload remains for back-compat only and will be removed in a " +
+        "future release.",
+        error: false)]
     public static IServiceCollection AddHonuaGeoPackageOfflineSync(
         this IServiceCollection services,
         GeoPackageSyncStoreOptions storeOptions,
@@ -300,7 +307,9 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton<IConnectivityStateProvider, AlwaysOnlineConnectivityStateProvider>();
         services.AddSingleton<GeoPackageSdkOfflineStoreAdapter>();
         services.AddSingleton<SdkFeatureClient>();
+#pragma warning disable CS0618 // Back-compat: the offline-namespace shim is intentionally registered alongside the SDK feature client.
         services.AddSingleton<HonuaMobileSdkFeatureClient>();
+#pragma warning restore CS0618
         services.AddSingleton<IHonuaFeatureQueryClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureEditClient>(sp => sp.GetRequiredService<SdkFeatureClient>());
         services.AddSingleton<IHonuaFeatureAttachmentClient>(sp => sp.GetRequiredService<SdkFeatureClient>());

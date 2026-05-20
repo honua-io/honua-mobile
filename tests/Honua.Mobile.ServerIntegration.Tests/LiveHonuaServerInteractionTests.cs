@@ -12,13 +12,16 @@ using Honua.Mobile.Offline.ScenePackages;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
-using Honua.Sdk.GeoServices.FeatureServer.Models;
 using Honua.Sdk.OgcFeatures.Models;
+using Honua.Sdk.Offline.Abstractions;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+using ReplicaSyncClient = Honua.Sdk.Offline.ReplicaSyncClient;
+using OfflineSyncEngine = Honua.Mobile.Offline.Sync.OfflineSyncEngine;
+using OfflineSyncEngineOptions = Honua.Mobile.Offline.Sync.OfflineSyncEngineOptions;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 
@@ -682,9 +685,9 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         AssertEditSucceeded(result, "deleteResults");
     }
 
-    private FeatureServerFeature CreateFeatureServerFeature(string suffix)
+    private FeatureEditFeature CreateFeatureServerFeature(string suffix)
     {
-        return new FeatureServerFeature
+        return new FeatureEditFeature
         {
             Attributes = CreateFeatureAttributes(suffix),
             Geometry = JsonSerializer.SerializeToElement(CreateFeatureServerGeometry(), JsonOptions),
@@ -750,14 +753,14 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         return 0;
     }
 
-    private OgcFeature CreateOgcFeature(string id, string suffix)
+    private JsonElement CreateOgcFeature(string id, string suffix)
     {
-        return new OgcFeature
+        return JsonSerializer.SerializeToElement(new OgcFeature
         {
             Id = JsonSerializer.SerializeToElement(id, JsonOptions),
             Properties = CreateFeatureAttributes(suffix),
             Geometry = JsonSerializer.SerializeToElement(CreateGeoJsonPoint(), JsonOptions),
-        };
+        }, JsonOptions);
     }
 
     private async Task<string> CreateOgcFeatureAsync(HonuaMobileClient client, string suffix)

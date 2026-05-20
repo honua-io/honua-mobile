@@ -4,7 +4,6 @@ using System.Text.Json;
 using Honua.Mobile.Offline;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 
 namespace Honua.Mobile.Offline.Sync;
@@ -60,10 +59,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
         }
-        catch (ArgumentNullException ex) when (string.Equals(ex.ParamName, "source", StringComparison.Ordinal))
-        {
-            return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits response payload is malformed." };
-        }
+        // ArgumentNullException is reclassified as a malformed-payload result via the
+        // broader ArgumentException catch below. The previous ParamName=="source"
+        // filter coupled mobile to upstream SDK internals and silently swallowed
+        // unrelated argument-null failures.
         catch (ArgumentException ex)
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };

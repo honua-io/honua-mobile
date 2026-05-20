@@ -3,6 +3,8 @@ using Honua.Mobile.Offline.GeoPackage;
 using Honua.Sdk.Abstractions.Features;
 using Microsoft.Data.Sqlite;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.Offline.Tests;
 
 public sealed class GeoPackageSyncStoreTests : IDisposable

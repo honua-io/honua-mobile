@@ -5,6 +5,8 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.Offline.Abstractions;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.Offline;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]

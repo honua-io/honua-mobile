@@ -2,7 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.GeoServices.FeatureServer.Models;
 using Honua.Sdk.OgcFeatures.Models;
 
@@ -123,7 +123,7 @@ public sealed class HonuaMobileClientHttpTests
             LayerId = 0,
             Adds =
             [
-                new FeatureServerFeature
+                new FeatureEditFeature
                 {
                     Attributes = new Dictionary<string, JsonElement>
                     {
@@ -297,7 +297,7 @@ public sealed class HonuaMobileClientHttpTests
         using var result = await client.CreateOgcItemAsync(new OgcCreateItemRequest
         {
             CollectionId = "buildings",
-            Feature = new OgcFeature
+            Feature = JsonSerializer.SerializeToElement(new OgcFeature
             {
                 Id = JsonSerializer.SerializeToElement("building-1"),
                 Properties = new Dictionary<string, JsonElement>
@@ -309,7 +309,7 @@ public sealed class HonuaMobileClientHttpTests
                     type = "Point",
                     coordinates = new[] { -157.8, 21.3 },
                 }),
-            },
+            }),
         });
 
         Assert.Equal("application/geo+json", capturedMediaType);

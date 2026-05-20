@@ -1,6 +1,8 @@
 using SQLite;
 using Honua.Mobile.FieldCollection.Models;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.FieldCollection.Services.Storage.Models;
 
 /// <summary>

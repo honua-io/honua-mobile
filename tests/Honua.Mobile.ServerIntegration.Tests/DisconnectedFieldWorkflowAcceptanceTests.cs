@@ -4,7 +4,13 @@ using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
+// Disambiguate the mobile orchestrator from Honua.Sdk.Offline.OfflineSyncEngine.
+using OfflineSyncEngine = Honua.Mobile.Offline.Sync.OfflineSyncEngine;
+using OfflineSyncEngineOptions = Honua.Mobile.Offline.Sync.OfflineSyncEngineOptions;
+using ReplicaSyncClient = Honua.Sdk.Offline.ReplicaSyncClient;
 
 namespace Honua.Mobile.ServerIntegration.Tests;
 

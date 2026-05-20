@@ -2,15 +2,19 @@ using System.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
-using Honua.Mobile.Sdk.Models;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
 
 namespace Honua.Mobile.Smoke.Tests;
 
 /// <summary>
 /// Reliability smoke tests that verify critical paths in the Honua Mobile offline stack.
 /// These are intentionally lightweight and run without external dependencies so they can
-/// gate every CI build.
+/// gate every CI build. All cases are platform-neutral (no Android-specific APIs) and
+/// therefore tagged <c>Category=Smoke</c>. Android-specific smoke tests, when added,
+/// should be tagged <c>Category=SmokeAndroid</c> and live alongside these.
 /// </summary>
+[Trait("Category", "Smoke")]
 public sealed class SmokeTests : IDisposable
 {
     private readonly string _databasePath;
@@ -247,7 +251,7 @@ public sealed class SmokeTests : IDisposable
         }
     }
 
-    private sealed class NoOpSyncRunner : IOfflineSyncRunner
+    private sealed class NoOpSyncRunner : Honua.Mobile.Offline.Sync.IOfflineSyncRunner
     {
         public int CallCount { get; private set; }
 
@@ -270,7 +274,7 @@ public sealed class SmokeTests : IDisposable
         public Task<CreateReplicaResult> CreateReplicaAsync(
             string serviceId,
             string replicaName,
-            int[]? layerIds = null,
+            IReadOnlyList<int>? layerIds = null,
             CancellationToken ct = default)
         {
             return Task.FromResult(new CreateReplicaResult(CreatedReplicaId, ServerGen: 1));

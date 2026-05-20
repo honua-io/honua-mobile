@@ -32,15 +32,30 @@ public sealed class BackgroundPrefetchScheduler : IAsyncDisposable
     /// <summary>
     /// Number of prefetch tasks currently tracked by the scheduler.
     /// </summary>
+    /// <remarks>
+    /// This property is pure: it does not prune the internal task list. Callers
+    /// that need accounting without completed tasks should invoke
+    /// <see cref="PruneCompletedTasks"/> explicitly.
+    /// </remarks>
     public int RunningCount
     {
         get
         {
             lock (_sync)
             {
-                PruneCompletedTasks();
                 return _runningTasks.Count;
             }
+        }
+    }
+
+    /// <summary>
+    /// Removes completed tasks from the internal tracking list. Safe to call from any thread.
+    /// </summary>
+    public void PruneCompletedTasksSnapshot()
+    {
+        lock (_sync)
+        {
+            PruneCompletedTasks();
         }
     }
 
