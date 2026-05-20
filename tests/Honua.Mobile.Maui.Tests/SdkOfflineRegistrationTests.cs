@@ -68,7 +68,9 @@ public sealed class SdkOfflineRegistrationTests
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureQueryClient>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureEditClient>());
             Assert.IsType<SdkFeatureClient>(provider.GetRequiredService<IHonuaFeatureAttachmentClient>());
+#pragma warning disable CS0618 // Back-compat assertion against the offline-namespace shim.
             Assert.IsType<HonuaMobileSdkFeatureClient>(provider.GetRequiredService<HonuaMobileSdkFeatureClient>());
+#pragma warning restore CS0618
             Assert.Equal("mobile-offline-field-ops-v1", manifest.PackageId);
             Assert.Equal(
                 ["mobile_offline_demo/FeatureServer/68910", "mobile_offline_demo/FeatureServer/68920"],

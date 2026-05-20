@@ -11,14 +11,6 @@ public sealed class MobileFieldCaptureWorkflow
     private readonly DuplicateDetector _duplicateDetector;
 
     /// <summary>
-    /// Initializes a new mobile field workflow adapter with the SDK default duplicate detector.
-    /// </summary>
-    public MobileFieldCaptureWorkflow()
-        : this(new DuplicateDetector())
-    {
-    }
-
-    /// <summary>
     /// Initializes a new mobile field workflow adapter.
     /// </summary>
     /// <param name="duplicateDetector">SDK duplicate detector.</param>

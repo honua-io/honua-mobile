@@ -9,6 +9,8 @@ using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
 using Microsoft.Data.Sqlite;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.Offline.GeoPackage;
 
 /// <summary>

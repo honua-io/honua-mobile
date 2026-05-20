@@ -4,6 +4,8 @@ using System.Buffers;
 using Microsoft.Data.Sqlite;
 using Honua.Mobile.Offline.GeoPackage;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.Offline.MapAreas;
 
 /// <summary>

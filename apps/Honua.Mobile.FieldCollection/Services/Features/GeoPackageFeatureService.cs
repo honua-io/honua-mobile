@@ -10,6 +10,8 @@ using StorageBoundingBox = Honua.Mobile.FieldCollection.Services.Storage.Models.
 using StorageSpatialQuery = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialQuery;
 using StorageSpatialRelationship = Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialRelationship;
 
+using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
+
 namespace Honua.Mobile.FieldCollection.Services.Features;
 
 /// <summary>

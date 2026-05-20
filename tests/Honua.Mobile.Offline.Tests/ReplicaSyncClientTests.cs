@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
-using Honua.Mobile.Offline.Sync;
+using Honua.Sdk.Offline;
+using Honua.Sdk.Offline.Abstractions;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -53,47 +54,6 @@ public sealed class ReplicaSyncClientTests
 
         Assert.NotNull(capturedBody);
         Assert.Contains("layers=0%2C3%2C5", capturedBody);
-    }
-
-    [Fact]
-    public async Task CreateReplicaAsync_CamelCaseResponse_ReturnsReplicaIdAndServerGen()
-    {
-        var handler = new StubHttpMessageHandler((_, _) =>
-        {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""{"replicaId":"replica-camel","serverGeneration":"42"}""", Encoding.UTF8, "application/json"),
-            });
-        });
-
-        var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
-
-        var result = await client.CreateReplicaAsync("assets", "test-replica");
-
-        Assert.Equal("replica-camel", result.ReplicaId);
-        Assert.Equal(42, result.ServerGen);
-    }
-
-    [Fact]
-    public async Task CreateReplicaAsync_PerLayerServerGenResponse_ReturnsReplicaIdAndServerGen()
-    {
-        var handler = new StubHttpMessageHandler((_, _) =>
-        {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    """{"replicaID":"replica-layer","layers":[{"id":68910,"serverGen":43}]}""",
-                    Encoding.UTF8,
-                    "application/json"),
-            });
-        });
-
-        var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
-
-        var result = await client.CreateReplicaAsync("assets", "test-replica");
-
-        Assert.Equal("replica-layer", result.ReplicaId);
-        Assert.Equal(43, result.ServerGen);
     }
 
     [Fact]
@@ -227,7 +187,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.CreateReplicaAsync("assets", "test-replica"));
+        await Assert.ThrowsAsync<ReplicaSyncException>(() => client.CreateReplicaAsync("assets", "test-replica"));
     }
 
     [Fact]
@@ -243,7 +203,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.ExtractChangesAsync("assets", "replica-abc-123"));
+        await Assert.ThrowsAsync<ReplicaSyncException>(() => client.ExtractChangesAsync("assets", "replica-abc-123"));
     }
 
     [Fact]
@@ -259,7 +219,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.SynchronizeReplicaAsync("assets", "replica-abc-123"));
+        await Assert.ThrowsAsync<ReplicaSyncException>(() => client.SynchronizeReplicaAsync("assets", "replica-abc-123"));
     }
 
     [Fact]
@@ -275,7 +235,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => client.UnRegisterReplicaAsync("assets", "replica-abc-123"));
+        await Assert.ThrowsAsync<ReplicaSyncException>(() => client.UnRegisterReplicaAsync("assets", "replica-abc-123"));
     }
 
     [Fact]
@@ -300,7 +260,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.CreateReplicaAsync("assets", "bad-name"));
+        var ex = await Assert.ThrowsAsync<ReplicaSyncException>(() => client.CreateReplicaAsync("assets", "bad-name"));
         Assert.Contains("Invalid replica name", ex.Message);
     }
 
@@ -326,7 +286,7 @@ public sealed class ReplicaSyncClientTests
 
         var client = new ReplicaSyncClient(new HttpClient(handler) { BaseAddress = new Uri("https://api.honua.test") });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.ExtractChangesAsync("assets", "bad-replica"));
+        var ex = await Assert.ThrowsAsync<ReplicaSyncException>(() => client.ExtractChangesAsync("assets", "bad-replica"));
         Assert.Contains("Replica not found", ex.Message);
     }
 

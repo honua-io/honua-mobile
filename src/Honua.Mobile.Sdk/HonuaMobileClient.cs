@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Honua.Mobile.Sdk.Auth;
-using Honua.Mobile.Sdk.Models;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.GeoServices;
@@ -16,6 +15,12 @@ using Honua.Sdk.OgcFeatures;
 using Honua.Sdk.OgcFeatures.Exceptions;
 using Honua.Sdk.Scenes;
 using Microsoft.Extensions.Options;
+
+// SDK-owned conversion shims (live in honua-sdk-dotnet train >= 0.1.17-alpha.1).
+// Aliased so the call-site identifiers stay close to the original local mappings.
+using FeatureServerRequestConverters = Honua.Sdk.GeoServices.FeatureServer.Conversion.RequestConverters;
+using GrpcRequestConverters = Honua.Sdk.Grpc.Conversion.MobileRequestConverters;
+using OgcRequestConverters = Honua.Sdk.OgcFeatures.Conversion.RequestConverters;
 
 namespace Honua.Mobile.Sdk;
 
@@ -415,7 +420,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var collections = await _ogcFeaturesClient.ListCollectionsAsync(ct).ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(collections);
+            return OgcRequestConverters.ToJsonDocument(collections);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -438,9 +443,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .GetItemsAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcItemsParams(request), ct)
+                .GetItemsAsync(request.CollectionId, OgcRequestConverters.ToOgcItemsParams(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -463,9 +468,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .CreateItemAsync(request.CollectionId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .CreateItemAsync(request.CollectionId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -488,9 +493,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .UpdateItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToOgcFeature(request.Feature), ct)
+                .UpdateItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -513,9 +518,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _ogcFeaturesClient
-                .PatchItemAsync(request.CollectionId, request.FeatureId, SdkFeatureTransportMappings.ToJsonElement(request.Patch), ct)
+                .PatchItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToJsonElement(request.Patch), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return OgcRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaOgcFeaturesException ex)
         {
@@ -577,9 +582,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
     private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
         var response = await GetGrpcClient()
-            .QueryFeaturesAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .QueryFeaturesAsync(GrpcRequestConverters.ToGrpcQueryRequest(request), ct)
             .ConfigureAwait(false);
-        return SdkGrpcTransportMappings.ToJsonDocument(response);
+        return GrpcRequestConverters.ToJsonDocument(response);
     }
 
     private async IAsyncEnumerable<JsonDocument> QueryFeaturesGrpcPagesAsync(
@@ -587,19 +592,19 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         [EnumeratorCancellation] CancellationToken ct)
     {
         await foreach (var page in GetGrpcClient()
-            .QueryFeaturesStreamAsync(SdkGrpcTransportMappings.ToGrpcQueryRequest(request), ct)
+            .QueryFeaturesStreamAsync(GrpcRequestConverters.ToGrpcQueryRequest(request), ct)
             .ConfigureAwait(false))
         {
-            yield return SdkGrpcTransportMappings.ToJsonDocument(page);
+            yield return GrpcRequestConverters.ToJsonDocument(page);
         }
     }
 
     private async Task<JsonDocument> ApplyEditsGrpcAsync(ApplyEditsRequest request, CancellationToken ct)
     {
         var response = await GetGrpcClient()
-            .ApplyEditsAsync(SdkGrpcTransportMappings.ToGrpcApplyEditsRequest(request), ct)
+            .ApplyEditsAsync(GrpcRequestConverters.ToGrpcApplyEditsRequest(request), ct)
             .ConfigureAwait(false);
-        return SdkGrpcTransportMappings.ToJsonDocument(response);
+        return GrpcRequestConverters.ToJsonDocument(response);
     }
 
     private async Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
@@ -607,9 +612,9 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         try
         {
             var response = await _featureServerClient
-                .QueryAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerQueryParams(request), ct)
+                .QueryAsync(request.ServiceId, request.LayerId, FeatureServerRequestConverters.ToFeatureServerQueryParams(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return FeatureServerRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaFeatureServerException ex)
         {
@@ -626,16 +631,16 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                 HttpMethod.Post,
                 path,
                 query: null,
-                new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(request)),
+                new FormUrlEncodedContent(FeatureServerRequestConverters.ToFeatureServerEditFormParameters(request)),
                 ct).ConfigureAwait(false);
         }
 
         try
         {
             var response = await _featureServerClient
-                .ApplyEditsAsync(request.ServiceId, request.LayerId, SdkFeatureTransportMappings.ToFeatureServerEditRequest(request), ct)
+                .ApplyEditsAsync(request.ServiceId, request.LayerId, FeatureServerRequestConverters.ToFeatureServerEditRequest(request), ct)
                 .ConfigureAwait(false);
-            return SdkFeatureTransportMappings.ToJsonDocument(response);
+            return FeatureServerRequestConverters.ToJsonDocument(response);
         }
         catch (HonuaFeatureServerException ex)
         {
@@ -801,17 +806,17 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
         var layerId = source.LayerId
             ?? throw new InvalidOperationException("FeatureServer feature edits require a layer ID.");
 
+        // The SDK's ApplyEditsRequest accepts FeatureEditFeature directly; the
+        // legacy mobile-side path that pre-converted to FeatureServerFeature is
+        // no longer required because Honua.Sdk.GeoServices owns the per-protocol
+        // conversion as part of ToFeatureServerEditFormParameters.
         var editRequest = new ApplyEditsRequest
         {
             ServiceId = serviceId,
             LayerId = layerId,
-            Adds = request.Adds.Count > 0
-                ? request.Adds.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToArray()
-                : null,
-            Updates = request.Updates.Count > 0
-                ? request.Updates.Select(SdkFeatureTransportMappings.ToFeatureServerFeature).ToArray()
-                : null,
-            Deletes = SdkFeatureTransportMappings.ToFeatureServerDeleteObjectIds(request),
+            Adds = request.Adds.Count > 0 ? [.. request.Adds] : null,
+            Updates = request.Updates.Count > 0 ? [.. request.Updates] : null,
+            Deletes = FeatureServerRequestConverters.ToFeatureServerDeleteObjectIds(request),
             RollbackOnFailure = request.RollbackOnFailure,
             ForceWrite = request.ForceWrite,
         };
@@ -821,7 +826,7 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             HttpMethod.Post,
             path,
             query: null,
-            new FormUrlEncodedContent(SdkFeatureTransportMappings.ToFeatureServerEditFormParameters(editRequest)),
+            new FormUrlEncodedContent(FeatureServerRequestConverters.ToFeatureServerEditFormParameters(editRequest)),
             ct).ConfigureAwait(false);
     }
 

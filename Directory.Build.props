@@ -1,11 +1,19 @@
 <Project>
   <PropertyGroup>
-    <HonuaSdkDotNetTrainVersion>0.1.15-alpha.1</HonuaSdkDotNetTrainVersion>
+    <!--
+      Honua .NET SDK 0.1.17-alpha.1 — bundles the mobile-shim consolidation:
+        - Honua.Sdk.Geometry.GeographicBoundingBox (SDK PR #151)
+        - Mobile DTO consolidation (SDK PR #152)
+        - Honua.Sdk.Offline.ReplicaSyncClient (SDK PR #153)
+        - Transport-mapping migration (SDK PR #154)
+        - Public-API + transitive Geometry surface (SDK PR #155)
+    -->
+    <HonuaSdkDotNetTrainVersion>0.1.17-alpha.1</HonuaSdkDotNetTrainVersion>
     <HonuaSdkDotNetTrainTag>dotnet-sdk-v$(HonuaSdkDotNetTrainVersion)</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/$(HonuaSdkDotNetTrainTag)</HonuaSdkDotNetTrainReleaseUrl>
-    <HonuaSdkDotNetTrainReleaseCommit>9d264e358099dc20a30b9247013b61d1fba0b0a9</HonuaSdkDotNetTrainReleaseCommit>
-    <HonuaSdkDotNetTrainReleasePublishedAt>2026-04-30T23:32:50Z</HonuaSdkDotNetTrainReleasePublishedAt>
+    <HonuaSdkDotNetTrainReleaseCommit>77da0cf</HonuaSdkDotNetTrainReleaseCommit>
+    <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-20T07:42:55Z</HonuaSdkDotNetTrainReleasePublishedAt>
     <MauiVersion>10.0.60</MauiVersion>
   </PropertyGroup>
 </Project>
