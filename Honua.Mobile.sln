@@ -31,6 +31,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.ServerIntegrat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.PlatformSmoke", "tests\Honua.Mobile.PlatformSmoke\Honua.Mobile.PlatformSmoke.csproj", "{0F322272-A4E5-43B4-909B-40A936F3CFDE}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "apps", "apps", "{1787FE1D-075E-9E68-7218-25F1BD1BBEAB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Honua.Mobile.FieldCollection.Core", "apps\Honua.Mobile.FieldCollection.Core\Honua.Mobile.FieldCollection.Core.csproj", "{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -185,6 +189,18 @@ Global
 		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x64.Build.0 = Release|Any CPU
 		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x86.ActiveCfg = Release|Any CPU
 		{0F322272-A4E5-43B4-909B-40A936F3CFDE}.Release|x86.Build.0 = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|x64.Build.0 = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Debug|x86.Build.0 = Debug|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|x64.ActiveCfg = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|x64.Build.0 = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|x86.ActiveCfg = Release|Any CPU
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -202,5 +218,6 @@ Global
 		{8F30E9F6-4C66-49FC-9020-0706E5708782} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E4932418-1C59-49D0-981E-1A06FC657649} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{0F322272-A4E5-43B4-909B-40A936F3CFDE} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{E9DCBB3C-AA2D-48DB-9B53-053A2BB43170} = {1787FE1D-075E-9E68-7218-25F1BD1BBEAB}
 	EndGlobalSection
 EndGlobal

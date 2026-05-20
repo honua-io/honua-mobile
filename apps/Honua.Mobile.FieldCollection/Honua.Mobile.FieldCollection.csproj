@@ -67,16 +67,12 @@
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
         <PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
-        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
         <PackageReference Include="Microsoft.Maui.Controls.Maps" Version="$(MauiVersion)" />
-        <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
-        <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
+    </ItemGroup>
 
-        <!-- SQLite and GeoPackage support -->
-        <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
-        <PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.8" />
-        <PackageReference Include="NetTopologySuite" Version="2.6.0" />
-        <PackageReference Include="NetTopologySuite.IO.SqlServerBytes" Version="2.1.0" />
+    <!-- Platform-neutral FieldCollection sources live in the Core class library. -->
+    <ItemGroup>
+        <ProjectReference Include="../Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj" />
     </ItemGroup>
 
     <!-- Development Dependency: Include Mobile SDK projects when building locally -->
