@@ -92,6 +92,57 @@ describe('honua map builder', () => {
     ]);
   });
 
+  it('rejects malformed API keys before generating snippets', () => {
+    const cases: { apiKey: string; message: RegExp }[] = [
+      { apiKey: 'has spaces in it', message: /must not contain whitespace/i },
+      { apiKey: 'Bearer abc123def456', message: /Authorization.*header prefix/i },
+      { apiKey: '"quoted-secret-key"', message: /wrapped in quotes/i },
+      { apiKey: 'short', message: /between 8 and 256 characters/i },
+      { apiKey: 'has!disallowed/chars', message: /letters, digits, and the characters/i },
+    ];
+
+    for (const { apiKey, message } of cases) {
+      const state = createHonuaMapBuilderState({
+        serviceUrl: 'https://services.example.test/FeatureServer',
+        layerIds: ['assets'],
+        apiKey,
+      });
+
+      const errors = state.issues.filter((issue) => issue.severity === 'error');
+      expect(errors.map((issue) => issue.code)).toContain('invalid-api-key');
+      const apiKeyError = errors.find((issue) => issue.code === 'invalid-api-key');
+      expect(apiKeyError?.field).toBe('apiKey');
+      expect(apiKeyError?.message).toMatch(message);
+      expect(state.canGenerateSnippet).toBe(false);
+      expect(state.snippet).toBeNull();
+      // Malformed keys must not produce a duplicate credentials-omitted warning.
+      expect(state.issues.map((issue) => issue.code)).not.toContain('credentials-omitted');
+    }
+  });
+
+  it('accepts well-formed API keys without raising format errors', () => {
+    const validKeys = [
+      'svc.tenant-42:abcDEF_0123456789',
+      // base64-style server-issued key, including padding.
+      'YWJjZGVmZ2hpamtsbW5vcA==',
+      // URL-safe base64 (commonly produced by JWT-adjacent tooling).
+      'eyJhbGciOiJIUzI1NiJ9.eyJ0ZW5hbnQiOiJmb28ifQ.sig-Value_123',
+      // Hex-only opaque token.
+      '0123456789abcdef0123456789abcdef',
+    ];
+
+    for (const apiKey of validKeys) {
+      const state = createHonuaMapBuilderState({
+        serviceUrl: 'https://services.example.test/FeatureServer',
+        layerIds: ['assets'],
+        apiKey,
+      });
+
+      expect(state.issues.map((issue) => issue.code)).not.toContain('invalid-api-key');
+      expect(state.canGenerateSnippet).toBe(true);
+    }
+  });
+
   it('applies builder preview state to an existing map element', () => {
     const element = document.createElement('honua-map');
     const state = createHonuaMapBuilderState({
