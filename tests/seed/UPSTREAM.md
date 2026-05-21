@@ -54,6 +54,14 @@ rather than silently take the upstream version. Commit the refreshed
 seed + updated `UPSTREAM.md` together in a single change so the SHA and
 the file always move in lockstep.
 
+A scheduled GitHub Actions workflow watches this file for upstream
+drift: `.github/workflows/seed-drift-check.yml` runs weekly on Monday
+14:00 UTC (and supports `workflow_dispatch`). When the upstream blob
+differs from the vendored copy it opens (or comments on) an issue
+titled `seed-drift: mobile-offline-demo-v1.sql` and fails the run so the
+drift is visible on the Actions page. Refresh via the sync script
+above, then close the tracking issue when the new SHA is committed.
+
 ## When to update
 
 Update when any of the following change upstream:
