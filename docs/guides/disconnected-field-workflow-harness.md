@@ -157,9 +157,9 @@ The `.github/workflows/live-server-integration.yml` workflow runs the
 `tests/Honua.Mobile.ServerIntegration.Tests/LiveHonuaServerInteractionTests.cs`
 against a Docker-hosted Honua server (no staging dependency). It triggers on:
 
-- Pull requests touching `src/**`, `tests/**`, `apps/**`, `contracts/**`, or
-  the build/version property files.
-- Pushes to `main` / `trunk` with the same path scope.
+- Every pull request (no `paths:` filter, so the required status check is
+  always reported even for docs-only PRs).
+- Pushes to `main` / `trunk`.
 - `workflow_dispatch` for ad-hoc runs.
 
 The job pre-pulls `honuaio/honua-server:latest` and the PostGIS image with

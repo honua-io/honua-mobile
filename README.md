@@ -216,8 +216,7 @@ platform smoke guardrails for honua-server #826 are documented in
 The `Live Server Integration` workflow
 (`.github/workflows/live-server-integration.yml`) runs
 `LiveHonuaServerInteractionTests` against a Docker-hosted Honua server stack
-on every PR that touches mobile source / tests / apps and on pushes to `main`.
-See
+on every PR and on pushes to `main`. See
 [Disconnected Field Workflow Harness](docs/guides/disconnected-field-workflow-harness.md#live-server-integration-workflow)
 for scope, triggers, and the seed-SQL gap.
 

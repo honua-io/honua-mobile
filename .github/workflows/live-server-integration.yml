@@ -1,29 +1,16 @@
 name: Live Server Integration
 
+# Intentionally NOT path-filtered: this workflow is intended to become a
+# required status check on `main`. Required workflows that are skipped via
+# `paths:` filters leave the status check in a pending state, blocking merges
+# for unrelated PRs (e.g. docs-only changes). The job is cheap-ish thanks to
+# pre-pull caching, NuGet cache, and a 20m timeout; if PR volume makes that
+# painful, gate inside the job (`if:` on changed-paths output) rather than at
+# the workflow trigger so the required check still reports success.
 on:
   pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "apps/**"
-      - "contracts/**"
-      - "Directory.Build.props"
-      - "build/Honua.Mobile.BuildMetadata.props"
-      - "Honua.Mobile.sln"
-      - "NuGet.config"
-      - ".github/workflows/live-server-integration.yml"
   push:
     branches: [main, trunk]
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "apps/**"
-      - "contracts/**"
-      - "Directory.Build.props"
-      - "build/Honua.Mobile.BuildMetadata.props"
-      - "Honua.Mobile.sln"
-      - "NuGet.config"
-      - ".github/workflows/live-server-integration.yml"
   workflow_dispatch:
     inputs:
       honua_server_image:
