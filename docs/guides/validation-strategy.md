@@ -19,7 +19,7 @@ and most reliable inward to most expensive and most operationally gated:
 ```
                        Physical device  (0 today, deferred to GA)
                   Cloud acceptance      (7 tests, manual dispatch)
-              Live server (Docker)      (10 tests, env-gated, opt-in)
+              Live server (Docker)      (10 tests, hard-gated on every PR)
           Server integration            (13 tests, in-process loopback)
       Unit                              (293 tests across 5 projects)
   Embed DOM                             (npm, src/Honua.Embed/tests/)
@@ -35,8 +35,13 @@ and most reliable inward to most expensive and most operationally gated:
 - **Live server (Docker, 10 tests)** -- `LiveHonuaServerInteractionTests`
   spin up the official Honua server image via Testcontainers (or attach to
   a pre-started Honua URL) when `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set.
-  Today this is opt-in; CI does not set the variable, so these tests skip
-  on PRs.
+  The `Live Server Integration` workflow
+  (`.github/workflows/live-server-integration.yml`) sets the env var on
+  every PR and points it at the vendored seed
+  (`tests/seed/mobile-offline-demo-v1.sql`, see `tests/seed/UPSTREAM.md`),
+  so the suite is now a hard gate on PRs -- a failing live test blocks the
+  merge. When run locally without the env var, the suite reports as
+  *Skipped* (Xunit.SkippableFact), not falsely Passed.
 - **Cloud acceptance (7 tests)** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
@@ -107,12 +112,13 @@ Known coverage gaps, with the owner ticket where one exists:
   honua-io/honua-mobile#23. Per-runtime native AR follow-ups are tracked
   in `docs/guides/native-scene-anchoring-requirements.md` and the
   3D/AR dependency matrix (`docs/guides/mobile-3d-ar-dependency-matrix.md`).
-- **Live server (Docker) on every PR** -- the
-  `LiveHonuaServerInteractionTests` suite (10 tests) is wired but never
-  enabled by `.github/workflows/ci.yml`. There is no open tracking issue
-  yet for promoting the live image into the default PR pipeline; the
-  closest currently open epic is honua-io/honua-mobile#92 (SDK-backed
-  offline field operations demo).
+- ~~**Live server (Docker) on every PR**~~ -- closed. The
+  `Live Server Integration` workflow now runs
+  `LiveHonuaServerInteractionTests` (10 tests) on every PR with the
+  vendored seed (`tests/seed/mobile-offline-demo-v1.sql`) loaded into the
+  postgres container and the dotnet test step as a hard gate (no
+  `continue-on-error`). Adding the workflow to branch-protection required
+  checks is a separate maintainer call.
 - **gRPC live transport** -- `Honua.Mobile.Sdk.Tests` covers gRPC
   translation and transport security via mocks; no live gRPC server
   fixture exists yet.
@@ -140,9 +146,12 @@ The relevant workflows under `.github/workflows/`:
     `Honua.Mobile.Field` with `TreatWarningsAsErrors`, plus
     `npm run build` for the embed package; runs `dotnet format` checks.
   - `test` -- runs the 5 unit projects (293 tests) plus the
-    `Honua.Mobile.ServerIntegration.Tests` project (live tests inside
-    skip because `HONUA_MOBILE_LIVE_SERVER_TESTS` is unset) plus
-    `npm test` for the embed package.
+    `Honua.Mobile.ServerIntegration.Tests` project; the 10
+    `LiveHonuaServerInteractionTests` report as **Skipped**
+    (`Xunit.SkippableFact`) here because `HONUA_MOBILE_LIVE_SERVER_TESTS`
+    is unset on the unit-test job. They run for real (and as a hard gate)
+    in the `Live Server Integration` workflow below.
+  - `npm test` runs for the embed package on the same job.
   - `maui-android`, `maui-ios`, `maui-windows` -- platform builds plus
     Android emulator and iOS simulator platform smoke
     (`scripts/run-android-platform-smoke.sh`,

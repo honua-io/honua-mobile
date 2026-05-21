@@ -40,13 +40,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Directory.CreateDirectory(_rootDirectory);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_HealthEndpoint_RespondsReady()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var http = CreateHttpClient();
         using var response = await http.GetAsync(_server.Uri(_server.Options.ReadyPath));
@@ -54,13 +51,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.True(response.IsSuccessStatusCode, $"Expected ready endpoint to succeed, got {(int)response.StatusCode}.");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_FeatureServerRestAndSdkFeatureContracts_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
         using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
@@ -164,13 +158,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_MobileSdkFeatureClientAdapter_QuerySmoke()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
         IHonuaFeatureQueryClient featureClient = new SdkFeatureClient(client);
@@ -186,13 +177,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.NotNull(result.Features);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_GrpcFeatureQueryAndEdit_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
         using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
@@ -225,13 +213,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_OgcFeaturesCrud_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
         var ogcSource = new FeatureSource { CollectionId = _server.Options.OgcCollectionId };
@@ -339,13 +324,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_FeatureAttachments_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
         var source = FeatureSource();
@@ -417,13 +399,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_ReplicaSyncAndOfflineQueue_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var http = CreateHttpClient();
         var replicaClient = new ReplicaSyncClient(http);
@@ -470,13 +449,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.Equal(0, await store.CountPendingAsync());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_MapAndScenePackageDownloaders_FetchServerAssets()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         Assert.NotNull(_server.Options.SceneAssetBaseUri);
 
@@ -520,13 +496,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.Single(await store.ListScenePackagesAsync());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_ScenesAndRouting_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
         var scenes = await client.Scenes.ListScenesAsync(new HonuaSceneListRequest
@@ -570,13 +543,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.NotEmpty(closest.Routes);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LiveImage_AuthRefreshAndExceptionUploads_RoundTrip()
     {
-        if (!_server.Enabled)
-        {
-            return;
-        }
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var authHttp = CreateHttpClient();
         var authService = new FieldServices.AuthenticationService(authHttp);
