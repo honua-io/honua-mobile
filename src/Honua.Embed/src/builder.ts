@@ -226,7 +226,9 @@ function validateOptions(
 ): void {
   validateServiceUrl(options.serviceUrl, issues);
 
-  if (options.apiKey && !snippetIncludesCredentials(snippetOptions)) {
+  const apiKeyValid = validateApiKeyFormat(options.apiKey, issues);
+
+  if (options.apiKey && apiKeyValid && !snippetIncludesCredentials(snippetOptions)) {
     issues.push({
       severity: 'warning',
       code: 'credentials-omitted',
@@ -300,6 +302,90 @@ function validateServiceUrl(
       message: 'Non-local embed service URLs should use HTTPS.',
     });
   }
+}
+
+const API_KEY_MIN_LENGTH = 8;
+const API_KEY_MAX_LENGTH = 256;
+// Allow the common opaque-token charset: alphanumerics, base64 / URL-safe
+// base64 padding and separators, and the punctuation produced by JWT,
+// hex, and prefix-style keys (`svc.tenant:abc`). Server-issued keys are
+// opaque, so this is intentionally permissive and only catches characters
+// that would break HTML attribute, URL, or header contexts.
+const API_KEY_ALLOWED_PATTERN = /^[A-Za-z0-9._\-:+/=~]+$/;
+const API_KEY_HEADER_PREFIX_PATTERN = /^(bearer|basic|token|apikey|api[-_]key)\s/i;
+
+/**
+ * Validates the shape of an embed API key without contacting any server.
+ *
+ * Server-issued keys are opaque, so this performs only format checks that catch
+ * common copy/paste mistakes (whitespace, surrounding quotes, accidentally
+ * pasted `Authorization` header prefixes, length, and unexpected characters).
+ *
+ * Returns `true` when the key is absent or appears well-formed and `false`
+ * when an error-level issue was appended.
+ */
+function validateApiKeyFormat(
+  apiKey: string | null | undefined,
+  issues: HonuaMapBuilderIssue[],
+): boolean {
+  if (!apiKey) {
+    return true;
+  }
+
+  if (API_KEY_HEADER_PREFIX_PATTERN.test(apiKey)) {
+    issues.push({
+      severity: 'error',
+      code: 'invalid-api-key',
+      field: 'apiKey',
+      message: 'API key must be the raw key value, without an "Authorization" header prefix.',
+    });
+    return false;
+  }
+
+  if (/\s/.test(apiKey)) {
+    issues.push({
+      severity: 'error',
+      code: 'invalid-api-key',
+      field: 'apiKey',
+      message: 'API key must not contain whitespace.',
+    });
+    return false;
+  }
+
+  if (
+    (apiKey.startsWith('"') && apiKey.endsWith('"')) ||
+    (apiKey.startsWith("'") && apiKey.endsWith("'"))
+  ) {
+    issues.push({
+      severity: 'error',
+      code: 'invalid-api-key',
+      field: 'apiKey',
+      message: 'API key must not be wrapped in quotes.',
+    });
+    return false;
+  }
+
+  if (apiKey.length < API_KEY_MIN_LENGTH || apiKey.length > API_KEY_MAX_LENGTH) {
+    issues.push({
+      severity: 'error',
+      code: 'invalid-api-key',
+      field: 'apiKey',
+      message: `API key must be between ${API_KEY_MIN_LENGTH} and ${API_KEY_MAX_LENGTH} characters.`,
+    });
+    return false;
+  }
+
+  if (!API_KEY_ALLOWED_PATTERN.test(apiKey)) {
+    issues.push({
+      severity: 'error',
+      code: 'invalid-api-key',
+      field: 'apiKey',
+      message: 'API key may only contain letters, digits, and the characters . _ - : + / = ~',
+    });
+    return false;
+  }
+
+  return true;
 }
 
 function validateCoordinate(

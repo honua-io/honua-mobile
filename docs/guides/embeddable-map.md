@@ -206,6 +206,16 @@ URL, coordinate ranges, or custom element names. API keys are kept out of
 generated snippets unless credentials are explicitly enabled for the selected
 target.
 
+When an `apiKey` is supplied the builder performs lightweight format checks
+(rejecting whitespace, `Authorization` header prefixes such as `Bearer ...`,
+surrounding quotes, lengths outside 8&ndash;256 characters, and characters
+outside `A-Z a-z 0-9 . _ - : + / = ~`). The charset is intentionally permissive
+to allow opaque server-issued tokens (alphanumerics, base64 / URL-safe
+base64, JWT, hex, and prefix-style `svc.tenant:abc` keys). Format violations
+surface as `{ code: 'invalid-api-key', field: 'apiKey' }` errors and block
+snippet generation so operators can correct copy/paste mistakes before the
+key reaches a server-backed admin flow.
+
 Admin portals can also mount the packaged builder element. It uses the same
 state helpers, renders a live preview and generated snippet, and emits
 `honua-map-builder-change` whenever the configuration changes.
