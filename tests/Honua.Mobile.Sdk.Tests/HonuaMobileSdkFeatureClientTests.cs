@@ -132,7 +132,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
     // explicit x/y projection that mobile previously performed before assembling
     // the form payload is no longer mobile-owned. Re-enable once
     // honua-sdk-dotnet adds the GeoJSON->FeatureServer geometry projection.
-    [Fact(Skip = "SDK 0.1.17-alpha.1 emits GeoJSON in adds payload; pending honua-sdk-dotnet geometry projection follow-up.")]
+    [Fact(Skip = "Tracked at honua-io/honua-mobile#199 — SDK 0.1.17-alpha.1 emits GeoJSON in adds payload; pending Honua.Sdk.GeoServices geometry projection.")]
     public async Task ApplyEditsAsync_FeatureServerRequest_AcceptsSparseLiveImageEditResponse()
     {
         string? capturedBody = null;
