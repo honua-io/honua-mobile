@@ -17,7 +17,7 @@ The current source-backed mobile feature map is in [docs/features/README.md](doc
 | Integration (in-process loopback) | ✅ | every PR | 13 tests in `Honua.Mobile.ServerIntegration.Tests` against a real ASP.NET Core loopback server |
 | Smoke | ✅ | every PR | 18 tests in `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
-| Live server (Docker image) | 🟡 | opt-in via `HONUA_MOBILE_LIVE_SERVER_TESTS=1` | 10 tests in `LiveHonuaServerInteractionTests`; not wired into the default PR pipeline yet |
+| Live server (Docker image) | 🟡 | every PR via `Live Server Integration` workflow (soft-fail pending seed SQL wiring) | 10 tests in `LiveHonuaServerInteractionTests`; Testcontainers spins up `honuaio/honua-server:latest` + PostGIS, health probe passes, full coverage gated on seed SQL source |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | 7 tests in `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
 | Physical device | 🟡 | deferred to GA | AR/VR field workflow tracked under honua-mobile#23 (closed, follow-ups in `docs/guides/native-scene-anchoring-requirements.md`); emulator/simulator platform smoke covers part of the surface |
 
