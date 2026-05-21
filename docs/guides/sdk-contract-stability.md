@@ -43,12 +43,11 @@ packages (from `.csproj` files under `src/`, `apps/`, `tests/`):
 | `Honua.Sdk.OgcFeatures` | OGC API Features client (models, conversion, exceptions). |
 | `Honua.Sdk.Scenes` | 3D scene client and scene-specific exceptions. |
 | `Honua.Sdk.Field` | Field forms (`FormDefinition`, `FormField`, `FormFieldType`) and `FieldRecord` types. |
-| `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, change journal / feature / sync-state / checkpoint stores. |
+| `Honua.Sdk.Offline.Abstractions` | Interface contracts for the offline sync engine: `IOfflineChangeJournal`, `IOfflineFeatureStore`, `IOfflineSyncCheckpointStore`, `IOfflineSyncStateStore`, `OfflinePackageManifest`. Referenced directly by `Honua.Mobile.Offline` and `Honua.Mobile.Maui`. |
+| `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, and the concrete store/journal implementations behind `Honua.Sdk.Offline.Abstractions`. |
 
-The harmonization fixture also references a separately-published
-`Honua.Sdk.Offline.Abstractions` (split from `Honua.Sdk.Offline`). Any of these
-package IDs disappearing or splitting further constitutes a contract change for
-the purposes of this doc.
+Any of these package IDs disappearing, splitting further, or being renamed
+constitutes a contract change for the purposes of this doc.
 
 ## What "alpha", "beta", "stable" mean here
 
