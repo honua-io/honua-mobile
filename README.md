@@ -210,6 +210,7 @@ no implementation yet.
 
 - **[Getting Started](docs/getting-started/)** -- installation, tutorial, and developer checklist
 - **[Guides](docs/guides/)** -- in-depth guides for offline sync, security, camera, performance, and more
+- **[SDK Contract Stability Roadmap](docs/guides/sdk-contract-stability.md)** -- exit criteria for moving Honua.Sdk.* from alpha to beta to stable
 - **[API Reference](docs/api/)** -- core SDK API documentation
 
 ## License
