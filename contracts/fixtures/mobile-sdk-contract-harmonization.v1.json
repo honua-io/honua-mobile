@@ -420,16 +420,16 @@
       "sdkType": "Honua.Sdk.Abstractions.Features.FeatureAttachmentInfo",
       "transport": "rest",
       "requiredFields": [
-        { "name": "id", "jsonType": "string", "nullable": false },
+        { "name": "id", "jsonType": "integer", "nullable": false, "wireParser": "HonuaMobileClient.Attachments.cs:TryGetInt64(element, _, \"id\", \"attachmentId\")" },
         { "name": "name", "jsonType": "string", "nullable": false },
         { "name": "contentType", "jsonType": "string", "nullable": false },
         { "name": "size", "jsonType": "integer", "nullable": false }
       ],
       "optionalFields": [
         { "name": "url", "jsonType": "string", "nullable": true, "format": "uri" },
-        { "name": "keywords", "jsonType": "array", "nullable": true, "elementType": "string" }
+        { "name": "keywords", "jsonType": "string", "nullable": true, "wireParser": "HonuaMobileClient.Attachments.cs:TryGetString(element, _, \"keywords\")" }
       ],
-      "notes": "Mobile retains only adapter glue; the wire shape is owned by Honua.Sdk.Abstractions."
+      "notes": "Mobile retains only adapter glue; the wire shape is owned by Honua.Sdk.Abstractions. Wire types verified against HonuaMobileClient.Attachments.cs and the loopback HonuaIntegrationServer fixture, which both treat `id` as numeric and `keywords` as a scalar string."
     }
   }
 }
