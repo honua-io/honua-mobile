@@ -22,9 +22,9 @@ on:
   workflow_dispatch:
     inputs:
       honua_server_image:
-        description: "Honua server image tag to pull (default honuaio/honua-server:latest)"
+        description: "Honua server image tag to pull (default honuaio/honua-server:nightly -- tracks current trunk so the vendored seed schema matches)"
         required: false
-        default: "honuaio/honua-server:latest"
+        default: "honuaio/honua-server:nightly"
       fixture_sql_ref:
         description: "Optional honua-server git ref to fetch a fresh tests/seed/mobile-offline-demo-v1.sql snapshot. Leave empty to use the vendored seed."
         required: false
@@ -42,7 +42,7 @@ env:
   DOTNET_VERSION: "10.0.x"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
   DOTNET_NOLOGO: "true"
-  HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+  HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
   HONUA_POSTGIS_IMAGE: "postgis/postgis:17-3.5-alpine"
 
 jobs:
@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 20
     env:
       HONUA_MOBILE_LIVE_SERVER_TESTS: "1"
-      HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+      HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
       HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "postgis/postgis:17-3.5-alpine"
       HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
     steps:
