@@ -1,0 +1,186 @@
+name: Live Server Integration
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "apps/**"
+      - "contracts/**"
+      - "Directory.Build.props"
+      - "build/Honua.Mobile.BuildMetadata.props"
+      - "Honua.Mobile.sln"
+      - "NuGet.config"
+      - ".github/workflows/live-server-integration.yml"
+  push:
+    branches: [main, trunk]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "apps/**"
+      - "contracts/**"
+      - "Directory.Build.props"
+      - "build/Honua.Mobile.BuildMetadata.props"
+      - "Honua.Mobile.sln"
+      - "NuGet.config"
+      - ".github/workflows/live-server-integration.yml"
+  workflow_dispatch:
+    inputs:
+      honua_server_image:
+        description: "Honua server image tag to pull (default honuaio/honua-server:latest)"
+        required: false
+        default: "honuaio/honua-server:latest"
+      fixture_sql_ref:
+        description: "Optional git ref of honua-server to fetch tests/seed/mobile-offline-demo-v1.sql from"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: live-server-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_NOLOGO: "true"
+  HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+  HONUA_POSTGIS_IMAGE: "postgis/postgis:17-3.5-alpine"
+
+jobs:
+  live-server-integration:
+    name: Live Server Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HONUA_MOBILE_LIVE_SERVER_TESTS: "1"
+      HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+      HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "postgis/postgis:17-3.5-alpine"
+      HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify Docker available
+        run: |
+          docker version
+          docker info | head -20
+
+      - name: Pre-pull container images with retry
+        run: |
+          set -e
+          pull_with_retry() {
+            local image="$1"
+            local attempts=3
+            local delay=10
+            for i in $(seq 1 $attempts); do
+              echo "::group::docker pull $image (attempt $i/$attempts)"
+              if docker pull "$image"; then
+                echo "::endgroup::"
+                return 0
+              fi
+              echo "::endgroup::"
+              if [ "$i" -lt "$attempts" ]; then
+                echo "Pull failed, retrying in ${delay}s..."
+                sleep "$delay"
+                delay=$((delay * 2))
+              fi
+            done
+            echo "::error::Failed to pull $image after $attempts attempts"
+            return 1
+          }
+          pull_with_retry "${HONUA_SERVER_IMAGE}"
+          pull_with_retry "${HONUA_POSTGIS_IMAGE}"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure GitHub Packages
+        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-live-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-live-
+            ${{ runner.os }}-nuget-
+
+      - name: Restore integration test project
+        run: dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
+
+      - name: Build integration test project
+        run: |
+          dotnet build tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
+            --no-restore --configuration Release
+
+      - name: Create artifact directories
+        run: |
+          mkdir -p TestResults
+          mkdir -p "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}"
+
+      # The seed SQL lives in the honua-server repo at tests/seed/mobile-offline-demo-v1.sql.
+      # It is intentionally NOT vendored here. If a fixture ref is supplied via workflow_dispatch,
+      # we fetch only that file via a sparse checkout. Otherwise the live tests run without seed,
+      # which means queries that depend on seeded layers will be brittle until the seed source is
+      # wired up (tracked as a follow-up; see PR description for the gap).
+      - name: Fetch fixture seed SQL (optional)
+        id: fixture-seed
+        if: ${{ inputs.fixture_sql_ref != '' }}
+        run: |
+          set -e
+          mkdir -p "${{ github.workspace }}/.fixture-seed"
+          cd "${{ github.workspace }}/.fixture-seed"
+          git init -q
+          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/honua-io/honua-server.git
+          git config core.sparseCheckout true
+          echo "tests/seed/mobile-offline-demo-v1.sql" > .git/info/sparse-checkout
+          if ! git fetch --depth=1 origin "${{ inputs.fixture_sql_ref }}" 2>/dev/null; then
+            echo "::warning::Could not fetch fixture SQL at ref ${{ inputs.fixture_sql_ref }} (token may lack honua-server read scope). Continuing without seed."
+            exit 0
+          fi
+          git checkout FETCH_HEAD -- tests/seed/mobile-offline-demo-v1.sql || {
+            echo "::warning::Seed SQL not present at ref ${{ inputs.fixture_sql_ref }}"
+            exit 0
+          }
+          SEED_PATH="${{ github.workspace }}/.fixture-seed/tests/seed/mobile-offline-demo-v1.sql"
+          echo "HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=${SEED_PATH}" >> "$GITHUB_ENV"
+          echo "seed_path=${SEED_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Run LiveHonuaServerInteractionTests
+        run: |
+          dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --filter "FullyQualifiedName~LiveHonuaServerInteractionTests" \
+            --logger "trx;LogFileName=live-server-integration.trx" \
+            --logger "console;verbosity=normal" \
+            --results-directory ./TestResults \
+            --blame-hang-timeout 5m
+
+      - name: Collect container logs on failure
+        if: failure()
+        run: |
+          set +e
+          mkdir -p "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}/container-logs"
+          echo "=== docker ps -a ==="
+          docker ps -a
+          for cid in $(docker ps -aq); do
+            name=$(docker inspect --format='{{.Name}}' "$cid" | tr -d '/' | tr ' ' '_')
+            docker logs "$cid" > "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}/container-logs/${name}.log" 2>&1
+          done
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-server-integration-${{ github.run_id }}
+          path: |
+            TestResults/
+            CloudAcceptanceEvidence/
+          retention-days: 14
+          if-no-files-found: ignore

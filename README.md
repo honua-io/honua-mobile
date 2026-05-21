@@ -213,6 +213,14 @@ Release workflow, branch-protection, package metadata, Dependabot, Trivy, and
 platform smoke guardrails for honua-server #826 are documented in
 [Repo Scaffolding Gates](docs/guides/repo-scaffolding-gates.md).
 
+The `Live Server Integration` workflow
+(`.github/workflows/live-server-integration.yml`) runs
+`LiveHonuaServerInteractionTests` against a Docker-hosted Honua server stack
+on every PR that touches mobile source / tests / apps and on pushes to `main`.
+See
+[Disconnected Field Workflow Harness](docs/guides/disconnected-field-workflow-harness.md#live-server-integration-workflow)
+for scope, triggers, and the seed-SQL gap.
+
 ## Status
 
 Production-ready foundation for offline sync, forms, and gRPC transport.
