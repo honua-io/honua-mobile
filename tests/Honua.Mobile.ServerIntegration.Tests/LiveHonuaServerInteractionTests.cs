@@ -222,6 +222,54 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     }
 
     [SkippableFact]
+    public async Task LiveImage_GrpcFeatureQueryStream_RoundTrip()
+    {
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
+
+        // Distinct from LiveImage_GrpcFeatureQueryAndEdit_RoundTrip (unary RPC + edit):
+        // this exercises the server-streaming RPC path (QueryFeaturesStreamAsync ->
+        // HonuaGrpcClient.QueryFeaturesStreamAsync) end-to-end against the live image,
+        // with REST fallback disabled so any pure-streaming bug surfaces here rather
+        // than being silently masked by the unary REST path.
+        using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
+
+        // Tracked at https://github.com/honua-io/honua-mobile/issues/202 -- the live
+        // server-streaming RPC currently rejects this request with
+        // "InvalidArgument: Invalid request parameters" even though the unary RPC
+        // accepts the same shape (see LiveImage_GrpcFeatureQueryAndEdit_RoundTrip).
+        // The mobile-side converter (GrpcRequestConverters.ToGrpcQueryRequest) is
+        // identical for both paths, so the divergence is in the server's request
+        // validation. Skip narrowly until the streaming contract is reconciled; the
+        // assertion below is preserved so it activates as soon as #202 lands.
+        Skip.If(true, "Tracked at #202 -- live gRPC streaming RPC rejects Where/OutFields/ReturnGeometry that unary accepts.");
+
+        JsonDocument? page = null;
+        await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
+        {
+            ServiceId = _server.Options.ServiceId,
+            LayerId = _server.Options.LayerId,
+            Where = "1=1",
+            OutFields = ["*"],
+            ReturnGeometry = true,
+            ResultRecordCount = 1,
+        }))
+        {
+            page = streamed;
+            break;
+        }
+
+        using (page)
+        {
+            Assert.NotNull(page);
+            Assert.Equal(JsonValueKind.Object, page.RootElement.ValueKind);
+            Assert.True(
+                page.RootElement.TryGetProperty("features", out var features)
+                    && features.ValueKind == JsonValueKind.Array,
+                page.RootElement.GetRawText());
+        }
+    }
+
+    [SkippableFact]
     public async Task LiveImage_OgcFeaturesCrud_RoundTrip()
     {
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
