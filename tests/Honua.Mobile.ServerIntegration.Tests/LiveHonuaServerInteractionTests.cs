@@ -140,7 +140,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                     },
                 ],
             });
-            Assert.True(sdkEdit.Succeeded, sdkEdit.Error?.Message);
+            Assert.True(sdkEdit.Succeeded, FormatFeatureEditDiagnostic(sdkEdit, "FeatureServer SDK ApplyEdits.Adds"));
             sdkObjectId = Assert.Single(sdkEdit.AddResults).ObjectId;
             Assert.True(sdkObjectId > 0);
         }
@@ -297,7 +297,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                     },
                 ],
             });
-            Assert.True(sdkEdit.Succeeded, sdkEdit.Error?.Message);
+            Assert.True(sdkEdit.Succeeded, FormatFeatureEditDiagnostic(sdkEdit, "OGC SDK ApplyEdits.Adds"));
             sdkCreatedId = Assert.Single(sdkEdit.AddResults).Id ?? sdkFeatureId;
         }
         finally
@@ -721,6 +721,28 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         }
 
         return 0;
+    }
+
+    // Captures provider name, top-level error, and per-feature results so live-server
+    // failures surface enough context to diagnose contract drift on the next CI run.
+    private static string FormatFeatureEditDiagnostic(FeatureEditResponse response, string context)
+    {
+        static string FormatResults(IReadOnlyList<FeatureEditResult> results)
+            => results.Count == 0
+                ? "(none)"
+                : string.Join(",", results.Select(r =>
+                    $"{{id={r.Id ?? "<null>"},oid={r.ObjectId?.ToString(CultureInfo.InvariantCulture) ?? "<null>"},success={r.Succeeded},error={r.Error?.Code?.ToString(CultureInfo.InvariantCulture) ?? "<null>"}/{r.Error?.Message ?? "<null>"}}}"));
+
+        var validation = response.ValidationResults.Count == 0
+            ? "(none)"
+            : string.Join(",", response.ValidationResults.Select(v => $"{{severity={v.Severity},blocks={v.BlocksApply},rule={v.RuleId ?? "<null>"},message={v.Message}}}"));
+
+        return $"{context} failed. provider={response.ProviderName}; "
+            + $"error={response.Error?.Code?.ToString(CultureInfo.InvariantCulture) ?? "<null>"}/{response.Error?.Message ?? "<null>"}; "
+            + $"adds={FormatResults(response.AddResults)}; "
+            + $"updates={FormatResults(response.UpdateResults)}; "
+            + $"deletes={FormatResults(response.DeleteResults)}; "
+            + $"validation={validation}";
     }
 
     private JsonElement CreateOgcFeature(string id, string suffix)

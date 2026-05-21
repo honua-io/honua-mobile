@@ -1189,7 +1189,11 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
                     raw);
             }
 
-            if (response.Content.Headers.ContentLength == 0)
+            // 204 No Content (and other success-without-body responses) carry no JSON
+            // payload — surface them as an empty object so callers can pattern-match
+            // on JsonValueKind.Object without parsing failures.
+            if (response.StatusCode == HttpStatusCode.NoContent
+                || response.Content.Headers.ContentLength == 0)
             {
                 return JsonDocument.Parse("{}");
             }
@@ -1201,8 +1205,14 @@ public sealed class HonuaMobileClient : IDisposable, IAsyncDisposable
             }
             catch (JsonException ex)
             {
-                // Preserve the prior contract: whitespace-only bodies parse as an empty object,
+                // Preserve the prior contract: whitespace-only / missing bodies parse as
+                // an empty object (some servers omit Content-Length on empty payloads),
                 // anything else surfaces as a HonuaMobileApiException with the invalid payload.
+                if (ex.LineNumber == 0 && ex.BytePositionInLine == 0)
+                {
+                    return JsonDocument.Parse("{}");
+                }
+
                 throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
             }
         }
