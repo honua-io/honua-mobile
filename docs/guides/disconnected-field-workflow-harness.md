@@ -171,16 +171,16 @@ and the acceptance evidence directory are uploaded as a single artifact.
 
 Seed SQL: the suite reads `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` and applies
 it via `psql` inside the postgres container. The seed file
-(`tests/seed/mobile-offline-demo-v1.sql`) lives in the `honua-server` repo and
-is not vendored here. The workflow can optionally fetch it via a sparse
-checkout when run with `workflow_dispatch` input `fixture_sql_ref`. Until the
-seed source is permanently wired up (token + ref selection on PR runs), the
-`Run LiveHonuaServerInteractionTests` step is marked `continue-on-error: true`
-so an unseeded run does not block unrelated mobile PRs. When the env var
-`HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` is supplied, an enforcement step turns
-any test failure back into a job failure -- so seeded runs (manual or once the
-seed source is wired) are strict. Remove `continue-on-error` from the test
-step after PR-trigger runs have a reliable seed source.
+(`tests/seed/mobile-offline-demo-v1.sql`) is **vendored from**
+`honua-io/honua-server` (see `tests/seed/UPSTREAM.md` for upstream provenance
+and `tools/sync-mobile-offline-seed.sh` for the drift-control workflow).
+PR-trigger runs of the workflow point `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL`
+at the vendored copy by default, so every PR exercises the fully-seeded suite
+and the `Run LiveHonuaServerInteractionTests` step is a hard gate -- a test
+failure blocks the merge. `workflow_dispatch` may override the vendored copy
+by supplying `fixture_sql_ref`, in which case the workflow does a sparse
+checkout of that ref from `honua-server`; the override path is equally strict
+(no `continue-on-error`).
 
 The workflow surfaces as the `Live Server Integration` status check. Adding
 it to branch protection required checks is handled separately by repo

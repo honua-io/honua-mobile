@@ -7,6 +7,14 @@ name: Live Server Integration
 # pre-pull caching, NuGet cache, and a 20m timeout; if PR volume makes that
 # painful, gate inside the job (`if:` on changed-paths output) rather than at
 # the workflow trigger so the required check still reports success.
+#
+# Seed SQL: the live tests load `tests/seed/mobile-offline-demo-v1.sql`
+# (vendored from honua-io/honua-server -- see tests/seed/UPSTREAM.md and
+# tools/sync-mobile-offline-seed.sh) into the postgres container before the
+# Honua server starts. Because the seed is vendored, every PR-trigger run
+# is a fully-seeded run -- the dotnet test step is a hard gate, not a
+# soft-fail. `workflow_dispatch` still accepts `fixture_sql_ref` to override
+# the vendored seed with a fresh upstream snapshot for ad-hoc validation.
 on:
   pull_request:
   push:
@@ -14,11 +22,11 @@ on:
   workflow_dispatch:
     inputs:
       honua_server_image:
-        description: "Honua server image tag to pull (default honuaio/honua-server:latest)"
+        description: "Honua server image tag to pull (default honuaio/honua-server:nightly -- tracks current trunk so the vendored seed schema matches)"
         required: false
-        default: "honuaio/honua-server:latest"
+        default: "honuaio/honua-server:nightly"
       fixture_sql_ref:
-        description: "Optional git ref of honua-server to fetch tests/seed/mobile-offline-demo-v1.sql from"
+        description: "Optional honua-server git ref to fetch a fresh tests/seed/mobile-offline-demo-v1.sql snapshot. Leave empty to use the vendored seed."
         required: false
         default: ""
 
@@ -34,7 +42,7 @@ env:
   DOTNET_VERSION: "10.0.x"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
   DOTNET_NOLOGO: "true"
-  HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+  HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
   HONUA_POSTGIS_IMAGE: "postgis/postgis:17-3.5-alpine"
 
 jobs:
@@ -44,7 +52,7 @@ jobs:
     timeout-minutes: 20
     env:
       HONUA_MOBILE_LIVE_SERVER_TESTS: "1"
-      HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:latest' }}
+      HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
       HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "postgis/postgis:17-3.5-alpine"
       HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
     steps:
@@ -111,45 +119,45 @@ jobs:
           mkdir -p TestResults
           mkdir -p "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}"
 
-      # The seed SQL lives in the honua-server repo at tests/seed/mobile-offline-demo-v1.sql.
-      # It is intentionally NOT vendored here. If a fixture ref is supplied via workflow_dispatch,
-      # we fetch only that file via a sparse checkout. Otherwise the live tests run without seed,
-      # which means queries that depend on seeded layers will be brittle until the seed source is
-      # wired up (tracked as a follow-up; see PR description for the gap).
-      - name: Fetch fixture seed SQL (optional)
+      # The seed SQL is vendored at tests/seed/mobile-offline-demo-v1.sql
+      # (see tests/seed/UPSTREAM.md for upstream provenance). PR-trigger runs
+      # consume the vendored copy directly, so the live suite is fully seeded
+      # on every PR and the dotnet test step below can be a hard gate.
+      #
+      # workflow_dispatch may override the vendored seed with a fresh upstream
+      # snapshot by supplying `fixture_sql_ref`. The token must have read scope
+      # on honua-io/honua-server for the sparse checkout to succeed; if it
+      # doesn't, we fail loudly rather than silently falling back, because the
+      # explicit override implies the caller wants that exact ref.
+      - name: Resolve fixture seed SQL path
         id: fixture-seed
-        if: ${{ inputs.fixture_sql_ref != '' }}
         run: |
           set -e
-          mkdir -p "${{ github.workspace }}/.fixture-seed"
-          cd "${{ github.workspace }}/.fixture-seed"
-          git init -q
-          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/honua-io/honua-server.git
-          git config core.sparseCheckout true
-          echo "tests/seed/mobile-offline-demo-v1.sql" > .git/info/sparse-checkout
-          if ! git fetch --depth=1 origin "${{ inputs.fixture_sql_ref }}" 2>/dev/null; then
-            echo "::warning::Could not fetch fixture SQL at ref ${{ inputs.fixture_sql_ref }} (token may lack honua-server read scope). Continuing without seed."
-            exit 0
+          if [ -n "${{ inputs.fixture_sql_ref }}" ]; then
+            mkdir -p "${{ github.workspace }}/.fixture-seed"
+            cd "${{ github.workspace }}/.fixture-seed"
+            git init -q
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/honua-io/honua-server.git
+            git config core.sparseCheckout true
+            echo "tests/seed/mobile-offline-demo-v1.sql" > .git/info/sparse-checkout
+            git fetch --depth=1 origin "${{ inputs.fixture_sql_ref }}"
+            git checkout FETCH_HEAD -- tests/seed/mobile-offline-demo-v1.sql
+            SEED_PATH="${{ github.workspace }}/.fixture-seed/tests/seed/mobile-offline-demo-v1.sql"
+            echo "Using workflow_dispatch override seed at ${SEED_PATH} (ref ${{ inputs.fixture_sql_ref }})"
+          else
+            SEED_PATH="${{ github.workspace }}/tests/seed/mobile-offline-demo-v1.sql"
+            echo "Using vendored seed at ${SEED_PATH}"
           fi
-          git checkout FETCH_HEAD -- tests/seed/mobile-offline-demo-v1.sql || {
-            echo "::warning::Seed SQL not present at ref ${{ inputs.fixture_sql_ref }}"
-            exit 0
-          }
-          SEED_PATH="${{ github.workspace }}/.fixture-seed/tests/seed/mobile-offline-demo-v1.sql"
+          test -s "${SEED_PATH}"
           echo "HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=${SEED_PATH}" >> "$GITHUB_ENV"
           echo "seed_path=${SEED_PATH}" >> "$GITHUB_OUTPUT"
 
-      # Soft-fail until the seed SQL source is wired into PR-trigger runs:
-      # without HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL, all suite tests except the
-      # health-probe will 404 on the live server because the mobile_offline_demo
-      # service is not registered. Keeping the step non-blocking lets the
-      # workflow surface as a status check on every PR and ship the TRX +
-      # container-log artifact without blocking unrelated mobile work. Flip
-      # continue-on-error back to false once the seed is fetched on PR runs
-      # (see Disconnected Field Workflow Harness guide for the gap).
+      # Hard gate: the vendored seed is present on every PR run, so a failure
+      # here is a real failure and must block the PR. `workflow_dispatch` runs
+      # that override the seed are equally strict -- the caller asked for that
+      # ref to be exercised.
       - name: Run LiveHonuaServerInteractionTests
         id: live-tests
-        continue-on-error: true
         run: |
           dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-build --no-restore --configuration Release \
@@ -158,21 +166,6 @@ jobs:
             --logger "console;verbosity=normal" \
             --results-directory ./TestResults \
             --blame-hang-timeout 5m
-
-      - name: Enforce live test result when seed SQL is provided
-        if: ${{ env.HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL != '' && steps.live-tests.outcome != 'success' }}
-        run: |
-          echo "::error::Live server tests failed and HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL was supplied -- a seeded run must pass."
-          exit 1
-
-      - name: Summarize unseeded live test outcome
-        if: ${{ env.HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL == '' }}
-        run: |
-          echo "### Live Server Integration (unseeded)" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "No fixture SQL was provided (HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL is unset)." >> "$GITHUB_STEP_SUMMARY"
-          echo "The mobile_offline_demo service is unseeded, so most suite tests will 404." >> "$GITHUB_STEP_SUMMARY"
-          echo "Test step outcome: ${{ steps.live-tests.outcome }} (soft-failed; see TRX artifact)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect container logs on failure
         if: failure()
