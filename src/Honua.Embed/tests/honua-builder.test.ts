@@ -121,14 +121,26 @@ describe('honua map builder', () => {
   });
 
   it('accepts well-formed API keys without raising format errors', () => {
-    const state = createHonuaMapBuilderState({
-      serviceUrl: 'https://services.example.test/FeatureServer',
-      layerIds: ['assets'],
-      apiKey: 'svc.tenant-42:abcDEF_0123456789',
-    });
+    const validKeys = [
+      'svc.tenant-42:abcDEF_0123456789',
+      // base64-style server-issued key, including padding.
+      'YWJjZGVmZ2hpamtsbW5vcA==',
+      // URL-safe base64 (commonly produced by JWT-adjacent tooling).
+      'eyJhbGciOiJIUzI1NiJ9.eyJ0ZW5hbnQiOiJmb28ifQ.sig-Value_123',
+      // Hex-only opaque token.
+      '0123456789abcdef0123456789abcdef',
+    ];
 
-    expect(state.issues.map((issue) => issue.code)).not.toContain('invalid-api-key');
-    expect(state.canGenerateSnippet).toBe(true);
+    for (const apiKey of validKeys) {
+      const state = createHonuaMapBuilderState({
+        serviceUrl: 'https://services.example.test/FeatureServer',
+        layerIds: ['assets'],
+        apiKey,
+      });
+
+      expect(state.issues.map((issue) => issue.code)).not.toContain('invalid-api-key');
+      expect(state.canGenerateSnippet).toBe(true);
+    }
   });
 
   it('applies builder preview state to an existing map element', () => {

@@ -306,7 +306,12 @@ function validateServiceUrl(
 
 const API_KEY_MIN_LENGTH = 8;
 const API_KEY_MAX_LENGTH = 256;
-const API_KEY_ALLOWED_PATTERN = /^[A-Za-z0-9._\-:]+$/;
+// Allow the common opaque-token charset: alphanumerics, base64 / URL-safe
+// base64 padding and separators, and the punctuation produced by JWT,
+// hex, and prefix-style keys (`svc.tenant:abc`). Server-issued keys are
+// opaque, so this is intentionally permissive and only catches characters
+// that would break HTML attribute, URL, or header contexts.
+const API_KEY_ALLOWED_PATTERN = /^[A-Za-z0-9._\-:+/=~]+$/;
 const API_KEY_HEADER_PREFIX_PATTERN = /^(bearer|basic|token|apikey|api[-_]key)\s/i;
 
 /**
@@ -375,7 +380,7 @@ function validateApiKeyFormat(
       severity: 'error',
       code: 'invalid-api-key',
       field: 'apiKey',
-      message: 'API key may only contain letters, digits, and the characters . _ - :',
+      message: 'API key may only contain letters, digits, and the characters . _ - : + / = ~',
     });
     return false;
   }
