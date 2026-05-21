@@ -152,7 +152,17 @@ jobs:
           echo "HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=${SEED_PATH}" >> "$GITHUB_ENV"
           echo "seed_path=${SEED_PATH}" >> "$GITHUB_OUTPUT"
 
+      # Soft-fail until the seed SQL source is wired into PR-trigger runs:
+      # without HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL, all suite tests except the
+      # health-probe will 404 on the live server because the mobile_offline_demo
+      # service is not registered. Keeping the step non-blocking lets the
+      # workflow surface as a status check on every PR and ship the TRX +
+      # container-log artifact without blocking unrelated mobile work. Flip
+      # continue-on-error back to false once the seed is fetched on PR runs
+      # (see Disconnected Field Workflow Harness guide for the gap).
       - name: Run LiveHonuaServerInteractionTests
+        id: live-tests
+        continue-on-error: true
         run: |
           dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-build --no-restore --configuration Release \
@@ -161,6 +171,21 @@ jobs:
             --logger "console;verbosity=normal" \
             --results-directory ./TestResults \
             --blame-hang-timeout 5m
+
+      - name: Enforce live test result when seed SQL is provided
+        if: ${{ env.HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL != '' && steps.live-tests.outcome != 'success' }}
+        run: |
+          echo "::error::Live server tests failed and HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL was supplied -- a seeded run must pass."
+          exit 1
+
+      - name: Summarize unseeded live test outcome
+        if: ${{ env.HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL == '' }}
+        run: |
+          echo "### Live Server Integration (unseeded)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No fixture SQL was provided (HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL is unset)." >> "$GITHUB_STEP_SUMMARY"
+          echo "The mobile_offline_demo service is unseeded, so most suite tests will 404." >> "$GITHUB_STEP_SUMMARY"
+          echo "Test step outcome: ${{ steps.live-tests.outcome }} (soft-failed; see TRX artifact)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect container logs on failure
         if: failure()

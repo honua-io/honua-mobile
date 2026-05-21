@@ -174,8 +174,13 @@ it via `psql` inside the postgres container. The seed file
 (`tests/seed/mobile-offline-demo-v1.sql`) lives in the `honua-server` repo and
 is not vendored here. The workflow can optionally fetch it via a sparse
 checkout when run with `workflow_dispatch` input `fixture_sql_ref`. Until the
-seed source is permanently wired up (token + ref selection on PR runs), tests
-that depend on seeded layers may be brittle.
+seed source is permanently wired up (token + ref selection on PR runs), the
+`Run LiveHonuaServerInteractionTests` step is marked `continue-on-error: true`
+so an unseeded run does not block unrelated mobile PRs. When the env var
+`HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` is supplied, an enforcement step turns
+any test failure back into a job failure -- so seeded runs (manual or once the
+seed source is wired) are strict. Remove `continue-on-error` from the test
+step after PR-trigger runs have a reliable seed source.
 
 The workflow surfaces as the `Live Server Integration` status check. Adding
 it to branch protection required checks is handled separately by repo
