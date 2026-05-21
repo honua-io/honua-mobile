@@ -1,0 +1,150 @@
+# Scheduled drift check for the vendored mobile-offline-demo seed against the
+# upstream copy in honua-io/honua-server.
+#
+# Trigger: weekly Monday 14:00 UTC + manual workflow_dispatch.
+#
+# What failure looks like:
+#   - If the upstream blob differs from the vendored copy, this workflow:
+#       1. Opens (or comments on) an issue titled
+#          `seed-drift: mobile-offline-demo-v1.sql` with the upstream blob
+#          SHA, the locally recorded SHA from tests/seed/UPSTREAM.md, and a
+#          pointer to `tools/sync-mobile-offline-seed.sh --write`.
+#       2. Exits non-zero so the scheduled workflow goes red on the Actions
+#          page (high-signal visual indicator).
+#
+# Auth note:
+#   - Uses the default GITHUB_TOKEN. This is sufficient when honua-server is
+#     public. If honua-server is private, the cross-repo `gh api ... contents`
+#     fetch returns 404 -- in that case define a `HONUA_SERVER_READ_TOKEN`
+#     repository secret with `repo:read` scope on honua-io/honua-server and
+#     replace `GITHUB_TOKEN` with `HONUA_SERVER_READ_TOKEN` in the env block
+#     below. The workflow currently emits a warning and exits 0 in that
+#     fallback path rather than crashing the scheduled run.
+name: Seed Drift Check
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-drift:
+    name: Check vendored seed against honua-server upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UPSTREAM_REPO: honua-io/honua-server
+      UPSTREAM_PATH: tests/seed/mobile-offline-demo-v1.sql
+      VENDORED_PATH: tests/seed/mobile-offline-demo-v1.sql
+      ISSUE_TITLE: "seed-drift: mobile-offline-demo-v1.sql"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch upstream blob
+        id: fetch
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          echo "tmp=${tmp}" >> "${GITHUB_OUTPUT}"
+          api_path="repos/${UPSTREAM_REPO}/contents/${UPSTREAM_PATH}"
+          if ! gh api "${api_path}" -H "Accept: application/vnd.github.raw" > "${tmp}" 2> fetch.err; then
+            echo "::warning::Failed to fetch upstream ${UPSTREAM_REPO}:${UPSTREAM_PATH} via GITHUB_TOKEN."
+            echo "::warning::If honua-server is private, define HONUA_SERVER_READ_TOKEN and wire it into env.GH_TOKEN above."
+            cat fetch.err || true
+            echo "fetch_failed=1" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          upstream_sha="$(gh api "${api_path}" --jq .sha)"
+          if [[ -z "${upstream_sha}" ]]; then
+            echo "::warning::Could not resolve upstream blob SHA; treating as fetch failure."
+            echo "fetch_failed=1" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "upstream_sha=${upstream_sha}" >> "${GITHUB_OUTPUT}"
+          echo "fetch_failed=0" >> "${GITHUB_OUTPUT}"
+
+      - name: Diff vendored vs upstream
+        id: diff
+        if: steps.fetch.outputs.fetch_failed == '0'
+        run: |
+          set -euo pipefail
+          tmp="${{ steps.fetch.outputs.tmp }}"
+          if cmp -s "${tmp}" "${VENDORED_PATH}"; then
+            echo "no drift: vendored ${VENDORED_PATH} matches upstream (sha ${{ steps.fetch.outputs.upstream_sha }})"
+            echo "drift=0" >> "${GITHUB_OUTPUT}"
+          else
+            echo "drift detected between vendored ${VENDORED_PATH} and upstream:"
+            echo "---"
+            diff -u "${VENDORED_PATH}" "${tmp}" || true
+            echo "---"
+            echo "drift=1" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Extract locally recorded blob SHA
+        id: local
+        if: steps.diff.outputs.drift == '1'
+        run: |
+          set -euo pipefail
+          local_sha="$(grep -E '^\| Upstream blob SHA \|' tests/seed/UPSTREAM.md | sed -E 's/.*` *([0-9a-f]+) *`.*/\1/')"
+          local_vendored="$(grep -E '^\| Vendored on \|' tests/seed/UPSTREAM.md | sed -E 's/.*\| ([0-9]{4}-[0-9]{2}-[0-9]{2}) *\|.*/\1/')"
+          echo "local_sha=${local_sha}" >> "${GITHUB_OUTPUT}"
+          echo "local_vendored=${local_vendored}" >> "${GITHUB_OUTPUT}"
+
+      - name: Open or update drift issue
+        if: steps.diff.outputs.drift == '1'
+        env:
+          UPSTREAM_SHA: ${{ steps.fetch.outputs.upstream_sha }}
+          LOCAL_SHA: ${{ steps.local.outputs.local_sha }}
+          LOCAL_VENDORED: ${{ steps.local.outputs.local_vendored }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --search "${ISSUE_TITLE} in:title" --state open --json number,title --jq '[.[] | select(.title == env.ISSUE_TITLE)] | .[0].number // empty')"
+          body_file="$(mktemp)"
+          {
+            echo "The vendored seed at \`${VENDORED_PATH}\` has drifted from the upstream copy in [\`${UPSTREAM_REPO}\`](https://github.com/${UPSTREAM_REPO}/blob/HEAD/${UPSTREAM_PATH})."
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Upstream blob SHA (now) | \`${UPSTREAM_SHA}\` |"
+            echo "| Locally recorded blob SHA | \`${LOCAL_SHA}\` |"
+            echo "| Vendored on (local) | ${LOCAL_VENDORED} |"
+            echo "| Detected by | [scheduled drift check](${RUN_URL}) |"
+            echo
+            echo "## How to refresh"
+            echo
+            echo "Run the sync script locally (requires \`gh\` authenticated with read scope on \`${UPSTREAM_REPO}\`):"
+            echo
+            echo '```bash'
+            echo "tools/sync-mobile-offline-seed.sh           # diff only (default)"
+            echo "tools/sync-mobile-offline-seed.sh --write   # overwrite vendored copy + refresh UPSTREAM.md"
+            echo '```'
+            echo
+            echo "Then commit both \`${VENDORED_PATH}\` and \`tests/seed/UPSTREAM.md\` in a single change so the blob and the recorded SHA move in lockstep."
+            echo
+            echo "Routine upstream churn that doesn't affect the \`mobile_offline_demo\` service definition, scene/routing identifiers, or feature counts asserted by \`LiveHonuaServerInteractionTests\` can be left alone -- see \`tests/seed/UPSTREAM.md\` for the full criteria."
+          } > "${body_file}"
+          if [[ -z "${existing}" ]]; then
+            gh issue create --title "${ISSUE_TITLE}" --body-file "${body_file}"
+          else
+            comment_file="$(mktemp)"
+            {
+              echo "Drift detected again on [this scheduled run](${RUN_URL})."
+              echo
+              echo "- Upstream blob SHA (now): \`${UPSTREAM_SHA}\`"
+              echo "- Locally recorded blob SHA: \`${LOCAL_SHA}\`"
+            } > "${comment_file}"
+            gh issue comment "${existing}" --body-file "${comment_file}"
+          fi
+
+      - name: Fail the run if drift was detected
+        if: steps.diff.outputs.drift == '1'
+        run: |
+          echo "::error::Seed drift detected; see the tracking issue in this repository."
+          exit 1

@@ -168,6 +168,13 @@ The relevant workflows under `.github/workflows/`:
 - `cloud-acceptance.yml` -- `workflow_dispatch` only. Runs
   `DisconnectedFieldWorkflowAcceptanceTests` (7 tests) against a cloud
   Honua URL provided as workflow inputs.
+- `seed-drift-check.yml` -- scheduled weekly (Monday 14:00 UTC, plus
+  `workflow_dispatch`). Compares `tests/seed/mobile-offline-demo-v1.sql`
+  against the upstream copy in `honua-io/honua-server` and, on drift,
+  opens or comments on a `seed-drift: mobile-offline-demo-v1.sql` issue
+  and fails the run. Not a PR gate -- a red scheduled run on the Actions
+  page is the signal to refresh the vendored seed via
+  `tools/sync-mobile-offline-seed.sh --write`.
 - `pr-validation.yml` -- non-test PR hygiene checks (title, body,
   metadata).
 - `android-debug-apk.yml`, `android-internal-distribution.yml`,
