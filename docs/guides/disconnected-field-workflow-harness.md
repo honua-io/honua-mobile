@@ -149,3 +149,39 @@ For the current staging closure path, a `transport` failure containing
 certificate for a different hostname. Track that as an infrastructure blocker
 instead of changing mobile TLS validation; issue #92 currently points at
 `honua-io/honua-server#965` for this case.
+
+## Live Server Integration Workflow
+
+The `.github/workflows/live-server-integration.yml` workflow runs the
+`LiveHonuaServerInteractionTests` suite from
+`tests/Honua.Mobile.ServerIntegration.Tests/LiveHonuaServerInteractionTests.cs`
+against a Docker-hosted Honua server (no staging dependency). It triggers on:
+
+- Every pull request (no `paths:` filter, so the required status check is
+  always reported even for docs-only PRs).
+- Pushes to `main` / `trunk`.
+- `workflow_dispatch` for ad-hoc runs.
+
+The job pre-pulls `honuaio/honua-server:latest` and the PostGIS image with
+retry, then lets `LiveHonuaServerFixture` orchestrate the Testcontainers
+network. Tests are filtered with
+`--filter "FullyQualifiedName~LiveHonuaServerInteractionTests"` and gated on
+`HONUA_MOBILE_LIVE_SERVER_TESTS=1`. TRX results, container logs (on failure),
+and the acceptance evidence directory are uploaded as a single artifact.
+
+Seed SQL: the suite reads `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` and applies
+it via `psql` inside the postgres container. The seed file
+(`tests/seed/mobile-offline-demo-v1.sql`) lives in the `honua-server` repo and
+is not vendored here. The workflow can optionally fetch it via a sparse
+checkout when run with `workflow_dispatch` input `fixture_sql_ref`. Until the
+seed source is permanently wired up (token + ref selection on PR runs), the
+`Run LiveHonuaServerInteractionTests` step is marked `continue-on-error: true`
+so an unseeded run does not block unrelated mobile PRs. When the env var
+`HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` is supplied, an enforcement step turns
+any test failure back into a job failure -- so seeded runs (manual or once the
+seed source is wired) are strict. Remove `continue-on-error` from the test
+step after PR-trigger runs have a reliable seed source.
+
+The workflow surfaces as the `Live Server Integration` status check. Adding
+it to branch protection required checks is handled separately by repo
+maintainers (not by this workflow).
