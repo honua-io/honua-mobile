@@ -69,7 +69,7 @@ honest gaps; the parenthesised reason indicates why.
 | Sync engine (queue, claim/lease, retry) | `OfflineSyncEngineTests.cs` (7), `HonuaApiOfflineOperationUploaderTests.cs` (10) | `OfflineServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | FeatureServer REST | `HonuaMobileClientHttpTests.cs` (17), `HonuaMobileSdkFeatureClientTests.cs` (5) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | OGC Features | `HonuaMobileClientHttpTests.cs` (subset of 17) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | covered |
-| gRPC transport | `HonuaMobileClientHttpTests.cs` (subset), `HonuaMobileClientTransportSecurityTests.cs` (7), `grpc-validation` job in `ci.yml` | N/A (loopback uses REST) | `LiveHonuaServerInteractionTests.LiveImage_GrpcFeatureQueryAndEdit_RoundTrip` (unary RPC + ApplyEdits add) and `LiveHonuaServerInteractionTests.LiveImage_GrpcFeatureQueryStream_RoundTrip` (server-streaming RPC), both with `allowRestFallbackOnGrpcFailure: false` against the testcontainers gRPC endpoint (port 8081 / `HONUA_MOBILE_LIVE_SERVER_GRPC_URL`) | N/A (manual) | N/A (deferred) | covered |
+| gRPC transport | `HonuaMobileClientHttpTests.cs` (subset), `HonuaMobileClientTransportSecurityTests.cs` (7), `grpc-validation` job in `ci.yml` | N/A (loopback uses REST) | `LiveHonuaServerInteractionTests.LiveImage_GrpcFeatureQueryAndEdit_RoundTrip` (unary RPC + ApplyEdits add, active) and `LiveImage_GrpcFeatureQueryStream_RoundTrip` (server-streaming RPC, tracked-Skip pending #202: server-side streaming validator rejects fields the unary RPC accepts), both wired against the testcontainers gRPC endpoint (port 8081 / `HONUA_MOBILE_LIVE_SERVER_GRPC_URL`) with `allowRestFallbackOnGrpcFailure: false` | N/A (manual) | N/A (deferred) | unit + live (unary); streaming live tracked-Skip |
 | Replica sync (delta, cursors) | `ReplicaSyncClientTests.cs` (12), `DeltaDownloadEngineTests.cs` (7) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
 | Offline diagnostics / cache governance | `BackgroundPrefetchSchedulerTests.cs` (1), `GeoPackageSyncServiceTests.cs` (15) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Field collection workflow | `FormValidatorTests.cs` (8), `RecordWorkflowTests.cs` (3), `FieldWorkflowOfflineAdapterTests.cs` (1), `FieldCollectionSdkContractMigrationTests.cs` (5) | `FieldCollectionServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by `DisconnectedFieldWorkflowAcceptanceTests.cs` | N/A (deferred) | covered |
@@ -119,13 +119,17 @@ Known coverage gaps, with the owner ticket where one exists:
   postgres container and the dotnet test step as a hard gate (no
   `continue-on-error`). Adding the workflow to branch-protection required
   checks is a separate maintainer call.
-- ~~**gRPC live transport**~~ -- closed. `LiveHonuaServerInteractionTests`
-  exercises both the unary RPC + ApplyEdits path
-  (`LiveImage_GrpcFeatureQueryAndEdit_RoundTrip`) and the server-streaming
-  RPC path (`LiveImage_GrpcFeatureQueryStream_RoundTrip`) against the
-  testcontainers honua-server image with `preferGrpc: true,
-  allowRestFallbackOnGrpcFailure: false`, on top of the existing
-  mock-based translation + transport-security units.
+- **gRPC live transport** -- unary covered.
+  `LiveHonuaServerInteractionTests.LiveImage_GrpcFeatureQueryAndEdit_RoundTrip`
+  exercises the unary RPC + `ApplyEdits` against the testcontainers
+  honua-server image with `preferGrpc: true, allowRestFallbackOnGrpcFailure:
+  false`. Server-streaming coverage is wired
+  (`LiveImage_GrpcFeatureQueryStream_RoundTrip`) but currently
+  tracked-`Skip` pending honua-io/honua-mobile#202: the server's
+  streaming-RPC validator rejects `Where`/`OutFields`/`ReturnGeometry`
+  even though the unary RPC accepts the same shape from the same
+  `GrpcRequestConverters.ToGrpcQueryRequest` output. The test's
+  assertion is preserved so it activates as soon as #202 lands.
 - **Background sync and connectivity-aware sync end-to-end** -- only
   unit-tested today (`BackgroundSyncOrchestratorTests.cs`,
   `BackgroundPrefetchSchedulerTests.cs`). No integration or live fixture
