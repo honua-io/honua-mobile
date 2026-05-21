@@ -222,6 +222,44 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     }
 
     [SkippableFact]
+    public async Task LiveImage_GrpcFeatureQueryStream_RoundTrip()
+    {
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
+
+        // Distinct from LiveImage_GrpcFeatureQueryAndEdit_RoundTrip (unary RPC + edit):
+        // this exercises the server-streaming RPC path (QueryFeaturesStreamAsync ->
+        // HonuaGrpcClient.QueryFeaturesStreamAsync) end-to-end against the live image,
+        // with REST fallback disabled so any pure-streaming bug surfaces here rather
+        // than being silently masked by the unary REST path.
+        using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
+
+        JsonDocument? page = null;
+        await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
+        {
+            ServiceId = _server.Options.ServiceId,
+            LayerId = _server.Options.LayerId,
+            Where = "1=1",
+            OutFields = ["*"],
+            ReturnGeometry = true,
+            ResultRecordCount = 1,
+        }))
+        {
+            page = streamed;
+            break;
+        }
+
+        using (page)
+        {
+            Assert.NotNull(page);
+            Assert.Equal(JsonValueKind.Object, page.RootElement.ValueKind);
+            Assert.True(
+                page.RootElement.TryGetProperty("features", out var features)
+                    && features.ValueKind == JsonValueKind.Array,
+                page.RootElement.GetRawText());
+        }
+    }
+
+    [SkippableFact]
     public async Task LiveImage_OgcFeaturesCrud_RoundTrip()
     {
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
