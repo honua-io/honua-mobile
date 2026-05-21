@@ -13,8 +13,8 @@ The current source-backed mobile feature map is in [docs/features/README.md](doc
 
 | Layer | Status | Run on | Coverage |
 | --- | --- | --- | --- |
-| Unit | ✅ | every PR | 293 tests across 5 .NET projects (SDK, Offline, Field, FieldCollection, MAUI) |
-| Integration (in-process loopback) | ✅ | every PR | 13 tests in `Honua.Mobile.ServerIntegration.Tests` against a real ASP.NET Core loopback server |
+| Unit | ✅ | every PR | 294 tests across 5 .NET projects (SDK, Offline, Field, FieldCollection, MAUI) |
+| Integration (in-process loopback) | ✅ | every PR | 9 loopback tests in `Honua.Mobile.ServerIntegration.Tests` (`SdkServerIntegrationTests`, `OfflineServerIntegrationTests`, `FieldCollectionServerIntegrationTests`) against a real ASP.NET Core loopback server; the same project also hosts 4 `LiveHonuaServerFixtureOptionsTests` harness-config tests |
 | Smoke | ✅ | every PR | 18 tests in `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | ✅ | every PR via `Live Server Integration` workflow (hard gate; vendored seed at `tests/seed/mobile-offline-demo-v1.sql`) | 11 tests in `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS, vendored seed loaded into postgres before the live server starts |
@@ -172,7 +172,7 @@ src/
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (79 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (80 tests)
   Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
   Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
   Honua.Mobile.ServerIntegration.Tests/ Loopback and opt-in live Honua image integration surface

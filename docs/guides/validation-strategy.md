@@ -20,18 +20,24 @@ and most reliable inward to most expensive and most operationally gated:
                        Physical device  (0 today, deferred to GA)
                   Cloud acceptance      (7 tests, manual dispatch)
               Live server (Docker)      (11 tests, hard-gated on every PR)
-          Server integration            (13 tests, in-process loopback)
-      Unit                              (293 tests across 5 projects)
+          Server integration            (9 loopback tests + 4 fixture config)
+      Unit                              (294 tests across 5 projects)
   Embed DOM                             (npm, src/Honua.Embed/tests/)
 ```
 
-- **Unit (293 .NET tests)** -- run on every PR via `.github/workflows/ci.yml`
+- **Unit (294 .NET tests)** -- run on every PR via `.github/workflows/ci.yml`
   `test` job. Cover SDK, Offline, Field, FieldCollection, and MAUI library
   surfaces with no network or platform dependencies.
-- **Server integration in-process (13 tests)** -- live ASP.NET Core loopback
-  server (`HonuaIntegrationServer`) plus loopback fixture exercise SDK,
-  Offline, FieldCollection, and exception-reporting HTTP paths. Run on
-  every PR via the same `test` job; no external infrastructure required.
+- **Server integration in-process (9 loopback tests + 4 fixture-config
+  tests)** -- a live ASP.NET Core loopback server
+  (`HonuaIntegrationServer`) exercises SDK, Offline, FieldCollection,
+  and exception-reporting HTTP paths via
+  `SdkServerIntegrationTests` (3), `OfflineServerIntegrationTests` (3),
+  and `FieldCollectionServerIntegrationTests` (3). The same project also
+  hosts `LiveHonuaServerFixtureOptionsTests` (4), which validate live
+  fixture configuration (env wiring, Testcontainers options) without
+  hitting the loopback server. Run on every PR via the same `test`
+  job; no external infrastructure required.
 - **Live server (Docker, 11 tests)** -- `LiveHonuaServerInteractionTests`
   spin up the official Honua server image via Testcontainers (or attach to
   a pre-started Honua URL) when `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set.
@@ -85,7 +91,9 @@ honest gaps; the parenthesised reason indicates why.
 
 Other notable test files contributing to the totals but not listed as a
 single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
-(4) validates `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`;
+(5) validates `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`
+(including `Fixture_ShapeInvariants_PinKeyWireShapes`, which enforces
+sdk-contract-stability.md exit criterion #4);
 `MobileBuildConfigurationTests.cs` (7) and `LiveHonuaServerFixtureOptionsTests.cs`
 (4) validate harness configuration; `HonuaRoutingClientTests.cs` (9)
 covers routing; `HonuaNativeDisplayTests.cs` (4) and
@@ -153,7 +161,7 @@ The relevant workflows under `.github/workflows/`:
   - `build` -- compiles `Honua.Mobile.Sdk`, `Honua.Mobile.Offline`,
     `Honua.Mobile.Field` with `TreatWarningsAsErrors`, plus
     `npm run build` for the embed package; runs `dotnet format` checks.
-  - `test` -- runs the 5 unit projects (293 tests) plus the
+  - `test` -- runs the 5 unit projects (294 tests) plus the
     `Honua.Mobile.ServerIntegration.Tests` project; the 11
     `LiveHonuaServerInteractionTests` report as **Skipped**
     (`Xunit.SkippableFact`) here because `HONUA_MOBILE_LIVE_SERVER_TESTS`

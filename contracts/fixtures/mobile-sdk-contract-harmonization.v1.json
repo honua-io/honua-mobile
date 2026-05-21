@@ -345,5 +345,91 @@
       "mobileDisposition": "quarantine",
       "notes": "Do not copy DTOs into honua-mobile or SDK without assigning explicit ownership in this fixture."
     }
-  ]
+  ],
+  "shapeInvariantsMeta": {
+    "intent": "Pin wire-format shapes the SDK promises to keep stable across alpha releases. Asserted by tests/Honua.Mobile.Sdk.Tests/MobileContractHarmonizationFixtureTests.cs (Fixture_ShapeInvariants_*). Adding, removing, or renaming a required key here is a contract change that must be acknowledged in the same PR that ships the wire-format change. This block satisfies sdk-contract-stability.md exit criterion #4 (whole-shape).",
+    "coverageNote": "Initial coverage covers the five shapes most-recently round-tripped against the live Honua server (#194, #201). Additional shapes (routing results, OGC merge-patch, attachment download envelopes) are tracked in honua-mobile#54 and will be pinned as they round-trip live."
+  },
+  "shapeInvariants": {
+    "geoservicesApplyEditsRequest": {
+      "family": "feature-edit",
+      "sdkType": "Honua.Sdk.GeoServices.ApplyEditsRequest",
+      "transport": "rest+grpc",
+      "requiredFields": [
+        { "name": "serviceId", "jsonType": "string", "nullable": false },
+        { "name": "layerId", "jsonType": "integer", "nullable": false }
+      ],
+      "optionalFields": [
+        { "name": "adds", "jsonType": "array", "nullable": true, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditFeature" },
+        { "name": "updates", "jsonType": "array", "nullable": true, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditFeature" },
+        { "name": "deletes", "jsonType": "array", "nullable": true, "elementType": "long" },
+        { "name": "rollbackOnFailure", "jsonType": "boolean", "nullable": true },
+        { "name": "forceWrite", "jsonType": "boolean", "nullable": true }
+      ],
+      "notes": "Mirrors GeoServices applyEdits form-body keys; mobile delegates conversion to Honua.Sdk.GeoServices.FeatureServerRequestConverters.ToFeatureServerEditFormParameters."
+    },
+    "geoservicesApplyEditsResponse": {
+      "family": "feature-edit",
+      "sdkType": "Honua.Sdk.Abstractions.Features.FeatureEditResponse",
+      "transport": "rest+grpc",
+      "requiredFields": [
+        { "name": "addResults", "jsonType": "array", "nullable": false, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditResult" },
+        { "name": "updateResults", "jsonType": "array", "nullable": false, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditResult" },
+        { "name": "deleteResults", "jsonType": "array", "nullable": false, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditResult" }
+      ],
+      "optionalFields": [
+        { "name": "error", "jsonType": "object", "nullable": true, "elementType": "Honua.Sdk.Abstractions.Features.FeatureEditError" }
+      ],
+      "notes": "Arrays may be empty but must be present on success; if none of the three arrays carry rows and error is absent, the response is treated as malformed (HonuaMobileClient.Features.cs:ToFeatureServerFeatureEditResponse)."
+    },
+    "ogcFeaturesCollectionResponse": {
+      "family": "feature-query",
+      "sdkType": "Honua.Sdk.OgcFeatures.OgcFeatureCollection",
+      "transport": "rest",
+      "requiredFields": [
+        { "name": "type", "jsonType": "string", "nullable": false, "constantValue": "FeatureCollection" },
+        { "name": "features", "jsonType": "array", "nullable": false, "elementType": "geojson-feature" }
+      ],
+      "optionalFields": [
+        { "name": "links", "jsonType": "array", "nullable": true },
+        { "name": "numberMatched", "jsonType": "integer", "nullable": true },
+        { "name": "numberReturned", "jsonType": "integer", "nullable": true },
+        { "name": "timeStamp", "jsonType": "string", "nullable": true, "format": "date-time" }
+      ],
+      "notes": "OGC API Features compliant collection envelope; mobile consumes via HonuaMobileClient.OgcFeatures.cs."
+    },
+    "sceneMetadataResponse": {
+      "family": "scene-metadata",
+      "sdkType": "Honua.Sdk.Abstractions.Scenes.HonuaSceneMetadata",
+      "transport": "rest",
+      "requiredFields": [
+        { "name": "id", "jsonType": "string", "nullable": false },
+        { "name": "name", "jsonType": "string", "nullable": false },
+        { "name": "capabilities", "jsonType": "object", "nullable": false }
+      ],
+      "optionalFields": [
+        { "name": "description", "jsonType": "string", "nullable": true },
+        { "name": "tilesetUrl", "jsonType": "string", "nullable": true, "format": "uri" },
+        { "name": "terrainUrl", "jsonType": "string", "nullable": true, "format": "uri" },
+        { "name": "accessEnvelope", "jsonType": "object", "nullable": true, "elementType": "Honua.Sdk.Abstractions.Scenes.HonuaSceneAccessEnvelope" }
+      ],
+      "notes": "Aligns with the live round-trip exercised in LiveHonuaServerInteractionTests scene cases shipped via honua-mobile#194."
+    },
+    "featureAttachmentInfo": {
+      "family": "feature-attachments",
+      "sdkType": "Honua.Sdk.Abstractions.Features.FeatureAttachmentInfo",
+      "transport": "rest",
+      "requiredFields": [
+        { "name": "id", "jsonType": "integer", "nullable": false, "wireParser": "HonuaMobileClient.Attachments.cs:TryGetInt64(element, _, \"id\", \"attachmentId\")" },
+        { "name": "name", "jsonType": "string", "nullable": false },
+        { "name": "contentType", "jsonType": "string", "nullable": false },
+        { "name": "size", "jsonType": "integer", "nullable": false }
+      ],
+      "optionalFields": [
+        { "name": "url", "jsonType": "string", "nullable": true, "format": "uri" },
+        { "name": "keywords", "jsonType": "string", "nullable": true, "wireParser": "HonuaMobileClient.Attachments.cs:TryGetString(element, _, \"keywords\")" }
+      ],
+      "notes": "Mobile retains only adapter glue; the wire shape is owned by Honua.Sdk.Abstractions. Wire types verified against HonuaMobileClient.Attachments.cs and the loopback HonuaIntegrationServer fixture, which both treat `id` as numeric and `keywords` as a scalar string."
+    }
+  }
 }

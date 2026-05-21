@@ -102,8 +102,16 @@ All of the following must hold at the candidate SDK release:
 4. **Harmonization fixture is whole-shape.** The fixture at
    `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json` validates
    100% of the negotiated contract fields (not only `packageVersion` strings).
-   Today it primarily pins versions; advancing to beta requires it to also
-   pin the negotiated shapes the SDK promises to keep stable.
+   The fixture's `shapeInvariants` block now pins the five wire shapes most
+   recently round-tripped against the live Honua server (GeoServices
+   `applyEdits` request + response, OGC features collection response, scene
+   metadata response, feature attachment info); see
+   `Fixture_ShapeInvariants_PinKeyWireShapes` in
+   `tests/Honua.Mobile.Sdk.Tests/MobileContractHarmonizationFixtureTests.cs`.
+   Advancing to beta requires the remaining family shapes (routing results,
+   OGC merge-patch, attachment download envelopes, offline package manifest)
+   to be pinned the same way as they round-trip live; the gap is tracked
+   under honua-mobile#54.
 5. **Live integration tests.** The mobile-side server-integration test project
    passes end-to-end against the candidate release using real transport (gRPC
    + REST), not just unit-level mocks.

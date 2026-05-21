@@ -140,6 +140,110 @@ public sealed class MobileContractHarmonizationFixtureTests
     }
 
     [Fact]
+    public void Fixture_ShapeInvariants_PinKeyWireShapes()
+    {
+        var fixture = LoadFixture();
+
+        // sdk-contract-stability.md exit criterion #4 ("Harmonization fixture is
+        // whole-shape") requires the fixture to pin the negotiated wire shapes
+        // the SDK promises to keep stable, not just package versions. The keys
+        // asserted below are the minimum-viable set: the five shapes round-tripped
+        // against the live Honua server stack (#194, #201). Removing or renaming
+        // any of these is a breaking contract change.
+        var invariants = fixture.ShapeInvariants
+            ?? throw new InvalidOperationException(
+                "shapeInvariants block missing from contract harmonization fixture; required by sdk-contract-stability.md exit criterion #4.");
+
+        Assert.Equal(
+        [
+            "featureAttachmentInfo",
+            "geoservicesApplyEditsRequest",
+            "geoservicesApplyEditsResponse",
+            "ogcFeaturesCollectionResponse",
+            "sceneMetadataResponse",
+        ], invariants.Keys.Order(StringComparer.Ordinal).ToArray());
+
+        AssertShape(
+            invariants,
+            "geoservicesApplyEditsRequest",
+            family: "feature-edit",
+            requiredFields: ["serviceId", "layerId"],
+            optionalFields: ["adds", "updates", "deletes", "rollbackOnFailure", "forceWrite"]);
+
+        AssertShape(
+            invariants,
+            "geoservicesApplyEditsResponse",
+            family: "feature-edit",
+            requiredFields: ["addResults", "updateResults", "deleteResults"],
+            optionalFields: ["error"]);
+
+        AssertShape(
+            invariants,
+            "ogcFeaturesCollectionResponse",
+            family: "feature-query",
+            requiredFields: ["type", "features"],
+            optionalFields: ["links", "numberMatched", "numberReturned", "timeStamp"]);
+
+        // The OGC FeatureCollection envelope pins type=="FeatureCollection" as a
+        // constant value; this is the marker used by every OGC API Features
+        // consumer to disambiguate the response.
+        var ogcType = invariants["ogcFeaturesCollectionResponse"]
+            .RequiredFields.Single(field => field.Name == "type");
+        Assert.Equal("FeatureCollection", ogcType.ConstantValue);
+        Assert.False(ogcType.Nullable);
+
+        AssertShape(
+            invariants,
+            "sceneMetadataResponse",
+            family: "scene-metadata",
+            requiredFields: ["id", "name", "capabilities"],
+            optionalFields: ["description", "tilesetUrl", "terrainUrl", "accessEnvelope"]);
+
+        AssertShape(
+            invariants,
+            "featureAttachmentInfo",
+            family: "feature-attachments",
+            requiredFields: ["id", "name", "contentType", "size"],
+            optionalFields: ["url", "keywords"]);
+
+        // Every shape must declare a non-empty family that references an existing
+        // model family in the fixture, transport must be set, and required fields
+        // must all be non-nullable -- those are the structural rules the fixture
+        // promises to its consumers.
+        var familyIds = fixture.ModelFamilies.Select(family => family.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var (name, shape) in invariants)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(shape.Family), $"shapeInvariants.{name}.family is required");
+            Assert.Contains(shape.Family, familyIds);
+            Assert.False(string.IsNullOrWhiteSpace(shape.Transport), $"shapeInvariants.{name}.transport is required");
+            Assert.False(string.IsNullOrWhiteSpace(shape.SdkType), $"shapeInvariants.{name}.sdkType is required");
+            Assert.NotEmpty(shape.RequiredFields);
+            Assert.All(shape.RequiredFields, field =>
+            {
+                Assert.False(field.Nullable, $"shapeInvariants.{name}.requiredFields[{field.Name}] must be non-nullable");
+                Assert.False(string.IsNullOrWhiteSpace(field.JsonType), $"shapeInvariants.{name}.requiredFields[{field.Name}].jsonType is required");
+            });
+        }
+    }
+
+    private static void AssertShape(
+        IDictionary<string, ShapeInvariant> invariants,
+        string key,
+        string family,
+        string[] requiredFields,
+        string[] optionalFields)
+    {
+        Assert.True(invariants.TryGetValue(key, out var shape), $"shapeInvariants.{key} missing");
+        Assert.Equal(family, shape!.Family);
+        Assert.Equal(
+            requiredFields.OrderBy(name => name, StringComparer.Ordinal),
+            shape.RequiredFields.Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal));
+        Assert.Equal(
+            optionalFields.OrderBy(name => name, StringComparer.Ordinal),
+            shape.OptionalFields.Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Fixture_HasPortableCompatibilityMetadata()
     {
         var fixture = LoadFixture();
@@ -214,6 +318,38 @@ public sealed class MobileContractHarmonizationFixtureTests
         public ContractCompatibility Compatibility { get; init; } = new();
 
         public IReadOnlyList<ContractFamily> ModelFamilies { get; init; } = [];
+
+        public IDictionary<string, ShapeInvariant>? ShapeInvariants { get; init; }
+    }
+
+    private sealed record ShapeInvariant
+    {
+        public string Family { get; init; } = string.Empty;
+
+        public string SdkType { get; init; } = string.Empty;
+
+        public string Transport { get; init; } = string.Empty;
+
+        public IReadOnlyList<ShapeField> RequiredFields { get; init; } = [];
+
+        public IReadOnlyList<ShapeField> OptionalFields { get; init; } = [];
+
+        public string? Notes { get; init; }
+    }
+
+    private sealed record ShapeField
+    {
+        public string Name { get; init; } = string.Empty;
+
+        public string JsonType { get; init; } = string.Empty;
+
+        public bool Nullable { get; init; }
+
+        public string? ElementType { get; init; }
+
+        public string? Format { get; init; }
+
+        public string? ConstantValue { get; init; }
     }
 
     private sealed record ContractCompatibility
