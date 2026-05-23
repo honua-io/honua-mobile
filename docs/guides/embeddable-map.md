@@ -595,10 +595,59 @@ original error.
 
 `<honua-map>` provides the declarative, white-label web component shell, Shadow
 DOM encapsulation, theme hooks, generated snippets, host extension controls,
-accessible controls, iframe fallback packaging, search events, and identify
-events. Production map rendering should use the MapLibre/deck.gl adapter above
-until the custom element owns a full renderer lifecycle. Follow-on work can add
-feature loading, analytics, binary deck.gl attribute batches, admin embed-builder
-screens, and framework-specific wrappers.
+accessible controls, iframe fallback packaging, search events, identify events,
+and host-side governance adapters. Production map rendering should use the
+MapLibre/deck.gl adapter above until the custom element owns a full renderer
+lifecycle. Follow-on work can add feature loading, binary deck.gl attribute
+batches, and server-backed API-key/rate/CORS enforcement.
+
+## Embed Governance
+
+`@honua-io/embed` does not issue API keys, enforce authoritative rate limits, or
+own CORS/domain policy. Those remain server/admin responsibilities. The package
+does provide a thin host-side governance adapter so admin portals can apply
+server-provided policy decisions and record redacted analytics from the existing
+map events.
+
+```ts
+import { bindHonuaMapGovernance } from '@honua-io/embed';
+
+const map = document.querySelector('honua-map')!;
+const binding = bindHonuaMapGovernance(map, {
+  integrationId: 'city-work-orders',
+  origin: window.location.origin,
+  policy: {
+    requiredApiKey: true,
+    allowedOrigins: ['https://portal.example.com'],
+    allowedServiceOrigins: ['https://services.example.com'],
+    allowedLayerIds: ['assets', 'work-orders'],
+    rateLimit: {
+      remaining: 1200,
+      resetAt: '2026-05-23T18:00:00Z',
+    },
+  },
+  sink: async (event) => {
+    await fetch('/internal/embed-analytics', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(event),
+    });
+  },
+});
+
+map.addEventListener('honua-map-policy-denied', (event) => {
+  console.warn(event.detail.decision.reasons);
+});
+
+// Later, for tenant switch or component teardown:
+binding.disconnect();
+```
+
+Governance events include view, configuration-change, search, identify, and
+policy-denied records. They include service URL, service origin, selected layer
+ids, integration id, origin, API-key presence, and optional host metadata, but
+never include the API-key value. Policy evaluation is intentionally local and
+advisory; use it to mirror server decisions in the embed UI, not as the
+authoritative security boundary.
 
 For 3D Tiles and CesiumJS-based scenes, use the [`<honua-scene>` guide](3d-scene-embed.md).
