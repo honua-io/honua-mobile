@@ -166,7 +166,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> SyncAsync()
     {
-        var unavailableReason = GetSyncUnavailableReason();
+        var unavailableReason = await GetSyncUnavailableReasonAsync();
         if (unavailableReason != null)
         {
             return SyncUnavailableResult("sync", unavailableReason);
@@ -288,7 +288,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> PullChangesAsync()
     {
-        var unavailableReason = GetSyncUnavailableReason();
+        var unavailableReason = await GetSyncUnavailableReasonAsync();
         if (unavailableReason != null)
         {
             return SyncUnavailableResult("pull changes", unavailableReason);
@@ -395,7 +395,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 
     public async Task<SyncResult> PushChangesAsync()
     {
-        var unavailableReason = GetSyncUnavailableReason();
+        var unavailableReason = await GetSyncUnavailableReasonAsync();
         if (unavailableReason != null)
         {
             return SyncUnavailableResult("push changes", unavailableReason);
@@ -975,21 +975,23 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             capability.IsRemoteSyncConfigured;
     }
 
-    private string? GetSyncUnavailableReason()
+    private async Task<string?> GetSyncUnavailableReasonAsync()
     {
-        if (!IsRemoteSyncConfigured)
-        {
-            return "remote field sync is not configured";
-        }
-
         if (!_connectivityService.IsConnected)
         {
             return "the device is offline";
         }
 
-        if (!_authService.IsAuthenticated)
+        if (!await _authService.EnsureValidSessionAsync().ConfigureAwait(false))
         {
-            return "authentication is required";
+            return _authService.RequiresReauthentication
+                ? _authService.SessionStatusMessage ?? "session expired; sign in again"
+                : "authentication is required";
+        }
+
+        if (!IsRemoteSyncConfigured)
+        {
+            return "remote field sync is not configured";
         }
 
         return null;

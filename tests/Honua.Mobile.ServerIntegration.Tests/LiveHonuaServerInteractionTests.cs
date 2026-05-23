@@ -1020,6 +1020,14 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
         public bool IsAuthenticated => true;
 
+        public bool RequiresReauthentication => false;
+
+        public string? SessionStatusMessage => "Session active";
+
+        public DateTimeOffset? ExpiresAtUtc => null;
+
+        public HonuaAuthScheme? AuthScheme => HonuaAuthScheme.ApiKey;
+
         public string? CurrentUserId => "live-image";
 
         public string? CurrentUserName => "Live Image";
@@ -1043,7 +1051,12 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             string password)
             => Task.FromResult(FieldServices.AuthenticationResult.Failure("Credentials are not used in live image tests."));
 
-        public Task<bool> RefreshTokenAsync() => Task.FromResult(true);
+        public Task<bool> RefreshTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> EnsureValidSessionAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public ValueTask<HonuaAuthToken?> GetAuthTokenAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<HonuaAuthToken?>(new HonuaAuthToken(HonuaAuthScheme.ApiKey, ApiKey!));
 
         public Task LogoutAsync() => Task.CompletedTask;
 

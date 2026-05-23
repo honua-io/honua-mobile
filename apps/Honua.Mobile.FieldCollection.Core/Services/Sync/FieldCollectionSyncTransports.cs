@@ -110,14 +110,14 @@ public sealed class HonuaSdkFieldCollectionFeatureSyncClient :
     {
         if (!TryCreateOptions(out var options))
         {
-            throw new InvalidOperationException("Honua server URL and API key are required for field sync.");
+            throw new InvalidOperationException("Honua server URL and authentication are required for field sync.");
         }
 
         var httpClient = _httpClientFactory.CreateClient("HonuaFieldSync");
         return new HonuaMobileClient(
             httpClient,
             options,
-            new FieldCollectionApiKeyTokenProvider(_authenticationService));
+            new FieldCollectionAuthTokenProvider(_authenticationService));
     }
 
     private bool TryCreateOptions(out HonuaMobileClientOptions options)
@@ -125,7 +125,7 @@ public sealed class HonuaSdkFieldCollectionFeatureSyncClient :
         options = null!;
 
         if (string.IsNullOrWhiteSpace(_authenticationService.ServerUrl) ||
-            string.IsNullOrWhiteSpace(_authenticationService.ApiKey) ||
+            !_authenticationService.IsAuthenticated ||
             !Uri.TryCreate(_authenticationService.ServerUrl.Trim(), UriKind.Absolute, out var baseUri))
         {
             return false;
@@ -143,6 +143,7 @@ public sealed class HonuaSdkFieldCollectionFeatureSyncClient :
         {
             BaseUri = baseUri,
             ApiKey = _authenticationService.ApiKey,
+            AuthTokenProvider = new FieldCollectionAuthTokenProvider(_authenticationService),
             AllowInsecureTransportForDevelopment = baseUri.Scheme == Uri.UriSchemeHttp && baseUri.IsLoopback,
             PreferGrpcForFeatureQueries = false,
             PreferGrpcForFeatureEdits = false,
@@ -1341,11 +1342,11 @@ public sealed class QueuedFieldCollectionChangeUploader :
     }
 }
 
-internal sealed class FieldCollectionApiKeyTokenProvider : IAuthTokenProvider
+internal sealed class FieldCollectionAuthTokenProvider : IAuthTokenProvider
 {
     private readonly IAuthenticationService _authenticationService;
 
-    public FieldCollectionApiKeyTokenProvider(IAuthenticationService authenticationService)
+    public FieldCollectionAuthTokenProvider(IAuthenticationService authenticationService)
     {
         _authenticationService = authenticationService;
     }
@@ -1353,13 +1354,16 @@ internal sealed class FieldCollectionApiKeyTokenProvider : IAuthTokenProvider
     public ValueTask<HonuaAuthToken?> GetTokenAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        return string.IsNullOrWhiteSpace(_authenticationService.ApiKey)
-            ? ValueTask.FromResult<HonuaAuthToken?>(null)
-            : ValueTask.FromResult<HonuaAuthToken?>(new HonuaAuthToken(HonuaAuthScheme.ApiKey, _authenticationService.ApiKey));
+        return _authenticationService.GetAuthTokenAsync(ct);
     }
 
-    public ValueTask<HonuaAuthToken?> RefreshTokenAsync(CancellationToken ct = default)
-        => GetTokenAsync(ct);
+    public async ValueTask<HonuaAuthToken?> RefreshTokenAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return await _authenticationService.RefreshTokenAsync(ct).ConfigureAwait(false)
+            ? await _authenticationService.GetAuthTokenAsync(ct).ConfigureAwait(false)
+            : null;
+    }
 
     public ValueTask StoreTokenAsync(HonuaAuthToken token, CancellationToken ct = default)
         => ValueTask.CompletedTask;

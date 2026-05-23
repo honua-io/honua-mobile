@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.Sdk.Auth;
 using Microsoft.Maui.Networking;
 
 namespace Honua.Mobile.FieldCollection.Tests;
@@ -26,10 +27,16 @@ internal sealed class TestAuthenticationService : IAuthenticationService
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public bool IsAuthenticated { get; init; } = true;
+    public bool RequiresReauthentication { get; init; }
+    public string? SessionStatusMessage { get; init; } = "Session active";
+    public DateTimeOffset? ExpiresAtUtc { get; init; }
+    public HonuaAuthScheme? AuthScheme { get; init; } = HonuaAuthScheme.ApiKey;
     public string? CurrentUserId { get; init; } = "test-user";
     public string? CurrentUserName { get; init; } = "Test User";
     public string? ApiKey { get; init; } = "test-api-key";
     public string? ServerUrl { get; init; } = "https://api.honua.test";
+    public int EnsureValidSessionCalls { get; private set; }
+    public bool EnsureValidSessionResult { get; init; } = true;
 
     public Task<AuthenticationResult> AuthenticateAsync(string serverUrl, string apiKey)
     {
@@ -44,9 +51,29 @@ internal sealed class TestAuthenticationService : IAuthenticationService
         return Task.FromResult(AuthenticationResult.Failure("Not configured."));
     }
 
-    public Task<bool> RefreshTokenAsync()
+    public Task<bool> RefreshTokenAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(true);
+    }
+
+    public Task<bool> EnsureValidSessionAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureValidSessionCalls++;
+        return Task.FromResult(EnsureValidSessionResult);
+    }
+
+    public ValueTask<HonuaAuthToken?> GetAuthTokenAsync(CancellationToken cancellationToken = default)
+    {
+        var token = AuthScheme switch
+        {
+            HonuaAuthScheme.ApiKey when !string.IsNullOrWhiteSpace(ApiKey) =>
+                new HonuaAuthToken(HonuaAuthScheme.ApiKey, ApiKey),
+            HonuaAuthScheme.Bearer when !string.IsNullOrWhiteSpace(ApiKey) =>
+                new HonuaAuthToken(HonuaAuthScheme.Bearer, ApiKey, expiresAtUtc: ExpiresAtUtc),
+            _ => null
+        };
+
+        return ValueTask.FromResult(token);
     }
 
     public Task LogoutAsync()

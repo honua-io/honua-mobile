@@ -1394,6 +1394,15 @@ public sealed partial class AuthenticationViewModel : BaseViewModel, IRouteAware
     private string statusMessage = "Not signed in";
 
     [ObservableProperty]
+    private string sessionStatus = "Not signed in";
+
+    [ObservableProperty]
+    private bool requiresReauthentication;
+
+    [ObservableProperty]
+    private DateTimeOffset? sessionExpiresAtUtc;
+
+    [ObservableProperty]
     private bool isAuthenticated;
 
     public AuthenticationViewModel(INavigationService navigationService, IAuthenticationService authService)
@@ -1439,6 +1448,7 @@ public sealed partial class AuthenticationViewModel : BaseViewModel, IRouteAware
     private async Task Logout()
     {
         await _authService.LogoutAsync();
+        ApiKey = string.Empty;
         RefreshState();
     }
 
@@ -1447,7 +1457,12 @@ public sealed partial class AuthenticationViewModel : BaseViewModel, IRouteAware
         ServerUrl = _authService.ServerUrl ?? ServerUrl;
         ApiKey = _authService.ApiKey ?? ApiKey;
         IsAuthenticated = _authService.IsAuthenticated;
-        StatusMessage = IsAuthenticated
+        RequiresReauthentication = _authService.RequiresReauthentication;
+        SessionExpiresAtUtc = _authService.ExpiresAtUtc;
+        SessionStatus = _authService.SessionStatusMessage ?? (IsAuthenticated ? "Session active" : "Not signed in");
+        StatusMessage = RequiresReauthentication
+            ? SessionStatus
+            : IsAuthenticated
             ? $"Signed in as {_authService.CurrentUserName ?? _authService.CurrentUserId ?? "current user"}"
             : "Not signed in";
     }
