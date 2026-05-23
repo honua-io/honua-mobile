@@ -273,6 +273,29 @@ Local export/evidence packages should include:
 UI implication: export screens should preview exactly what will leave the
 device, including media count, record count, redactions, and validation status.
 
+## Field-Day Acceptance
+
+The no-cloud product acceptance harness is represented by
+`NoCloudFieldDayAcceptanceHarnessTests` and emits
+`honua.mobile.no-cloud-field-day.evidence.v1` evidence. The local workflow runs
+from an empty GeoPackage and covers:
+
+- local project catalog install/open state;
+- form validation and calculated field application;
+- local record collection into GeoPackage storage;
+- local media metadata plus exportable device media content;
+- deterministic conflict replay through `LocalReplayFieldSyncPeer`;
+- local export package generation and catalog export timestamp marking.
+
+The evidence includes step-level status and artifact names. Assignment packets
+and formal lifecycle transitions are currently recorded as `follow-up` steps
+linked to honua-mobile#252 and honua-mobile#251 because those adapters depend on
+the SDK package work and are not silently treated as complete.
+
+UI implication: a field-day review screen can be designed around step status,
+artifact links, counts, and follow-up markers without requiring hosted
+acceptance infrastructure.
+
 ## Implementation Backlog
 
 Local parity backlog:
