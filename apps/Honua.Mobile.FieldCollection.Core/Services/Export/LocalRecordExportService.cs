@@ -216,7 +216,7 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
 
             foreach (var attributeColumn in attributeColumns)
             {
-                feature.Attributes.TryGetValue(attributeColumn, out var value);
+                TryGetAttributeValue(feature.Attributes, attributeColumn, out var value);
                 values.Add(FormatAttributeValue(SanitizeAttributeValue(attributeColumn, value)));
             }
 
@@ -413,6 +413,29 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             attribute => attribute.Key,
             attribute => SanitizeAttributeValue(attribute.Key, attribute.Value),
             StringComparer.Ordinal);
+    }
+
+    private static bool TryGetAttributeValue(
+        IReadOnlyDictionary<string, object?> attributes,
+        string attributeColumn,
+        out object? value)
+    {
+        if (attributes.TryGetValue(attributeColumn, out value))
+        {
+            return true;
+        }
+
+        foreach (var attribute in attributes)
+        {
+            if (string.Equals(attribute.Key, attributeColumn, StringComparison.OrdinalIgnoreCase))
+            {
+                value = attribute.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
     }
 
     private static object? SanitizeAttributeValue(string name, object? value)

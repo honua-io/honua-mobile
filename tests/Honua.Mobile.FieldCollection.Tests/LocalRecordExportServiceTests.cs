@@ -116,6 +116,30 @@ public sealed class LocalRecordExportServiceTests
     }
 
     [Fact]
+    public async Task ExportLayerAsync_WhenAttributeCasingDiffers_DoesNotBlankCsvCells()
+    {
+        var databasePath = CreateDatabasePath();
+        var exportRoot = CreateExportRoot();
+        await using var cleanup = new FileCleanup(databasePath, exportRoot);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.ApplyRemoteFeatureAsync(CreateFeature("asset-001", "synced", statusAttributeName: "Status"));
+        await storage.ApplyRemoteFeatureAsync(CreateFeature("asset-002", "pending", statusAttributeName: "status"));
+        var service = new LocalRecordExportService(storage, exportRoot);
+
+        var result = await service.ExportLayerAsync(layer);
+
+        var rows = File.ReadAllLines(result.CsvPath);
+        var headers = rows[0].Split(',');
+        var statusIndex = Array.FindIndex(headers, header =>
+            string.Equals(header, "attribute_Status", StringComparison.OrdinalIgnoreCase));
+
+        Assert.True(statusIndex >= 0);
+        Assert.Equal("synced", rows[1].Split(',')[statusIndex]);
+        Assert.Equal("pending", rows[2].Split(',')[statusIndex]);
+    }
+
+    [Fact]
     public async Task ExportLayerAsync_WithManyRecords_CompletesWithoutChangingOutputShape()
     {
         var databasePath = CreateDatabasePath();
@@ -152,7 +176,11 @@ public sealed class LocalRecordExportServiceTests
         };
     }
 
-    private static Feature CreateFeature(string id, string status, string? pendingSecret = null)
+    private static Feature CreateFeature(
+        string id,
+        string status,
+        string? pendingSecret = null,
+        string statusAttributeName = "status")
     {
         return new Feature
         {
@@ -166,7 +194,7 @@ public sealed class LocalRecordExportServiceTests
             Attributes = new Dictionary<string, object?>
             {
                 ["name"] = id,
-                ["status"] = status,
+                [statusAttributeName] = status,
                 ["accessToken"] = pendingSecret
             }
         };
