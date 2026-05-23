@@ -209,6 +209,7 @@ public class AttachmentInfo
     public DateTime UploadedAt { get; set; }
     public DateTime? LastSyncedAt { get; set; }
     public string? Description { get; set; }
+    public FieldLocationCaptureEvidence? CaptureLocation { get; set; }
     public string? ThumbnailUrl { get; set; }
     public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
     public int RetryCount { get; set; }

@@ -105,6 +105,9 @@ public class LocalAttachment
     [Column("description")]
     public string? Description { get; set; }
 
+    [Column("capture_location_json")]
+    public string? CaptureLocationJson { get; set; }
+
     [Column("thumbnail_url")]
     public string? ThumbnailUrl { get; set; }
 

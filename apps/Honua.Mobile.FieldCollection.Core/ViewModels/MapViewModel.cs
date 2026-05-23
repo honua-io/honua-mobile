@@ -152,6 +152,9 @@ public partial class MapViewModel : BaseViewModel
     private Location? currentLocation;
 
     [ObservableProperty]
+    private FieldLocationFix? currentLocationFix;
+
+    [ObservableProperty]
     private DateTimeOffset? currentLocationCapturedAtUtc;
 
     [ObservableProperty]
@@ -292,11 +295,11 @@ public partial class MapViewModel : BaseViewModel
     {
         await ExecuteAsync(async () =>
         {
-            CurrentLocation = await _locationService.GetCurrentLocationAsync();
-            CurrentLocationCapturedAtUtc = CurrentLocation?.Timestamp == default
-                ? DateTimeOffset.UtcNow
-                : CurrentLocation?.Timestamp;
-            CurrentLocationMetadata = FormatLocationMetadata(CurrentLocation, CurrentLocationCapturedAtUtc);
+            CurrentLocationFix = await _locationService.GetCurrentLocationFixAsync();
+            CurrentLocation = CurrentLocationFix?.Location;
+            var evidence = CurrentLocationFix?.ToEvidence();
+            CurrentLocationCapturedAtUtc = evidence?.CapturedAtUtc;
+            CurrentLocationMetadata = FieldLocationMetadataMapper.FormatEvidence(evidence);
         });
     }
 
@@ -425,23 +428,23 @@ public partial class MapViewModel : BaseViewModel
             return;
         }
 
-        if (CurrentLocation == null)
+        if (CurrentLocationFix == null)
         {
             await LoadCurrentLocation();
         }
 
-        if (CurrentLocation == null)
+        if (CurrentLocationFix == null)
         {
             await ShowError("Location Unavailable", "Unable to determine current location.");
             return;
         }
 
-        var point = new FieldPoint(CurrentLocation.Latitude, CurrentLocation.Longitude, CurrentLocation.Altitude);
+        var location = CurrentLocationFix.Location;
+        var point = new FieldPoint(location.Latitude, location.Longitude, location.Altitude);
         await BeginRecordCreateAtLocation(
             point,
             MobileMapCaptureSource.CurrentGps,
-            CurrentLocation.Accuracy,
-            CurrentLocationCapturedAtUtc ?? DateTimeOffset.UtcNow);
+            CurrentLocationFix.ToEvidence());
     }
 
     [RelayCommand]
@@ -452,7 +455,7 @@ public partial class MapViewModel : BaseViewModel
             return;
         }
 
-        await BeginRecordCreateAtLocation(location, MobileMapCaptureSource.MapTap, null, DateTimeOffset.UtcNow);
+        await BeginRecordCreateAtLocation(location, MobileMapCaptureSource.MapTap, null);
     }
 
     [RelayCommand]
@@ -549,8 +552,7 @@ public partial class MapViewModel : BaseViewModel
     private async Task BeginRecordCreateAtLocation(
         FieldPoint location,
         MobileMapCaptureSource source,
-        double? accuracyMeters,
-        DateTimeOffset capturedAtUtc)
+        FieldLocationCaptureEvidence? locationEvidence)
     {
         if (SelectedLayer == null)
         {
@@ -568,11 +570,21 @@ public partial class MapViewModel : BaseViewModel
                 ["location"] = location,
                 ["isNew"] = true,
                 ["captureSource"] = source.ToString(),
-                ["capturedAtUtc"] = capturedAtUtc.UtcDateTime
+                ["capturedAtUtc"] = (locationEvidence?.CapturedAtUtc ?? DateTimeOffset.UtcNow).UtcDateTime
             };
-            if (accuracyMeters.HasValue)
+            if (locationEvidence is not null)
             {
-                parameters["gpsAccuracyMeters"] = accuracyMeters.Value;
+                parameters["locationEvidence"] = locationEvidence;
+                parameters["gpsSource"] = locationEvidence.SourceKind.ToString();
+                if (locationEvidence.HorizontalAccuracyMeters.HasValue)
+                {
+                    parameters["gpsAccuracyMeters"] = locationEvidence.HorizontalAccuracyMeters.Value;
+                }
+
+                if (!string.IsNullOrWhiteSpace(locationEvidence.Provider))
+                {
+                    parameters["gpsProvider"] = locationEvidence.Provider;
+                }
             }
 
             await NavigationService.NavigateToAsync("record-create", parameters);
@@ -694,22 +706,6 @@ public partial class MapViewModel : BaseViewModel
     private static bool SupportsPointCapture(GeometryType geometryType)
     {
         return geometryType is GeometryType.Unspecified or GeometryType.Point;
-    }
-
-    private static string FormatLocationMetadata(Location? location, DateTimeOffset? capturedAtUtc)
-    {
-        if (location == null)
-        {
-            return "GPS not captured";
-        }
-
-        var accuracy = location.Accuracy.HasValue
-            ? $"accuracy {location.Accuracy.Value:F1} m"
-            : "accuracy unknown";
-        var captured = capturedAtUtc.HasValue
-            ? capturedAtUtc.Value.UtcDateTime.ToString("u")
-            : "time unknown";
-        return $"{accuracy}; captured {captured}";
     }
 
     private static Feature CloneFeature(Feature feature)

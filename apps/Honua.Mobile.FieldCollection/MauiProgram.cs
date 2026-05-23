@@ -106,7 +106,10 @@ public static class MauiProgram
 
         // Core services
         services.AddSingleton<INavigationService, NavigationService>();
-        services.AddSingleton<ILocationService, LocationService>();
+        services.AddSingleton<ILocationService>(provider =>
+            new LocationService(
+                provider.GetService<IHighAccuracyLocationMetadataProvider>(),
+                provider.GetService<ILogger<LocationService>>()));
         services.AddHttpClient("HonuaFieldAuthentication");
         services.AddHttpClient("HonuaFieldMetadata");
         services.AddSingleton<IAuthenticationService>(provider =>

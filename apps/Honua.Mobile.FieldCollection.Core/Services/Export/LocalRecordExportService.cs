@@ -355,6 +355,7 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             uploadedAtUtc = FormatDateTime(attachment.UploadedAt),
             lastSyncedAtUtc = FormatDateTime(attachment.LastSyncedAt),
             description = DiagnosticRedactor.RedactSensitiveText(attachment.Description),
+            captureLocation = SanitizeCaptureLocation(attachment.CaptureLocation),
             thumbnailUrl = DiagnosticRedactor.RedactUrl(attachment.ThumbnailUrl),
             syncStatus = attachment.SyncStatus.ToString(),
             retryCount = attachment.RetryCount,
@@ -362,6 +363,38 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             isDeleted = attachment.IsDeleted,
             deletedAtUtc = FormatDateTime(attachment.DeletedAt)
         };
+    }
+
+    private static object? SanitizeCaptureLocation(FieldLocationCaptureEvidence? captureLocation)
+    {
+        return captureLocation is null
+            ? null
+            : new
+            {
+                latitude = captureLocation.Latitude,
+                longitude = captureLocation.Longitude,
+                altitudeMeters = captureLocation.AltitudeMeters,
+                horizontalAccuracyMeters = captureLocation.HorizontalAccuracyMeters,
+                verticalAccuracyMeters = captureLocation.VerticalAccuracyMeters,
+                speedMetersPerSecond = captureLocation.SpeedMetersPerSecond,
+                headingDegrees = captureLocation.HeadingDegrees,
+                capturedAtUtc = FormatDateTime(captureLocation.CapturedAtUtc.UtcDateTime),
+                sourceKind = captureLocation.SourceKind.ToString(),
+                provider = DiagnosticRedactor.RedactSensitiveText(captureLocation.Provider),
+                isMockProvider = captureLocation.IsMockProvider,
+                reducedAccuracy = captureLocation.ReducedAccuracy,
+                receiver = captureLocation.Receiver is null
+                    ? null
+                    : new
+                    {
+                        name = DiagnosticRedactor.RedactSensitiveText(captureLocation.Receiver.Name),
+                        manufacturer = DiagnosticRedactor.RedactSensitiveText(captureLocation.Receiver.Manufacturer),
+                        model = DiagnosticRedactor.RedactSensitiveText(captureLocation.Receiver.Model),
+                        firmwareVersion = DiagnosticRedactor.RedactSensitiveText(captureLocation.Receiver.FirmwareVersion),
+                        serialNumber = DiagnosticRedactor.RedactSensitiveText(captureLocation.Receiver.SerialNumber),
+                        isExternal = captureLocation.Receiver.IsExternal
+                    }
+            };
     }
 
     private static IReadOnlyList<ChangeRecord> GetPendingChanges(

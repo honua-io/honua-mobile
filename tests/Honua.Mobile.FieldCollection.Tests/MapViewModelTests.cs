@@ -74,12 +74,25 @@ public sealed class MapViewModelTests
         var layer = EditableLayer(7, GeometryType.Point);
         var capturedAt = new DateTimeOffset(2026, 5, 23, 8, 30, 0, TimeSpan.Zero);
         var navigation = new RecordingNavigationService();
+        var location = new Location(21.31, -157.81, capturedAt)
+        {
+            Accuracy = 4.5,
+            VerticalAccuracy = 6.5
+        };
         var locationService = new StubLocationService
         {
-            CurrentLocation = new Location(21.31, -157.81, capturedAt)
-            {
-                Accuracy = 4.5
-            }
+            CurrentFix = FieldLocationMetadataMapper.FromMauiLocation(
+                location,
+                new FieldLocationCaptureMetadata
+                {
+                    SourceKind = FieldLocationSourceKind.ExternalGnss,
+                    Provider = "bluetooth-nmea",
+                    Receiver = new FieldLocationReceiverMetadata
+                    {
+                        Name = "Trimble R12",
+                        IsExternal = true
+                    }
+                })
         };
         var viewModel = CreateViewModel(
             new RecordingFeatureService(layer, []),
@@ -100,7 +113,12 @@ public sealed class MapViewModelTests
         Assert.Equal("record-create", navigation.LastRoute);
         Assert.Equal(MobileMapCaptureSource.CurrentGps.ToString(), navigation.LastParameters["captureSource"]);
         Assert.Equal(4.5, navigation.LastParameters["gpsAccuracyMeters"]);
+        Assert.Equal(FieldLocationSourceKind.ExternalGnss.ToString(), navigation.LastParameters["gpsSource"]);
         Assert.Equal(capturedAt.UtcDateTime, navigation.LastParameters["capturedAtUtc"]);
+        var evidence = Assert.IsType<FieldLocationCaptureEvidence>(navigation.LastParameters["locationEvidence"]);
+        Assert.Equal(FieldLocationSourceKind.ExternalGnss, evidence.SourceKind);
+        Assert.Equal("Trimble R12", evidence.Receiver?.Name);
+        Assert.Contains("External GNSS", viewModel.CurrentLocationMetadata, StringComparison.Ordinal);
         Assert.Contains("accuracy 4.5 m", viewModel.CurrentLocationMetadata, StringComparison.Ordinal);
     }
 
@@ -222,12 +240,24 @@ public sealed class MapViewModelTests
     private sealed class StubLocationService : ILocationService
     {
         public Location? CurrentLocation { get; init; }
+        public FieldLocationFix? CurrentFix { get; init; }
 
         public bool IsLocationEnabled => true;
 
-        public Task<Location?> GetCurrentLocationAsync() => Task.FromResult(CurrentLocation);
+        public Task<Location?> GetCurrentLocationAsync() => Task.FromResult(CurrentFix?.Location ?? CurrentLocation);
 
-        public Task<Location?> GetLastKnownLocationAsync() => Task.FromResult(CurrentLocation);
+        public Task<FieldLocationFix?> GetCurrentLocationFixAsync(CancellationToken cancellationToken = default)
+        {
+            var fix = CurrentFix ?? (CurrentLocation is null
+                ? null
+                : FieldLocationMetadataMapper.FromMauiLocation(CurrentLocation));
+            return Task.FromResult(fix);
+        }
+
+        public Task<Location?> GetLastKnownLocationAsync() => Task.FromResult(CurrentFix?.Location ?? CurrentLocation);
+
+        public Task<FieldLocationFix?> GetLastKnownLocationFixAsync(CancellationToken cancellationToken = default)
+            => GetCurrentLocationFixAsync(cancellationToken);
 
         public Task StartLocationTracking() => Task.CompletedTask;
 
