@@ -69,10 +69,22 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Layer Selection -->
+                <!-- Project Selection -->
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                    <Label Grid.Column="0" Text="Project:" FontAttributes="Bold" VerticalOptions="Center" />
+
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding AvailableProjects}"
+                            SelectedItem="{Binding SelectedProject}"
+                            ItemDisplayBinding="{Binding Name}"
+                            Title="Select Project" />
+                </Grid>
+
+                <!-- Layer Selection -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,10,0,0">
                     <Label Grid.Column="0" Text="Layer:" FontAttributes="Bold" VerticalOptions="Center" />
 
                     <Picker Grid.Column="1"
@@ -89,7 +101,7 @@
                 </Grid>
 
                 <!-- Layer Info -->
-                <StackLayout Grid.Row="1"
+                <StackLayout Grid.Row="2"
                              Orientation="Horizontal"
                              Spacing="20"
                              Margin="0,10,0,0"

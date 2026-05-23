@@ -333,7 +333,7 @@ public class GeoPackageFeatureService : IFeatureService
         }
     }
 
-    public async Task<List<LayerInfo>> GetLayersAsync()
+    public async Task<IReadOnlyList<LayerInfo>> GetLayersAsync()
     {
         try
         {

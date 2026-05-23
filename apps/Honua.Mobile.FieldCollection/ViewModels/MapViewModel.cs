@@ -4,7 +4,6 @@ using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using System.Collections.ObjectModel;
 using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
-using GeometryType = Honua.Sdk.Abstractions.Features.FeatureSpatialGeometryType;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 
@@ -13,6 +12,8 @@ public partial class MapViewModel : BaseViewModel
     private readonly ILocationService _locationService;
     private readonly IFeatureService _featureService;
     private readonly IFormService _formService;
+    private readonly IFieldCollectionMetadataService _metadataService;
+    private bool _updatingSelection;
 
     [ObservableProperty]
     private Location? currentLocation;
@@ -24,6 +25,9 @@ public partial class MapViewModel : BaseViewModel
     private LayerInfo? selectedLayer;
 
     [ObservableProperty]
+    private FieldProjectInfo? selectedProject;
+
+    [ObservableProperty]
     private Feature? selectedFeature;
 
     [ObservableProperty]
@@ -32,6 +36,7 @@ public partial class MapViewModel : BaseViewModel
     [ObservableProperty]
     private FieldPoint? newFeatureLocation;
 
+    public ObservableCollection<FieldProjectInfo> AvailableProjects { get; } = new();
     public ObservableCollection<LayerInfo> AvailableLayers { get; } = new();
     public ObservableCollection<Feature> MapFeatures { get; } = new();
 
@@ -39,64 +44,99 @@ public partial class MapViewModel : BaseViewModel
         INavigationService navigationService,
         ILocationService locationService,
         IFeatureService featureService,
-        IFormService formService)
+        IFormService formService,
+        IFieldCollectionMetadataService metadataService)
         : base(navigationService)
     {
         _locationService = locationService;
         _featureService = featureService;
         _formService = formService;
+        _metadataService = metadataService;
 
         Title = "Map";
         IsLocationEnabled = _locationService.IsLocationEnabled;
-
-        // Initialize with default layers until server-provided metadata is available.
-        InitializeLayers();
     }
 
-    private void InitializeLayers()
+    partial void OnSelectedLayerChanged(LayerInfo? value)
     {
-        AvailableLayers.Add(new LayerInfo
+        if (_updatingSelection || value == null)
         {
-            Id = 1,
-            Name = "Points of Interest",
-            Description = "Point feature layer",
-            GeometryType = GeometryType.Point,
-            IsVisible = true,
-            IsEditable = true,
-            Style = new LayerStyle
-            {
-                FillColor = "#FF0000",
-                StrokeColor = "#000000",
-                MarkerSize = 12
-            }
-        });
-
-        AvailableLayers.Add(new LayerInfo
-        {
-            Id = 2,
-            Name = "Inspection Routes",
-            Description = "Line features for route planning",
-            GeometryType = GeometryType.Polyline,
-            IsVisible = false,
-            IsEditable = true,
-            Style = new LayerStyle
-            {
-                StrokeColor = "#0000FF",
-                StrokeWidth = 3
-            }
-        });
-
-        // Select the first layer by default
-        if (AvailableLayers.Count > 0)
-        {
-            SelectedLayer = AvailableLayers[0];
+            return;
         }
+
+        _ = LoadMapFeatures();
+    }
+
+    partial void OnSelectedProjectChanged(FieldProjectInfo? value)
+    {
+        if (_updatingSelection || value == null)
+        {
+            return;
+        }
+
+        _ = SelectProject(value);
     }
 
     protected override async Task OnRefresh()
     {
+        await LoadMetadataAsync(refresh: true);
         await LoadCurrentLocation();
+    }
+
+    [RelayCommand]
+    private Task LoadMetadata()
+    {
+        return LoadMetadataAsync();
+    }
+
+    private async Task LoadMetadataAsync(bool refresh = false)
+    {
+        await ExecuteAsync(async () =>
+        {
+            var projects = await _metadataService.GetProjectsAsync(refresh);
+            var selectedProject = await _metadataService.GetSelectedProjectAsync();
+            var layers = await _metadataService.GetLayersAsync(refresh);
+
+            ApplyMetadata(projects, selectedProject, layers);
+        });
+
         await LoadMapFeatures();
+    }
+
+    private void ApplyMetadata(
+        IReadOnlyList<FieldProjectInfo> projects,
+        FieldProjectInfo? selectedProject,
+        IReadOnlyList<LayerInfo> layers)
+    {
+        var selectedLayerId = SelectedLayer?.Id;
+
+        _updatingSelection = true;
+        try
+        {
+            AvailableProjects.Clear();
+            foreach (var project in projects)
+            {
+                AvailableProjects.Add(project);
+            }
+
+            SelectedProject = selectedProject is null
+                ? AvailableProjects.FirstOrDefault()
+                : AvailableProjects.FirstOrDefault(project =>
+                    string.Equals(project.ServiceId, selectedProject.ServiceId, StringComparison.OrdinalIgnoreCase)) ?? selectedProject;
+
+            AvailableLayers.Clear();
+            foreach (var layer in layers)
+            {
+                AvailableLayers.Add(layer);
+            }
+
+            SelectedLayer = AvailableLayers.FirstOrDefault(layer => layer.Id == selectedLayerId) ??
+                AvailableLayers.FirstOrDefault();
+        }
+        finally
+        {
+            _updatingSelection = false;
+        }
     }
 
     [RelayCommand]
@@ -111,7 +151,11 @@ public partial class MapViewModel : BaseViewModel
     [RelayCommand]
     private async Task LoadMapFeatures()
     {
-        if (SelectedLayer == null) return;
+        if (SelectedLayer == null)
+        {
+            MapFeatures.Clear();
+            return;
+        }
 
         await ExecuteAsync(async () =>
         {
@@ -132,6 +176,18 @@ public partial class MapViewModel : BaseViewModel
 
         SelectedLayer = layer;
         await LoadMapFeatures();
+    }
+
+    [RelayCommand]
+    private async Task SelectProject(FieldProjectInfo project)
+    {
+        if (SelectedProject != project)
+        {
+            SelectedProject = project;
+        }
+
+        await _metadataService.SelectProjectAsync(project.ServiceId);
+        await LoadMetadataAsync(refresh: true);
     }
 
     [RelayCommand]

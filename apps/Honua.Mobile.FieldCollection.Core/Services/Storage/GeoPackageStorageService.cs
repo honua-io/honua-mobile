@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
@@ -129,6 +130,7 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<SyncSession>();
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
+        await EnsureLayerMetadataTableAsync();
     }
 
     private async Task EnsureLocalFeaturesTableAsync()
@@ -157,6 +159,24 @@ public class GeoPackageStorageService : IDisposable
         return columns.Any(column =>
             string.Equals(column.Name, "storage_key", StringComparison.OrdinalIgnoreCase) &&
             column.PrimaryKey > 0);
+    }
+
+    private async Task EnsureLayerMetadataTableAsync()
+    {
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(layer_metadata)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!columnNames.Contains("service_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN service_id TEXT");
+        }
+
+        if (!columnNames.Contains("source_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN source_id TEXT");
+        }
     }
 
     private async Task MigrateLocalFeaturesTableAsync()
@@ -694,13 +714,16 @@ public class GeoPackageStorageService : IDisposable
             var metadata = new LayerMetadata
             {
                 Id = layer.Id,
+                ServiceId = layer.ServiceId,
+                SourceId = layer.SourceId,
                 Name = layer.Name,
                 Description = layer.Description,
                 GeometryType = layer.GeometryType.ToString(),
                 SpatialReference = "EPSG:4326",
                 IsEditable = layer.IsEditable,
                 Schema = JsonSerializer.Serialize(layer.Schema, SchemaJsonOptions),
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                LastSync = DateTime.UtcNow
             };
 
             await _connection.InsertOrReplaceAsync(metadata);
@@ -763,9 +786,11 @@ public class GeoPackageStorageService : IDisposable
 
     private LayerInfo ConvertToLayerInfo(LayerMetadata metadata)
     {
-        return new LayerInfo
+        var layer = new LayerInfo
         {
             Id = metadata.Id,
+            ServiceId = metadata.ServiceId,
+            SourceId = metadata.SourceId,
             Name = metadata.Name,
             Description = metadata.Description,
             GeometryType = ParseGeometryType(metadata.GeometryType),
@@ -773,6 +798,9 @@ public class GeoPackageStorageService : IDisposable
             IsVisible = true,
             Schema = DeserializeLayerSchema(metadata.Schema)
         };
+
+        layer.Form = FieldCollectionMetadataMapper.CreateFormDefinition(layer);
+        return layer;
     }
 
     private static GeometryType ParseGeometryType(string? value)
