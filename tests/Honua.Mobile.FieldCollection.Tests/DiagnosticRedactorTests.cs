@@ -13,6 +13,8 @@ public sealed class DiagnosticRedactorTests
               "api_key": "api-secret",
               "x-api-key": "header-secret",
               "access-key": "access-secret",
+              "access_token": "access-token-secret",
+              "refresh_token": "refresh-token-secret",
               "nested": { "Authorization": "Bearer auth-secret" },
               "safe": "visible"
             }
@@ -23,7 +25,20 @@ public sealed class DiagnosticRedactorTests
         Assert.DoesNotContain("api-secret", redacted);
         Assert.DoesNotContain("header-secret", redacted);
         Assert.DoesNotContain("access-secret", redacted);
+        Assert.DoesNotContain("access-token-secret", redacted);
+        Assert.DoesNotContain("refresh-token-secret", redacted);
         Assert.DoesNotContain("auth-secret", redacted);
+    }
+
+    [Fact]
+    public void RedactSensitiveText_RedactsBearerAndTokenPairs()
+    {
+        var redacted = DiagnosticRedactor.RedactSensitiveText(
+            "Authorization: Bearer bearer-secret refresh_token=refresh-secret");
+
+        Assert.DoesNotContain("bearer-secret", redacted);
+        Assert.DoesNotContain("refresh-secret", redacted);
+        Assert.Contains("[redacted]", redacted);
     }
 
     [Fact]

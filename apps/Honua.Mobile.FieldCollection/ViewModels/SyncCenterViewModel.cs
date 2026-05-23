@@ -93,7 +93,9 @@ public partial class SyncCenterViewModel : BaseViewModel
 
     private void OnAuthServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated))
+        if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated) ||
+            e.PropertyName == nameof(IAuthenticationService.RequiresReauthentication) ||
+            e.PropertyName == nameof(IAuthenticationService.SessionStatusMessage))
         {
             UpdateFromSyncService();
         }
@@ -117,24 +119,27 @@ public partial class SyncCenterViewModel : BaseViewModel
             IsRemoteSyncConfigured &&
             IsOnline &&
             _authService.IsAuthenticated &&
+            !_authService.RequiresReauthentication &&
             !IsSyncing;
     }
 
     private void UpdateSyncStatusMessage()
     {
-        if (!IsRemoteSyncConfigured)
-        {
-            SyncStatusMessage = PendingChangesCount > 0
-                ? $"Remote sync not configured - {PendingChangesCount} changes remain on this device"
-                : "Remote sync not configured";
-        }
-        else if (!IsOnline)
+        if (!IsOnline)
         {
             SyncStatusMessage = "Offline - sync unavailable";
         }
         else if (!_authService.IsAuthenticated)
         {
-            SyncStatusMessage = "Not authenticated";
+            SyncStatusMessage = _authService.RequiresReauthentication
+                ? _authService.SessionStatusMessage ?? "Session expired - sign in again"
+                : "Not authenticated";
+        }
+        else if (!IsRemoteSyncConfigured)
+        {
+            SyncStatusMessage = PendingChangesCount > 0
+                ? $"Remote sync not configured - {PendingChangesCount} changes remain on this device"
+                : "Remote sync not configured";
         }
         else
         {
@@ -169,12 +174,6 @@ public partial class SyncCenterViewModel : BaseViewModel
             return;
         }
 
-        if (!IsRemoteSyncConfigured)
-        {
-            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
-            return;
-        }
-
         if (!IsOnline)
         {
             await ShowError("No Connection", "Please check your internet connection and try again.");
@@ -183,7 +182,15 @@ public partial class SyncCenterViewModel : BaseViewModel
 
         if (!_authService.IsAuthenticated)
         {
-            await ShowError("Not Authenticated", "Please sign in before syncing.");
+            await ShowError(
+                _authService.RequiresReauthentication ? "Sign In Required" : "Not Authenticated",
+                _authService.SessionStatusMessage ?? "Please sign in before syncing.");
+            return;
+        }
+
+        if (!IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
             return;
         }
 

@@ -59,6 +59,30 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PushChangesAsync_WhenSessionRequiresReauthentication_LeavesPendingEditsQueued()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        var auth = new TestAuthenticationService
+        {
+            IsAuthenticated = false,
+            RequiresReauthentication = true,
+            SessionStatusMessage = "Session expired. Sign in again.",
+            EnsureValidSessionResult = false
+        };
+        using var sync = CreateSyncService(storage, authService: auth);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Session expired", result.ErrorMessage);
+        Assert.Single(await storage.GetPendingChangesAsync());
+        Assert.Equal(1, auth.EnsureValidSessionCalls);
+    }
+
+    [Fact]
     public async Task PullChangesAsync_WhenUsingLocalOnlyProductionPuller_ReturnsConfigurationFailure()
     {
         var databasePath = CreateDatabasePath();
@@ -612,11 +636,12 @@ public sealed class GeoPackageSyncServiceTests
         GeoPackageStorageService storage,
         IFieldCollectionChangeUploader? uploader = null,
         IFieldCollectionChangePuller? puller = null,
+        IAuthenticationService? authService = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
         return new GeoPackageSyncService(
             storage,
-            new TestAuthenticationService(),
+            authService ?? new TestAuthenticationService(),
             new TestConnectivityService(),
             uploader ?? new FixedResultUploader(true),
             puller ?? new FixedPuller([]),

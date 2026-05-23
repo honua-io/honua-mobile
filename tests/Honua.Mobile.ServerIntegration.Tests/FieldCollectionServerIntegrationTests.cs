@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Honua.Mobile.Sdk.Auth;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.Maui.Diagnostics;
@@ -172,6 +173,14 @@ public sealed class FieldCollectionServerIntegrationTests : IDisposable
 
         public bool IsAuthenticated => true;
 
+        public bool RequiresReauthentication => false;
+
+        public string? SessionStatusMessage => "Session active";
+
+        public DateTimeOffset? ExpiresAtUtc => null;
+
+        public HonuaAuthScheme? AuthScheme => HonuaAuthScheme.ApiKey;
+
         public string? CurrentUserId => "integration-user";
 
         public string? CurrentUserName => "Integration User";
@@ -186,7 +195,12 @@ public sealed class FieldCollectionServerIntegrationTests : IDisposable
         public Task<AuthenticationResult> AuthenticateWithCredentialsAsync(string serverUrl, string username, string password)
             => Task.FromResult(AuthenticationResult.Failure("Username/password authentication is not configured."));
 
-        public Task<bool> RefreshTokenAsync() => Task.FromResult(true);
+        public Task<bool> RefreshTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> EnsureValidSessionAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public ValueTask<HonuaAuthToken?> GetAuthTokenAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<HonuaAuthToken?>(new HonuaAuthToken(HonuaAuthScheme.ApiKey, ApiKey!));
 
         public Task LogoutAsync() => Task.CompletedTask;
 
