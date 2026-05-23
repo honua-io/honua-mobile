@@ -65,11 +65,106 @@ public interface IHonuaMapPluginContext
 
     HonuaMapPluginDescriptor Plugin { get; }
 
+    IReadOnlyList<HonuaPluginPermissionDeclaration> GrantedPermissions { get; }
+
+    bool HasPermission(string permission, string access);
+
     void AddToolbarButton(HonuaMapPluginToolbarButton button);
 
     void AddUiExtension(HonuaMapPluginUiExtension extension);
 
     void AddFeatureRenderer(HonuaMapPluginFeatureRenderer renderer);
+}
+
+public enum HonuaMapPluginTrustState
+{
+    Approved,
+    Untrusted,
+    Revoked,
+}
+
+public sealed record HonuaMapPluginTrustEvaluation
+{
+    public HonuaMapPluginTrustState State { get; init; } = HonuaMapPluginTrustState.Approved;
+
+    public string? Reason { get; init; }
+
+    public bool CanLoad => State == HonuaMapPluginTrustState.Approved;
+
+    public static HonuaMapPluginTrustEvaluation Approved()
+        => new() { State = HonuaMapPluginTrustState.Approved };
+
+    public static HonuaMapPluginTrustEvaluation Untrusted(string? reason = null)
+        => new() { State = HonuaMapPluginTrustState.Untrusted, Reason = reason };
+
+    public static HonuaMapPluginTrustEvaluation Revoked(string? reason = null)
+        => new() { State = HonuaMapPluginTrustState.Revoked, Reason = reason };
+}
+
+public interface IHonuaMapPluginTrustService
+{
+    ValueTask<HonuaMapPluginTrustEvaluation> EvaluateTrustAsync(
+        HonuaMapPluginDescriptor plugin,
+        CancellationToken ct = default);
+}
+
+public sealed class LocalHonuaMapPluginTrustService : IHonuaMapPluginTrustService
+{
+    public ValueTask<HonuaMapPluginTrustEvaluation> EvaluateTrustAsync(
+        HonuaMapPluginDescriptor plugin,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        ct.ThrowIfCancellationRequested();
+
+        return ValueTask.FromResult(HonuaMapPluginTrustEvaluation.Approved());
+    }
+}
+
+public sealed record HonuaMapPluginPermissionRequest
+{
+    public required HonuaMapPluginDescriptor Plugin { get; init; }
+
+    public required HonuaPluginPermissionDeclaration Permission { get; init; }
+}
+
+public sealed record HonuaMapPluginPermissionDecision
+{
+    public bool Granted { get; init; }
+
+    public string? Reason { get; init; }
+
+    public static HonuaMapPluginPermissionDecision Grant()
+        => new() { Granted = true };
+
+    public static HonuaMapPluginPermissionDecision Deny(string? reason = null)
+        => new() { Granted = false, Reason = reason };
+}
+
+public interface IHonuaMapPluginPermissionService
+{
+    ValueTask<HonuaMapPluginPermissionDecision> RequestPermissionAsync(
+        HonuaMapPluginPermissionRequest request,
+        CancellationToken ct = default);
+}
+
+public sealed class DenyByDefaultHonuaMapPluginPermissionService : IHonuaMapPluginPermissionService
+{
+    public ValueTask<HonuaMapPluginPermissionDecision> RequestPermissionAsync(
+        HonuaMapPluginPermissionRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ct.ThrowIfCancellationRequested();
+
+        return ValueTask.FromResult(HonuaMapPluginPermissionDecision.Deny(
+            "No mobile plugin permission service approved this request."));
+    }
+}
+
+public sealed record HonuaMapPluginActivationOptions
+{
+    public IReadOnlyList<string> DisabledPluginIds { get; init; } = [];
 }
 
 /// <summary>

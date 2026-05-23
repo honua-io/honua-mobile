@@ -104,7 +104,7 @@ describe('honua embed extensions', () => {
     expect(map.shadowRoot!.querySelector('[data-honua-extension-control="reset"]')).toBeNull();
     expect(scene.shadowRoot!.querySelector('[data-honua-extension-control="reset"]')).not.toBeNull();
     expect(listHonuaEmbedExtensions('scene')).toMatchObject([
-      { id: 'scene-reset', target: ['scene'], priority: 0 },
+      { id: 'scene-reset', target: ['scene'], priority: 0, trustState: 'approved' },
     ]);
   });
 
@@ -144,5 +144,84 @@ describe('honua embed extensions', () => {
       lifecycle: 'activate',
       error,
     });
+    expect(listener.mock.calls[0][0].detail.message).toBe('failed to activate');
+  });
+
+  it('fails closed when an extension is untrusted', () => {
+    expect(() => registerHonuaEmbedExtension({
+      id: 'untrusted-extension',
+      activate: vi.fn(),
+    }, {
+      trustState: 'untrusted',
+    })).toThrow(/not approved/);
+  });
+
+  it('requires granted permissions before registering required browser hooks', () => {
+    expect(() => registerHonuaEmbedExtension({
+      id: 'camera-extension',
+      activate: vi.fn(),
+    }, {
+      permissions: [{ permission: 'camera.capture', required: true }],
+    })).toThrow(/requires permission/);
+
+    const registration = registerHonuaEmbedExtension({
+      id: 'approved-camera-extension',
+      activate(context) {
+        context.addControl({
+          id: 'camera',
+          label: context.hasPermission('camera.capture') ? 'Camera' : 'Denied',
+        });
+      },
+    }, {
+      permissions: [{ permission: 'camera.capture', required: true }],
+      grantedPermissions: ['camera.capture'],
+    });
+    registrations.push(registration);
+
+    const element = document.createElement('honua-map');
+    document.body.append(element);
+
+    expect(element.shadowRoot!.querySelector('[data-honua-extension-control="camera"]')).not.toBeNull();
+    expect(listHonuaEmbedExtensions()).toMatchObject([
+      {
+        id: 'approved-camera-extension',
+        permissions: ['camera.capture'],
+        trustState: 'approved',
+      },
+    ]);
+  });
+
+  it('isolates command failures and redacts sensitive error messages', () => {
+    const registration = registerHonuaEmbedExtension({
+      id: 'command-failure-extension',
+      target: 'map',
+      activate(context) {
+        context.addControl({
+          id: 'explode',
+          label: 'Explode',
+          onClick() {
+            throw new Error('token=secret-value');
+          },
+        });
+      },
+    });
+    registrations.push(registration);
+
+    const element = document.createElement('honua-map');
+    const listener = vi.fn();
+    element.addEventListener('honua-embed-extension-error', listener);
+    document.body.append(element);
+
+    const button = element.shadowRoot!.querySelector<HTMLButtonElement>('[data-honua-extension-control="explode"]')!;
+    button.click();
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0][0].detail).toMatchObject({
+      extensionId: 'command-failure-extension',
+      lifecycle: 'command',
+      message: 'token=[redacted]',
+    });
+    expect(listener.mock.calls[0][0].detail.message).not.toContain('secret-value');
+    expect(button.isConnected).toBe(true);
   });
 });

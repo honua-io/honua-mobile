@@ -105,6 +105,41 @@ public sealed class HonuaMapPluginHostTests
     }
 
     [Fact]
+    public async Task ActivateAsync_SkipsDisabledPluginsForRuntimeUnload()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMapPlugin(new RecordingMapPlugin("first", priority: 1))
+            .AddHonuaMapPlugin(new RecordingMapPlugin("second", priority: 2))
+            .BuildServiceProvider();
+
+        var host = provider.GetRequiredService<HonuaMapPluginHost>();
+        var report = await host.ActivateAsync(new HonuaMapPluginActivationOptions
+        {
+            DisabledPluginIds = ["first"],
+        });
+
+        Assert.Equal("second", Assert.Single(report.ActivatedPlugins).Id);
+        Assert.Equal("second-action", Assert.Single(report.Contributions.ToolbarButtons).Contribution.Id);
+    }
+
+    [Fact]
+    public async Task ActivationReport_WithoutPlugin_RemovesContributionsWithoutRestart()
+    {
+        using var provider = new ServiceCollection()
+            .AddHonuaMapPlugin(new RecordingMapPlugin("first", priority: 1))
+            .AddHonuaMapPlugin(new RecordingMapPlugin("second", priority: 2))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+        var unloaded = report.WithoutPlugin("first");
+
+        Assert.Equal("second", Assert.Single(unloaded.ActivatedPlugins).Id);
+        Assert.DoesNotContain(unloaded.Contributions.ToolbarButtons, item => item.PluginId == "first");
+        Assert.DoesNotContain(unloaded.Contributions.UiExtensions, item => item.PluginId == "first");
+        Assert.DoesNotContain(unloaded.Contributions.FeatureRenderers, item => item.PluginId == "first");
+    }
+
+    [Fact]
     public async Task AddHonuaMapPlugin_RegistersPluginTypeAndHost()
     {
         using var provider = new ServiceCollection()
@@ -152,6 +187,71 @@ public sealed class HonuaMapPluginHostTests
         Assert.Equal(typeof(ManifestBackedMapPlugin).FullName, failure.PluginId);
         Assert.Contains("mobile", failure.Message, StringComparison.Ordinal);
         Assert.Equal("healthy", Assert.Single(report.ActivatedPlugins).Id);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_BlocksUntrustedPluginBeforeActivation()
+    {
+        var trustService = new RecordingTrustService(
+            HonuaMapPluginTrustEvaluation.Untrusted("publisher not approved"));
+        using var provider = new ServiceCollection()
+            .AddSingleton<IHonuaMapPluginTrustService>(trustService)
+            .AddHonuaMapPlugin(new RecordingMapPlugin("blocked"))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal("blocked", failure.PluginId);
+        Assert.Contains("trust state is Untrusted", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(report.ActivatedPlugins);
+        Assert.Equal(["blocked"], trustService.EvaluatedPluginIds);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_BlocksRequiredPermissionWhenHostDeniesAndRedactsReason()
+    {
+        using var provider = new ServiceCollection()
+            .AddSingleton<IHonuaMapPluginPermissionService>(new RecordingPermissionService(
+                HonuaMapPluginPermissionDecision.Deny("apiKey=secret-value")))
+            .AddHonuaMapPlugin(new PermissionAwareMapPlugin(
+                CreateSdkManifest(
+                    "camera-plugin",
+                    "Camera Plugin",
+                    [HonuaPluginHostKinds.Mobile],
+                    CreatePermission("device.camera", HonuaPluginPermissionAccess.Read, required: true))))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal("camera-plugin", failure.PluginId);
+        Assert.Contains("device.camera", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-value", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(report.ActivatedPlugins);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_ProvidesGrantedPermissionsToPluginContext()
+    {
+        var permission = CreatePermission("device.camera", HonuaPluginPermissionAccess.Read, required: true);
+        using var provider = new ServiceCollection()
+            .AddSingleton<IHonuaMapPluginPermissionService>(new RecordingPermissionService(
+                HonuaMapPluginPermissionDecision.Grant()))
+            .AddHonuaMapPlugin(new PermissionAwareMapPlugin(
+                CreateSdkManifest(
+                    "camera-plugin",
+                    "Camera Plugin",
+                    [HonuaPluginHostKinds.Mobile],
+                    permission)))
+            .BuildServiceProvider();
+
+        var report = await provider.GetRequiredService<HonuaMapPluginHost>().ActivateAsync();
+
+        Assert.False(report.HasFailures);
+        Assert.Equal("camera-plugin", Assert.Single(report.ActivatedPlugins).Id);
+        Assert.Equal("camera-plugin-action", Assert.Single(report.Contributions.ToolbarButtons).Contribution.Id);
     }
 
     [Fact]
@@ -291,6 +391,64 @@ public sealed class HonuaMapPluginHostTests
         }
     }
 
+    private sealed class PermissionAwareMapPlugin : IHonuaMapPlugin
+    {
+        public PermissionAwareMapPlugin(HonuaPluginManifest manifest)
+        {
+            Descriptor = manifest.ToMapPluginDescriptor();
+        }
+
+        public HonuaMapPluginDescriptor Descriptor { get; }
+
+        public ValueTask ActivateAsync(IHonuaMapPluginContext context, CancellationToken ct = default)
+        {
+            if (!context.HasPermission("device.camera", HonuaPluginPermissionAccess.Read))
+            {
+                throw new InvalidOperationException("Camera permission was not granted.");
+            }
+
+            context.AddToolbarButton(CreateToolbarButton($"{context.Plugin.Id}-action"));
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingTrustService : IHonuaMapPluginTrustService
+    {
+        private readonly HonuaMapPluginTrustEvaluation _evaluation;
+
+        public RecordingTrustService(HonuaMapPluginTrustEvaluation evaluation)
+        {
+            _evaluation = evaluation;
+        }
+
+        public List<string> EvaluatedPluginIds { get; } = [];
+
+        public ValueTask<HonuaMapPluginTrustEvaluation> EvaluateTrustAsync(
+            HonuaMapPluginDescriptor plugin,
+            CancellationToken ct = default)
+        {
+            EvaluatedPluginIds.Add(plugin.Id);
+            return ValueTask.FromResult(_evaluation);
+        }
+    }
+
+    private sealed class RecordingPermissionService : IHonuaMapPluginPermissionService
+    {
+        private readonly HonuaMapPluginPermissionDecision _decision;
+
+        public RecordingPermissionService(HonuaMapPluginPermissionDecision decision)
+        {
+            _decision = decision;
+        }
+
+        public ValueTask<HonuaMapPluginPermissionDecision> RequestPermissionAsync(
+            HonuaMapPluginPermissionRequest request,
+            CancellationToken ct = default)
+        {
+            return ValueTask.FromResult(_decision);
+        }
+    }
+
     private sealed class RecordingRenderer;
 
     private static HonuaMapPluginToolbarButton CreateToolbarButton(string id)
@@ -304,7 +462,8 @@ public sealed class HonuaMapPluginHostTests
     private static HonuaPluginManifest CreateSdkManifest(
         string pluginId,
         string displayName,
-        IReadOnlyList<string> hosts)
+        IReadOnlyList<string> hosts,
+        params HonuaPluginPermissionDeclaration[] permissions)
         => new()
         {
             SchemaVersion = HonuaPluginManifest.CurrentSchemaVersion,
@@ -316,6 +475,7 @@ public sealed class HonuaMapPluginHostTests
             {
                 SupportedHosts = hosts,
             },
+            Permissions = permissions,
             Extensions =
             [
                 new HonuaPluginExtensionPoint
@@ -327,5 +487,17 @@ public sealed class HonuaMapPluginHostTests
                     Order = 0,
                 },
             ],
+        };
+
+    private static HonuaPluginPermissionDeclaration CreatePermission(
+        string permission,
+        string access,
+        bool required)
+        => new()
+        {
+            Permission = permission,
+            Access = access,
+            Required = required,
+            Reason = "Needed for plugin tests.",
         };
 }

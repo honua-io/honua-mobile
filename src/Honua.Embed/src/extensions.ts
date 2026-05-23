@@ -9,12 +9,14 @@ export interface HonuaEmbedConfigByTarget {
 }
 
 export type HonuaEmbedExtensionCleanup = () => void;
+export type HonuaEmbedExtensionTrustState = 'approved' | 'untrusted' | 'revoked';
 
 export interface HonuaEmbedExtensionContext<TTarget extends HonuaEmbedTarget = HonuaEmbedTarget> {
   readonly target: TTarget;
   readonly element: HTMLElement;
   readonly shadowRoot: ShadowRoot;
   readonly config: HonuaEmbedConfigByTarget[TTarget];
+  hasPermission(permission: string): boolean;
   addControl(options: HonuaEmbedControlOptions<TTarget>): HonuaEmbedContribution;
   setCssVariable(name: string, value: string | null): void;
   dispatch(type: string, detail?: unknown, init?: Omit<CustomEventInit, 'detail'>): boolean;
@@ -48,16 +50,31 @@ export interface HonuaEmbedExtensionRegistration {
   unregister(): void;
 }
 
+export interface HonuaEmbedExtensionPermission {
+  permission: string;
+  required?: boolean;
+  reason?: string;
+}
+
+export interface HonuaEmbedExtensionRegistrationOptions {
+  trustState?: HonuaEmbedExtensionTrustState;
+  permissions?: readonly HonuaEmbedExtensionPermission[];
+  grantedPermissions?: readonly string[];
+}
+
 export interface HonuaEmbedExtensionDescriptor {
   readonly id: string;
   readonly target: readonly HonuaEmbedTarget[];
   readonly priority: number;
+  readonly trustState: HonuaEmbedExtensionTrustState;
+  readonly permissions: readonly string[];
 }
 
 export interface HonuaEmbedExtensionErrorDetail {
   extensionId: string;
   target: HonuaEmbedTarget;
-  lifecycle: 'activate' | 'configChanged' | 'deactivate';
+  lifecycle: 'activate' | 'configChanged' | 'command' | 'deactivate';
+  message: string;
   error: unknown;
 }
 
@@ -70,16 +87,29 @@ interface HonuaEmbedExtensionHostOptions<TTarget extends HonuaEmbedTarget> {
 
 interface ActiveExtension {
   extension: HonuaEmbedExtension;
+  policy: HonuaEmbedExtensionRegistrationPolicy;
   cleanup?: HonuaEmbedExtensionCleanup;
   contributions: HonuaEmbedContribution[];
 }
 
+interface HonuaEmbedExtensionRegistrationPolicy {
+  trustState: HonuaEmbedExtensionTrustState;
+  permissions: readonly HonuaEmbedExtensionPermission[];
+  grantedPermissions: ReadonlySet<string>;
+}
+
+interface RegisteredExtension {
+  extension: HonuaEmbedExtension;
+  policy: HonuaEmbedExtensionRegistrationPolicy;
+}
+
 const DEFAULT_CONTROLS_SELECTOR = '[data-honua-extension-controls]';
-const extensions = new Map<string, HonuaEmbedExtension>();
+const extensions = new Map<string, RegisteredExtension>();
 const hosts = new Set<HonuaEmbedExtensionHost<HonuaEmbedTarget>>();
 
 export function registerHonuaEmbedExtension<TTarget extends HonuaEmbedTarget>(
   extension: HonuaEmbedExtension<TTarget>,
+  options?: HonuaEmbedExtensionRegistrationOptions,
 ): HonuaEmbedExtensionRegistration {
   const id = extension.id.trim();
   if (!id) {
@@ -90,10 +120,11 @@ export function registerHonuaEmbedExtension<TTarget extends HonuaEmbedTarget>(
     throw new Error(`A Honua embed extension is already registered with id "${id}".`);
   }
 
+  const policy = normalizeRegistrationPolicy(id, options);
   const normalized = { ...extension, id } as HonuaEmbedExtension;
-  extensions.set(id, normalized);
+  extensions.set(id, { extension: normalized, policy });
   for (const host of hosts) {
-    host.activate(normalized);
+    host.activate(normalized, policy);
   }
 
   let registered = true;
@@ -114,12 +145,14 @@ export function registerHonuaEmbedExtension<TTarget extends HonuaEmbedTarget>(
 }
 
 export function listHonuaEmbedExtensions(target?: HonuaEmbedTarget): HonuaEmbedExtensionDescriptor[] {
-  return sortedExtensions()
-    .filter((extension) => !target || extensionTargets(extension).includes(target))
-    .map((extension) => ({
-      id: extension.id,
-      target: extensionTargets(extension),
-      priority: extension.priority ?? 0,
+  return sortedExtensionEntries()
+    .filter((entry) => !target || extensionTargets(entry.extension).includes(target))
+    .map((entry) => ({
+      id: entry.extension.id,
+      target: extensionTargets(entry.extension),
+      priority: entry.extension.priority ?? 0,
+      trustState: entry.policy.trustState,
+      permissions: entry.policy.permissions.map((permission) => permission.permission),
     }));
 }
 
@@ -145,8 +178,8 @@ export class HonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget> {
 
     this.#connected = true;
     hosts.add(this as HonuaEmbedExtensionHost<HonuaEmbedTarget>);
-    for (const extension of sortedExtensions()) {
-      this.activate(extension);
+    for (const entry of sortedExtensionEntries()) {
+      this.activate(entry.extension, entry.policy);
     }
   }
 
@@ -177,12 +210,15 @@ export class HonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget> {
     }
   }
 
-  activate(extension: HonuaEmbedExtension): void {
+  activate(
+    extension: HonuaEmbedExtension,
+    policy: HonuaEmbedExtensionRegistrationPolicy = createDefaultRegistrationPolicy(),
+  ): void {
     if (!this.#connected || this.#active.has(extension.id) || !extensionTargets(extension).includes(this.#target)) {
       return;
     }
 
-    const active: ActiveExtension = { extension, contributions: [] };
+    const active: ActiveExtension = { extension, policy, contributions: [] };
     this.#active.set(extension.id, active);
 
     try {
@@ -229,6 +265,10 @@ export class HonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget> {
       },
       get config() {
         return thisHost.#getConfig();
+      },
+      hasPermission(permission) {
+        const active = thisHost.#active.get(extensionId);
+        return active?.policy.grantedPermissions.has(permission.trim()) ?? false;
       },
       addControl(options) {
         return thisHost.#addControl(extensionId, options);
@@ -279,7 +319,11 @@ export class HonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget> {
     }
 
     button.addEventListener('click', (event) => {
-      options.onClick?.(event, this.#context(extensionId));
+      try {
+        options.onClick?.(event, this.#context(extensionId));
+      } catch (error) {
+        this.#emitError(extensionId, 'command', error);
+      }
     });
 
     outlet.append(button);
@@ -337,6 +381,7 @@ export class HonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget> {
         extensionId,
         target: this.#target,
         lifecycle,
+        message: redactExtensionError(error),
         error,
       },
     }));
@@ -349,10 +394,10 @@ export function createHonuaEmbedExtensionHost<TTarget extends HonuaEmbedTarget>(
   return new HonuaEmbedExtensionHost(options);
 }
 
-function sortedExtensions(): HonuaEmbedExtension[] {
+function sortedExtensionEntries(): RegisteredExtension[] {
   return [...extensions.values()].sort((left, right) => {
-    const priority = (left.priority ?? 0) - (right.priority ?? 0);
-    return priority === 0 ? left.id.localeCompare(right.id) : priority;
+    const priority = (left.extension.priority ?? 0) - (right.extension.priority ?? 0);
+    return priority === 0 ? left.extension.id.localeCompare(right.extension.id) : priority;
   });
 }
 
@@ -373,4 +418,48 @@ function setOutletActive(outlet: HTMLElement): void {
   if (parent?.classList.contains('controls')) {
     parent.dataset.honuaExtensionActive = active;
   }
+}
+
+function createDefaultRegistrationPolicy(): HonuaEmbedExtensionRegistrationPolicy {
+  return {
+    trustState: 'approved',
+    permissions: [],
+    grantedPermissions: new Set(),
+  };
+}
+
+function normalizeRegistrationPolicy(
+  extensionId: string,
+  options?: HonuaEmbedExtensionRegistrationOptions,
+): HonuaEmbedExtensionRegistrationPolicy {
+  const trustState = options?.trustState ?? 'approved';
+  if (trustState !== 'approved') {
+    throw new Error(`Honua embed extension "${extensionId}" is not approved to load: ${trustState}.`);
+  }
+
+  const permissions = options?.permissions ?? [];
+  const grantedPermissions = new Set((options?.grantedPermissions ?? [])
+    .map((permission) => permission.trim())
+    .filter(Boolean));
+  const missingRequired = permissions.find((permission) =>
+    permission.required !== false && !grantedPermissions.has(permission.permission.trim()));
+  if (missingRequired) {
+    throw new Error(
+      `Honua embed extension "${extensionId}" requires permission "${missingRequired.permission}" before registration.`,
+    );
+  }
+
+  return {
+    trustState,
+    permissions,
+    grantedPermissions,
+  };
+}
+
+function redactExtensionError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/\b(authorization)\s*[:=]\s*(?:bearer|basic)?\s*[A-Za-z0-9._~+/=-]+/gi, '$1=[redacted]')
+    .replace(/\b(access[_-]?token|refresh[_-]?token|token|x[_-]?api[_-]?key|api[_-]?key|apikey|access[_-]?key|accesskey|password|passwd|secret|client[_-]?secret|credential)\b\s*[:=]\s*["']?[^"'&\s,;]+["']?/gi, '$1=[redacted]')
+    .slice(0, 1000);
 }
