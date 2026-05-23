@@ -249,7 +249,11 @@ public enum AttachmentPayloadKind
 {
     File,
     Photo,
-    Signature
+    Signature,
+    Video,
+    Audio,
+    Sketch,
+    Barcode
 }
 
 public class LayerInfo

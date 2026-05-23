@@ -183,6 +183,11 @@ assignee, crew, priority, due date, status, binding, and map/source query.
 UI implication: capture buttons, attachment warnings, and submit blocking should
 be derived from policy and validation, not from screen-specific rules.
 
+Mobile-owned `AttachmentPayloadKind` values currently distinguish `File`,
+`Photo`, `Signature`, `Video`, `Audio`, `Sketch`, and `Barcode` so local
+storage, diagnostics, and export can preserve media intent without relying on a
+cloud attachment service.
+
 ## Local Catalog State
 
 Mobile-owned catalog state should wrap the portable package with runtime facts:
