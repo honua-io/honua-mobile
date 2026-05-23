@@ -1,7 +1,9 @@
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Configuration;
+using Honua.Mobile.Maui.Diagnostics;
 using System.Text.Json;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Networking;
 using Microsoft.Extensions.Logging;
@@ -19,13 +21,20 @@ public class DiagnosticService
     private readonly IConnectivityService _connectivityService;
     private readonly IAuthenticationService _authService;
     private readonly MobileBuildConfiguration _buildConfiguration;
+    private readonly IMobileExceptionReporter _exceptionReporter;
     private readonly ILogger<DiagnosticService>? _logger;
+
+    private static readonly JsonSerializerOptions ExportJsonOptions = new()
+    {
+        WriteIndented = true
+    };
 
     public DiagnosticService(
         DatabaseService databaseService,
         ISyncService syncService,
         IConnectivityService connectivityService,
         IAuthenticationService authService,
+        IMobileExceptionReporter exceptionReporter,
         MobileBuildConfiguration? buildConfiguration = null,
         ILogger<DiagnosticService>? logger = null)
     {
@@ -33,6 +42,7 @@ public class DiagnosticService
         _syncService = syncService;
         _connectivityService = connectivityService;
         _authService = authService;
+        _exceptionReporter = exceptionReporter;
         _buildConfiguration = buildConfiguration ?? MobileBuildConfiguration.Empty;
         _logger = logger;
     }
@@ -231,19 +241,29 @@ public class DiagnosticService
             OfflineCache = await GetOfflineCacheDiagnosticsAsync()
         };
 
+        report.FieldDevice = CreateFieldDeviceDiagnostics(report);
         return report;
+    }
+
+    public async Task<DiagnosticReport> GenerateSanitizedDiagnosticReportAsync()
+    {
+        var report = await GenerateDiagnosticReportAsync();
+        RedactSensitiveFields(report);
+        return report;
+    }
+
+    public async Task<string> GenerateSanitizedDiagnosticsJsonAsync()
+    {
+        var report = await GenerateSanitizedDiagnosticReportAsync();
+        var json = JsonSerializer.Serialize(report, ExportJsonOptions);
+        return RedactSerializedJson(json);
     }
 
     public async Task<string> ExportDiagnosticsAsync()
     {
         try
         {
-            var report = await GenerateDiagnosticReportAsync();
-            RedactSensitiveFields(report);
-            var json = JsonSerializer.Serialize(report, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
+            var json = await GenerateSanitizedDiagnosticsJsonAsync();
 
             var fileName = $"honua_diagnostics_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
             var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -255,6 +275,41 @@ public class DiagnosticService
         catch (Exception ex)
         {
             throw new InvalidOperationException("Failed to export diagnostics.", ex);
+        }
+    }
+
+    public async Task CopyDiagnosticsAsync()
+    {
+        try
+        {
+            var json = await GenerateSanitizedDiagnosticsJsonAsync();
+            await Clipboard.Default.SetTextAsync(json);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to copy diagnostics.", ex);
+        }
+    }
+
+    public async Task ReportDiagnosticsAsync()
+    {
+        try
+        {
+            var report = await GenerateSanitizedDiagnosticReportAsync();
+            var snapshot = report.FieldDevice;
+            await _exceptionReporter.ReportAsync(
+                new FieldDeviceDiagnosticsReportException(snapshot.HealthStatus, snapshot.HealthReason),
+                new MobileExceptionReportContext
+                {
+                    Source = "FieldCollection.Diagnostics",
+                    Operation = "diagnostics.field-device-health",
+                    Severity = ToExceptionSeverity(snapshot.HealthStatus),
+                    Properties = snapshot.ToReportProperties(),
+                });
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to report diagnostics.", ex);
         }
     }
 
@@ -336,7 +391,80 @@ public class DiagnosticService
         report.OfflineCache.PackageFileName = DiagnosticRedactor.RedactPath(report.OfflineCache.PackageFileName);
     }
 
+    private static string RedactSerializedJson(string json)
+    {
+        var redactedJson = DiagnosticRedactor.RedactJson(json);
+        using var document = JsonDocument.Parse(redactedJson);
+        return JsonSerializer.Serialize(document.RootElement, ExportJsonOptions);
+    }
+
+    private static MobileExceptionSeverity ToExceptionSeverity(string healthStatus)
+    {
+        return healthStatus switch
+        {
+            "Critical" => MobileExceptionSeverity.Critical,
+            "Attention" => MobileExceptionSeverity.Warning,
+            _ => MobileExceptionSeverity.Warning
+        };
+    }
+
+    private FieldDeviceDiagnosticsSnapshot CreateFieldDeviceDiagnostics(DiagnosticReport report)
+    {
+        return FieldDeviceDiagnosticsSnapshot.Create(new FieldDeviceDiagnosticsInput
+        {
+            GeneratedAtUtc = report.GeneratedAt,
+            AppVersion = report.AppVersion,
+            BuildNumber = report.Build.Metadata.ApplicationVersion,
+            BuildEnvironment = report.Build.Metadata.BuildEnvironment,
+            SourceDisplay = report.Build.Metadata.SourceDisplay,
+            WorkflowRunDisplay = report.Build.Metadata.WorkflowRunDisplay,
+            ServiceEndpointState = report.Build.ServiceEndpoint.DisplayValue,
+            Platform = report.System.Platform,
+            OperatingSystem = report.System.OperatingSystem,
+            DeviceModel = report.System.DeviceModel,
+            DeviceType = report.System.DeviceType,
+            Architecture = report.System.Architecture,
+            Manufacturer = report.System.Manufacturer,
+            IsConnected = report.Connectivity.IsConnected,
+            ServerReachable = report.Connectivity.ServerReachable,
+            IsSyncing = report.Sync.IsSyncing,
+            IsRemoteSyncConfigured = report.Sync.IsRemoteSyncConfigured,
+            SyncStatus = report.Sync.SyncStatus,
+            LastSyncTime = report.Sync.LastSyncTime ?? report.OfflineCache.LastSyncTime,
+            PendingChangeCount = Math.Max(report.Sync.PendingChanges, report.OfflineCache.Operations.PendingCount),
+            ConflictCount = Math.Max(report.Sync.ConflictCount, report.OfflineCache.Operations.ConflictCount),
+            FailedOperationCount = report.OfflineCache.Operations.FailedCount,
+            RetryOperationCount = report.OfflineCache.Operations.RetryCount,
+            PendingAttachmentCount = report.OfflineCache.Operations.AttachmentPendingCount,
+            FailedAttachmentCount = report.OfflineCache.Operations.AttachmentFailedCount,
+            AttachmentUploadFailedCount = report.OfflineCache.Operations.AttachmentUploadFailedCount,
+            AttachmentDownloadFailedCount = report.OfflineCache.Operations.AttachmentDownloadFailedCount,
+            AttachmentDeleteFailedCount = report.OfflineCache.Operations.AttachmentDeleteFailedCount,
+            DatabaseSizeDisplay = report.Database.DatabaseSize,
+            TotalFeatureCount = report.Database.TotalFeatures,
+            LayerCount = report.Database.LayerCount,
+            PackageId = report.OfflineCache.PackageId,
+            PackageFileName = report.OfflineCache.PackageFileName,
+            PackageSizeDisplay = report.OfflineCache.PackageSizeDisplay,
+            MetadataCacheStatus = report.OfflineCache.MetadataCache.Status,
+            MetadataSourceCount = report.OfflineCache.MetadataCache.SourceCount,
+            FeatureCacheStatus = report.OfflineCache.FeatureCache.Status,
+            FeatureSourceCount = report.OfflineCache.FeatureCache.SourceCount,
+            CachedFeatureCount = report.OfflineCache.FeatureCache.TotalFeatureCount,
+            LocalGeneration = report.OfflineCache.LocalGeneration,
+            ServerGeneration = report.OfflineCache.ServerGeneration
+        });
+    }
+
     #endregion
+}
+
+internal sealed class FieldDeviceDiagnosticsReportException : Exception
+{
+    public FieldDeviceDiagnosticsReportException(string healthStatus, string healthReason)
+        : base($"Field device diagnostics report: {healthStatus}. {healthReason}")
+    {
+    }
 }
 
 #region Diagnostic Models
@@ -412,6 +540,7 @@ public class DiagnosticReport
     public DateTime GeneratedAt { get; set; }
     public string AppVersion { get; set; } = string.Empty;
     public MobileBuildConfiguration Build { get; set; } = MobileBuildConfiguration.Empty;
+    public FieldDeviceDiagnosticsSnapshot FieldDevice { get; set; } = FieldDeviceDiagnosticsSnapshot.Empty;
     public SystemDiagnostics System { get; set; } = new();
     public ConnectivityDiagnostics Connectivity { get; set; } = new();
     public SyncDiagnostics Sync { get; set; } = new();
