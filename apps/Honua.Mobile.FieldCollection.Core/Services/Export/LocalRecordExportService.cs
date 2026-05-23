@@ -23,11 +23,13 @@ public sealed class LocalRecordExportResult
     public string CsvPath { get; init; } = string.Empty;
     public string GeoJsonPath { get; init; } = string.Empty;
     public string AttachmentManifestPath { get; init; } = string.Empty;
+    public string EvidenceManifestPath { get; init; } = string.Empty;
     public DateTime ExportedAtUtc { get; init; }
     public int LayerId { get; init; }
     public string LayerName { get; init; } = string.Empty;
     public int RecordCount { get; init; }
     public int AttachmentCount { get; init; }
+    public int MediaFileCount { get; init; }
     public bool IsEmpty => RecordCount == 0;
 }
 
@@ -116,6 +118,8 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             var csvPath = Path.Combine(exportDirectory, "records.csv");
             var geoJsonPath = Path.Combine(exportDirectory, "records.geojson");
             var attachmentManifestPath = Path.Combine(exportDirectory, "attachments-manifest.json");
+            var evidenceManifestPath = Path.Combine(exportDirectory, "honua-evidence.json");
+            var mediaDirectory = Path.Combine(exportDirectory, "media");
 
             await WriteCsvAsync(
                 csvPath,
@@ -135,13 +139,34 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
                 attachmentsByFeature,
                 cancellationToken).ConfigureAwait(false);
 
-            var attachmentCount = await WriteAttachmentManifestAsync(
+            var attachmentSummary = await WriteAttachmentManifestAsync(
                 attachmentManifestPath,
+                mediaDirectory,
                 layer,
                 exportedAtUtc,
                 features,
                 attachmentsByFeature,
                 cancellationToken).ConfigureAwait(false);
+
+            var catalogEntries = await _storage.GetProjectCatalogEntriesAsync(includeArchived: true).ConfigureAwait(false);
+            var diagnostics = await _storage.GetOfflineCacheDiagnosticsAsync().ConfigureAwait(false);
+            await WriteEvidenceManifestAsync(
+                evidenceManifestPath,
+                layer,
+                exportedAtUtc,
+                features.Count,
+                attachmentSummary,
+                catalogEntries,
+                diagnostics,
+                cancellationToken).ConfigureAwait(false);
+
+            var matchingCatalogEntry = FindMatchingCatalogEntry(catalogEntries, layer);
+            if (matchingCatalogEntry is not null)
+            {
+                await _storage.MarkProjectCatalogExportedAsync(
+                    matchingCatalogEntry.ProjectId,
+                    exportedAtUtc).ConfigureAwait(false);
+            }
 
             return new LocalRecordExportResult
             {
@@ -149,11 +174,13 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
                 CsvPath = csvPath,
                 GeoJsonPath = geoJsonPath,
                 AttachmentManifestPath = attachmentManifestPath,
+                EvidenceManifestPath = evidenceManifestPath,
                 ExportedAtUtc = exportedAtUtc,
                 LayerId = layer.Id,
                 LayerName = layer.Name,
                 RecordCount = features.Count,
-                AttachmentCount = attachmentCount
+                AttachmentCount = attachmentSummary.AttachmentCount,
+                MediaFileCount = attachmentSummary.CopiedFileCount
             };
         }
         catch (OperationCanceledException)
@@ -303,8 +330,9 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
         await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<int> WriteAttachmentManifestAsync(
+    private static async Task<AttachmentExportSummary> WriteAttachmentManifestAsync(
         string manifestPath,
+        string mediaDirectory,
         LayerInfo layer,
         DateTime exportedAtUtc,
         IReadOnlyList<Feature> features,
@@ -315,8 +343,30 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             .SelectMany(feature => GetAttachments(attachmentsByFeature, feature.Id))
             .OrderBy(attachment => attachment.FeatureId, StringComparer.Ordinal)
             .ThenBy(attachment => attachment.CreatedAt)
-            .Select(SanitizeAttachment)
             .ToList();
+
+        var copiedFileCount = 0;
+        var manifestAttachments = new List<object>(attachments.Count);
+
+        foreach (var attachment in attachments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var exportedRelativePath = CopyLocalAttachmentContent(
+                attachment,
+                mediaDirectory,
+                copiedFileCount + 1);
+
+            if (!string.IsNullOrWhiteSpace(exportedRelativePath))
+            {
+                copiedFileCount++;
+            }
+
+            manifestAttachments.Add(SanitizeAttachment(
+                attachment,
+                exportedRelativePath,
+                hasLocalContent: !string.IsNullOrWhiteSpace(exportedRelativePath)));
+        }
 
         var manifest = new
         {
@@ -325,17 +375,21 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             layerName = layer.Name,
             recordCount = features.Count,
             attachmentCount = attachments.Count,
+            copiedFileCount,
             localPathsRedacted = true,
-            contentIncluded = false,
-            attachments
+            contentIncluded = copiedFileCount > 0,
+            attachments = manifestAttachments
         };
 
         await using var stream = new FileStream(manifestPath, FileMode.Create, FileAccess.Write, FileShare.Read);
         await JsonSerializer.SerializeAsync(stream, manifest, JsonOptions, cancellationToken).ConfigureAwait(false);
-        return attachments.Count;
+        return new AttachmentExportSummary(attachments.Count, copiedFileCount);
     }
 
-    private static object SanitizeAttachment(AttachmentInfo attachment)
+    private static object SanitizeAttachment(
+        AttachmentInfo attachment,
+        string? exportedRelativePath,
+        bool hasLocalContent)
     {
         return new
         {
@@ -349,7 +403,8 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             payloadKind = attachment.PayloadKind.ToString(),
             sizeBytes = attachment.SizeBytes,
             localFileName = string.IsNullOrWhiteSpace(attachment.LocalPath) ? null : RedactFileName(attachment.LocalPath),
-            hasLocalContent = !string.IsNullOrWhiteSpace(attachment.LocalPath),
+            hasLocalContent,
+            exportedRelativePath,
             createdAtUtc = FormatDateTime(attachment.CreatedAt),
             updatedAtUtc = FormatDateTime(attachment.UpdatedAt),
             uploadedAtUtc = FormatDateTime(attachment.UploadedAt),
@@ -363,6 +418,283 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             isDeleted = attachment.IsDeleted,
             deletedAtUtc = FormatDateTime(attachment.DeletedAt)
         };
+    }
+
+    private static string? CopyLocalAttachmentContent(
+        AttachmentInfo attachment,
+        string mediaDirectory,
+        int ordinal)
+    {
+        if (attachment.IsDeleted ||
+            string.IsNullOrWhiteSpace(attachment.LocalPath) ||
+            !File.Exists(attachment.LocalPath))
+        {
+            return null;
+        }
+
+        Directory.CreateDirectory(mediaDirectory);
+        var fileName = BuildExportedMediaFileName(attachment, ordinal);
+        var destinationPath = Path.Combine(mediaDirectory, fileName);
+        File.Copy(attachment.LocalPath, destinationPath, overwrite: false);
+
+        return ToPortableRelativePath(Path.Combine("media", fileName));
+    }
+
+    private static string BuildExportedMediaFileName(AttachmentInfo attachment, int ordinal)
+    {
+        var attachmentId = SanitizePathSegment(string.IsNullOrWhiteSpace(attachment.Id)
+            ? "attachment"
+            : attachment.Id);
+        var extension = GetSafeExtension(attachment);
+
+        return $"{ordinal:0000}_{attachmentId}{extension}";
+    }
+
+    private static string GetSafeExtension(AttachmentInfo attachment)
+    {
+        var sourceFileName = !string.IsNullOrWhiteSpace(attachment.LocalPath)
+            ? attachment.LocalPath
+            : attachment.FileName;
+        var extension = Path.GetExtension(RedactFileName(sourceFileName));
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        var sanitized = SanitizePathSegment(extension.TrimStart('.'));
+        return string.IsNullOrWhiteSpace(sanitized) ? string.Empty : $".{sanitized}";
+    }
+
+    private static string ToPortableRelativePath(string path)
+    {
+        return path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
+    }
+
+    private static async Task WriteEvidenceManifestAsync(
+        string evidenceManifestPath,
+        LayerInfo layer,
+        DateTime exportedAtUtc,
+        int recordCount,
+        AttachmentExportSummary attachmentSummary,
+        IReadOnlyList<FieldProjectCatalogEntry> catalogEntries,
+        OfflineCacheDiagnostics diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var matchingCatalogEntry = FindMatchingCatalogEntry(catalogEntries, layer);
+        var manifest = new
+        {
+            formatVersion = "honua.local-export-evidence.v1",
+            generatedAtUtc = FormatDateTime(exportedAtUtc),
+            noCloud = true,
+            cloudUploadIncluded = false,
+            layer = new
+            {
+                id = layer.Id,
+                serviceId = layer.ServiceId,
+                sourceId = layer.SourceId,
+                name = layer.Name,
+                geometryType = layer.GeometryType.ToString(),
+                isEditable = layer.IsEditable
+            },
+            files = new
+            {
+                recordsCsv = "records.csv",
+                recordsGeoJson = "records.geojson",
+                attachmentsManifest = "attachments-manifest.json",
+                evidenceManifest = "honua-evidence.json",
+                mediaDirectory = attachmentSummary.CopiedFileCount > 0 ? "media" : null
+            },
+            counts = new
+            {
+                records = recordCount,
+                attachments = attachmentSummary.AttachmentCount,
+                copiedMediaFiles = attachmentSummary.CopiedFileCount,
+                pendingOperations = diagnostics.Operations.PendingCount,
+                conflicts = diagnostics.Operations.ConflictCount,
+                conflictReviewItems = diagnostics.ConflictReview.Count
+            },
+            validationSummary = new
+            {
+                status = "not-run",
+                issueCount = 0,
+                source = "local-export"
+            },
+            redaction = new
+            {
+                localPathsRedacted = true,
+                urlsRedacted = true,
+                sensitiveValuesRedacted = true
+            },
+            projectCatalog = new
+            {
+                matchedProjectId = matchingCatalogEntry?.ProjectId,
+                entries = catalogEntries
+                    .Select(entry => SanitizeCatalogEntry(entry, matchingCatalogEntry?.ProjectId))
+                    .ToList()
+            },
+            diagnostics = SanitizeDiagnostics(diagnostics),
+            conflicts = diagnostics.ConflictReview.Select(SanitizeConflictReviewItem).ToList()
+        };
+
+        await using var stream = new FileStream(evidenceManifestPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+        await JsonSerializer.SerializeAsync(stream, manifest, JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static object SanitizeCatalogEntry(FieldProjectCatalogEntry entry, string? matchedProjectId)
+    {
+        return new
+        {
+            projectId = entry.ProjectId,
+            serviceId = entry.ServiceId,
+            packageId = entry.PackageId,
+            version = DiagnosticRedactor.RedactSensitiveText(entry.Version),
+            name = DiagnosticRedactor.RedactSensitiveText(entry.Name),
+            description = DiagnosticRedactor.RedactSensitiveText(entry.Description),
+            state = entry.State.ToString(),
+            validationStatus = entry.ValidationStatus.ToString(),
+            validationIssueCount = entry.ValidationIssueCount,
+            layerCount = entry.LayerCount,
+            packageSizeBytes = entry.PackageSizeBytes,
+            mediaSizeBytes = entry.MediaSizeBytes,
+            localStorageFileName = string.IsNullOrWhiteSpace(entry.LocalStoragePath)
+                ? null
+                : DiagnosticRedactor.RedactPath(entry.LocalStoragePath),
+            manifestFileName = string.IsNullOrWhiteSpace(entry.ManifestPath)
+                ? null
+                : DiagnosticRedactor.RedactPath(entry.ManifestPath),
+            importSource = RedactImportSource(entry.ImportSource),
+            packageDigest = entry.PackageDigest,
+            importedAtUtc = FormatDateTime(entry.ImportedAtUtc),
+            updatedAtUtc = FormatDateTime(entry.UpdatedAtUtc),
+            lastOpenedAtUtc = FormatDateTime(entry.LastOpenedAtUtc),
+            lastValidationAtUtc = FormatDateTime(entry.LastValidationAtUtc),
+            lastSimulationRunAtUtc = FormatDateTime(entry.LastSimulationRunAtUtc),
+            lastExportAtUtc = FormatDateTime(entry.LastExportAtUtc),
+            isMatchedLayerProject = string.Equals(entry.ProjectId, matchedProjectId, StringComparison.Ordinal)
+        };
+    }
+
+    private static object SanitizeDiagnostics(OfflineCacheDiagnostics diagnostics)
+    {
+        return new
+        {
+            packageId = DiagnosticRedactor.RedactSensitiveText(diagnostics.PackageId),
+            packageFileName = DiagnosticRedactor.RedactPath(diagnostics.PackageFileName),
+            packageSizeBytes = diagnostics.PackageSizeBytes,
+            lastSyncTimeUtc = FormatDateTime(diagnostics.LastSyncTime),
+            localGeneration = diagnostics.LocalGeneration,
+            serverGeneration = diagnostics.ServerGeneration,
+            timestampUtc = FormatDateTime(diagnostics.Timestamp),
+            metadataCache = new
+            {
+                status = diagnostics.MetadataCache.Status,
+                sourceCount = diagnostics.MetadataCache.SourceCount,
+                lastUpdatedUtc = FormatDateTime(diagnostics.MetadataCache.LastUpdatedUtc),
+                sources = diagnostics.MetadataCache.Sources.Select(SanitizeSourceDiagnostics).ToList()
+            },
+            featureCache = new
+            {
+                status = diagnostics.FeatureCache.Status,
+                sourceCount = diagnostics.FeatureCache.SourceCount,
+                totalFeatureCount = diagnostics.FeatureCache.TotalFeatureCount,
+                sizeBytes = diagnostics.FeatureCache.SizeBytes,
+                sources = diagnostics.FeatureCache.Sources.Select(SanitizeSourceDiagnostics).ToList()
+            },
+            operations = new
+            {
+                pendingCount = diagnostics.Operations.PendingCount,
+                claimedCount = diagnostics.Operations.ClaimedCount,
+                succeededCount = diagnostics.Operations.SucceededCount,
+                failedCount = diagnostics.Operations.FailedCount,
+                retryCount = diagnostics.Operations.RetryCount,
+                conflictCount = diagnostics.Operations.ConflictCount,
+                attachmentPendingCount = diagnostics.Operations.AttachmentPendingCount,
+                attachmentSucceededCount = diagnostics.Operations.AttachmentSucceededCount,
+                attachmentFailedCount = diagnostics.Operations.AttachmentFailedCount,
+                attachmentUploadFailedCount = diagnostics.Operations.AttachmentUploadFailedCount,
+                attachmentDownloadFailedCount = diagnostics.Operations.AttachmentDownloadFailedCount,
+                attachmentDeleteFailedCount = diagnostics.Operations.AttachmentDeleteFailedCount
+            }
+        };
+    }
+
+    private static object SanitizeSourceDiagnostics(OfflineSourceDiagnostics source)
+    {
+        return new
+        {
+            sourceId = source.SourceId,
+            displayName = DiagnosticRedactor.RedactSensitiveText(source.DisplayName),
+            featureCount = source.FeatureCount,
+            lastSyncTimeUtc = FormatDateTime(source.LastSyncTime),
+            sourceUrl = DiagnosticRedactor.RedactUrl(source.SourceUrl)
+        };
+    }
+
+    private static object SanitizeConflictReviewItem(OfflineConflictReviewItem conflict)
+    {
+        return new
+        {
+            conflictId = conflict.ConflictId,
+            operationId = conflict.OperationId,
+            sourceId = conflict.SourceId,
+            featureId = conflict.FeatureId,
+            conflictType = conflict.ConflictType,
+            status = conflict.Status,
+            reason = DiagnosticRedactor.RedactSensitiveText(conflict.Reason),
+            localState = DiagnosticRedactor.RedactSensitiveText(conflict.LocalState),
+            serverState = DiagnosticRedactor.RedactSensitiveText(conflict.ServerState),
+            detectedAtUtc = FormatDateTime(conflict.DetectedAtUtc),
+            resolutionActions = conflict.ResolutionActions
+        };
+    }
+
+    private static string? RedactImportSource(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !uri.IsFile)
+        {
+            return DiagnosticRedactor.RedactUrl(value);
+        }
+
+        return DiagnosticRedactor.RedactSensitiveText(DiagnosticRedactor.RedactPath(value));
+    }
+
+    private static FieldProjectCatalogEntry? FindMatchingCatalogEntry(
+        IReadOnlyList<FieldProjectCatalogEntry> catalogEntries,
+        LayerInfo layer)
+    {
+        if (catalogEntries.Count == 0)
+        {
+            return null;
+        }
+
+        var serviceId = layer.ServiceId?.Trim();
+        if (!string.IsNullOrWhiteSpace(serviceId))
+        {
+            var exactMatch = catalogEntries.FirstOrDefault(entry =>
+                string.Equals(entry.ServiceId, serviceId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.ProjectId, serviceId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.PackageId, serviceId, StringComparison.OrdinalIgnoreCase));
+
+            if (exactMatch is not null)
+            {
+                return exactMatch;
+            }
+        }
+
+        var sourceId = layer.SourceId?.Trim();
+        if (!string.IsNullOrWhiteSpace(sourceId))
+        {
+            return catalogEntries.FirstOrDefault(entry =>
+                !string.IsNullOrWhiteSpace(entry.ServiceId) &&
+                sourceId.StartsWith($"{entry.ServiceId}/", StringComparison.OrdinalIgnoreCase));
+        }
+
+        return null;
     }
 
     private static object? SanitizeCaptureLocation(FieldLocationCaptureEvidence? captureLocation)
@@ -609,6 +941,11 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             .Trim();
 
         sanitized = string.Join("_", sanitized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            return "item";
+        }
+
         return sanitized.Length > 64
             ? sanitized[..64]
             : sanitized;
@@ -654,4 +991,6 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
             _logger?.LogDebug(cleanupException, "Failed to delete partial record export at {ExportDirectory}", exportDirectory);
         }
     }
+
+    private sealed record AttachmentExportSummary(int AttachmentCount, int CopiedFileCount);
 }

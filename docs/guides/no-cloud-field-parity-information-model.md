@@ -224,14 +224,21 @@ blocked and what the available resolution choices mean.
 
 Local export/evidence packages should include:
 
-- package metadata;
-- project/catalog snapshot;
-- records and geometry;
-- lifecycle events;
-- validation summaries;
-- media manifest and optional selected media files;
-- conflict simulation evidence;
-- diagnostics and redaction summary.
+- `honua-evidence.json`: no-cloud export manifest with format version,
+  record/media/conflict counts, validation summary, redaction flags, diagnostics,
+  and project catalog match.
+- `records.csv`: flat attribute export with pending state, pending operations,
+  geometry type, attachment counts, and redacted sensitive values.
+- `records.geojson`: geometry export with the same pending state and sanitized
+  attribute payload.
+- `attachments-manifest.json`: attachment metadata with local paths redacted,
+  remote URLs stripped of query/fragment secrets, payload kind, sync state,
+  retry/error evidence, and copied media relative paths when content is included.
+- `media/`: optional copied local media files selected from existing device
+  paths. Missing or deleted media stays metadata-only.
+- local project catalog export timestamp via
+  `field_project_catalog.last_export_at_utc` when the exported layer matches the
+  local project `service_id`, `project_id`, or package id.
 
 UI implication: export screens should preview exactly what will leave the
 device, including media count, record count, redactions, and validation status.
