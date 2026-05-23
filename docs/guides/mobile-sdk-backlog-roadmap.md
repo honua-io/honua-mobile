@@ -1,6 +1,6 @@
 # Mobile SDK Backlog Roadmap
 
-Last reviewed: 2026-05-01.
+Last reviewed: 2026-05-23.
 
 This roadmap integrates the remaining non-Flutter backlog for #1, the mobile SDK
 epic. It covers open children #10, #12, #16, #23, #38, #42, #50, #51, and #57.
@@ -63,6 +63,30 @@ historical Phase 0 parity targets and source-backed shipped status.
 | P1 | [#210](https://github.com/honua-io/honua-mobile/issues/210) functional FieldCollection workflows; [#211](https://github.com/honua-io/honua-mobile/issues/211) metadata-driven projects/layers/forms; [#212](https://github.com/honua-io/honua-mobile/issues/212) remote sync transports; [#213](https://github.com/honua-io/honua-mobile/issues/213) attachment storage/sync; [#214](https://github.com/honua-io/honua-mobile/issues/214) pilot field-type controls; [#215](https://github.com/honua-io/honua-mobile/issues/215) rules/calculations/conditional visibility/repeats; [#216](https://github.com/honua-io/honua-mobile/issues/216) real map workflow surface. | MVP field workflow is usable end to end from metadata load through capture, validation, map context, offline storage, and sync. |
 | P2 | [#217](https://github.com/honua-io/honua-mobile/issues/217) product acceptance suite; [#218](https://github.com/honua-io/honua-mobile/issues/218) auth/session hardening; [#219](https://github.com/honua-io/honua-mobile/issues/219) server/admin dependencies; [#220](https://github.com/honua-io/honua-mobile/issues/220) local record export; [#221](https://github.com/honua-io/honua-mobile/issues/221) diagnostics and sync health. | Beta hardening covers acceptance evidence, operational support, auth robustness, admin dependencies, and field troubleshooting. |
 | P3 | [#222](https://github.com/honua-io/honua-mobile/issues/222) external GNSS metadata; [#223](https://github.com/honua-io/honua-mobile/issues/223) geofence/proximity workflows; [#224](https://github.com/honua-io/honua-mobile/issues/224) AI-assisted capture hooks; [#225](https://github.com/honua-io/honua-mobile/issues/225) first AR/3D field workflow; [#226](https://github.com/honua-io/honua-mobile/issues/226) mobile/web plugin host hardening. | GA-oriented differentiators are implemented only after SDK/server dependencies and MVP/Beta workflow gaps are stable. |
+
+## Back-Office Dependency Handoff
+
+#219 is a dependency-tracking issue, not a request to add server/admin clients to
+this repository. Fulcrum/Survey123 parity requires project/form administration,
+supervisor review, exports, reports, tenancy, permissions, and audit behavior,
+but those capabilities are owned by `honua-server`, admin UI, and SDK packages.
+Mobile should consume the resulting `Honua.Sdk.*` contracts through adapters,
+DI, local cache integration, UX, and tests only.
+
+| Back-office capability | Owning issue outside mobile | Mobile consumption boundary |
+|------------------------|-----------------------------|-----------------------------|
+| Project, layer, map-area, and form administration | [honua-server#1158](https://github.com/honua-io/honua-server/issues/1158) | `FieldCollectionMetadataService`, project/layer/form selectors, sync setup, and local cache migration consume published metadata contracts. Mobile must not define long-lived admin DTOs or provider-neutral project/form clients. |
+| Submitted-record review, QA, correction requests, and approvals | [honua-server#1159](https://github.com/honua-io/honua-server/issues/1159) | Mobile may show review/status messages or correction prompts after SDK contracts exist. Review queues, approval rules, comments, and supervisor workflows remain server/admin-owned. |
+| Back-office exports and report packages | [honua-server#1160](https://github.com/honua-io/honua-server/issues/1160) | #220 covers device-local support export. Server/admin owns supervisory exports, scheduled reports, report templates, and export authorization. Mobile may link to availability/status through SDK contracts. |
+| SSO/OIDC identity policy | [honua-server#348](https://github.com/honua-io/honua-server/issues/348) | Mobile owns secure storage, token refresh orchestration, re-auth UX, and sync blocking. Identity providers, token policy, SCIM/SAML, and tenant identity configuration remain server/admin-owned. |
+| Multi-tenancy and tenant isolation | [honua-server#346](https://github.com/honua-io/honua-server/issues/346) | Mobile stores tenant-scoped cache/session state only after SDK/server identifiers exist. Tenant provisioning, schema/data isolation, scoped keys, usage metering, and admin tenancy UI remain server-owned. |
+| Permissions and RBAC | [honua-server#349](https://github.com/honua-io/honua-server/issues/349) | Mobile presents authorization failures, disables unavailable actions, and preserves offline edits when permission checks fail. Role definitions, layer/field permissions, operation checks, and policy evaluation remain server-owned. |
+| Audit logs and SIEM export | [honua-server#350](https://github.com/honua-io/honua-server/issues/350), [honua-server#507](https://github.com/honua-io/honua-server/issues/507), [honua-server#509](https://github.com/honua-io/honua-server/issues/509) | Mobile may attach device/session/sync context to API calls and diagnostics. Immutable audit storage, audit coverage, retention, operator access, and SIEM export remain server-owned. |
+
+Mobile-owned follow-ups should be opened only after these owners expose stable
+SDK/server contracts. Acceptable mobile follow-ups include adapter wiring, MAUI
+registration, local cache lifecycle, field UX, diagnostic presentation, and
+contract/acceptance tests.
 
 ## Acceptance Matrix
 
