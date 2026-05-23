@@ -83,6 +83,7 @@ public interface ISettingsService
 {
     Task<T> GetSettingAsync<T>(string key, T defaultValue = default!);
     Task SetSettingAsync<T>(string key, T value);
+    Task RemoveSettingAsync(string key);
     Task<bool> HasSettingAsync(string key);
 }
 
@@ -223,7 +224,8 @@ public class FormService : IFormService
 
     public Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)
     {
-        var result = FormValidator.Validate(definition, formData.ToSdkFieldRecord(definition));
+        var validationDefinition = EnsureValidationRules(definition);
+        var result = FormValidator.Validate(validationDefinition, formData.ToSdkFieldRecord(validationDefinition));
 
         formData.ValidationErrors.Clear();
         foreach (var error in result.Errors)
@@ -232,6 +234,43 @@ public class FormService : IFormService
         }
 
         return Task.FromResult(result.IsValid);
+    }
+
+    private static FormDefinition EnsureValidationRules(FormDefinition definition)
+    {
+        return new FormDefinition
+        {
+            FormId = definition.FormId,
+            Name = definition.Name,
+            Description = definition.Description,
+            Target = definition.Target,
+            Sections = definition.Sections
+                .Select(section => new FormSection
+                {
+                    SectionId = section.SectionId,
+                    Label = section.Label,
+                    Fields = section.Fields.Select(CloneField).ToList()
+                })
+                .ToList(),
+            Metadata = new Dictionary<string, string>(definition.Metadata, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static FormField CloneField(FormField field)
+    {
+        return new FormField
+        {
+            FieldId = field.FieldId,
+            Label = field.Label,
+            Type = field.Type,
+            SourceFieldName = field.SourceFieldName,
+            Required = field.Required,
+            Choices = field.Choices,
+            Validation = field.Validation ?? new FieldValidationRule(),
+            VisibilityRule = field.VisibilityRule,
+            CalculatedExpression = field.CalculatedExpression,
+            HelpText = field.HelpText
+        };
     }
 
     public async Task<FormData> CreateEmptyFormAsync(int layerId)
@@ -630,6 +669,12 @@ public class SettingsService : ISettingsService
     {
         var json = System.Text.Json.JsonSerializer.Serialize(value);
         await SecureStorage.SetAsync(key, json);
+    }
+
+    public Task RemoveSettingAsync(string key)
+    {
+        SecureStorage.Remove(key);
+        return Task.CompletedTask;
     }
 
     public async Task<bool> HasSettingAsync(string key)

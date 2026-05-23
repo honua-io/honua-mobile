@@ -325,6 +325,12 @@ public sealed class FieldCollectionMetadataServiceTests
             return Task.CompletedTask;
         }
 
+        public Task RemoveSettingAsync(string key)
+        {
+            _settings.Remove(key);
+            return Task.CompletedTask;
+        }
+
         public Task<bool> HasSettingAsync(string key)
         {
             return Task.FromResult(_settings.ContainsKey(key));

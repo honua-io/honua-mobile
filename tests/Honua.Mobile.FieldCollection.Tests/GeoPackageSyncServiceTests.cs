@@ -864,6 +864,12 @@ public sealed class GeoPackageSyncServiceTests
             return Task.CompletedTask;
         }
 
+        public Task RemoveSettingAsync(string key)
+        {
+            _values.Remove(key);
+            return Task.CompletedTask;
+        }
+
         public Task<bool> HasSettingAsync(string key)
         {
             return Task.FromResult(_values.ContainsKey(key));

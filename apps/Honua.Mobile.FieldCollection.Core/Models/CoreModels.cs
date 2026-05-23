@@ -145,6 +145,8 @@ public class FormData
     public int LayerId { get; set; }
     public string? FeatureId { get; set; }
     public Dictionary<string, object?> Values { get; set; } = new();
+    public List<FieldMediaAttachment> Media { get; set; } = new();
+    public FieldGeoPoint? Location { get; set; }
     public Dictionary<string, string> ValidationErrors { get; set; } = new();
     public bool IsValid => ValidationErrors.Count == 0;
     public DateTime CreatedAt { get; set; }
@@ -157,6 +159,8 @@ public class FormData
             RecordId = FeatureId ?? string.Empty,
             FormId = definition?.FormId ?? LayerId.ToString(CultureInfo.InvariantCulture),
             Values = new Dictionary<string, object?>(Values),
+            Media = new System.Collections.ObjectModel.Collection<FieldMediaAttachment>(Media),
+            Location = Location,
             CreatedAtUtc = ToDateTimeOffset(CreatedAt),
         };
     }
@@ -168,6 +172,8 @@ public class FormData
             LayerId = layerId,
             FeatureId = record.RecordId,
             Values = new Dictionary<string, object?>(record.Values),
+            Media = record.Media.ToList(),
+            Location = record.Location,
             CreatedAt = record.CreatedAtUtc.UtcDateTime,
             UpdatedAt = record.SubmittedAtUtc?.UtcDateTime ?? record.CompletedAtUtc?.UtcDateTime
         };
