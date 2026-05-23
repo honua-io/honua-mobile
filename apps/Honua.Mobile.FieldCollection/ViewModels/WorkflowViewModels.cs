@@ -1139,10 +1139,44 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         if (sender is EditableFormFieldItem item)
         {
             item.ValidationError = null;
+            ClearStaleLocationEvidence(item);
         }
 
         RefreshFormRules();
         _ = SaveDraftSnapshotAsync();
+    }
+
+    private void ClearStaleLocationEvidence(EditableFormFieldItem item)
+    {
+        if (item.Definition.Type != FormFieldType.Location || string.IsNullOrWhiteSpace(item.ValueKey))
+        {
+            return;
+        }
+
+        if (!_locationEvidenceByField.TryGetValue(item.ValueKey, out var evidence))
+        {
+            RemoveSupplementalLocationEvidence(item.ValueKey);
+            return;
+        }
+
+        if (!MobileFormValueConverter.TryGetLocation(item.ToValue(), out var point) ||
+            !FieldLocationMetadataMapper.MatchesFieldLocation(point, evidence))
+        {
+            _locationEvidenceByField.Remove(item.ValueKey);
+            RemoveSupplementalLocationEvidence(item.ValueKey);
+        }
+    }
+
+    private void RemoveSupplementalLocationEvidence(string valueKey)
+    {
+        var prefix = FieldLocationMetadataMapper.BuildFieldEvidencePrefix(valueKey);
+        var keyPrefix = $"{prefix}_";
+        foreach (var key in _supplementalFormValues.Keys
+            .Where(key => key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToArray())
+        {
+            _supplementalFormValues.Remove(key);
+        }
     }
 
     private async Task SaveDraftSnapshotAsync()

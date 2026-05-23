@@ -1,4 +1,5 @@
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Sdk.Field.Records;
 using Microsoft.Maui.Devices.Sensors;
 
 namespace Honua.Mobile.FieldCollection.Tests;
@@ -66,5 +67,27 @@ public sealed class FieldLocationMetadataMapperTests
 
         Assert.Equal(FieldLocationSourceKind.BuiltInGps, fix.SourceKind);
         Assert.Equal("Built-in GPS", FieldLocationMetadataMapper.FormatSource(fix.SourceKind));
+    }
+
+    [Fact]
+    public void MatchesFieldLocation_RequiresCapturedPointAndAccuracyToMatch()
+    {
+        var evidence = new FieldLocationCaptureEvidence
+        {
+            Latitude = 21.3069,
+            Longitude = -157.8583,
+            HorizontalAccuracyMeters = 0.8,
+            SourceKind = FieldLocationSourceKind.ExternalGnss
+        };
+
+        Assert.True(FieldLocationMetadataMapper.MatchesFieldLocation(
+            new FieldGeoPoint(21.3069, -157.8583, 0.8),
+            evidence));
+        Assert.False(FieldLocationMetadataMapper.MatchesFieldLocation(
+            new FieldGeoPoint(21.3070, -157.8583, 0.8),
+            evidence));
+        Assert.False(FieldLocationMetadataMapper.MatchesFieldLocation(
+            new FieldGeoPoint(21.3069, -157.8583, null),
+            evidence));
     }
 }

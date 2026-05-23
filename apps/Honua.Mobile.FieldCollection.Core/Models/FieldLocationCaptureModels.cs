@@ -299,6 +299,27 @@ public static class FieldLocationMetadataMapper
         return $"{SanitizeAttributeKey(valueKey)}_gps";
     }
 
+    public static bool MatchesFieldLocation(
+        FieldGeoPoint point,
+        FieldLocationCaptureEvidence evidence,
+        double coordinateTolerance = 0.0000001,
+        double accuracyTolerance = 0.001)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+        ArgumentNullException.ThrowIfNull(evidence);
+
+        if (Math.Abs(point.Latitude - evidence.Latitude) > coordinateTolerance ||
+            Math.Abs(point.Longitude - evidence.Longitude) > coordinateTolerance)
+        {
+            return false;
+        }
+
+        return NullableDoubleMatches(
+            point.AccuracyMeters,
+            evidence.HorizontalAccuracyMeters,
+            accuracyTolerance);
+    }
+
     public static string ToAttachmentKeywords(
         string? description,
         FieldLocationCaptureEvidence? evidence)
@@ -380,6 +401,16 @@ public static class FieldLocationMetadataMapper
 
         var sanitized = builder.ToString().Trim('_');
         return string.IsNullOrWhiteSpace(sanitized) ? "gps" : sanitized;
+    }
+
+    private static bool NullableDoubleMatches(double? left, double? right, double tolerance)
+    {
+        if (!left.HasValue || !right.HasValue)
+        {
+            return left.HasValue == right.HasValue;
+        }
+
+        return Math.Abs(left.Value - right.Value) <= tolerance;
     }
 
     private static FieldLocationSourceKind ResolveSourceKind(

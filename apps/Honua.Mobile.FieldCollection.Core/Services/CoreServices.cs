@@ -191,7 +191,7 @@ public class LocationService : ILocationService
         await Task.CompletedTask;
     }
 
-    private async Task<FieldLocationFix?> BuildLocationFixAsync(
+    internal async Task<FieldLocationFix?> BuildLocationFixAsync(
         Location? location,
         CancellationToken cancellationToken)
     {
@@ -200,9 +200,23 @@ public class LocationService : ILocationService
             return null;
         }
 
-        var metadata = _metadataProvider is null
-            ? null
-            : await _metadataProvider.GetMetadataAsync(location, cancellationToken).ConfigureAwait(false);
+        FieldLocationCaptureMetadata? metadata = null;
+        if (_metadataProvider is not null)
+        {
+            try
+            {
+                metadata = await _metadataProvider.GetMetadataAsync(location, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                _logger?.LogDebug("High accuracy location metadata enrichment failed.");
+            }
+        }
+
         return FieldLocationMetadataMapper.FromMauiLocation(location, metadata);
     }
 }
