@@ -189,13 +189,26 @@ public class FormData
 public class AttachmentInfo
 {
     public string Id { get; set; } = string.Empty;
+    public int LayerId { get; set; }
+    public string FeatureId { get; set; } = string.Empty;
+    public long? RemoteAttachmentId { get; set; }
+    public string? RemoteGlobalId { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string ContentType { get; set; } = string.Empty;
+    public AttachmentPayloadKind PayloadKind { get; set; } = AttachmentPayloadKind.File;
     public long SizeBytes { get; set; }
+    public string? LocalPath { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public DateTime UploadedAt { get; set; }
+    public DateTime? LastSyncedAt { get; set; }
     public string? Description { get; set; }
     public string? ThumbnailUrl { get; set; }
     public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
+    public int RetryCount { get; set; }
+    public string? LastError { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
 }
 
 public enum AttachmentSyncStatus
@@ -206,7 +219,17 @@ public enum AttachmentSyncStatus
     UploadFailed,
     PendingDownload,
     Downloading,
-    DownloadFailed
+    DownloadFailed,
+    PendingDelete,
+    Deleting,
+    DeleteFailed
+}
+
+public enum AttachmentPayloadKind
+{
+    File,
+    Photo,
+    Signature
 }
 
 public class LayerInfo

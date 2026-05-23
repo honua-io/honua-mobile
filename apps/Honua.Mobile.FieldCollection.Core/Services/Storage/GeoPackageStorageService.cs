@@ -131,6 +131,7 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
         await EnsureLayerMetadataTableAsync();
+        await EnsureLocalAttachmentsTableAsync();
     }
 
     private async Task EnsureLocalFeaturesTableAsync()
@@ -184,6 +185,20 @@ public class GeoPackageStorageService : IDisposable
         {
             await MigrateLayerMetadataTableAsync();
         }
+    }
+
+    private async Task EnsureLocalAttachmentsTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalAttachment>();
+
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_feature_layer ON local_attachments(feature_id, layer_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_remote ON local_attachments(layer_id, feature_id, remote_attachment_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_sync_status ON local_attachments(sync_status)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_deleted ON local_attachments(is_deleted)");
     }
 
     private async Task MigrateLayerMetadataTableAsync()
@@ -685,6 +700,375 @@ public class GeoPackageStorageService : IDisposable
         {
             _dbLock.Release();
         }
+    }
+
+    #endregion
+
+    #region Attachment Storage
+
+    public async Task StoreAttachmentMetadataAsync(AttachmentInfo attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(attachment.Id))
+            {
+                attachment.Id = Guid.NewGuid().ToString("N");
+            }
+
+            if (attachment.CreatedAt == default)
+            {
+                attachment.CreatedAt = now;
+            }
+
+            attachment.UpdatedAt = now;
+            await _connection.InsertOrReplaceAsync(ToLocalAttachment(attachment));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<AttachmentInfo?> GetAttachmentMetadataAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var attachment = await _connection.Table<LocalAttachment>()
+                .FirstOrDefaultAsync(row => row.Id == attachmentId);
+            return attachment == null ? null : ToAttachmentInfo(attachment);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<AttachmentInfo?> GetAttachmentByRemoteIdAsync(
+        int layerId,
+        string featureId,
+        long remoteAttachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var attachment = await _connection.Table<LocalAttachment>()
+                .FirstOrDefaultAsync(row =>
+                    row.LayerId == layerId &&
+                    row.FeatureId == featureId &&
+                    row.RemoteAttachmentId == remoteAttachmentId);
+            return attachment == null ? null : ToAttachmentInfo(attachment);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<List<AttachmentInfo>> GetAttachmentsForFeatureAsync(
+        string featureId,
+        int? layerId = null,
+        bool includeDeleted = false)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var query = _connection.Table<LocalAttachment>()
+                .Where(row => row.FeatureId == featureId);
+
+            if (layerId.HasValue)
+            {
+                query = query.Where(row => row.LayerId == layerId.Value);
+            }
+
+            var rows = await query.ToListAsync();
+            return rows
+                .Where(row => includeDeleted || !row.IsDeleted)
+                .OrderBy(row => row.CreatedAt)
+                .Select(ToAttachmentInfo)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<List<AttachmentInfo>> GetPendingAttachmentChangesAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalAttachment>().ToListAsync();
+            return rows
+                .Where(row => IsPendingAttachmentStatus(row.SyncStatus))
+                .OrderBy(row => row.UpdatedAt ?? row.CreatedAt)
+                .Select(ToAttachmentInfo)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentUploadedAsync(
+        string attachmentId,
+        long remoteAttachmentId,
+        string? remoteGlobalId,
+        DateTime uploadedAt)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET remote_attachment_id = ?,
+                    remote_global_id = ?,
+                    uploaded_at = ?,
+                    last_synced_at = ?,
+                    updated_at = ?,
+                    sync_status = ?,
+                    retry_count = 0,
+                    last_error = NULL,
+                    is_deleted = 0,
+                    deleted_at = NULL
+                WHERE id = ?
+                """,
+                remoteAttachmentId,
+                remoteGlobalId,
+                uploadedAt,
+                uploadedAt,
+                DateTime.UtcNow,
+                AttachmentSyncStatus.Synced,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentSyncedAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET last_synced_at = ?,
+                    updated_at = ?,
+                    sync_status = ?,
+                    retry_count = 0,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                now,
+                now,
+                AttachmentSyncStatus.Synced,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentPendingDeleteAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    is_deleted = 1,
+                    deleted_at = ?,
+                    updated_at = ?,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                AttachmentSyncStatus.PendingDelete,
+                now,
+                now,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentDeletedSyncedAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    is_deleted = 1,
+                    deleted_at = COALESCE(deleted_at, ?),
+                    last_synced_at = ?,
+                    updated_at = ?,
+                    retry_count = 0,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                AttachmentSyncStatus.Synced,
+                now,
+                now,
+                now,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentSyncFailedAsync(
+        string attachmentId,
+        AttachmentSyncStatus failedStatus,
+        string errorMessage)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    retry_count = retry_count + 1,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                failedStatus,
+                errorMessage,
+                DateTime.UtcNow,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<int> GetPendingAttachmentChangesCountAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalAttachment>().ToListAsync();
+            return rows.Count(row => IsPendingAttachmentStatus(row.SyncStatus));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    internal async Task<IReadOnlyList<AttachmentStatusCount>> GetAttachmentStatusCountsAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.QueryAsync<AttachmentStatusCount>(
+                "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM local_attachments GROUP BY sync_status");
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static bool IsPendingAttachmentStatus(AttachmentSyncStatus status)
+    {
+        return status is AttachmentSyncStatus.PendingUpload
+            or AttachmentSyncStatus.UploadFailed
+            or AttachmentSyncStatus.PendingDownload
+            or AttachmentSyncStatus.DownloadFailed
+            or AttachmentSyncStatus.PendingDelete
+            or AttachmentSyncStatus.DeleteFailed;
+    }
+
+    private static LocalAttachment ToLocalAttachment(AttachmentInfo attachment)
+    {
+        return new LocalAttachment
+        {
+            Id = attachment.Id,
+            FeatureId = attachment.FeatureId,
+            LayerId = attachment.LayerId,
+            RemoteAttachmentId = attachment.RemoteAttachmentId,
+            RemoteGlobalId = attachment.RemoteGlobalId,
+            FileName = attachment.FileName,
+            ContentType = attachment.ContentType,
+            PayloadKind = attachment.PayloadKind,
+            SizeBytes = attachment.SizeBytes,
+            LocalPath = attachment.LocalPath,
+            CreatedAt = attachment.CreatedAt,
+            UpdatedAt = attachment.UpdatedAt,
+            UploadedAt = attachment.UploadedAt,
+            LastSyncedAt = attachment.LastSyncedAt,
+            Description = attachment.Description,
+            ThumbnailUrl = attachment.ThumbnailUrl,
+            SyncStatus = attachment.SyncStatus,
+            RetryCount = attachment.RetryCount,
+            LastError = attachment.LastError,
+            IsDeleted = attachment.IsDeleted,
+            DeletedAt = attachment.DeletedAt
+        };
+    }
+
+    private static AttachmentInfo ToAttachmentInfo(LocalAttachment attachment)
+    {
+        return new AttachmentInfo
+        {
+            Id = attachment.Id,
+            FeatureId = attachment.FeatureId,
+            LayerId = attachment.LayerId,
+            RemoteAttachmentId = attachment.RemoteAttachmentId,
+            RemoteGlobalId = attachment.RemoteGlobalId,
+            FileName = attachment.FileName,
+            ContentType = attachment.ContentType,
+            PayloadKind = attachment.PayloadKind,
+            SizeBytes = attachment.SizeBytes,
+            LocalPath = attachment.LocalPath,
+            CreatedAt = attachment.CreatedAt,
+            UpdatedAt = attachment.UpdatedAt,
+            UploadedAt = attachment.UploadedAt,
+            LastSyncedAt = attachment.LastSyncedAt,
+            Description = attachment.Description,
+            ThumbnailUrl = attachment.ThumbnailUrl,
+            SyncStatus = attachment.SyncStatus,
+            RetryCount = attachment.RetryCount,
+            LastError = attachment.LastError,
+            IsDeleted = attachment.IsDeleted,
+            DeletedAt = attachment.DeletedAt
+        };
     }
 
     #endregion
@@ -1238,6 +1622,8 @@ public class GeoPackageStorageService : IDisposable
                 "SELECT layer_id AS layer_id, COUNT(*) AS feature_count FROM local_features GROUP BY layer_id ORDER BY layer_id");
             var operationCounts = await _connection.QueryAsync<OperationStatusCount>(
                 "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM change_records GROUP BY sync_status");
+            var attachmentCounts = await _connection.QueryAsync<AttachmentStatusCount>(
+                "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM local_attachments GROUP BY sync_status");
             var unresolvedConflictCount = await _connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM conflict_records WHERE resolved_at IS NULL");
             var conflicts = await _connection.QueryAsync<ConflictRecord>(
@@ -1276,7 +1662,7 @@ public class GeoPackageStorageService : IDisposable
                 })
                 .ToList();
 
-            var operations = MapOperationCounts(operationCounts, unresolvedConflictCount);
+            var operations = MapOperationCounts(operationCounts, attachmentCounts, unresolvedConflictCount);
             var session = latestSession.FirstOrDefault();
             var lastSyncTimes = metadataRows
                 .Select(row => row.LastSync)
@@ -1321,18 +1707,38 @@ public class GeoPackageStorageService : IDisposable
 
     private static OfflineOperationDiagnostics MapOperationCounts(
         IEnumerable<OperationStatusCount> counts,
+        IEnumerable<AttachmentStatusCount> attachmentCounts,
         int unresolvedConflictCount)
     {
         var byStatus = counts.ToDictionary(row => row.SyncStatus, row => row.ItemCount);
+        var attachmentsByStatus = attachmentCounts.ToDictionary(row => row.SyncStatus, row => row.ItemCount);
+        var attachmentPending =
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingUpload) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingDownload) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingDelete) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed);
+
         return new OfflineOperationDiagnostics
         {
             PendingCount = byStatus.GetValueOrDefault(StorageSyncStatus.PendingUpload) +
-                byStatus.GetValueOrDefault(StorageSyncStatus.PendingDownload),
+                byStatus.GetValueOrDefault(StorageSyncStatus.PendingDownload) +
+                attachmentPending,
             ClaimedCount = 0,
             SucceededCount = byStatus.GetValueOrDefault(StorageSyncStatus.Synced),
             FailedCount = byStatus.GetValueOrDefault(StorageSyncStatus.Error),
             RetryCount = 0,
-            ConflictCount = unresolvedConflictCount + byStatus.GetValueOrDefault(StorageSyncStatus.Conflict)
+            ConflictCount = unresolvedConflictCount + byStatus.GetValueOrDefault(StorageSyncStatus.Conflict),
+            AttachmentPendingCount = attachmentPending,
+            AttachmentSucceededCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.Synced),
+            AttachmentFailedCount =
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed) +
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed) +
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed),
+            AttachmentUploadFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed),
+            AttachmentDownloadFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed),
+            AttachmentDeleteFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed)
         };
     }
 
@@ -1419,6 +1825,15 @@ internal sealed class OperationStatusCount
 {
     [Column("sync_status")]
     public StorageSyncStatus SyncStatus { get; set; }
+
+    [Column("item_count")]
+    public int ItemCount { get; set; }
+}
+
+internal sealed class AttachmentStatusCount
+{
+    [Column("sync_status")]
+    public AttachmentSyncStatus SyncStatus { get; set; }
 
     [Column("item_count")]
     public int ItemCount { get; set; }

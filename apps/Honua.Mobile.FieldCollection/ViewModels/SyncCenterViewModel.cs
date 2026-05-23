@@ -198,6 +198,8 @@ public partial class SyncCenterViewModel : BaseViewModel
                     LastSyncTime = result.CompletedAt,
                     FeaturesPulled = result.ChangesPulled,
                     FeaturesPushed = result.ChangesPushed,
+                    AttachmentsDownloaded = result.AttachmentsPulled,
+                    AttachmentsUploaded = result.AttachmentsPushed,
                     ConflictsDetected = result.ConflictsDetected,
                     LastSyncDuration = result.Duration
                 };
@@ -219,6 +221,8 @@ public partial class SyncCenterViewModel : BaseViewModel
                     $"Sync completed successfully!\n" +
                     $"Downloaded: {result.ChangesPulled} changes\n" +
                     $"Uploaded: {result.ChangesPushed} changes\n" +
+                    $"Attachments downloaded: {result.AttachmentsPulled}\n" +
+                    $"Attachments uploaded/deleted: {result.AttachmentsPushed}\n" +
                     $"Duration: {result.Duration:mm\\:ss}");
 
                 // Refresh conflicts if any were detected
@@ -267,7 +271,9 @@ public partial class SyncCenterViewModel : BaseViewModel
             var result = await _syncService.PullChangesAsync();
             if (result.IsSuccess)
             {
-                await ShowMessage("Pull Complete", $"Downloaded {result.ChangesPulled} changes from server.");
+                await ShowMessage(
+                    "Pull Complete",
+                    $"Downloaded {result.ChangesPulled} changes and {result.AttachmentsPulled} attachments from server.");
             }
             else
             {
@@ -302,7 +308,9 @@ public partial class SyncCenterViewModel : BaseViewModel
             var result = await _syncService.PushChangesAsync();
             if (result.IsSuccess)
             {
-                await ShowMessage("Push Complete", $"Uploaded {result.ChangesPushed} changes to server.");
+                await ShowMessage(
+                    "Push Complete",
+                    $"Uploaded {result.ChangesPushed} changes and {result.AttachmentsPushed} attachments to server.");
             }
             else
             {

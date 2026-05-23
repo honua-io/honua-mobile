@@ -37,6 +37,24 @@ public interface IFieldCollectionChangePuller
 }
 
 /// <summary>
+/// Uploads and downloads feature attachments through the configured remote sync transport.
+/// </summary>
+public interface IFieldCollectionAttachmentSynchronizer
+{
+    Task<AttachmentSyncResult> PushPendingAttachmentsAsync(CancellationToken cancellationToken = default);
+    Task<AttachmentSyncResult> PullRemoteAttachmentsAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class AttachmentSyncResult
+{
+    public int Uploaded { get; set; }
+    public int Downloaded { get; set; }
+    public int Deleted { get; set; }
+    public int Failed { get; set; }
+    public bool Succeeded => Failed == 0;
+}
+
+/// <summary>
 /// Marks sync transports that intentionally do not connect to a remote field sync endpoint.
 /// </summary>
 public interface IFieldCollectionRemoteSyncCapability
@@ -57,6 +75,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     private readonly IConnectivityService _connectivityService;
     private readonly IFieldCollectionChangeUploader _changeUploader;
     private readonly IFieldCollectionChangePuller _changePuller;
+    private readonly IFieldCollectionAttachmentSynchronizer _attachmentSynchronizer;
     private readonly IMobileExceptionReporter _exceptionReporter;
     private readonly ILogger<GeoPackageSyncService>? _logger;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
@@ -93,6 +112,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,
         IFieldCollectionChangePuller? changePuller = null,
+        IFieldCollectionAttachmentSynchronizer? attachmentSynchronizer = null,
         ILogger<GeoPackageSyncService>? logger = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
@@ -101,6 +121,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         _connectivityService = connectivityService;
         _changeUploader = changeUploader ?? new UnconfiguredFieldCollectionChangeUploader();
         _changePuller = changePuller ?? new UnconfiguredFieldCollectionChangePuller();
+        _attachmentSynchronizer = attachmentSynchronizer ?? new NoOpFieldCollectionAttachmentSynchronizer();
         _exceptionReporter = exceptionReporter ?? new NoOpMobileExceptionReporter();
         _logger = logger;
         // Update pending changes count periodically
@@ -114,7 +135,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             try
             {
                 var changes = await _storage.GetPendingChangesAsync();
-                PendingChangesCount = changes.Count;
+                var pendingAttachments = await _storage.GetPendingAttachmentChangesCountAsync();
+                PendingChangesCount = changes.Count + pendingAttachments;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -163,6 +185,8 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             SyncMessage = "Starting sync session...";
 
             StorageSyncSession? session = null;
+            AttachmentSyncResult pulledAttachments = new();
+            AttachmentSyncResult pushedAttachments = new();
             try
             {
                 session = await CreateSyncSessionAsync(sessionId, includeRemoteGeneration: true);
@@ -171,6 +195,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 Status = SyncStatus.PullingChanges;
                 SyncMessage = "Downloading changes from server...";
                 await PullChangesInternalAsync(session, _syncCancellation.Token);
+                pulledAttachments = await PullAttachmentsInternalAsync(_syncCancellation.Token);
 
                 SyncProgress = 0.5;
 
@@ -178,6 +203,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 Status = SyncStatus.PushingChanges;
                 SyncMessage = "Uploading changes to server...";
                 await PushChangesInternalAsync(session, _syncCancellation.Token);
+                pushedAttachments = await PushAttachmentsInternalAsync(_syncCancellation.Token);
 
                 SyncProgress = 0.8;
 
@@ -202,6 +228,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                     Duration = duration,
                     ChangesPulled = session.ChangesPulled,
                     ChangesPushed = session.ChangesPushed,
+                    AttachmentsPulled = pulledAttachments.Downloaded,
+                    AttachmentsPushed = pushedAttachments.Uploaded + pushedAttachments.Deleted,
+                    AttachmentsFailed = pulledAttachments.Failed + pushedAttachments.Failed,
                     ConflictsDetected = session.ConflictsDetected
                 };
             }
@@ -278,6 +307,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             Status = SyncStatus.PullingChanges;
 
             await PullChangesInternalAsync(session, _syncCancellation.Token);
+            var pulledAttachments = await PullAttachmentsInternalAsync(_syncCancellation.Token);
             await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
             LastSyncTime = DateTime.UtcNow;
@@ -286,7 +316,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             {
                 IsSuccess = true,
                 CompletedAt = DateTime.UtcNow,
-                ChangesPulled = session.ChangesPulled
+                ChangesPulled = session.ChangesPulled,
+                AttachmentsPulled = pulledAttachments.Downloaded,
+                AttachmentsFailed = pulledAttachments.Failed
             };
         }
         catch (OperationCanceledException)
@@ -350,6 +382,13 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
     }
 
+    private async Task<AttachmentSyncResult> PullAttachmentsInternalAsync(CancellationToken cancellationToken)
+    {
+        var result = await _attachmentSynchronizer.PullRemoteAttachmentsAsync(cancellationToken).ConfigureAwait(false);
+        ThrowIfAttachmentFailures(result, "download");
+        return result;
+    }
+
     #endregion
 
     #region Push Changes
@@ -368,7 +407,11 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         try
         {
             var pendingChanges = await _storage.GetPendingChangesAsync();
-            if (pendingChanges.Count == 0)
+            var pendingAttachmentUploads = (await _storage.GetPendingAttachmentChangesAsync())
+                .Where(attachment =>
+                    attachment.SyncStatus is not AttachmentSyncStatus.PendingDownload and not AttachmentSyncStatus.DownloadFailed)
+                .ToList();
+            if (pendingChanges.Count == 0 && pendingAttachmentUploads.Count == 0)
             {
                 return new SyncResult
                 {
@@ -386,13 +429,16 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             Status = SyncStatus.PushingChanges;
 
             await PushChangesInternalAsync(session, _syncCancellation.Token);
+            var pushedAttachments = await PushAttachmentsInternalAsync(_syncCancellation.Token);
             await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
             return new SyncResult
             {
                 IsSuccess = true,
                 CompletedAt = DateTime.UtcNow,
-                ChangesPushed = session.ChangesPushed
+                ChangesPushed = session.ChangesPushed,
+                AttachmentsPushed = pushedAttachments.Uploaded + pushedAttachments.Deleted,
+                AttachmentsFailed = pushedAttachments.Failed
             };
         }
         catch (OperationCanceledException)
@@ -471,6 +517,22 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         catch (Exception)
         {
             throw;
+        }
+    }
+
+    private async Task<AttachmentSyncResult> PushAttachmentsInternalAsync(CancellationToken cancellationToken)
+    {
+        var result = await _attachmentSynchronizer.PushPendingAttachmentsAsync(cancellationToken).ConfigureAwait(false);
+        ThrowIfAttachmentFailures(result, "upload");
+        return result;
+    }
+
+    private static void ThrowIfAttachmentFailures(AttachmentSyncResult result, string operation)
+    {
+        if (result.Failed > 0)
+        {
+            throw new InvalidOperationException(
+                $"{result.Failed} attachment(s) failed to {operation} and remain queued for retry.");
         }
     }
 
@@ -1022,6 +1084,21 @@ internal sealed class UnconfiguredFieldCollectionChangePuller :
     {
         throw new InvalidOperationException(
             "Field collection local sync generation lookup is not configured.");
+    }
+}
+
+internal sealed class NoOpFieldCollectionAttachmentSynchronizer : IFieldCollectionAttachmentSynchronizer
+{
+    public Task<AttachmentSyncResult> PushPendingAttachmentsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new AttachmentSyncResult());
+    }
+
+    public Task<AttachmentSyncResult> PullRemoteAttachmentsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new AttachmentSyncResult());
     }
 }
 

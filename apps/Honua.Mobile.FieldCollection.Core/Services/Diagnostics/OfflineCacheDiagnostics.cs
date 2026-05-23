@@ -69,6 +69,12 @@ public sealed class OfflineOperationDiagnostics
     public int FailedCount { get; set; }
     public int RetryCount { get; set; }
     public int ConflictCount { get; set; }
+    public int AttachmentPendingCount { get; set; }
+    public int AttachmentSucceededCount { get; set; }
+    public int AttachmentFailedCount { get; set; }
+    public int AttachmentUploadFailedCount { get; set; }
+    public int AttachmentDownloadFailedCount { get; set; }
+    public int AttachmentDeleteFailedCount { get; set; }
 }
 
 public sealed class OfflineConflictReviewItem

@@ -1,3 +1,4 @@
+using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -228,6 +229,8 @@ internal static class WorkflowPageContent
             })
         };
         attributes.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attributes"));
+        var attachments = AttachmentList("OpenAttachmentCommand");
+        attachments.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attachments"));
 
         return PageScroll(
             BoundHeader("Feature.DisplayTitle", "Record"),
@@ -235,6 +238,8 @@ internal static class WorkflowPageContent
             BoundLabel("GeometrySummary", "Geometry"),
             SectionTitle("Attributes"),
             attributes,
+            SectionTitle("Attachments"),
+            attachments,
             ButtonRow(
                 CommandButton("Edit", "EditRecordCommand"),
                 CommandButton("Delete", "DeleteRecordCommand")));
@@ -270,14 +275,20 @@ internal static class WorkflowPageContent
             })
         };
         attributes.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attributes"));
+        var attachments = AttachmentList("RemoveAttachmentCommand");
+        attachments.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attachments"));
 
         return PageScroll(
             BoundHeader("PageTitle", "Record"),
             BoundLabel("GeometrySummary", "Geometry"),
             SectionTitle("Attributes"),
             attributes,
+            SectionTitle("Attachments"),
+            attachments,
             ButtonRow(
                 CommandButton("Add field", "AddAttributeCommand"),
+                CommandButton("Add file", "AddFileAttachmentCommand"),
+                CommandButton("Add photo", "AddPhotoAttachmentCommand"),
                 CommandButton("Save", "SaveRecordCommand"),
                 CommandButton("Cancel", "CancelCommand")));
     }
@@ -454,6 +465,55 @@ internal static class WorkflowPageContent
         var label = new Label { LineBreakMode = LineBreakMode.WordWrap };
         label.SetBinding(Label.TextProperty, new Binding(path));
         return label;
+    }
+
+    private static CollectionView AttachmentList(string commandPath)
+    {
+        return new CollectionView
+        {
+            EmptyView = new Label { Text = "No attachments" },
+            ItemTemplate = new DataTemplate(() =>
+            {
+                var fileName = new Label { FontAttributes = FontAttributes.Bold };
+                fileName.SetBinding(Label.TextProperty, new Binding(nameof(AttachmentInfo.FileName)));
+
+                var details = new Label { FontSize = 12, TextColor = Colors.Gray };
+                details.SetBinding(
+                    Label.TextProperty,
+                    new Binding(nameof(AttachmentInfo.SyncStatus), stringFormat: "{0}"));
+
+                var action = new Button { Text = commandPath.StartsWith("Open", StringComparison.Ordinal) ? "Open" : "Remove" };
+                action.SetBinding(
+                    Button.CommandProperty,
+                    new Binding(
+                        $"BindingContext.{commandPath}",
+                        source: new RelativeBindingSource(
+                            RelativeBindingSourceMode.FindAncestor,
+                            typeof(ContentPage))));
+                action.SetBinding(Button.CommandParameterProperty, new Binding("."));
+
+                var info = new VerticalStackLayout
+                {
+                    Spacing = 2,
+                    Children = { fileName, details }
+                };
+
+                var grid = new Grid
+                {
+                    Padding = new Thickness(0, 6),
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition { Width = GridLength.Star },
+                        new ColumnDefinition { Width = GridLength.Auto }
+                    }
+                };
+                Grid.SetColumn(info, 0);
+                Grid.SetColumn(action, 1);
+                grid.Children.Add(info);
+                grid.Children.Add(action);
+                return grid;
+            })
+        };
     }
 
     private static Entry BoundEntry(string path, string placeholder)
