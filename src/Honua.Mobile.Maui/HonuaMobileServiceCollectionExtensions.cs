@@ -464,6 +464,7 @@ public static class HonuaMobileServiceCollectionExtensions
 
         services.AddSingleton(options ?? new HonuaNativeArSessionOptions());
         services.AddSingleton<HonuaNativeArSceneAnchoringController>();
+        services.AddSingleton<HonuaNativeArFieldWorkflow>();
         return services;
     }
 

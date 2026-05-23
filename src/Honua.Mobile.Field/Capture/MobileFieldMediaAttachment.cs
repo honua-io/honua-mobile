@@ -35,6 +35,33 @@ public sealed record MobileFieldMediaAttachment
     public bool RequiresFaceBlur { get; init; }
 
     /// <summary>
+    /// Mobile-owned evidence metadata, such as AR scene anchoring context. This is
+    /// intentionally excluded from SDK attachment conversion until the SDK owns a
+    /// portable evidence contract.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> EvidenceMetadata { get; init; } =
+        new Dictionary<string, object?>();
+
+    /// <summary>
+    /// Returns a copy with merged mobile evidence metadata.
+    /// </summary>
+    /// <param name="metadata">Metadata to merge into the attachment.</param>
+    /// <returns>A copy containing the merged metadata.</returns>
+    public MobileFieldMediaAttachment WithEvidenceMetadata(IReadOnlyDictionary<string, object?> metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+
+        var merged = new Dictionary<string, object?>(EvidenceMetadata, StringComparer.Ordinal);
+        foreach (var item in metadata)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(item.Key);
+            merged[item.Key] = item.Value;
+        }
+
+        return this with { EvidenceMetadata = merged };
+    }
+
+    /// <summary>
     /// Converts mobile capture metadata to the portable SDK attachment contract.
     /// </summary>
     /// <returns>SDK field media attachment without host-local file-system paths.</returns>
