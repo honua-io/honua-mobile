@@ -11,6 +11,7 @@ public partial class RecordsViewModel : BaseViewModel
     private readonly IFeatureService _featureService;
     private readonly IFormService _formService;
     private readonly IFieldCollectionMetadataService _metadataService;
+    private readonly ILocalRecordExportService _recordExportService;
     private bool _updatingSelection;
 
     [ObservableProperty]
@@ -39,12 +40,14 @@ public partial class RecordsViewModel : BaseViewModel
         INavigationService navigationService,
         IFeatureService featureService,
         IFormService formService,
-        IFieldCollectionMetadataService metadataService)
+        IFieldCollectionMetadataService metadataService,
+        ILocalRecordExportService recordExportService)
         : base(navigationService)
     {
         _featureService = featureService;
         _formService = formService;
         _metadataService = metadataService;
+        _recordExportService = recordExportService;
 
         Title = "Records";
     }
@@ -275,12 +278,18 @@ public partial class RecordsViewModel : BaseViewModel
     [RelayCommand]
     private async Task ExportRecords()
     {
-        if (Records.Count == 0)
+        if (SelectedLayer == null)
         {
-            await ShowMessage("No Records", "There are no records to export for the selected layer.");
+            await ShowError("Cannot Export", "Please select a layer first.");
             return;
         }
 
-        await ShowError("Export Unavailable", "Record export is not configured yet.");
+        await ExecuteAsync(async () =>
+        {
+            var result = await _recordExportService.ExportLayerAsync(SelectedLayer);
+            await ShowMessage(
+                "Export Complete",
+                $"Exported {result.RecordCount} records and {result.AttachmentCount} attachment references to {result.ExportDirectory}.");
+        });
     }
 }
