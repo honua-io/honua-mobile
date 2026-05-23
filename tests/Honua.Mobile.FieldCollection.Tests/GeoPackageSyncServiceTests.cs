@@ -4,8 +4,10 @@ using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.Maui.Diagnostics;
+using Honua.Sdk.Abstractions.Features;
 using Microsoft.Extensions.Logging.Abstractions;
 using SQLite;
+using System.Text.Json;
 using StorageChangeRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeRecord;
 using StorageChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using StorageConflictRecord = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictRecord;
@@ -135,6 +137,144 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PushChangesAsync_WithHonuaUploader_UploadsSdkFeatureEditAndMarksChangeSynced()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        var feature = CreateFeature("asset-1", version: 1);
+        feature.Attributes["objectid"] = 42;
+        await storage.StoreFeatureAsync(feature);
+        var metadata = new FixedMetadataService([layer]);
+        var client = new RecordingFeatureSyncClient
+        {
+            EditResponse = new FeatureEditResponse
+            {
+                ProviderName = "test",
+                AddResults = [new FeatureEditResult { Succeeded = true, ObjectId = 42 }]
+            }
+        };
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(await storage.GetPendingChangesAsync());
+        var request = Assert.Single(client.EditRequests);
+        Assert.Equal("assets", request.Source.ServiceId);
+        Assert.Equal(1, request.Source.LayerId);
+        var add = Assert.Single(request.Adds);
+        Assert.Equal(42, add.ObjectId);
+        Assert.Equal(-157.8, add.Geometry!.Value.GetProperty("x").GetDouble());
+        Assert.Equal(21.3, add.Geometry!.Value.GetProperty("y").GetDouble());
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WithHonuaUploaderDelete_UsesStoredObjectIdAfterLocalDelete()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        var feature = CreateFeature("asset-1", version: 1);
+        feature.Attributes["objectid"] = 42;
+        await storage.StoreFeatureAsync(feature);
+        var initialChanges = await storage.GetPendingChangesAsync();
+        await storage.MarkChangesAsSynced(initialChanges.Select(change => change.Id).ToList());
+        await storage.DeleteFeatureAsync("asset-1", 1);
+        var metadata = new FixedMetadataService([layer]);
+        var client = new RecordingFeatureSyncClient
+        {
+            EditResponse = new FeatureEditResponse
+            {
+                ProviderName = "test",
+                DeleteResults = [new FeatureEditResult { Succeeded = true, ObjectId = 42 }]
+            }
+        };
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(await storage.GetPendingChangesAsync());
+        var request = Assert.Single(client.EditRequests);
+        Assert.Empty(request.Adds);
+        Assert.Empty(request.Updates);
+        Assert.Equal([42], request.DeleteObjectIds);
+    }
+
+    [Fact]
+    public async Task DeleteFeatureAsync_WhenOfflineInsertNeverSynced_CollapsesLocalOnlyLifecycle()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        await storage.StoreFeatureAsync(CreateFeature("local-only", version: 1));
+        var metadata = new FixedMetadataService([layer]);
+        var client = new RecordingFeatureSyncClient();
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client));
+
+        await storage.DeleteFeatureAsync("local-only", 1);
+        var result = await sync.PushChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.ChangesPushed);
+        Assert.Empty(await storage.GetPendingChangesAsync());
+        Assert.Empty(client.EditRequests);
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WithHonuaUploaderConflict_StoresConflictForReview()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        var feature = CreateFeature("asset-1", version: 2);
+        feature.Attributes["objectid"] = 42;
+        await storage.StoreFeatureAsync(feature);
+        var metadata = new FixedMetadataService([layer]);
+        var client = new RecordingFeatureSyncClient
+        {
+            EditResponse = new FeatureEditResponse
+            {
+                ProviderName = "test",
+                AddResults =
+                [
+                    new FeatureEditResult
+                    {
+                        Succeeded = false,
+                        Error = new FeatureEditError { Code = 409, Message = "Version conflict" }
+                    }
+                ]
+            }
+        };
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Single(await storage.GetPendingChangesAsync());
+        var conflict = Assert.Single(await sync.GetConflictsAsync());
+        Assert.Equal("asset-1", conflict.FeatureId);
+        Assert.Contains("Version conflict", conflict.RedactedServerVersion);
+    }
+
+    [Fact]
     public async Task PushChangesAsync_WhenCompleted_PersistsSyncHistory()
     {
         var databasePath = CreateDatabasePath();
@@ -172,6 +312,71 @@ public sealed class GeoPackageSyncServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(0, result.ChangesPulled);
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WithHonuaPuller_AppliesServerFeatureAndPersistsCursor()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        var metadata = new FixedMetadataService([layer]);
+        var settings = new InMemorySettingsService();
+        var client = new RecordingFeatureSyncClient
+        {
+            QueryResponse = new FeatureQueryResult
+            {
+                ProviderName = "test",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = "42",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["objectid"] = JsonSerializer.SerializeToElement(42),
+                            ["sync_version"] = JsonSerializer.SerializeToElement(5L),
+                            ["name"] = JsonSerializer.SerializeToElement("server")
+                        },
+                        Geometry = JsonSerializer.SerializeToElement(new { x = -157.8, y = 21.3 })
+                    }
+                ]
+            }
+        };
+        var puller = new HonuaFieldCollectionChangePuller(metadata, client, settings);
+        using var sync = CreateSyncService(storage, puller: puller);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.ChangesPulled);
+        Assert.Equal(5, await puller.GetLastSyncedGenerationAsync());
+        var feature = await storage.GetFeatureAsync("42", 1);
+        Assert.NotNull(feature);
+        Assert.Equal("server", feature.Attributes["name"]?.ToString());
+    }
+
+    [Fact]
+    public void IsRemoteSyncConfigured_ReflectsDynamicTransportConfiguration()
+    {
+        var databasePath = CreateDatabasePath();
+        using var storage = new GeoPackageStorageService(databasePath);
+        var client = new RecordingFeatureSyncClient { IsConfigured = false };
+        var metadata = new FixedMetadataService([CreateLayer()]);
+        var settings = new InMemorySettingsService();
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client),
+            puller: new HonuaFieldCollectionChangePuller(metadata, client, settings));
+
+        Assert.False(sync.IsRemoteSyncConfigured);
+
+        client.IsConfigured = true;
+
+        Assert.True(sync.IsRemoteSyncConfigured);
     }
 
     [Fact]
@@ -431,6 +636,19 @@ public sealed class GeoPackageSyncServiceTests
         return context;
     }
 
+    private static LayerInfo CreateLayer()
+    {
+        return new LayerInfo
+        {
+            Id = 1,
+            ServiceId = "assets",
+            SourceId = "assets/FeatureServer/1",
+            Name = "Assets",
+            GeometryType = GeometryType.Point,
+            IsEditable = true
+        };
+    }
+
     private static Feature CreateFeature(
         string id,
         long version,
@@ -540,6 +758,115 @@ public sealed class GeoPackageSyncServiceTests
         public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0L);
+        }
+    }
+
+    private sealed class RecordingFeatureSyncClient : IFieldCollectionFeatureSyncClient
+    {
+        public bool IsConfigured { get; set; } = true;
+        public FeatureEditResponse? EditResponse { get; set; }
+        public FeatureQueryResult? QueryResponse { get; set; }
+        public List<FeatureEditRequest> EditRequests { get; } = [];
+        public List<FeatureQueryRequest> QueryRequests { get; } = [];
+
+        public Task<FeatureEditResponse> ApplyEditsAsync(
+            FeatureEditRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            EditRequests.Add(request);
+            return Task.FromResult(EditResponse ?? new FeatureEditResponse
+            {
+                ProviderName = "test",
+                UpdateResults = [new FeatureEditResult { Succeeded = true }]
+            });
+        }
+
+        public Task<FeatureQueryResult> QueryAsync(
+            FeatureQueryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            QueryRequests.Add(request);
+            return Task.FromResult(QueryResponse ?? new FeatureQueryResult
+            {
+                ProviderName = "test",
+                Features = []
+            });
+        }
+    }
+
+    private sealed class FixedMetadataService : IFieldCollectionMetadataService
+    {
+        private readonly IReadOnlyList<LayerInfo> _layers;
+        private string _selectedServiceId;
+
+        public FixedMetadataService(IReadOnlyList<LayerInfo> layers)
+        {
+            _layers = layers;
+            _selectedServiceId = layers.FirstOrDefault()?.ServiceId ?? "assets";
+        }
+
+        public Task<IReadOnlyList<FieldProjectInfo>> GetProjectsAsync(
+            bool refresh = false,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<FieldProjectInfo>>(
+            [
+                new FieldProjectInfo
+                {
+                    ServiceId = _selectedServiceId,
+                    Name = _selectedServiceId,
+                    LayerCount = _layers.Count,
+                    Layers = _layers.ToList()
+                }
+            ]);
+        }
+
+        public Task<FieldProjectInfo?> GetSelectedProjectAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<FieldProjectInfo?>(new FieldProjectInfo
+            {
+                ServiceId = _selectedServiceId,
+                Name = _selectedServiceId,
+                LayerCount = _layers.Count,
+                Layers = _layers.ToList()
+            });
+        }
+
+        public Task SelectProjectAsync(string serviceId, CancellationToken cancellationToken = default)
+        {
+            _selectedServiceId = serviceId;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<LayerInfo>> GetLayersAsync(
+            bool refresh = false,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_layers);
+        }
+    }
+
+    private sealed class InMemorySettingsService : ISettingsService
+    {
+        private readonly Dictionary<string, object?> _values = new(StringComparer.Ordinal);
+
+        public Task<T> GetSettingAsync<T>(string key, T defaultValue = default!)
+        {
+            return Task.FromResult(
+                _values.TryGetValue(key, out var value) && value is T typed
+                    ? typed
+                    : defaultValue);
+        }
+
+        public Task SetSettingAsync<T>(string key, T value)
+        {
+            _values[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> HasSettingAsync(string key)
+        {
+            return Task.FromResult(_values.ContainsKey(key));
         }
     }
 

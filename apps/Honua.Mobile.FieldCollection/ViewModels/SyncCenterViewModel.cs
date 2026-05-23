@@ -95,8 +95,7 @@ public partial class SyncCenterViewModel : BaseViewModel
     {
         if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated))
         {
-            UpdateSyncActionState();
-            UpdateSyncStatusMessage();
+            UpdateFromSyncService();
         }
     }
 

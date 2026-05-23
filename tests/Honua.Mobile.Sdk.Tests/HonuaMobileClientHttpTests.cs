@@ -92,6 +92,62 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task FeatureServerRestAsync_WithFolderedServiceId_PreservesFolderPath()
+    {
+        var capturedPaths = new List<string>();
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            capturedPaths.Add(path);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    path.EndsWith("/query", StringComparison.Ordinal)
+                        ? """{"features":[]}"""
+                        : """{"addResults":[{"objectId":42,"success":true}],"updateResults":[],"deleteResults":[]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+
+        using var queryResult = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = "Utilities/Assets",
+            LayerId = 2,
+        });
+
+        using var editResult = await client.ApplyEditsAsync(new ApplyEditsRequest
+        {
+            ServiceId = "Utilities/Assets",
+            LayerId = 2,
+            AddsJson = """[{"attributes":{"name":"Test"}}]""",
+        });
+
+        var sdkEditResult = await client.ApplyEditsAsync(new FeatureEditRequest
+        {
+            Source = new FeatureSource { ServiceId = "Utilities/Assets", LayerId = 2 },
+            Adds =
+            [
+                new FeatureEditFeature
+                {
+                    Attributes = new Dictionary<string, JsonElement>
+                    {
+                        ["name"] = JsonSerializer.SerializeToElement("Test"),
+                    },
+                },
+            ],
+        });
+
+        Assert.Contains("/rest/services/Utilities/Assets/FeatureServer/2/query", capturedPaths);
+        Assert.Equal(
+            2,
+            capturedPaths.Count(path => path == "/rest/services/Utilities/Assets/FeatureServer/2/applyEdits"));
+        Assert.True(sdkEditResult.Succeeded);
+    }
+
+    [Fact]
     public async Task ApplyEditsAsync_WithSdkFeatureServerModels_SerializesEditForm()
     {
         string? capturedBody = null;

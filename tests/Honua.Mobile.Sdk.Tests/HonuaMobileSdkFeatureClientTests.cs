@@ -381,7 +381,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         var handler = new StubHttpMessageHandler((request, _) =>
         {
             requestedPaths.Add(request.RequestUri!.PathAndQuery);
-            if (request.RequestUri!.AbsolutePath == "/rest/services/assets/FeatureServer/0/queryAttachments")
+            if (request.RequestUri!.AbsolutePath == "/rest/services/Utilities/Assets/FeatureServer/0/queryAttachments")
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -420,11 +420,11 @@ public sealed class HonuaMobileSdkFeatureClientTests
 
         var listed = await attachments.ListAttachmentsAsync(new FeatureAttachmentListRequest
         {
-            Source = new FeatureSource { ServiceId = "assets", LayerId = 0 },
+            Source = new FeatureSource { ServiceId = "Utilities/Assets", LayerId = 0 },
             ObjectId = 42,
         });
 
-        Assert.Contains(requestedPaths, path => path.Contains("/rest/services/assets/FeatureServer/0/queryAttachments", StringComparison.Ordinal));
+        Assert.Contains(requestedPaths, path => path.Contains("/rest/services/Utilities/Assets/FeatureServer/0/queryAttachments", StringComparison.Ordinal));
         var attachment = Assert.Single(listed);
         Assert.Equal(42, attachment.ParentObjectId);
         Assert.Equal(7, attachment.AttachmentId);
