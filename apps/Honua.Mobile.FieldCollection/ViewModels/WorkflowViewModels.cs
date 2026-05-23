@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Models;
@@ -53,6 +54,23 @@ public sealed partial class EditableChoiceItem : ObservableObject
     }
 }
 
+public sealed partial class EditableRepeatSectionItem : ObservableObject
+{
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanRemove))]
+    private int entryCount;
+
+    public string SectionId { get; init; } = string.Empty;
+
+    public string Label { get; init; } = string.Empty;
+
+    public bool CanRemove => EntryCount > 0;
+
+    public ICommand? AddCommand { get; init; }
+
+    public ICommand? RemoveCommand { get; init; }
+}
+
 public sealed partial class EditableFormFieldItem : ObservableObject
 {
     private bool _suppressValueChanged;
@@ -79,13 +97,29 @@ public sealed partial class EditableFormFieldItem : ObservableObject
     [ObservableProperty]
     private string valueSummary = string.Empty;
 
+    [ObservableProperty]
+    private bool isVisible = true;
+
     public EditableFormFieldItem(FormField definition)
+        : this(new MobileFormFieldBinding(
+            new FormSection { SectionId = "default", Label = "Default", Fields = [definition] },
+            definition,
+            definition.FieldId,
+            null))
     {
-        Definition = definition;
-        ControlKind = MobileFormControlSelector.Select(definition);
-        Label = definition.Required ? $"{definition.Label} *" : definition.Label;
-        HelpText = definition.HelpText ?? string.Empty;
-        foreach (var choice in definition.Choices)
+    }
+
+    public EditableFormFieldItem(MobileFormFieldBinding binding)
+    {
+        Definition = binding.Field;
+        Section = binding.Section;
+        ValueKey = binding.ValueKey;
+        RepeatIndex = binding.RepeatIndex;
+        ControlKind = MobileFormControlSelector.Select(Definition);
+        IsReadOnly = Definition.Type == FormFieldType.Calculated || !string.IsNullOrWhiteSpace(Definition.CalculatedExpression);
+        Label = BuildLabel(binding);
+        HelpText = Definition.HelpText ?? string.Empty;
+        foreach (var choice in Definition.Choices)
         {
             var item = new EditableChoiceItem
             {
@@ -98,6 +132,12 @@ public sealed partial class EditableFormFieldItem : ObservableObject
     }
 
     public FormField Definition { get; }
+
+    public FormSection Section { get; }
+
+    public string ValueKey { get; }
+
+    public int? RepeatIndex { get; }
 
     public MobileFormControlKind ControlKind { get; }
 
@@ -114,6 +154,10 @@ public sealed partial class EditableFormFieldItem : ObservableObject
     public bool HasPrimaryAction => PrimaryActionCommand != null;
 
     public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationError);
+
+    public bool IsReadOnly { get; }
+
+    public bool IsEditable => !IsReadOnly;
 
     public bool IsSingleLineText => ControlKind is MobileFormControlKind.SingleLineText or MobileFormControlKind.Barcode;
 
@@ -305,6 +349,20 @@ public sealed partial class EditableFormFieldItem : ObservableObject
             ValueChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    private static string BuildLabel(MobileFormFieldBinding binding)
+    {
+        var label = binding.Field.Required ? $"{binding.Field.Label} *" : binding.Field.Label;
+        if (binding.RepeatIndex is not { } repeatIndex)
+        {
+            return label;
+        }
+
+        var sectionLabel = string.IsNullOrWhiteSpace(binding.Section.Label)
+            ? binding.Section.SectionId
+            : binding.Section.Label;
+        return $"{sectionLabel} {repeatIndex + 1}: {label}";
+    }
 }
 
 public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
@@ -490,6 +548,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     private readonly ILocationService _locationService;
     private bool _isLoadingForm;
     private FormDefinition? _formDefinition;
+    private readonly Dictionary<string, int> _repeatSectionCounts = new(StringComparer.Ordinal);
 
     [ObservableProperty]
     private int layerId = 1;
@@ -517,6 +576,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
     public ObservableCollection<EditableAttributeItem> Attributes { get; } = [];
     public ObservableCollection<EditableFormFieldItem> FormFields { get; } = [];
+    public ObservableCollection<EditableRepeatSectionItem> RepeatSections { get; } = [];
     public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
 
     public RecordEditViewModel(
@@ -566,7 +626,9 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 }
 
                 FormFields.Clear();
+                RepeatSections.Clear();
                 Attachments.Clear();
+                _repeatSectionCounts.Clear();
                 ValidationSummary = string.Empty;
                 PageTitle = IsNew ? "Create Record" : "Edit Record";
                 Title = PageTitle;
@@ -592,6 +654,11 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     {
                         source[value.Key] = value.Value;
                     }
+
+                    foreach (var repeatCount in draft.RepeatCounts)
+                    {
+                        _repeatSectionCounts[repeatCount.Key] = repeatCount.Value;
+                    }
                 }
 
                 foreach (var attribute in source.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
@@ -616,6 +683,10 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 _formDefinition = await _formService.GetFormDefinitionAsync(LayerId)
                     ?? CreateAdHocFormDefinition(LayerId, source);
                 LoadFormFields(_formDefinition, source);
+                if (draft?.ValidationErrors.Count > 0)
+                {
+                    ApplyValidationErrors(draft.ValidationErrors);
+                }
             }
             finally
             {
@@ -636,13 +707,15 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
         if (_formDefinition != null)
         {
+            var section = _formDefinition.Sections.FirstOrDefault(section => !section.Repeatable) ??
+                new FormSection { SectionId = "attributes", Label = "Attributes" };
             var field = new FormField
             {
                 FieldId = $"field_{index}",
                 Label = $"Field {index}",
                 Type = FormFieldType.Text
             };
-            AddFormField(field, null);
+            AddFormField(new MobileFormFieldBinding(section, field, field.FieldId, null), null);
         }
     }
 
@@ -751,6 +824,45 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     }
 
     [RelayCommand]
+    private async Task AddRepeatEntry(EditableRepeatSectionItem section)
+    {
+        if (_formDefinition == null || string.IsNullOrWhiteSpace(section.SectionId))
+        {
+            return;
+        }
+
+        var values = BuildFormValues(includeHidden: true);
+        _repeatSectionCounts[section.SectionId] = section.EntryCount + 1;
+        ReloadFormFields(values);
+        await SaveDraftSnapshotAsync();
+    }
+
+    [RelayCommand]
+    private async Task RemoveRepeatEntry(EditableRepeatSectionItem section)
+    {
+        if (_formDefinition == null || string.IsNullOrWhiteSpace(section.SectionId) || section.EntryCount <= 0)
+        {
+            return;
+        }
+
+        var values = BuildFormValues(includeHidden: true);
+        var removedIndex = section.EntryCount - 1;
+        foreach (var key in values.Keys.ToArray())
+        {
+            if (MobileFormRepeatKey.TryParse(key, out var sectionId, out var repeatIndex, out _) &&
+                repeatIndex == removedIndex &&
+                string.Equals(sectionId, section.SectionId, StringComparison.Ordinal))
+            {
+                values.Remove(key);
+            }
+        }
+
+        _repeatSectionCounts[section.SectionId] = removedIndex;
+        ReloadFormFields(values);
+        await SaveDraftSnapshotAsync();
+    }
+
+    [RelayCommand]
     private async Task RemoveAttachment(AttachmentInfo attachment)
     {
         await ExecuteAsync(async () =>
@@ -807,6 +919,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             {
                 var formData = BuildFormData(values);
                 var valid = await _formService.ValidateFormAsync(formData, _formDefinition);
+                values = formData.Values;
+                ApplyCalculatedValues(values);
                 ApplyValidationErrors(formData.ValidationErrors);
                 if (!valid)
                 {
@@ -857,20 +971,75 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
     private void LoadFormFields(FormDefinition formDefinition, IReadOnlyDictionary<string, object?> values)
     {
-        var attachmentsById = Attachments.ToDictionary(attachment => attachment.Id, StringComparer.Ordinal);
-        foreach (var field in formDefinition.Sections.SelectMany(section => section.Fields))
+        var seededValues = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+        foreach (var section in formDefinition.Sections.Where(section => section.Repeatable))
         {
-            values.TryGetValue(field.FieldId, out var value);
-            AddFormField(field, value, attachmentsById);
+            if (!_repeatSectionCounts.TryGetValue(section.SectionId, out var repeatCount))
+            {
+                continue;
+            }
+
+            for (var repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++)
+            {
+                foreach (var field in section.Fields)
+                {
+                    seededValues.TryAdd(MobileFormRepeatKey.ForField(section, repeatIndex, field), null);
+                }
+            }
         }
+
+        var resolvedValues = MobileFormRuleRuntime.ApplyCalculatedValues(
+            formDefinition,
+            MobileFormRuleRuntime.ApplyDefaultValues(formDefinition, seededValues));
+        var attachmentsById = Attachments.ToDictionary(attachment => attachment.Id, StringComparer.Ordinal);
+
+        foreach (var section in formDefinition.Sections)
+        {
+            if (!section.Repeatable)
+            {
+                foreach (var field in section.Fields)
+                {
+                    resolvedValues.TryGetValue(field.FieldId, out var value);
+                    AddFormField(new MobileFormFieldBinding(section, field, field.FieldId, null), value, attachmentsById);
+                }
+
+                continue;
+            }
+
+            var repeatCount = _repeatSectionCounts.TryGetValue(section.SectionId, out var configuredCount)
+                ? Math.Max(0, configuredCount)
+                : MobileFormRepeatKey.GetRepeatCount(section, resolvedValues, defaultCount: 1);
+            _repeatSectionCounts[section.SectionId] = repeatCount;
+            RepeatSections.Add(new EditableRepeatSectionItem
+            {
+                SectionId = section.SectionId,
+                Label = string.IsNullOrWhiteSpace(section.Label) ? section.SectionId : section.Label,
+                EntryCount = repeatCount,
+                AddCommand = AddRepeatEntryCommand,
+                RemoveCommand = RemoveRepeatEntryCommand
+            });
+
+            for (var repeatIndex = 0; repeatIndex < repeatCount; repeatIndex++)
+            {
+                foreach (var field in section.Fields)
+                {
+                    var valueKey = MobileFormRepeatKey.ForField(section, repeatIndex, field);
+                    resolvedValues.TryGetValue(valueKey, out var value);
+                    AddFormField(new MobileFormFieldBinding(section, field, valueKey, repeatIndex), value, attachmentsById);
+                }
+            }
+        }
+
+        RefreshFormRules();
     }
 
     private void AddFormField(
-        FormField field,
+        MobileFormFieldBinding binding,
         object? value,
         IReadOnlyDictionary<string, AttachmentInfo>? attachmentsById = null)
     {
-        var item = new EditableFormFieldItem(field)
+        var field = binding.Field;
+        var item = new EditableFormFieldItem(binding)
         {
             PrimaryActionCommand = field.Type switch
             {
@@ -894,6 +1063,31 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         FormFields.Add(item);
     }
 
+    private void ReloadFormFields(IReadOnlyDictionary<string, object?> values)
+    {
+        if (_formDefinition == null)
+        {
+            return;
+        }
+
+        _isLoadingForm = true;
+        try
+        {
+            foreach (var field in FormFields)
+            {
+                field.ValueChanged -= OnFormFieldValueChanged;
+            }
+
+            FormFields.Clear();
+            RepeatSections.Clear();
+            LoadFormFields(_formDefinition, values);
+        }
+        finally
+        {
+            _isLoadingForm = false;
+        }
+    }
+
     private void OnFormFieldValueChanged(object? sender, EventArgs e)
     {
         if (_isLoadingForm)
@@ -907,6 +1101,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             item.ValidationError = null;
         }
 
+        RefreshFormRules();
         _ = SaveDraftSnapshotAsync();
     }
 
@@ -922,11 +1117,15 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             LayerId = LayerId,
             FeatureId = FeatureId,
             FormId = _formDefinition?.FormId,
-            Values = BuildFormValues()
+            Values = BuildFormValues(includeHidden: true),
+            ValidationErrors = FormFields
+                .Where(field => field.HasValidationError)
+                .ToDictionary(field => field.ValueKey, field => field.ValidationError!, StringComparer.OrdinalIgnoreCase),
+            RepeatCounts = new Dictionary<string, int>(_repeatSectionCounts, StringComparer.Ordinal)
         });
     }
 
-    private Dictionary<string, object?> BuildFormValues()
+    private Dictionary<string, object?> BuildFormValues(bool includeHidden = true)
     {
         if (FormFields.Count == 0)
         {
@@ -940,20 +1139,19 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         }
 
         return FormFields
-            .Where(field => !string.IsNullOrWhiteSpace(field.Definition.FieldId))
+            .Where(field => !string.IsNullOrWhiteSpace(field.ValueKey) && (includeHidden || field.IsVisible))
             .ToDictionary(
-                field => field.Definition.FieldId,
+                field => field.ValueKey,
                 field => field.ToValue(),
                 StringComparer.OrdinalIgnoreCase);
     }
 
     private FormData BuildFormData(Dictionary<string, object?> values)
     {
-        var fields = FormFields.Select(field => field.Definition).ToArray();
         var attachmentsById = Attachments.ToDictionary(attachment => attachment.Id, StringComparer.Ordinal);
-        var location = fields
-            .Where(field => field.Type == FormFieldType.Location)
-            .Select(field => values.TryGetValue(field.FieldId, out var value) &&
+        var location = FormFields
+            .Where(field => field.IsVisible && field.Definition.Type == FormFieldType.Location)
+            .Select(field => values.TryGetValue(field.ValueKey, out var value) &&
                 MobileFormValueConverter.TryGetLocation(value, out var point)
                     ? point
                     : (FieldGeoPoint?)null)
@@ -964,17 +1162,52 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             LayerId = LayerId,
             FeatureId = FeatureId,
             Values = values,
-            Media = MobileFormValueConverter.BuildMediaAttachments(fields, values, attachmentsById).ToList(),
+            Media = BuildMediaAttachments(values, attachmentsById),
             Location = location,
             CreatedAt = _existingFeature?.CreatedAt ?? DateTime.UtcNow
         };
+    }
+
+    private List<FieldMediaAttachment> BuildMediaAttachments(
+        IReadOnlyDictionary<string, object?> values,
+        IReadOnlyDictionary<string, AttachmentInfo> attachmentsById)
+    {
+        var media = new List<FieldMediaAttachment>();
+        foreach (var field in FormFields.Where(field => MobileFormValueConverter.IsMediaField(field.Definition)))
+        {
+            if (!values.TryGetValue(field.ValueKey, out var rawValue))
+            {
+                continue;
+            }
+
+            foreach (var attachmentId in MobileFormValueConverter.ToChoiceValues(rawValue))
+            {
+                if (!attachmentsById.TryGetValue(attachmentId, out var attachment))
+                {
+                    continue;
+                }
+
+                media.Add(new FieldMediaAttachment
+                {
+                    AttachmentId = attachment.Id,
+                    FieldId = field.ValueKey,
+                    FileName = attachment.FileName,
+                    ContentType = attachment.ContentType,
+                    SizeBytes = attachment.SizeBytes,
+                    CapturedAtUtc = new DateTimeOffset(attachment.CreatedAt == default ? DateTime.UtcNow : attachment.CreatedAt),
+                    MediaType = MobileFormValueConverter.ToSdkMediaType(field.Definition.Type, attachment.PayloadKind)
+                });
+            }
+        }
+
+        return media;
     }
 
     private void ApplyValidationErrors(IReadOnlyDictionary<string, string> errors)
     {
         foreach (var field in FormFields)
         {
-            field.ValidationError = errors.TryGetValue(field.Definition.FieldId, out var error)
+            field.ValidationError = errors.TryGetValue(field.ValueKey, out var error)
                 ? error
                 : null;
         }
@@ -982,6 +1215,53 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         ValidationSummary = errors.Count == 0
             ? string.Empty
             : $"Fix {errors.Count} field error(s) before saving.";
+    }
+
+    private void RefreshFormRules()
+    {
+        if (_formDefinition == null || FormFields.Count == 0)
+        {
+            return;
+        }
+
+        var values = MobileFormRuleRuntime.ApplyCalculatedValues(_formDefinition, BuildFormValues(includeHidden: true));
+        ApplyCalculatedValues(values);
+        ApplyVisibility(values);
+    }
+
+    private void ApplyCalculatedValues(IReadOnlyDictionary<string, object?> values)
+    {
+        foreach (var field in FormFields.Where(field =>
+            field.Definition.Type == FormFieldType.Calculated ||
+            !string.IsNullOrWhiteSpace(field.Definition.CalculatedExpression)))
+        {
+            if (values.TryGetValue(field.ValueKey, out var value))
+            {
+                field.SetValue(value);
+            }
+        }
+    }
+
+    private void ApplyVisibility(IReadOnlyDictionary<string, object?> values)
+    {
+        if (_formDefinition == null)
+        {
+            return;
+        }
+
+        foreach (var field in FormFields)
+        {
+            field.IsVisible = MobileFormRuleRuntime.IsFieldVisible(
+                _formDefinition,
+                field.Section,
+                field.Definition,
+                values,
+                field.RepeatIndex);
+            if (!field.IsVisible)
+            {
+                field.ValidationError = null;
+            }
+        }
     }
 
     private static FormDefinition CreateAdHocFormDefinition(int layerId, IReadOnlyDictionary<string, object?> source)

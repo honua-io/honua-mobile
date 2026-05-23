@@ -583,12 +583,400 @@ public static class MobileFormValueConverter
     }
 }
 
+public sealed record MobileFormFieldBinding(
+    FormSection Section,
+    FormField Field,
+    string ValueKey,
+    int? RepeatIndex);
+
+public static class MobileFormRepeatKey
+{
+    public static string ForField(FormSection section, int repeatIndex, FormField field)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(field);
+
+        if (repeatIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(repeatIndex), repeatIndex, "Repeat index must be non-negative.");
+        }
+
+        return $"{section.SectionId}[{repeatIndex}].{field.FieldId}";
+    }
+
+    public static bool TryParse(string? key, out string sectionId, out int repeatIndex, out string fieldId)
+    {
+        sectionId = string.Empty;
+        repeatIndex = -1;
+        fieldId = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        var open = key.IndexOf('[', StringComparison.Ordinal);
+        var close = key.IndexOf(']', StringComparison.Ordinal);
+        if (open <= 0 || close <= open + 1 || close + 1 >= key.Length || key[close + 1] != '.')
+        {
+            return false;
+        }
+
+        if (!int.TryParse(key.AsSpan(open + 1, close - open - 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out repeatIndex) ||
+            repeatIndex < 0)
+        {
+            return false;
+        }
+
+        sectionId = key[..open];
+        fieldId = key[(close + 2)..];
+        return !string.IsNullOrWhiteSpace(sectionId) && !string.IsNullOrWhiteSpace(fieldId);
+    }
+
+    public static IReadOnlyList<int> GetRepeatIndices(
+        FormSection section,
+        IReadOnlyDictionary<string, object?> values,
+        int defaultCount = 0)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(values);
+
+        var fieldIds = section.Fields
+            .Select(field => field.FieldId)
+            .Where(fieldId => !string.IsNullOrWhiteSpace(fieldId))
+            .ToHashSet(StringComparer.Ordinal);
+        var indices = values.Keys
+            .Select(key => TryParse(key, out var sectionId, out var repeatIndex, out var fieldId) &&
+                string.Equals(sectionId, section.SectionId, StringComparison.Ordinal) &&
+                fieldIds.Contains(fieldId)
+                    ? repeatIndex
+                    : -1)
+            .Where(index => index >= 0)
+            .Distinct()
+            .Order()
+            .ToList();
+
+        if (indices.Count > 0 || defaultCount <= 0)
+        {
+            return indices;
+        }
+
+        return Enumerable.Range(0, defaultCount).ToArray();
+    }
+
+    public static int GetRepeatCount(
+        FormSection section,
+        IReadOnlyDictionary<string, object?> values,
+        int defaultCount = 0)
+    {
+        var indices = GetRepeatIndices(section, values, defaultCount);
+        return indices.Count == 0 ? 0 : indices.Max() + 1;
+    }
+}
+
+public static class MobileFormRuleRuntime
+{
+    public static IReadOnlyList<MobileFormFieldBinding> BuildFieldBindings(
+        FormDefinition definition,
+        IReadOnlyDictionary<string, object?> values,
+        int initialRepeatCount = 1)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(values);
+
+        var bindings = new List<MobileFormFieldBinding>();
+        foreach (var section in definition.Sections)
+        {
+            if (!section.Repeatable)
+            {
+                bindings.AddRange(section.Fields.Select(field =>
+                    new MobileFormFieldBinding(section, field, field.FieldId, null)));
+                continue;
+            }
+
+            foreach (var repeatIndex in MobileFormRepeatKey.GetRepeatIndices(section, values, initialRepeatCount))
+            {
+                bindings.AddRange(section.Fields.Select(field =>
+                    new MobileFormFieldBinding(section, field, MobileFormRepeatKey.ForField(section, repeatIndex, field), repeatIndex)));
+            }
+        }
+
+        return bindings;
+    }
+
+    public static Dictionary<string, object?> ApplyDefaultValues(
+        FormDefinition definition,
+        IReadOnlyDictionary<string, object?> values,
+        int initialRepeatCount = 1)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(values);
+
+        var result = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+        foreach (var binding in BuildFieldBindings(definition, result, initialRepeatCount))
+        {
+            if (result.TryGetValue(binding.ValueKey, out var existing) && !IsBlank(existing))
+            {
+                continue;
+            }
+
+            if (TryGetDefaultValue(definition, binding.Section, binding.Field, out var defaultValue))
+            {
+                result[binding.ValueKey] = MobileFormValueConverter.NormalizeValue(binding.Field, defaultValue);
+            }
+        }
+
+        return result;
+    }
+
+    public static Dictionary<string, object?> ApplyCalculatedValues(
+        FormDefinition definition,
+        IReadOnlyDictionary<string, object?> values)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(values);
+
+        var result = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+        ApplyNonRepeatCalculations(definition, result);
+        ApplyRepeatCalculations(definition, result);
+        return result;
+    }
+
+    public static bool IsFieldVisible(
+        FormDefinition definition,
+        FormSection section,
+        FormField field,
+        IReadOnlyDictionary<string, object?> values,
+        int? repeatIndex = null)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(field);
+        ArgumentNullException.ThrowIfNull(values);
+
+        if (field.VisibilityRule == null)
+        {
+            return true;
+        }
+
+        var probeField = new FormField
+        {
+            FieldId = field.FieldId,
+            Label = field.Label,
+            Type = field.Type,
+            SourceFieldName = field.SourceFieldName,
+            Required = true,
+            Choices = field.Choices.ToList(),
+            Validation = field.Validation ?? new FieldValidationRule(),
+            VisibilityRule = field.VisibilityRule,
+            CalculatedExpression = field.CalculatedExpression,
+            HelpText = field.HelpText
+        };
+
+        var probeDefinition = new FormDefinition
+        {
+            FormId = definition.FormId,
+            Name = definition.Name,
+            Sections =
+            [
+                new FormSection
+                {
+                    SectionId = section.SectionId,
+                    Label = section.Label,
+                    Fields = [probeField]
+                }
+            ]
+        };
+        var recordValues = BuildRecordValuesForBinding(section, values, repeatIndex);
+        recordValues[field.FieldId] = null;
+        var result = FormValidator.Validate(probeDefinition, new FieldRecord
+        {
+            RecordId = "visibility-probe",
+            FormId = definition.FormId,
+            Values = recordValues
+        });
+
+        return result.Errors.Any(error => string.Equals(error.FieldId, field.FieldId, StringComparison.Ordinal));
+    }
+
+    public static FormField CloneField(FormField field)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+
+        return new FormField
+        {
+            FieldId = field.FieldId,
+            Label = field.Label,
+            Type = field.Type,
+            SourceFieldName = field.SourceFieldName,
+            Required = field.Required,
+            Choices = field.Choices.ToList(),
+            Validation = field.Validation ?? new FieldValidationRule(),
+            VisibilityRule = field.VisibilityRule,
+            CalculatedExpression = field.CalculatedExpression,
+            HelpText = field.HelpText
+        };
+    }
+
+    public static FormSection CloneSection(FormSection section, bool repeatable)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+
+        return new FormSection
+        {
+            SectionId = section.SectionId,
+            Label = section.Label,
+            Description = section.Description,
+            Repeatable = repeatable,
+            Collapsible = section.Collapsible,
+            InitiallyCollapsed = section.InitiallyCollapsed,
+            Fields = section.Fields.Select(CloneField).ToList()
+        };
+    }
+
+    public static Dictionary<string, object?> BuildRecordValuesForBinding(
+        FormSection section,
+        IReadOnlyDictionary<string, object?> values,
+        int? repeatIndex)
+    {
+        var recordValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            if (MobileFormRepeatKey.TryParse(value.Key, out var repeatSectionId, out var parsedRepeatIndex, out var fieldId))
+            {
+                if (repeatIndex.HasValue &&
+                    parsedRepeatIndex == repeatIndex.Value &&
+                    string.Equals(repeatSectionId, section.SectionId, StringComparison.Ordinal))
+                {
+                    recordValues[fieldId] = value.Value;
+                }
+
+                continue;
+            }
+
+            recordValues[value.Key] = value.Value;
+        }
+
+        return recordValues;
+    }
+
+    private static void ApplyNonRepeatCalculations(FormDefinition definition, Dictionary<string, object?> values)
+    {
+        var sections = definition.Sections
+            .Where(section => !section.Repeatable)
+            .Select(section => CloneSection(section, repeatable: false))
+            .ToList();
+        if (sections.Count == 0)
+        {
+            return;
+        }
+
+        var form = CloneDefinition(definition, sections);
+        var record = new FieldRecord
+        {
+            RecordId = "calculation",
+            FormId = definition.FormId,
+            Values = values
+                .Where(value => !MobileFormRepeatKey.TryParse(value.Key, out _, out _, out _))
+                .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase)
+        };
+        CalculatedFieldEvaluator.ApplyCalculatedFields(form, record);
+
+        foreach (var field in sections.SelectMany(section => section.Fields).Where(IsCalculatedField))
+        {
+            if (record.Values.TryGetValue(field.FieldId, out var calculated))
+            {
+                values[field.FieldId] = calculated;
+            }
+        }
+    }
+
+    private static void ApplyRepeatCalculations(FormDefinition definition, Dictionary<string, object?> values)
+    {
+        foreach (var section in definition.Sections.Where(section => section.Repeatable))
+        {
+            var repeatForm = CloneDefinition(definition, [CloneSection(section, repeatable: false)]);
+            foreach (var repeatIndex in MobileFormRepeatKey.GetRepeatIndices(section, values))
+            {
+                var record = new FieldRecord
+                {
+                    RecordId = $"calculation:{section.SectionId}:{repeatIndex}",
+                    FormId = definition.FormId,
+                    Values = BuildRecordValuesForBinding(section, values, repeatIndex)
+                };
+                CalculatedFieldEvaluator.ApplyCalculatedFields(repeatForm, record);
+
+                foreach (var field in section.Fields.Where(IsCalculatedField))
+                {
+                    if (record.Values.TryGetValue(field.FieldId, out var calculated))
+                    {
+                        values[MobileFormRepeatKey.ForField(section, repeatIndex, field)] = calculated;
+                    }
+                }
+            }
+        }
+    }
+
+    private static FormDefinition CloneDefinition(FormDefinition definition, List<FormSection> sections)
+    {
+        return new FormDefinition
+        {
+            FormId = definition.FormId,
+            Name = definition.Name,
+            Version = definition.Version,
+            Description = definition.Description,
+            Target = definition.Target,
+            Sections = sections,
+            Metadata = new Dictionary<string, string>(definition.Metadata, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static bool IsCalculatedField(FormField field)
+        => field.Type == FormFieldType.Calculated || !string.IsNullOrWhiteSpace(field.CalculatedExpression);
+
+    private static bool TryGetDefaultValue(
+        FormDefinition definition,
+        FormSection section,
+        FormField field,
+        out string defaultValue)
+    {
+        var keys = new[]
+        {
+            $"default:{section.SectionId}.{field.FieldId}",
+            $"default:{field.FieldId}",
+            $"defaults.{section.SectionId}.{field.FieldId}",
+            $"defaults.{field.FieldId}"
+        };
+
+        foreach (var key in keys)
+        {
+            if (definition.Metadata.TryGetValue(key, out defaultValue!) &&
+                !string.IsNullOrWhiteSpace(defaultValue))
+            {
+                return true;
+            }
+        }
+
+        defaultValue = string.Empty;
+        return false;
+    }
+
+    private static bool IsBlank(object? value)
+    {
+        return value is null ||
+            value is string text && string.IsNullOrWhiteSpace(text) ||
+            value is JsonElement { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined };
+    }
+}
+
 public sealed class FormDraftSnapshot
 {
     public int LayerId { get; set; }
     public string FeatureId { get; set; } = string.Empty;
     public string? FormId { get; set; }
     public Dictionary<string, object?> Values { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> ValidationErrors { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, int> RepeatCounts { get; set; } = new(StringComparer.Ordinal);
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
