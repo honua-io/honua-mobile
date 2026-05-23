@@ -209,13 +209,18 @@ from device-local operational state.
 
 No-cloud acceptance should use deterministic local sync-peer evidence:
 
-- operation id and order;
-- package id, binding id, source id, record id;
-- operation type: create/update/delete/media;
-- local version and simulated remote version;
-- conflict cause;
-- selected resolution;
-- final local state.
+- `LocalReplayFieldSyncPeer`: in-process pull/push/attachment sync peer used
+  only for local replay and CI. It is configured as a sync transport but never
+  connects to a cloud endpoint.
+- `LocalFieldConflictReplayHarness`: creates local fixture edits, replays a
+  simulated remote update/delete through `GeoPackageSyncService`, applies the
+  selected resolution, and emits evidence.
+- evidence schema `honua.mobile.local-conflict-replay.evidence.v1` with run id,
+  no-cloud flags, layer/source ids, record id, local/server versions, operation
+  event order, conflict cause, selected resolution, final record state, and
+  diagnostic conflict/pending counts.
+- conflict evidence must use redacted local/server JSON from
+  `DiagnosticRedactor` and must not include secrets or local filesystem paths.
 
 UI implication: conflict review needs enough data to explain why the record is
 blocked and what the available resolution choices mean.
