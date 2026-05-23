@@ -1,14 +1,25 @@
 # Honua Mobile SDK - Competitive Parity Specification
 
+> Status note, May 2026: this Phase 0 document is a historical planning
+> baseline, not shipped-product status. Use
+> [docs/features/README.md](../features/README.md) for source-backed current
+> capabilities, [docs/guides/validation-strategy.md](../guides/validation-strategy.md)
+> for validated coverage, and
+> [docs/guides/mobile-sdk-backlog-roadmap.md](../guides/mobile-sdk-backlog-roadmap.md)
+> for open parity backlog issues and dependencies.
+
 ## Executive Summary
 
-This document defines Honua's competitive parity requirements against leading geospatial mobile platforms. The analysis demonstrates that Honua achieves **functional parity** with market leaders while introducing **innovative advantages** that position it as the next-generation platform.
+This document defines Honua's competitive parity requirements against leading
+geospatial mobile platforms. It records the Phase 0 target analysis for
+functional parity and innovation opportunities; shipped status must be verified
+against the feature map, validation strategy, and backlog issues linked above.
 
 **Key Findings:**
-- ✅ **Full parity** achieved with Survey123, Fulcrum, and Mapbox Mobile SDK
-- 🚀 **Innovation leadership** in gRPC protocols, real-time collaboration, and mobile optimization
-- 📱 **Superior mobile experience** with 60-70% bandwidth reduction and 5x faster form loading
-- 🌍 **Open source advantage** breaking vendor lock-in with Apache 2.0 client libraries
+- **Parity target** documented against Survey123, Fulcrum, and Mapbox Mobile SDK
+- **Innovation roadmap** identified around gRPC protocols, collaboration, and mobile optimization
+- **Performance targets** proposed for bandwidth and form loading
+- **Open source direction** recorded for Apache 2.0 client libraries
 
 ## Capability Matrix
 
@@ -264,16 +275,15 @@ This document defines Honua's competitive parity requirements against leading ge
 
 ## Conclusion
 
-Honua achieves **full competitive parity** with market leaders while introducing **breakthrough innovations** that position it for industry leadership:
+This Phase 0 specification defines the parity target and innovation thesis for
+later implementation:
 
-🎯 **Parity Achieved**: All essential capabilities match or exceed Survey123, Fulcrum, and Mapbox Mobile
+- **Parity target**: essential capabilities are mapped against Survey123,
+  Fulcrum, and Mapbox Mobile.
+- **Innovation roadmap**: open gRPC geospatial protocols, collaboration,
+  device-aware optimization, and performance targets are identified.
+- **Strategic advantage**: open-source client libraries are positioned as an
+  alternative to vendor lock-in.
 
-🚀 **Innovation Leadership**:
-- First open gRPC geospatial protocols
-- Real-time collaborative editing
-- Device-aware mobile optimization
-- Superior performance (5x faster, 68% bandwidth reduction)
-
-🌍 **Strategic Advantage**: Open source ecosystem disrupts vendor lock-in models while enabling rapid innovation
-
-**Phase 0 Exit Criteria Met**: Technical foundation ready for Phase 1 market deployment and standards leadership initiative.
+**Phase 0 Exit Criteria Met**: planning foundation ready for Phase 1
+implementation, validation, and standards exploration.

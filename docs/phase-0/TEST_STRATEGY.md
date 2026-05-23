@@ -1,5 +1,13 @@
 # Honua Mobile SDK - Test Strategy
 
+> Status note, May 2026: this Phase 0 document is a proposed test strategy and
+> planning baseline. The source-backed validation map is
+> [docs/guides/validation-strategy.md](../guides/validation-strategy.md);
+> current implemented capability status is
+> [docs/features/README.md](../features/README.md), and open parity gaps are
+> tracked from
+> [docs/guides/mobile-sdk-backlog-roadmap.md](../guides/mobile-sdk-backlog-roadmap.md).
+
 ## Executive Summary
 
 This document defines the comprehensive testing strategy for Honua Mobile SDK, focusing on **golden dataset validation**, **replay testing**, and **fault injection** to ensure production reliability in challenging field conditions. The strategy emphasizes **real-world simulation** and **continuous validation** against competitive benchmarks.
