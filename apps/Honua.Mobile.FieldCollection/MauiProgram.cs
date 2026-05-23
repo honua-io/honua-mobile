@@ -3,6 +3,7 @@ using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
+using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
@@ -142,6 +143,7 @@ public static class MauiProgram
         // Other feature services
         services.AddSingleton<IFormService>(provider =>
             new FormService(provider.GetRequiredService<IFieldCollectionMetadataService>()));
+        services.AddSingleton<IFormDraftService, SettingsFormDraftService>();
         services.AddSingleton<IAttachmentService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();

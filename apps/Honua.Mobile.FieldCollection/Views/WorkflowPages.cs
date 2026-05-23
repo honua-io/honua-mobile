@@ -1,5 +1,6 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.ViewModels;
+using Honua.Sdk.Field.Forms;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Honua.Mobile.FieldCollection.Views;
@@ -247,42 +248,22 @@ internal static class WorkflowPageContent
 
     public static View CreateRecordEditContent()
     {
-        var attributes = new CollectionView
-        {
-            ItemTemplate = new DataTemplate(() =>
-            {
-                var key = new Entry { Placeholder = "Field" };
-                key.SetBinding(Entry.TextProperty, new Binding(nameof(EditableAttributeItem.Key)));
+        var fields = FormFieldList();
+        fields.SetBinding(ItemsView.ItemsSourceProperty, new Binding("FormFields"));
 
-                var value = new Entry { Placeholder = "Value" };
-                value.SetBinding(Entry.TextProperty, new Binding(nameof(EditableAttributeItem.ValueText)));
+        var validation = BoundMultilineLabel("ValidationSummary");
+        validation.TextColor = Colors.DarkRed;
+        validation.SetBinding(VisualElement.IsVisibleProperty, new Binding("HasValidationSummary"));
 
-                var grid = new Grid
-                {
-                    Padding = new Thickness(0, 6),
-                    ColumnDefinitions =
-                    {
-                        new ColumnDefinition { Width = new GridLength(130) },
-                        new ColumnDefinition { Width = GridLength.Star }
-                    }
-                };
-
-                Grid.SetColumn(key, 0);
-                Grid.SetColumn(value, 1);
-                grid.Children.Add(key);
-                grid.Children.Add(value);
-                return grid;
-            })
-        };
-        attributes.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attributes"));
         var attachments = AttachmentList("RemoveAttachmentCommand");
         attachments.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attachments"));
 
         return PageScroll(
             BoundHeader("PageTitle", "Record"),
             BoundLabel("GeometrySummary", "Geometry"),
-            SectionTitle("Attributes"),
-            attributes,
+            validation,
+            SectionTitle("Fields"),
+            fields,
             SectionTitle("Attachments"),
             attachments,
             ButtonRow(
@@ -291,6 +272,114 @@ internal static class WorkflowPageContent
                 CommandButton("Add photo", "AddPhotoAttachmentCommand"),
                 CommandButton("Save", "SaveRecordCommand"),
                 CommandButton("Cancel", "CancelCommand")));
+    }
+
+    private static CollectionView FormFieldList()
+    {
+        return new CollectionView
+        {
+            EmptyView = new Label { Text = "No fields" },
+            ItemTemplate = new DataTemplate(() =>
+            {
+                var label = new Label { FontAttributes = FontAttributes.Bold };
+                label.SetBinding(Label.TextProperty, new Binding(nameof(EditableFormFieldItem.Label)));
+
+                var help = new Label { FontSize = 12, TextColor = Colors.Gray };
+                help.SetBinding(Label.TextProperty, new Binding(nameof(EditableFormFieldItem.HelpText)));
+
+                var singleLine = new Entry { Placeholder = "Value" };
+                singleLine.SetBinding(Entry.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
+                singleLine.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsSingleLineText)));
+
+                var numeric = new Entry { Placeholder = "Number", Keyboard = Keyboard.Numeric };
+                numeric.SetBinding(Entry.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
+                numeric.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsNumeric)));
+
+                var multiline = new Editor { AutoSize = EditorAutoSizeOption.TextChanges, MinimumHeightRequest = 96 };
+                multiline.SetBinding(Editor.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
+                multiline.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsMultilineText)));
+
+                var date = new DatePicker();
+                date.SetBinding(DatePicker.DateProperty, new Binding(nameof(EditableFormFieldItem.DateValue), mode: BindingMode.TwoWay));
+                date.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsDate)));
+
+                var dateTime = new HorizontalStackLayout { Spacing = 8 };
+                dateTime.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsDateTime)));
+                var datePart = new DatePicker();
+                datePart.SetBinding(DatePicker.DateProperty, new Binding(nameof(EditableFormFieldItem.DateValue), mode: BindingMode.TwoWay));
+                var timePart = new TimePicker();
+                timePart.SetBinding(TimePicker.TimeProperty, new Binding(nameof(EditableFormFieldItem.TimeValue), mode: BindingMode.TwoWay));
+                dateTime.Children.Add(datePart);
+                dateTime.Children.Add(timePart);
+
+                var yesNo = new Switch();
+                yesNo.SetBinding(Switch.IsToggledProperty, new Binding(nameof(EditableFormFieldItem.BoolValue), mode: BindingMode.TwoWay));
+                yesNo.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsYesNo)));
+
+                var choice = new Picker { ItemDisplayBinding = new Binding(nameof(FieldChoice.Label)) };
+                choice.SetBinding(Picker.ItemsSourceProperty, new Binding("Definition.Choices"));
+                choice.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(EditableFormFieldItem.SelectedChoice), mode: BindingMode.TwoWay));
+                choice.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsSingleChoice)));
+
+                var choices = new VerticalStackLayout { Spacing = 6 };
+                choices.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsMultipleChoice)));
+                choices.SetBinding(BindableLayout.ItemsSourceProperty, new Binding(nameof(EditableFormFieldItem.Choices)));
+                BindableLayout.SetItemTemplate(choices, new DataTemplate(() =>
+                {
+                    var checkbox = new CheckBox();
+                    checkbox.SetBinding(CheckBox.IsCheckedProperty, new Binding(nameof(EditableChoiceItem.IsSelected), mode: BindingMode.TwoWay));
+
+                    var choiceLabel = new Label { VerticalOptions = LayoutOptions.Center };
+                    choiceLabel.SetBinding(Label.TextProperty, new Binding(nameof(EditableChoiceItem.Label)));
+
+                    return new HorizontalStackLayout
+                    {
+                        Spacing = 8,
+                        Children = { checkbox, choiceLabel }
+                    };
+                }));
+
+                var summary = new Label { FontSize = 12, TextColor = Colors.Gray };
+                summary.SetBinding(Label.TextProperty, new Binding(nameof(EditableFormFieldItem.ValueSummary)));
+                summary.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.HasPrimaryAction)));
+
+                var action = new Button();
+                action.SetBinding(Button.TextProperty, new Binding(nameof(EditableFormFieldItem.PrimaryActionLabel)));
+                action.SetBinding(Button.CommandProperty, new Binding(nameof(EditableFormFieldItem.PrimaryActionCommand)));
+                action.SetBinding(Button.CommandParameterProperty, new Binding("."));
+                action.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.HasPrimaryAction)));
+
+                var unsupported = new Label { Text = "Unsupported field type", TextColor = Colors.DarkRed };
+                unsupported.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsUnsupported)));
+
+                var error = new Label { FontSize = 12, TextColor = Colors.DarkRed };
+                error.SetBinding(Label.TextProperty, new Binding(nameof(EditableFormFieldItem.ValidationError)));
+                error.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.HasValidationError)));
+
+                return new VerticalStackLayout
+                {
+                    Padding = new Thickness(0, 8),
+                    Spacing = 6,
+                    Children =
+                    {
+                        label,
+                        help,
+                        singleLine,
+                        numeric,
+                        multiline,
+                        date,
+                        dateTime,
+                        yesNo,
+                        choice,
+                        choices,
+                        summary,
+                        action,
+                        unsupported,
+                        error
+                    }
+                };
+            })
+        };
     }
 
     public static View CreateAuthenticationContent()

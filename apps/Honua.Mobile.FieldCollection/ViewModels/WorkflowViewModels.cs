@@ -5,7 +5,11 @@ using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Records;
+using Microsoft.Maui.Devices.Sensors;
 using StorageSyncSession = Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSession;
 using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 
@@ -30,6 +34,277 @@ public sealed partial class EditableAttributeItem : ObservableObject
 
     [ObservableProperty]
     private string valueText = string.Empty;
+}
+
+public sealed partial class EditableChoiceItem : ObservableObject
+{
+    [ObservableProperty]
+    private bool isSelected;
+
+    public string Value { get; init; } = string.Empty;
+
+    public string Label { get; init; } = string.Empty;
+
+    public event EventHandler? SelectionChanged;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+}
+
+public sealed partial class EditableFormFieldItem : ObservableObject
+{
+    private bool _suppressValueChanged;
+
+    [ObservableProperty]
+    private string textValue = string.Empty;
+
+    [ObservableProperty]
+    private bool boolValue;
+
+    [ObservableProperty]
+    private DateTime dateValue = DateTime.Today;
+
+    [ObservableProperty]
+    private TimeSpan timeValue = DateTime.Now.TimeOfDay;
+
+    [ObservableProperty]
+    private FieldChoice? selectedChoice;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasValidationError))]
+    private string? validationError;
+
+    [ObservableProperty]
+    private string valueSummary = string.Empty;
+
+    public EditableFormFieldItem(FormField definition)
+    {
+        Definition = definition;
+        ControlKind = MobileFormControlSelector.Select(definition);
+        Label = definition.Required ? $"{definition.Label} *" : definition.Label;
+        HelpText = definition.HelpText ?? string.Empty;
+        foreach (var choice in definition.Choices)
+        {
+            var item = new EditableChoiceItem
+            {
+                Value = choice.Value,
+                Label = string.IsNullOrWhiteSpace(choice.Label) ? choice.Value : choice.Label
+            };
+            item.SelectionChanged += (_, _) => RaiseValueChanged();
+            Choices.Add(item);
+        }
+    }
+
+    public FormField Definition { get; }
+
+    public MobileFormControlKind ControlKind { get; }
+
+    public string Label { get; }
+
+    public string HelpText { get; }
+
+    public ObservableCollection<EditableChoiceItem> Choices { get; } = [];
+
+    public IAsyncRelayCommand<EditableFormFieldItem>? PrimaryActionCommand { get; set; }
+
+    public string PrimaryActionLabel { get; set; } = string.Empty;
+
+    public bool HasPrimaryAction => PrimaryActionCommand != null;
+
+    public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationError);
+
+    public bool IsSingleLineText => ControlKind is MobileFormControlKind.SingleLineText or MobileFormControlKind.Barcode;
+
+    public bool IsMultilineText => ControlKind == MobileFormControlKind.MultilineText;
+
+    public bool IsNumeric => ControlKind == MobileFormControlKind.Numeric;
+
+    public bool IsDate => ControlKind == MobileFormControlKind.Date;
+
+    public bool IsDateTime => ControlKind == MobileFormControlKind.DateTime;
+
+    public bool IsYesNo => ControlKind == MobileFormControlKind.YesNo;
+
+    public bool IsSingleChoice => ControlKind is MobileFormControlKind.SingleChoice or MobileFormControlKind.Dropdown;
+
+    public bool IsMultipleChoice => ControlKind == MobileFormControlKind.MultipleChoice;
+
+    public bool IsLocation => ControlKind == MobileFormControlKind.Location;
+
+    public bool IsMedia => ControlKind is MobileFormControlKind.Photo or MobileFormControlKind.File or MobileFormControlKind.Signature;
+
+    public bool IsUnsupported => ControlKind == MobileFormControlKind.Unsupported;
+
+    public event EventHandler? ValueChanged;
+
+    public void SetValue(object? value, IReadOnlyDictionary<string, AttachmentInfo>? attachmentsById = null)
+    {
+        _suppressValueChanged = true;
+        try
+        {
+            ValidationError = null;
+
+            switch (ControlKind)
+            {
+                case MobileFormControlKind.YesNo:
+                    BoolValue = MobileFormValueConverter.TryGetBoolean(value, out var boolean) && boolean;
+                    ValueSummary = BoolValue ? "Yes" : "No";
+                    break;
+                case MobileFormControlKind.Date:
+                    DateValue = MobileFormValueConverter.TryGetDate(value, out var date) ? date : DateTime.Today;
+                    ValueSummary = DateValue.ToString("yyyy-MM-dd");
+                    break;
+                case MobileFormControlKind.DateTime:
+                    var dateTime = MobileFormValueConverter.TryGetDateTime(value, out var parsedDateTime)
+                        ? parsedDateTime
+                        : DateTime.Now;
+                    DateValue = dateTime.Date;
+                    TimeValue = dateTime.TimeOfDay;
+                    ValueSummary = dateTime.ToString("u");
+                    break;
+                case MobileFormControlKind.SingleChoice:
+                case MobileFormControlKind.Dropdown:
+                    var selectedValue = MobileFormValueConverter.ToChoiceValues(value).FirstOrDefault();
+                    SelectedChoice = Definition.Choices.FirstOrDefault(choice =>
+                        string.Equals(choice.Value, selectedValue, StringComparison.Ordinal));
+                    ValueSummary = SelectedChoice?.Label ?? SelectedChoice?.Value ?? string.Empty;
+                    break;
+                case MobileFormControlKind.MultipleChoice:
+                    var selected = MobileFormValueConverter
+                        .ToChoiceValues(value)
+                        .ToHashSet(StringComparer.Ordinal);
+                    foreach (var choice in Choices)
+                    {
+                        choice.IsSelected = selected.Contains(choice.Value);
+                    }
+
+                    ValueSummary = string.Join(", ", Choices.Where(choice => choice.IsSelected).Select(choice => choice.Label));
+                    break;
+                case MobileFormControlKind.Location:
+                    if (MobileFormValueConverter.TryGetLocation(value, out var point))
+                    {
+                        TextValue = $"{point.Latitude},{point.Longitude},{point.AccuracyMeters?.ToString() ?? string.Empty}";
+                        ValueSummary = MobileFormValueConverter.ToDisplayText(Definition, point);
+                    }
+                    else
+                    {
+                        TextValue = MobileFormValueConverter.ToDisplayText(Definition, value);
+                        ValueSummary = TextValue;
+                    }
+
+                    break;
+                case MobileFormControlKind.Photo:
+                case MobileFormControlKind.File:
+                case MobileFormControlKind.Signature:
+                    SetMediaValue(MobileFormValueConverter.ToChoiceValues(value), attachmentsById);
+                    break;
+                default:
+                    TextValue = MobileFormValueConverter.ToDisplayText(Definition, value);
+                    ValueSummary = TextValue;
+                    break;
+            }
+        }
+        finally
+        {
+            _suppressValueChanged = false;
+        }
+    }
+
+    public object? ToValue()
+    {
+        return ControlKind switch
+        {
+            MobileFormControlKind.YesNo => MobileFormValueConverter.FromBoolean(Definition, BoolValue),
+            MobileFormControlKind.Date => MobileFormValueConverter.FromDate(Definition, DateValue),
+            MobileFormControlKind.DateTime => MobileFormValueConverter.FromDateTime(Definition, DateValue, TimeValue),
+            MobileFormControlKind.SingleChoice or MobileFormControlKind.Dropdown => SelectedChoice?.Value,
+            MobileFormControlKind.MultipleChoice => MobileFormValueConverter.FromChoiceValues(
+                Definition,
+                Choices.Where(choice => choice.IsSelected).Select(choice => choice.Value)),
+            MobileFormControlKind.Location => MobileFormValueConverter.NormalizeValue(Definition, TextValue),
+            MobileFormControlKind.Photo or MobileFormControlKind.File or MobileFormControlKind.Signature
+                => MobileFormValueConverter.ToChoiceValues(TextValue).ToArray(),
+            _ => MobileFormValueConverter.FromText(Definition, TextValue)
+        };
+    }
+
+    public void SetLocation(Location location)
+    {
+        var value = MobileFormValueConverter.FromLocation(
+            location.Latitude,
+            location.Longitude,
+            location.Accuracy);
+        SetValue(value);
+        RaiseValueChanged();
+    }
+
+    public void AddMediaAttachment(AttachmentInfo attachment)
+    {
+        var ids = MobileFormValueConverter.ToChoiceValues(TextValue).ToList();
+        if (!ids.Contains(attachment.Id, StringComparer.Ordinal))
+        {
+            ids.Add(attachment.Id);
+        }
+
+        SetMediaValue(ids, new Dictionary<string, AttachmentInfo>(StringComparer.Ordinal)
+        {
+            [attachment.Id] = attachment
+        });
+        RaiseValueChanged();
+    }
+
+    partial void OnTextValueChanged(string value)
+    {
+        ValueSummary = value;
+        RaiseValueChanged();
+    }
+
+    partial void OnBoolValueChanged(bool value)
+    {
+        ValueSummary = value ? "Yes" : "No";
+        RaiseValueChanged();
+    }
+
+    partial void OnDateValueChanged(DateTime value)
+    {
+        ValueSummary = ControlKind == MobileFormControlKind.DateTime
+            ? value.Date.Add(TimeValue).ToString("u")
+            : value.ToString("yyyy-MM-dd");
+        RaiseValueChanged();
+    }
+
+    partial void OnTimeValueChanged(TimeSpan value)
+    {
+        ValueSummary = DateValue.Date.Add(value).ToString("u");
+        RaiseValueChanged();
+    }
+
+    partial void OnSelectedChoiceChanged(FieldChoice? value)
+    {
+        ValueSummary = value?.Label ?? value?.Value ?? string.Empty;
+        RaiseValueChanged();
+    }
+
+    private void SetMediaValue(IReadOnlyList<string> attachmentIds, IReadOnlyDictionary<string, AttachmentInfo>? attachmentsById)
+    {
+        TextValue = string.Join(",", attachmentIds);
+        var names = attachmentIds
+            .Select(id => attachmentsById != null && attachmentsById.TryGetValue(id, out var attachment)
+                ? attachment.FileName
+                : id)
+            .ToArray();
+        ValueSummary = names.Length == 0 ? string.Empty : string.Join(", ", names);
+    }
+
+    private void RaiseValueChanged()
+    {
+        if (!_suppressValueChanged)
+        {
+            ValueChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 }
 
 public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
@@ -210,6 +485,11 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 {
     private readonly IFeatureService _featureService;
     private readonly IAttachmentService _attachmentService;
+    private readonly IFormService _formService;
+    private readonly IFormDraftService _formDraftService;
+    private readonly ILocationService _locationService;
+    private bool _isLoadingForm;
+    private FormDefinition? _formDefinition;
 
     [ObservableProperty]
     private int layerId = 1;
@@ -226,20 +506,33 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     [ObservableProperty]
     private string geometrySummary = "No geometry";
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasValidationSummary))]
+    private string validationSummary = string.Empty;
+
+    public bool HasValidationSummary => !string.IsNullOrWhiteSpace(ValidationSummary);
+
     private FieldPoint? _location;
     private Feature? _existingFeature;
 
     public ObservableCollection<EditableAttributeItem> Attributes { get; } = [];
+    public ObservableCollection<EditableFormFieldItem> FormFields { get; } = [];
     public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
 
     public RecordEditViewModel(
         INavigationService navigationService,
         IFeatureService featureService,
-        IAttachmentService attachmentService)
+        IAttachmentService attachmentService,
+        IFormService formService,
+        IFormDraftService formDraftService,
+        ILocationService locationService)
         : base(navigationService)
     {
         _featureService = featureService;
         _attachmentService = attachmentService;
+        _formService = formService;
+        _formDraftService = formDraftService;
+        _locationService = locationService;
         Title = "Create Record";
     }
 
@@ -263,39 +556,70 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     {
         await ExecuteAsync(async () =>
         {
-            Attributes.Clear();
-            Attachments.Clear();
-            PageTitle = IsNew ? "Create Record" : "Edit Record";
-            Title = PageTitle;
-
-            if (IsNew && string.IsNullOrWhiteSpace(FeatureId))
+            _isLoadingForm = true;
+            try
             {
-                FeatureId = Guid.NewGuid().ToString("N");
-            }
-
-            if (!IsNew && !string.IsNullOrWhiteSpace(FeatureId))
-            {
-                _existingFeature = await _featureService.GetFeatureAsync(LayerId, FeatureId);
-            }
-
-            var source = _existingFeature?.Attributes ?? CreateDefaultAttributes();
-            foreach (var attribute in source.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                Attributes.Add(new EditableAttributeItem
+                Attributes.Clear();
+                foreach (var field in FormFields)
                 {
-                    Key = attribute.Key,
-                    ValueText = RecordDetailViewModel.FormatValue(attribute.Value)
-                });
-            }
-
-            GeometrySummary = FormatGeometry(_existingFeature?.Geometry ?? _location);
-
-            if (!string.IsNullOrWhiteSpace(FeatureId))
-            {
-                foreach (var attachment in await _attachmentService.GetAttachmentsAsync(FeatureId))
-                {
-                    Attachments.Add(attachment);
+                    field.ValueChanged -= OnFormFieldValueChanged;
                 }
+
+                FormFields.Clear();
+                Attachments.Clear();
+                ValidationSummary = string.Empty;
+                PageTitle = IsNew ? "Create Record" : "Edit Record";
+                Title = PageTitle;
+
+                if (IsNew && string.IsNullOrWhiteSpace(FeatureId))
+                {
+                    FeatureId = Guid.NewGuid().ToString("N");
+                }
+
+                if (!IsNew && !string.IsNullOrWhiteSpace(FeatureId))
+                {
+                    _existingFeature = await _featureService.GetFeatureAsync(LayerId, FeatureId);
+                }
+
+                var source = _existingFeature?.Attributes ?? CreateDefaultAttributes();
+                var draft = string.IsNullOrWhiteSpace(FeatureId)
+                    ? null
+                    : await _formDraftService.GetDraftAsync(LayerId, FeatureId);
+                if (draft?.Values.Count > 0)
+                {
+                    source = new Dictionary<string, object?>(source, StringComparer.OrdinalIgnoreCase);
+                    foreach (var value in draft.Values)
+                    {
+                        source[value.Key] = value.Value;
+                    }
+                }
+
+                foreach (var attribute in source.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    Attributes.Add(new EditableAttributeItem
+                    {
+                        Key = attribute.Key,
+                        ValueText = RecordDetailViewModel.FormatValue(attribute.Value)
+                    });
+                }
+
+                GeometrySummary = FormatGeometry(_existingFeature?.Geometry ?? _location);
+
+                if (!string.IsNullOrWhiteSpace(FeatureId))
+                {
+                    foreach (var attachment in await _attachmentService.GetAttachmentsAsync(FeatureId))
+                    {
+                        Attachments.Add(attachment);
+                    }
+                }
+
+                _formDefinition = await _formService.GetFormDefinitionAsync(LayerId)
+                    ?? CreateAdHocFormDefinition(LayerId, source);
+                LoadFormFields(_formDefinition, source);
+            }
+            finally
+            {
+                _isLoadingForm = false;
             }
         });
     }
@@ -309,6 +633,17 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             Key = $"field_{index}",
             ValueText = string.Empty
         });
+
+        if (_formDefinition != null)
+        {
+            var field = new FormField
+            {
+                FieldId = $"field_{index}",
+                Label = $"Field {index}",
+                Type = FormFieldType.Text
+            };
+            AddFormField(field, null);
+        }
     }
 
     [RelayCommand]
@@ -351,6 +686,71 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     }
 
     [RelayCommand]
+    private async Task CaptureFormFieldLocation(EditableFormFieldItem field)
+    {
+        await ExecuteAsync(async () =>
+        {
+            var location = await _locationService.GetCurrentLocationAsync();
+            if (location == null)
+            {
+                await ShowError("Location Unavailable", "Unable to determine current location.");
+                return;
+            }
+
+            field.SetLocation(location);
+            await SaveDraftSnapshotAsync();
+        });
+    }
+
+    [RelayCommand]
+    private async Task CaptureFormFieldAttachment(EditableFormFieldItem field)
+    {
+        Microsoft.Maui.Storage.FileResult? file = null;
+        var payloadKind = field.ControlKind switch
+        {
+            MobileFormControlKind.Photo => AttachmentPayloadKind.Photo,
+            MobileFormControlKind.Signature => AttachmentPayloadKind.Signature,
+            _ => AttachmentPayloadKind.File
+        };
+
+        if (payloadKind == AttachmentPayloadKind.Photo && Microsoft.Maui.Media.MediaPicker.Default.IsCaptureSupported)
+        {
+            file = await Microsoft.Maui.Media.MediaPicker.Default.CapturePhotoAsync();
+        }
+
+        file ??= payloadKind switch
+        {
+            AttachmentPayloadKind.Photo => await Microsoft.Maui.Storage.FilePicker.Default.PickAsync(
+                new Microsoft.Maui.Storage.PickOptions { FileTypes = Microsoft.Maui.Storage.FilePickerFileType.Images }),
+            _ => await Microsoft.Maui.Storage.FilePicker.Default.PickAsync()
+        };
+
+        if (file == null)
+        {
+            return;
+        }
+
+        await AddAttachmentFromFileResultAsync(file, payloadKind, field);
+    }
+
+    [RelayCommand]
+    private async Task CaptureBarcode(EditableFormFieldItem field)
+    {
+        var value = await NavigationService.DisplayPromptAsync(
+            "Barcode / QR",
+            "Enter scanned code",
+            placeholder: "Code",
+            initialValue: field.TextValue);
+        if (value == null)
+        {
+            return;
+        }
+
+        field.TextValue = value;
+        await SaveDraftSnapshotAsync();
+    }
+
+    [RelayCommand]
     private async Task RemoveAttachment(AttachmentInfo attachment)
     {
         await ExecuteAsync(async () =>
@@ -362,7 +762,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
     private async Task AddAttachmentFromFileResultAsync(
         Microsoft.Maui.Storage.FileResult file,
-        AttachmentPayloadKind payloadKind)
+        AttachmentPayloadKind payloadKind,
+        EditableFormFieldItem? ownerField = null)
     {
         await ExecuteAsync(async () =>
         {
@@ -380,8 +781,11 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 string.IsNullOrWhiteSpace(file.ContentType)
                     ? "application/octet-stream"
                     : file.ContentType,
-                payloadKind);
+                payloadKind,
+                ownerField?.Definition.FieldId);
             Attachments.Add(attachment);
+            ownerField?.AddMediaAttachment(attachment);
+            await SaveDraftSnapshotAsync();
         });
     }
 
@@ -398,13 +802,20 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             };
 
             feature.LayerId = LayerId;
-            feature.Attributes = Attributes
-                .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Key))
-                .GroupBy(attribute => attribute.Key.Trim(), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    group => group.Key,
-                    group => ParseAttributeValue(group.Last().ValueText),
-                    StringComparer.OrdinalIgnoreCase);
+            var values = BuildFormValues();
+            if (_formDefinition != null)
+            {
+                var formData = BuildFormData(values);
+                var valid = await _formService.ValidateFormAsync(formData, _formDefinition);
+                ApplyValidationErrors(formData.ValidationErrors);
+                if (!valid)
+                {
+                    ValidationSummary = $"Fix {formData.ValidationErrors.Count} field error(s) before saving.";
+                    return;
+                }
+            }
+
+            feature.Attributes = values;
 
             if (IsNew)
             {
@@ -417,6 +828,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
             FeatureId = feature.Id;
             IsNew = false;
+            await _formDraftService.DeleteDraftAsync(LayerId, FeatureId);
             await NavigationService.NavigateToAsync(
                 "record-detail",
                 new Dictionary<string, object>
@@ -436,9 +848,177 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             {
                 await _attachmentService.DeleteAttachmentAsync(attachment.Id);
             }
+
+            await _formDraftService.DeleteDraftAsync(LayerId, FeatureId);
         }
 
         await NavigationService.GoBackAsync();
+    }
+
+    private void LoadFormFields(FormDefinition formDefinition, IReadOnlyDictionary<string, object?> values)
+    {
+        var attachmentsById = Attachments.ToDictionary(attachment => attachment.Id, StringComparer.Ordinal);
+        foreach (var field in formDefinition.Sections.SelectMany(section => section.Fields))
+        {
+            values.TryGetValue(field.FieldId, out var value);
+            AddFormField(field, value, attachmentsById);
+        }
+    }
+
+    private void AddFormField(
+        FormField field,
+        object? value,
+        IReadOnlyDictionary<string, AttachmentInfo>? attachmentsById = null)
+    {
+        var item = new EditableFormFieldItem(field)
+        {
+            PrimaryActionCommand = field.Type switch
+            {
+                FormFieldType.Location => CaptureFormFieldLocationCommand,
+                FormFieldType.Photo or FormFieldType.File or FormFieldType.Signature => CaptureFormFieldAttachmentCommand,
+                FormFieldType.Barcode => CaptureBarcodeCommand,
+                _ => null
+            },
+            PrimaryActionLabel = field.Type switch
+            {
+                FormFieldType.Location => "Use current location",
+                FormFieldType.Photo => "Add photo",
+                FormFieldType.Signature => "Add signature",
+                FormFieldType.File => "Add file",
+                FormFieldType.Barcode => "Scan or enter code",
+                _ => string.Empty
+            }
+        };
+        item.SetValue(value, attachmentsById);
+        item.ValueChanged += OnFormFieldValueChanged;
+        FormFields.Add(item);
+    }
+
+    private void OnFormFieldValueChanged(object? sender, EventArgs e)
+    {
+        if (_isLoadingForm)
+        {
+            return;
+        }
+
+        ValidationSummary = string.Empty;
+        if (sender is EditableFormFieldItem item)
+        {
+            item.ValidationError = null;
+        }
+
+        _ = SaveDraftSnapshotAsync();
+    }
+
+    private async Task SaveDraftSnapshotAsync()
+    {
+        if (_isLoadingForm || string.IsNullOrWhiteSpace(FeatureId))
+        {
+            return;
+        }
+
+        await _formDraftService.SaveDraftAsync(new FormDraftSnapshot
+        {
+            LayerId = LayerId,
+            FeatureId = FeatureId,
+            FormId = _formDefinition?.FormId,
+            Values = BuildFormValues()
+        });
+    }
+
+    private Dictionary<string, object?> BuildFormValues()
+    {
+        if (FormFields.Count == 0)
+        {
+            return Attributes
+                .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Key))
+                .GroupBy(attribute => attribute.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => ParseAttributeValue(group.Last().ValueText),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        return FormFields
+            .Where(field => !string.IsNullOrWhiteSpace(field.Definition.FieldId))
+            .ToDictionary(
+                field => field.Definition.FieldId,
+                field => field.ToValue(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private FormData BuildFormData(Dictionary<string, object?> values)
+    {
+        var fields = FormFields.Select(field => field.Definition).ToArray();
+        var attachmentsById = Attachments.ToDictionary(attachment => attachment.Id, StringComparer.Ordinal);
+        var location = fields
+            .Where(field => field.Type == FormFieldType.Location)
+            .Select(field => values.TryGetValue(field.FieldId, out var value) &&
+                MobileFormValueConverter.TryGetLocation(value, out var point)
+                    ? point
+                    : (FieldGeoPoint?)null)
+            .FirstOrDefault(point => point != null);
+
+        return new FormData
+        {
+            LayerId = LayerId,
+            FeatureId = FeatureId,
+            Values = values,
+            Media = MobileFormValueConverter.BuildMediaAttachments(fields, values, attachmentsById).ToList(),
+            Location = location,
+            CreatedAt = _existingFeature?.CreatedAt ?? DateTime.UtcNow
+        };
+    }
+
+    private void ApplyValidationErrors(IReadOnlyDictionary<string, string> errors)
+    {
+        foreach (var field in FormFields)
+        {
+            field.ValidationError = errors.TryGetValue(field.Definition.FieldId, out var error)
+                ? error
+                : null;
+        }
+
+        ValidationSummary = errors.Count == 0
+            ? string.Empty
+            : $"Fix {errors.Count} field error(s) before saving.";
+    }
+
+    private static FormDefinition CreateAdHocFormDefinition(int layerId, IReadOnlyDictionary<string, object?> source)
+    {
+        return new FormDefinition
+        {
+            FormId = $"layer-{layerId}:ad-hoc",
+            Name = $"Layer {layerId}",
+            Sections =
+            [
+                new FormSection
+                {
+                    SectionId = "attributes",
+                    Label = "Attributes",
+                    Fields = source
+                        .OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(attribute => new FormField
+                        {
+                            FieldId = attribute.Key,
+                            Label = attribute.Key,
+                            Type = InferAdHocFieldType(attribute.Value)
+                        })
+                        .ToList()
+                }
+            ]
+        };
+    }
+
+    private static FormFieldType InferAdHocFieldType(object? value)
+    {
+        return value switch
+        {
+            bool => FormFieldType.YesNo,
+            byte or short or int or long or float or double or decimal => FormFieldType.Numeric,
+            DateTime or DateTimeOffset => FormFieldType.DateTime,
+            _ => FormFieldType.Text
+        };
     }
 
     private static Dictionary<string, object?> CreateDefaultAttributes() =>
