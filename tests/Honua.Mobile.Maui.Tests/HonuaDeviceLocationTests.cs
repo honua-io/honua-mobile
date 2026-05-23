@@ -363,6 +363,36 @@ public sealed class HonuaDeviceLocationTests
     }
 
     [Fact]
+    public async Task SdkGeofenceWorkflowController_StartAsync_MergesCaseCollidingRequestMetadata()
+    {
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            geofenceMonitor: monitor);
+        var controller = new HonuaSdkGeofenceWorkflowController(
+            coordinator,
+            new HonuaBackgroundLocationLifecycleController(coordinator),
+            []);
+
+        await controller.StartAsync(new HonuaSdkGeofenceWorkflowRequest
+        {
+            Definitions = [CreateSdkGeofenceDefinition()],
+            Metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["workflow"] = "initial",
+                ["Workflow"] = "case-override",
+            },
+        });
+
+        var region = monitor.Requests.Single().Regions.Single();
+        Assert.Equal("case-override", region.Metadata["workflow"]);
+    }
+
+    [Fact]
     public async Task SdkGeofenceWorkflowController_PublishesNativeTransitionsToWorkflowAndSyncSinks()
     {
         var monitor = new RecordingGeofenceMonitor();

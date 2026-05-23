@@ -432,23 +432,16 @@ public sealed class HonuaSdkGeofenceWorkflowController : IDisposable, IAsyncDisp
         SdkGeofenceDefinition definition,
         string regionId)
     {
-        var metadata = new Dictionary<string, object?>(request.Metadata, StringComparer.OrdinalIgnoreCase)
-        {
-            ["honua.sdk.geofence_id"] = definition.GeofenceId,
-            ["honua.native.region_id"] = regionId,
-        };
+        var metadata = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        MergeMetadata(metadata, request.Metadata);
+
+        metadata["honua.sdk.geofence_id"] = definition.GeofenceId;
+        metadata["honua.native.region_id"] = regionId;
 
         AddMetadata(metadata, "honua.sdk.source_id", definition.Source?.Id);
         AddMetadata(metadata, "honua.sdk.source_protocol", definition.Source?.Protocol);
         AddMetadata(metadata, "honua.sdk.source_query_where", definition.SourceQuery?.Where);
-
-        foreach (var item in definition.Metadata)
-        {
-            if (!string.IsNullOrWhiteSpace(item.Key))
-            {
-                metadata[item.Key] = item.Value;
-            }
-        }
+        MergeMetadata(metadata, definition.Metadata);
 
         return metadata;
     }
@@ -475,6 +468,19 @@ public sealed class HonuaSdkGeofenceWorkflowController : IDisposable, IAsyncDisp
         }
 
         return metadata;
+    }
+
+    private static void MergeMetadata<TValue>(
+        IDictionary<string, object?> metadata,
+        IEnumerable<KeyValuePair<string, TValue>> source)
+    {
+        foreach (var item in source)
+        {
+            if (!string.IsNullOrWhiteSpace(item.Key))
+            {
+                metadata[item.Key] = item.Value;
+            }
+        }
     }
 
     private static void AddMetadata(IDictionary<string, object?> metadata, string key, object? value)
