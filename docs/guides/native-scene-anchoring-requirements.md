@@ -52,6 +52,19 @@ may capture evidence, and `PrecisionInspection` requires survey-quality source
 data, enough confirmed control points, and a calibration residual under the
 configured threshold.
 
+`HonuaNativeArFieldWorkflow` is the first shared MAUI field workflow shell for
+[#225](https://github.com/honua-io/honua-mobile/issues/225). It wraps the
+anchoring controller with field record context, offline package behavior,
+user-visible degraded states, and evidence attachment helpers. The workflow can
+attach AR metadata to mobile photos, annotations, or report metadata under the
+mobile-owned `honua.arEvidence` key while keeping SDK field attachments free of
+host-local paths and AR-specific contracts.
+
+The workflow is not a platform-native AR renderer by itself. Apps still need to
+register an `IHonuaNativeArSceneAnchorAdapter` backed by ARCore or ARKit, plus
+the field UI that renders the user-visible state. Physical-device validation is
+still required before this workstream is treated as GA complete.
+
 ## Target Prototype
 
 | Decision | Requirement |
@@ -238,6 +251,16 @@ pass this checklist on physical devices:
   language.
 - Two-device validation covers at least one iOS ARKit target and one Android
   ARCore target before the workflow is promoted beyond prototype.
+
+For the shared field workflow shell, automated tests must cover:
+
+- Field context, scene id, scene revision, package id, and package state are
+  carried into the user-visible workflow state.
+- Offline package failures produce blocked/degraded UX text rather than silent
+  fallback.
+- AR evidence metadata can be attached to mobile photos, annotations, and report
+  metadata.
+- SDK field attachment conversion strips mobile-only evidence and local paths.
 
 ## Platform References
 
