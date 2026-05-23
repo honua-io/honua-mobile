@@ -461,16 +461,25 @@ internal static class WorkflowPageContent
 
     public static View CreateDiagnosticsContent()
     {
+        var health = BoundLabel("HealthStatus", "Health");
         var summary = BoundMultilineLabel("Summary");
+        var actions = BoundMultilineLabel("SupportActions");
         var exportPath = BoundLabel("ExportPath", "Export");
+        var reportStatus = BoundLabel("ReportStatus", "Report");
 
         return PageScroll(
             SectionTitle("Diagnostics"),
+            health,
             summary,
+            SectionTitle("Support actions"),
+            actions,
             exportPath,
+            reportStatus,
             ButtonRow(
                 CommandButton("Refresh", "LoadDiagnosticsCommand"),
                 CommandButton("Export", "ExportDiagnosticsCommand"),
+                CommandButton("Copy", "CopyDiagnosticsCommand"),
+                CommandButton("Report", "ReportDiagnosticsCommand"),
                 CommandButton("Compact", "CompactDatabaseCommand")));
     }
 

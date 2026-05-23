@@ -1476,7 +1476,16 @@ public sealed partial class DiagnosticsViewModel : BaseViewModel, IRouteAwareVie
     private string summary = "Diagnostics not loaded";
 
     [ObservableProperty]
+    private string healthStatus = "Unknown";
+
+    [ObservableProperty]
+    private string supportActions = string.Empty;
+
+    [ObservableProperty]
     private string exportPath = string.Empty;
+
+    [ObservableProperty]
+    private string reportStatus = string.Empty;
 
     public DiagnosticsViewModel(INavigationService navigationService, DiagnosticService diagnosticService)
         : base(navigationService)
@@ -1507,6 +1516,26 @@ public sealed partial class DiagnosticsViewModel : BaseViewModel, IRouteAwareVie
     }
 
     [RelayCommand]
+    private async Task CopyDiagnostics()
+    {
+        await ExecuteAsync(async () =>
+        {
+            await _diagnosticService.CopyDiagnosticsAsync();
+            ReportStatus = "Sanitized diagnostics copied";
+        });
+    }
+
+    [RelayCommand]
+    private async Task ReportDiagnostics()
+    {
+        await ExecuteAsync(async () =>
+        {
+            await _diagnosticService.ReportDiagnosticsAsync();
+            ReportStatus = "Sanitized diagnostics report queued";
+        });
+    }
+
+    [RelayCommand]
     private async Task CompactDatabase()
     {
         await ExecuteAsync(async () =>
@@ -1520,17 +1549,9 @@ public sealed partial class DiagnosticsViewModel : BaseViewModel, IRouteAwareVie
     private async Task UpdateSummaryAsync()
     {
         var report = await _diagnosticService.GenerateDiagnosticReportAsync();
-        Summary =
-            $"App {report.AppVersion}\n" +
-            $"Platform {report.System.Platform}\n" +
-            $"Online {report.Connectivity.IsConnected}\n" +
-            $"Remote sync configured {report.Sync.IsRemoteSyncConfigured}\n" +
-            $"Pending changes {report.Sync.PendingChanges}\n" +
-            $"Pending attachments {report.OfflineCache.Operations.AttachmentPendingCount}\n" +
-            $"Attachment failures {report.OfflineCache.Operations.AttachmentFailedCount}\n" +
-            $"Conflicts {report.Sync.ConflictCount}\n" +
-            $"Database {report.Database.DatabaseSize}\n" +
-            $"Offline cache {report.OfflineCache.PackageSizeDisplay}";
+        HealthStatus = $"{report.FieldDevice.HealthStatus}: {report.FieldDevice.HealthReason}";
+        SupportActions = report.FieldDevice.SupportActionsText;
+        Summary = report.FieldDevice.SummaryText;
     }
 }
 
