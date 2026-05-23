@@ -31,6 +31,28 @@ public sealed class DiagnosticRedactorTests
     }
 
     [Fact]
+    public void RedactJson_RedactsAiCapturePayloadAndBiometricFields()
+    {
+        var redacted = DiagnosticRedactor.RedactJson(
+            """
+            {
+              "voiceTranscript": "replace pump seal",
+              "rawMediaPayload": "base64-photo",
+              "localPath": "/private/mobile/photo.jpg",
+              "faceEmbedding": "biometric-vector",
+              "safeStatus": "queued"
+            }
+            """);
+
+        Assert.Contains("queued", redacted);
+        Assert.Contains("[redacted]", redacted);
+        Assert.DoesNotContain("replace pump seal", redacted);
+        Assert.DoesNotContain("base64-photo", redacted);
+        Assert.DoesNotContain("/private/mobile/photo.jpg", redacted);
+        Assert.DoesNotContain("biometric-vector", redacted);
+    }
+
+    [Fact]
     public void RedactSensitiveText_RedactsBearerAndTokenPairs()
     {
         var redacted = DiagnosticRedactor.RedactSensitiveText(

@@ -1,6 +1,7 @@
 using Microsoft.Maui.Devices.Sensors;
 using System.Globalization;
 using System.Text.Json;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Field.Records;
 
@@ -211,11 +212,23 @@ public class AttachmentInfo
     public string? Description { get; set; }
     public FieldLocationCaptureEvidence? CaptureLocation { get; set; }
     public string? ThumbnailUrl { get; set; }
+    public MobileAiMediaState? AiMediaState { get; set; }
     public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
     public int RetryCount { get; set; }
     public string? LastError { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
+
+    public string StatusSummary
+    {
+        get
+        {
+            var aiSummary = AiMediaState?.Summary;
+            return string.IsNullOrWhiteSpace(aiSummary)
+                ? SyncStatus.ToString()
+                : $"{SyncStatus} - {aiSummary}";
+        }
+    }
 }
 
 public enum AttachmentSyncStatus

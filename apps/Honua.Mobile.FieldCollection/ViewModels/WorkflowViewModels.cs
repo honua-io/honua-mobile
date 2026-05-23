@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Forms;
@@ -69,6 +70,31 @@ public sealed partial class EditableRepeatSectionItem : ObservableObject
     public ICommand? AddCommand { get; init; }
 
     public ICommand? RemoveCommand { get; init; }
+}
+
+public sealed partial class MobileAiFieldSuggestionItem : ObservableObject
+{
+    [ObservableProperty]
+    private bool isSelected = true;
+
+    public required MobileAiFieldSuggestion Suggestion { get; init; }
+
+    public required string Label { get; init; }
+
+    public string ValueText => RecordDetailViewModel.FormatValue(Suggestion.SuggestedValue);
+
+    public string DetailText
+    {
+        get
+        {
+            var confidence = Suggestion.Confidence.HasValue
+                ? $" ({Suggestion.Confidence.Value:P0})"
+                : string.Empty;
+            return string.IsNullOrWhiteSpace(Suggestion.Reason)
+                ? $"AI suggestion{confidence}"
+                : $"{Suggestion.Reason}{confidence}";
+        }
+    }
 }
 
 public sealed partial class EditableFormFieldItem : ObservableObject
@@ -560,6 +586,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     private readonly IFormService _formService;
     private readonly IFormDraftService _formDraftService;
     private readonly ILocationService _locationService;
+    private readonly IMobileAiCaptureService _aiCaptureService;
     private bool _isLoadingForm;
     private FormDefinition? _formDefinition;
     private readonly Dictionary<string, int> _repeatSectionCounts = new(StringComparer.Ordinal);
@@ -585,6 +612,15 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
     public bool HasValidationSummary => !string.IsNullOrWhiteSpace(ValidationSummary);
 
+    [ObservableProperty]
+    private bool aiAssistanceEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAiCaptureSummary))]
+    private string aiCaptureSummary = string.Empty;
+
+    public bool HasAiCaptureSummary => !string.IsNullOrWhiteSpace(AiCaptureSummary);
+
     private FieldPoint? _location;
     private string? _captureSource;
     private DateTime? _capturedAtUtc;
@@ -600,6 +636,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     public ObservableCollection<EditableFormFieldItem> FormFields { get; } = [];
     public ObservableCollection<EditableRepeatSectionItem> RepeatSections { get; } = [];
     public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
+    public ObservableCollection<MobileAiFieldSuggestionItem> AiSuggestions { get; } = [];
 
     public RecordEditViewModel(
         INavigationService navigationService,
@@ -607,7 +644,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         IAttachmentService attachmentService,
         IFormService formService,
         IFormDraftService formDraftService,
-        ILocationService locationService)
+        ILocationService locationService,
+        IMobileAiCaptureService aiCaptureService)
         : base(navigationService)
     {
         _featureService = featureService;
@@ -615,6 +653,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         _formService = formService;
         _formDraftService = formDraftService;
         _locationService = locationService;
+        _aiCaptureService = aiCaptureService;
         Title = "Create Record";
     }
 
@@ -655,10 +694,12 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 FormFields.Clear();
                 RepeatSections.Clear();
                 Attachments.Clear();
+                AiSuggestions.Clear();
                 _repeatSectionCounts.Clear();
                 _locationEvidenceByField.Clear();
                 _supplementalFormValues.Clear();
                 ValidationSummary = string.Empty;
+                AiCaptureSummary = string.Empty;
                 PageTitle = IsNew ? "Create Record" : "Edit Record";
                 Title = PageTitle;
 
@@ -860,6 +901,92 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     }
 
     [RelayCommand]
+    private async Task RequestAiSuggestions()
+    {
+        if (_formDefinition == null)
+        {
+            return;
+        }
+
+        if (!AiAssistanceEnabled)
+        {
+            var enabled = await ShowConfirmation(
+                "AI assistance",
+                "Allow AI assistance for this draft? Field values and attachment metadata may be sent to the configured provider; raw media stays local unless the host provider explicitly uses local files.",
+                "Allow",
+                "Cancel");
+            if (!enabled)
+            {
+                AiCaptureSummary = "AI assistance not enabled.";
+                return;
+            }
+
+            AiAssistanceEnabled = true;
+        }
+
+        await ExecuteAsync(async () =>
+        {
+            await RefreshAiMediaStatesAsync();
+
+            var result = await _aiCaptureService.RequestFieldSuggestionsAsync(BuildAiCaptureRequest());
+            AiSuggestions.Clear();
+            foreach (var suggestion in result.Suggestions)
+            {
+                AiSuggestions.Add(new MobileAiFieldSuggestionItem
+                {
+                    Suggestion = suggestion,
+                    Label = GetFieldLabel(suggestion.TargetKey)
+                });
+            }
+
+            AiCaptureSummary = result.Status switch
+            {
+                MobileAiCaptureStatus.Completed => AiSuggestions.Count == 0
+                    ? "AI returned no field suggestions."
+                    : $"{AiSuggestions.Count} AI suggestion(s) ready.",
+                MobileAiCaptureStatus.Queued => "AI suggestions queued until a provider is available.",
+                MobileAiCaptureStatus.Disabled => "AI assistance is disabled.",
+                MobileAiCaptureStatus.Unavailable => "No AI provider is available.",
+                _ => result.Message ?? "AI assistance failed."
+            };
+        });
+    }
+
+    [RelayCommand]
+    private async Task ApplyAiSuggestions()
+    {
+        var selected = AiSuggestions.Where(item => item.IsSelected).ToArray();
+        if (selected.Length == 0)
+        {
+            AiCaptureSummary = "No AI suggestions selected.";
+            return;
+        }
+
+        foreach (var item in selected)
+        {
+            var field = FormFields.FirstOrDefault(field =>
+                string.Equals(field.ValueKey, item.Suggestion.TargetKey, StringComparison.OrdinalIgnoreCase));
+            field?.SetValue(item.Suggestion.SuggestedValue);
+        }
+
+        AiSuggestions.Clear();
+        AiCaptureSummary = $"Applied {selected.Length} AI suggestion(s).";
+        RefreshFormRules();
+        await SaveDraftSnapshotAsync();
+    }
+
+    [RelayCommand]
+    private Task RejectAiSuggestions()
+    {
+        var count = AiSuggestions.Count;
+        AiSuggestions.Clear();
+        AiCaptureSummary = count == 0
+            ? "No AI suggestions to reject."
+            : $"Rejected {count} AI suggestion(s).";
+        return Task.CompletedTask;
+    }
+
+    [RelayCommand]
     private async Task AddRepeatEntry(EditableRepeatSectionItem section)
     {
         if (_formDefinition == null || string.IsNullOrWhiteSpace(section.SectionId))
@@ -935,10 +1062,59 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 payloadKind,
                 ownerField?.Definition.FieldId,
                 captureLocation);
+            attachment.AiMediaState = await RequestAttachmentAiStateAsync(attachment);
+            if (attachment.AiMediaState is not null)
+            {
+                await _attachmentService.UpdateAttachmentAiStateAsync(attachment.Id, attachment.AiMediaState);
+            }
+
             Attachments.Add(attachment);
             ownerField?.AddMediaAttachment(attachment);
             await SaveDraftSnapshotAsync();
         });
+    }
+
+    private async Task<MobileAiMediaState?> RequestAttachmentAiStateAsync(AttachmentInfo attachment)
+    {
+        if (!AiAssistanceEnabled || attachment.PayloadKind != AttachmentPayloadKind.Photo)
+        {
+            return null;
+        }
+
+        return await _aiCaptureService.RequestMediaEnrichmentAsync(new MobileAiMediaRequest
+        {
+            Policy = CreateAiCapturePolicy(),
+            LayerId = LayerId,
+            FeatureId = FeatureId,
+            Attachment = MobileAiAttachmentDescriptor.FromAttachment(attachment)
+        });
+    }
+
+    private async Task RefreshAiMediaStatesAsync()
+    {
+        foreach (var attachment in Attachments.Where(ShouldRequestAiMediaState).ToArray())
+        {
+            var state = await RequestAttachmentAiStateAsync(attachment);
+            if (state is null)
+            {
+                continue;
+            }
+
+            attachment.AiMediaState = state;
+            await _attachmentService.UpdateAttachmentAiStateAsync(attachment.Id, state);
+        }
+    }
+
+    private static bool ShouldRequestAiMediaState(AttachmentInfo attachment)
+    {
+        if (attachment.PayloadKind != AttachmentPayloadKind.Photo)
+        {
+            return false;
+        }
+
+        return attachment.AiMediaState is null ||
+            (attachment.AiMediaState.RedactionStatus == MobileAiMediaProcessingStatus.NotRequested &&
+                attachment.AiMediaState.EnrichmentStatus == MobileAiMediaProcessingStatus.NotRequested);
     }
 
     [RelayCommand]
@@ -1199,6 +1375,62 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         });
     }
 
+    private MobileAiCaptureRequest BuildAiCaptureRequest()
+    {
+        var fields = FormFields
+            .Where(field => field.IsVisible && field.IsEditable && !string.IsNullOrWhiteSpace(field.ValueKey))
+            .Select(field => new MobileAiFormFieldDescriptor
+            {
+                TargetKey = field.ValueKey,
+                FieldId = field.Definition.FieldId,
+                Label = field.Label,
+                FieldType = field.Definition.Type,
+                IsRequired = field.Definition.Required,
+                Choices = field.Definition.Choices
+                    .Select(choice => choice.Value)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .ToArray()
+            })
+            .ToArray();
+
+        var attachments = Attachments
+            .Select(MobileAiAttachmentDescriptor.FromAttachment)
+            .ToArray();
+
+        return new MobileAiCaptureRequest
+        {
+            Policy = CreateAiCapturePolicy(),
+            LayerId = LayerId,
+            FeatureId = FeatureId,
+            FormId = _formDefinition?.FormId,
+            CurrentValues = BuildFormValues(includeHidden: false),
+            Fields = fields,
+            Attachments = attachments,
+            Capabilities = new HashSet<MobileAiCaptureCapability>
+            {
+                MobileAiCaptureCapability.VoiceToFields,
+                MobileAiCaptureCapability.PhotoToFields
+            }
+        };
+    }
+
+    private MobileAiCapturePolicy CreateAiCapturePolicy()
+        => new()
+        {
+            IsEnabled = AiAssistanceEnabled,
+            AllowVoiceToFields = true,
+            AllowPhotoToFields = true,
+            AllowMediaRedaction = true,
+            QueueWhenProviderUnavailable = true
+        };
+
+    private string GetFieldLabel(string targetKey)
+    {
+        var field = FormFields.FirstOrDefault(field =>
+            string.Equals(field.ValueKey, targetKey, StringComparison.OrdinalIgnoreCase));
+        return field?.Label ?? targetKey;
+    }
+
     private async Task<FieldLocationCaptureEvidence?> TryCaptureCurrentLocationEvidenceAsync()
     {
         try
@@ -1324,7 +1556,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     SizeBytes = attachment.SizeBytes,
                     CapturedAtUtc = new DateTimeOffset(attachment.CreatedAt == default ? DateTime.UtcNow : attachment.CreatedAt),
                     CaptureLocation = attachment.CaptureLocation?.ToFieldGeoPoint(),
-                    MediaType = MobileFormValueConverter.ToSdkMediaType(field.Definition.Type, attachment.PayloadKind)
+                    MediaType = MobileFormValueConverter.ToSdkMediaType(field.Definition.Type, attachment.PayloadKind),
+                    RequiresFaceBlur = attachment.AiMediaState?.RequiresFaceBlur == true
                 });
             }
         }

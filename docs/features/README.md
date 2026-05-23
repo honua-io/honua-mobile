@@ -6,6 +6,7 @@ This repository owns mobile SDK packages, MAUI integration, offline field workfl
 
 - `Honua.Mobile.Sdk`: transport, auth, gRPC-first feature queries, REST fallback, routing, scene metadata adapter, and secure transport checks.
 - `Honua.Mobile.Field`: SDK-backed field form validation, calculated fields, duplicate detection, media attachment metadata conversion, and record workflow.
+- Field collection reference workflow: opt-in AI capture adapter hooks for field suggestions, media redaction state, provider-unavailable queueing, and sanitized diagnostics.
 - `Honua.Mobile.Offline`: GeoPackage storage, sync queue, pull/push sync, conflicts, map area download, delta cursors, TTL/cache governance, and R-tree bbox lookup.
 - `Honua.Mobile.Maui`: DI registration, native display boundaries, map annotations, secure auth token storage, device location, background location, and geofencing contracts.
 - `@honua/embed`: framework-agnostic `<honua-map>` and `<honua-scene>` components with display adapters, scene package caching, snippets, and DOM behavior tests.
@@ -18,7 +19,7 @@ This repository owns mobile SDK packages, MAUI integration, offline field workfl
 - Embed package: `src/Honua.Embed/`
 - Apps and examples: `apps/`, `examples/`, `templates/`
 - Tests: `tests/`, `src/Honua.Embed/tests/`
-- 3D/offline docs: `docs/guides/3d-scene-embed.md`, `docs/guides/offline-3d-scene-packages.md`, `docs/guides/protected-3d-scene-auth.md`
+- 3D/offline/capture docs: `docs/guides/3d-scene-embed.md`, `docs/guides/offline-3d-scene-packages.md`, `docs/guides/protected-3d-scene-auth.md`, `docs/guides/field-ai-assisted-capture.md`
 
 ## 3D Status
 

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Sdk.Abstractions.Features;
@@ -89,6 +90,10 @@ public interface IAttachmentService
     Task<IEnumerable<AttachmentInfo>> GetAttachmentsAsync(string featureId);
     Task<IReadOnlyList<AttachmentInfo>> GetPendingAttachmentsAsync(CancellationToken cancellationToken = default);
     Task<bool> AttachmentContentExistsAsync(string attachmentId);
+    Task UpdateAttachmentAiStateAsync(
+        string attachmentId,
+        MobileAiMediaState? state,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ISettingsService
@@ -658,6 +663,16 @@ public class AttachmentService : IAttachmentService
     {
         var storage = EnsureStorageConfigured();
         return await storage.GetAttachmentsForFeatureAsync(featureId).ConfigureAwait(false);
+    }
+
+    public async Task UpdateAttachmentAiStateAsync(
+        string attachmentId,
+        MobileAiMediaState? state,
+        CancellationToken cancellationToken = default)
+    {
+        var storage = EnsureStorageConfigured();
+        cancellationToken.ThrowIfCancellationRequested();
+        await storage.UpdateAttachmentAiStateAsync(attachmentId, state).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<AttachmentInfo>> GetPendingAttachmentsAsync(

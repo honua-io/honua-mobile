@@ -1,6 +1,7 @@
 using System.Text;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Sdk.Abstractions.Features;
@@ -89,6 +90,48 @@ public sealed class FieldCollectionAttachmentServiceTests
             Assert.Equal(FieldLocationSourceKind.ExternalGnss, attachment.CaptureLocation?.SourceKind);
             Assert.Equal("Trimble R12", attachment.CaptureLocation?.Receiver?.Name);
             Assert.Equal(21.3069, attachment.CaptureLocation?.Latitude);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAttachmentAiStateAsync_PersistsMediaRedactionState()
+    {
+        var databasePath = CreateDatabasePath();
+        var attachmentRoot = CreateAttachmentRoot();
+        await using var cleanup = new FileCleanup(databasePath, attachmentRoot);
+
+        string attachmentId;
+        using (var storage = new GeoPackageStorageService(databasePath))
+        {
+            var service = new AttachmentService(storage, attachmentRoot);
+            await using var content = new MemoryStream(Encoding.UTF8.GetBytes("photo"));
+            var attachment = await service.SaveAttachmentAsync(
+                1,
+                "asset-1",
+                content,
+                "asset.jpg",
+                "image/jpeg",
+                AttachmentPayloadKind.Photo);
+            attachmentId = attachment.Id;
+
+            await service.UpdateAttachmentAiStateAsync(attachment.Id, new MobileAiMediaState
+            {
+                RedactionStatus = MobileAiMediaProcessingStatus.Queued,
+                EnrichmentStatus = MobileAiMediaProcessingStatus.Completed,
+                RequiresFaceBlur = true,
+                ProviderId = "mock"
+            });
+        }
+
+        using (var restartedStorage = new GeoPackageStorageService(databasePath))
+        {
+            var restartedService = new AttachmentService(restartedStorage, attachmentRoot);
+            var attachment = Assert.Single(await restartedService.GetAttachmentsAsync("asset-1"));
+
+            Assert.Equal(attachmentId, attachment.Id);
+            Assert.True(attachment.AiMediaState?.RequiresFaceBlur);
+            Assert.Equal(MobileAiMediaProcessingStatus.Queued, attachment.AiMediaState?.RedactionStatus);
+            Assert.Contains("AI redaction Queued", attachment.StatusSummary);
         }
     }
 
