@@ -891,21 +891,18 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 : 0
         };
 
-        // Store in database
-        // await _storage.StoreSyncSessionAsync(session);
+        await _storage.StoreSyncSessionAsync(session);
 
         return session;
     }
 
-    private Task CompleteSyncSessionAsync(StorageSyncSession session, StorageSyncSessionStatus status, string? errorMessage = null)
+    private async Task CompleteSyncSessionAsync(StorageSyncSession session, StorageSyncSessionStatus status, string? errorMessage = null)
     {
         session.EndTime = DateTime.UtcNow;
         session.Status = status;
         session.ErrorMessage = errorMessage;
 
-        // Update in database
-        // await _storage.UpdateSyncSessionAsync(session);
-        return Task.CompletedTask;
+        await _storage.UpdateSyncSessionAsync(session);
     }
 
     #endregion

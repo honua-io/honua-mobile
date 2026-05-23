@@ -139,6 +139,17 @@ public static class MauiProgram
         services.AddTransient<RecordsViewModel>();
         services.AddTransient<SyncCenterViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<RecordDetailViewModel>();
+        services.AddTransient<RecordEditViewModel>();
+        services.AddTransient<AuthenticationViewModel>();
+        services.AddTransient<DiagnosticsViewModel>();
+        services.AddTransient<LayerSettingsViewModel>();
+        services.AddTransient<FeatureDetailViewModel>();
+        services.AddTransient<ConflictResolutionViewModel>();
+        services.AddTransient<SyncHistoryViewModel>();
+        services.AddTransient<ServerConfigViewModel>();
+        services.AddTransient<UserProfileViewModel>();
+        services.AddTransient<AboutViewModel>();
     }
 
     private static void RegisterViews(IServiceCollection services)
@@ -148,5 +159,16 @@ public static class MauiProgram
         services.AddTransient<RecordsPage>();
         services.AddTransient<SyncCenterPage>();
         services.AddTransient<SettingsPage>();
+        services.AddTransient<RecordDetailPage>();
+        services.AddTransient<RecordEditPage>();
+        services.AddTransient<AuthenticationPage>();
+        services.AddTransient<DiagnosticsPage>();
+        services.AddTransient<LayerSettingsPage>();
+        services.AddTransient<FeatureDetailPage>();
+        services.AddTransient<ConflictResolutionPage>();
+        services.AddTransient<SyncHistoryPage>();
+        services.AddTransient<ServerConfigPage>();
+        services.AddTransient<UserProfilePage>();
+        services.AddTransient<AboutPage>();
     }
 }
