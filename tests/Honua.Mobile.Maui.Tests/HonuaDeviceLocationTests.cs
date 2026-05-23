@@ -1,7 +1,12 @@
 using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.Location;
+using Honua.Sdk.Abstractions.Features;
 using Microsoft.Extensions.DependencyInjection;
+using NetTopologySuite.Geometries;
+using SdkGeofenceStatus = Honua.Sdk.Geometry.HonuaGeofenceStatus;
+using SdkGeofenceTransition = Honua.Sdk.Geometry.HonuaGeofenceTransition;
+using SdkGeofenceDefinition = Honua.Sdk.Geometry.HonuaGeofenceDefinition;
 
 namespace Honua.Mobile.Maui.Tests;
 
@@ -314,6 +319,126 @@ public sealed class HonuaDeviceLocationTests
     }
 
     [Fact]
+    public async Task SdkGeofenceWorkflowController_StartAsync_MapsSdkDefinitionsToNativeGeofences()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaSdkGeofenceWorkflowController(
+            coordinator,
+            new HonuaBackgroundLocationLifecycleController(coordinator),
+            []);
+
+        await controller.StartAsync(new HonuaSdkGeofenceWorkflowRequest
+        {
+            Definitions = [CreateSdkGeofenceDefinition()],
+            BackgroundUpdates = new HonuaBackgroundLocationOptions
+            {
+                MinimumInterval = TimeSpan.FromSeconds(15),
+                MinimumDistanceMeters = 10,
+                Purpose = "proximity fixture",
+            },
+            MinimumBackgroundInterval = TimeSpan.FromMinutes(5),
+            Metadata = new Dictionary<string, object?>
+            {
+                ["workflow"] = "inspection-arrival",
+            },
+        });
+
+        var region = monitor.Requests.Single().Regions.Single();
+        Assert.Equal("job-site", region.Id);
+        Assert.Equal(new HonuaMapCoordinate(21.3069, -157.8583), region.Center);
+        Assert.Equal(75, region.RadiusMeters, precision: 6);
+        Assert.Equal("inspection-arrival", region.Metadata["workflow"]);
+        Assert.Equal("inspections", region.Metadata["honua.sdk.source_id"]);
+        Assert.Equal(FeatureProtocolIds.OgcFeatures, region.Metadata["honua.sdk.source_protocol"]);
+        Assert.Equal(TimeSpan.FromMinutes(5), backgroundProvider.Options.Single().MinimumInterval);
+    }
+
+    [Fact]
+    public async Task SdkGeofenceWorkflowController_PublishesNativeTransitionsToWorkflowAndSyncSinks()
+    {
+        var monitor = new RecordingGeofenceMonitor();
+        var sink = new RecordingWorkflowEventSink();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            new RecordingBackgroundLocationProvider(),
+            monitor);
+        var controller = new HonuaSdkGeofenceWorkflowController(
+            coordinator,
+            new HonuaBackgroundLocationLifecycleController(coordinator),
+            [sink]);
+        var emitted = new List<HonuaGeofenceWorkflowEvent>();
+        controller.WorkflowEventEmitted += (_, workflowEvent) => emitted.Add(workflowEvent);
+
+        await controller.StartAsync(new HonuaSdkGeofenceWorkflowRequest
+        {
+            Definitions = [CreateSdkGeofenceDefinition()],
+        });
+        monitor.Emit(new HonuaGeofenceTransition
+        {
+            RegionId = "job-site",
+            Kind = HonuaGeofenceTransitionKind.Proximity,
+            Location = new HonuaDeviceLocation
+            {
+                Coordinate = new HonuaMapCoordinate(21.3068, -157.8582),
+                AccuracyMeters = 8,
+                IsBackground = true,
+                Provider = "android-fused",
+            },
+            OccurredAt = DateTimeOffset.Parse("2026-05-23T08:00:00Z"),
+        });
+
+        var workflowEvent = Assert.Single(sink.Events);
+        Assert.Same(workflowEvent, Assert.Single(emitted));
+        Assert.Equal("job-site", workflowEvent.GeofenceId);
+        Assert.Equal(HonuaGeofenceTransitionKind.Proximity, workflowEvent.NativeTransition);
+        Assert.Equal(SdkGeofenceTransition.Approached, workflowEvent.SdkTransition);
+        Assert.Equal(SdkGeofenceStatus.Proximity, workflowEvent.SdkStatus);
+        Assert.Equal("android-fused", workflowEvent.Metadata["honua.location.provider"]);
+        Assert.Equal(8d, workflowEvent.Metadata["honua.location.accuracy_m"]);
+    }
+
+    [Fact]
+    public async Task SdkGeofenceWorkflowController_DefaultsToOsGeofencesWithoutBackgroundPolling()
+    {
+        var backgroundProvider = new RecordingBackgroundLocationProvider();
+        var monitor = new RecordingGeofenceMonitor();
+        var coordinator = new HonuaDeviceLocationCoordinator(
+            new RecordingPermissionService
+            {
+                CheckStatus = HonuaLocationPermissionStatus.Background,
+            },
+            new RecordingLocationProvider(),
+            backgroundProvider,
+            monitor);
+        var controller = new HonuaSdkGeofenceWorkflowController(
+            coordinator,
+            new HonuaBackgroundLocationLifecycleController(coordinator),
+            []);
+
+        await controller.StartAsync(new HonuaSdkGeofenceWorkflowRequest
+        {
+            Definitions = [CreateSdkGeofenceDefinition()],
+        });
+
+        Assert.Empty(backgroundProvider.Options);
+        Assert.Single(monitor.Requests);
+        Assert.Equal(HonuaBackgroundLocationRuntimeState.Running, controller.State);
+    }
+
+    [Fact]
     public void AddHonuaDeviceLocation_RegistersCoordinatorWithOptionalProviders()
     {
         using var provider = new ServiceCollection()
@@ -326,6 +451,7 @@ public sealed class HonuaDeviceLocationTests
 
         Assert.NotNull(provider.GetRequiredService<HonuaDeviceLocationCoordinator>());
         Assert.NotNull(provider.GetRequiredService<HonuaBackgroundLocationLifecycleController>());
+        Assert.NotNull(provider.GetRequiredService<HonuaSdkGeofenceWorkflowController>());
     }
 
     [Fact]
@@ -366,6 +492,30 @@ public sealed class HonuaDeviceLocationTests
                 },
             ],
         };
+
+    private static SdkGeofenceDefinition CreateSdkGeofenceDefinition()
+    {
+        var geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
+        return new SdkGeofenceDefinition
+        {
+            GeofenceId = "job-site",
+            Geometry = geometryFactory.CreatePoint(new Coordinate(-157.8583, 21.3069)),
+            ProximityDistance = 75,
+            Source = new SourceDescriptor
+            {
+                Id = "inspections",
+                Protocol = FeatureProtocolIds.OgcFeatures,
+            },
+            SourceQuery = new SourceQuery
+            {
+                Where = "status = 'open'",
+            },
+            Metadata = new Dictionary<string, string>
+            {
+                ["field_workflow"] = "inspection-arrival",
+            },
+        };
+    }
 
     private sealed class RecordingPermissionService : IHonuaDeviceLocationPermissionService
     {
@@ -481,6 +631,17 @@ public sealed class HonuaDeviceLocationTests
                 throw exception;
             }
 
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingWorkflowEventSink : IHonuaGeofenceWorkflowEventSink
+    {
+        public List<HonuaGeofenceWorkflowEvent> Events { get; } = [];
+
+        public ValueTask EnqueueAsync(HonuaGeofenceWorkflowEvent workflowEvent, CancellationToken ct = default)
+        {
+            Events.Add(workflowEvent);
             return ValueTask.CompletedTask;
         }
     }

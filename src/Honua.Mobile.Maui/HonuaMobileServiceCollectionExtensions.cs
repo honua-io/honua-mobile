@@ -484,6 +484,11 @@ public static class HonuaMobileServiceCollectionExtensions
         services.AddSingleton(sp => new HonuaBackgroundLocationLifecycleController(
             sp.GetRequiredService<HonuaDeviceLocationCoordinator>(),
             sp.GetService<ILogger<HonuaBackgroundLocationLifecycleController>>()));
+        services.AddSingleton(sp => new HonuaSdkGeofenceWorkflowController(
+            sp.GetRequiredService<HonuaDeviceLocationCoordinator>(),
+            sp.GetRequiredService<HonuaBackgroundLocationLifecycleController>(),
+            sp.GetServices<IHonuaGeofenceWorkflowEventSink>(),
+            sp.GetService<ILogger<HonuaSdkGeofenceWorkflowController>>()));
         return services;
     }
 }
