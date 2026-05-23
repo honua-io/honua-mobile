@@ -135,6 +135,24 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PushChangesAsync_WhenCompleted_PersistsSyncHistory()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        using var sync = CreateSyncService(storage, uploader: new FixedResultUploader(true));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        var session = Assert.Single(await storage.GetSyncSessionsAsync());
+        Assert.Equal(Honua.Mobile.FieldCollection.Services.Storage.Models.SyncSessionStatus.Completed, session.Status);
+        Assert.Equal(1, session.ChangesPushed);
+        Assert.NotNull(session.EndTime);
+    }
+
+    [Fact]
     public async Task PullChangesAsync_WhenApplyFails_ReturnsFailureAndDoesNotCountPulledChange()
     {
         var databasePath = CreateDatabasePath();

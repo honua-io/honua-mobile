@@ -501,6 +501,60 @@ public class GeoPackageStorageService : IDisposable
 
     #endregion
 
+    #region Sync Session History
+
+    public async Task StoreSyncSessionAsync(SyncSession session)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(session);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task UpdateSyncSessionAsync(SyncSession session)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(session);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<SyncSession>> GetSyncSessionsAsync(int limit = 50)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var safeLimit = Math.Clamp(limit, 1, 250);
+            return await _connection.QueryAsync<SyncSession>(
+                """
+                SELECT *
+                FROM sync_sessions
+                ORDER BY COALESCE(end_time, start_time) DESC
+                LIMIT ?
+                """,
+                safeLimit);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    #endregion
+
     #region Conflict Tracking
 
     public async Task StoreConflictAsync(ConflictRecord conflict)
