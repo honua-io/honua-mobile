@@ -205,6 +205,31 @@ Mobile-owned catalog state should wrap the portable package with runtime facts:
 UI implication: catalog cards/lists should distinguish portable package metadata
 from device-local operational state.
 
+## Golden Fixtures
+
+The local form parity fixture suite is represented by
+`LocalFormParityGoldenFixtureTests` and emits
+`honua.mobile.form-parity-golden-fixtures.evidence.v1` evidence during CI. The
+current fixtures cover:
+
+- inspection workflow: required rules, conditional visibility, calculated
+  values, media minimums, inline choices, and draft restore;
+- asset inventory: barcode capture, inline choice sets, record-link value
+  capture, required rules, and draft restore;
+- incident report: location, signature media, conditional injury notes,
+  required rules, and draft restore;
+- repeat-heavy survey: repeat groups, repeat-scoped validation, repeat-scoped
+  media, calculated repeat values, and draft restore.
+
+Unsupported or package-version-gated fixture capabilities are explicitly listed
+in the evidence as follow-ups, currently shared choice-set ids, record-link
+target metadata, media capture policy fields, full XLSForm/Arcade expression
+parity, rejected-media fixtures, and nested-repeat scenario coverage.
+
+UI implication: form design can treat these fixture records as no-cloud parity
+examples, while unsupported fixture items remain visible as SDK/mobile backlog
+instead of being hidden by the runtime.
+
 ## Conflict Simulation
 
 No-cloud acceptance should use deterministic local sync-peer evidence:
