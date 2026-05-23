@@ -151,6 +151,13 @@ public static class MauiProgram
                 databaseService.GetStorageService(),
                 logger: provider.GetService<ILogger<AttachmentService>>());
         });
+        services.AddSingleton<ILocalRecordExportService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new LocalRecordExportService(
+                databaseService.GetStorageService(),
+                logger: provider.GetService<ILogger<LocalRecordExportService>>());
+        });
 
         // Configuration services
         var buildConfiguration = MobileBuildConfiguration.FromAssembly(
