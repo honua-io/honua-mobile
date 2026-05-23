@@ -154,6 +154,32 @@ Known coverage gaps, with the owner ticket where one exists:
 
 ## 4. How CI Surfaces Failures
 
+The local command that most closely mirrors the PR gate is:
+
+```bash
+scripts/validate-local.sh
+```
+
+For a fresh checkout, configure GitHub Packages credentials first. The mobile
+repo consumes versioned `Honua.Sdk.*` packages from the private
+`github-honua` NuGet source, so the token must have `read:packages` for the
+`honua-io` organization:
+
+```bash
+gh auth refresh -s read:packages
+export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
+export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
+scripts/validate-local.sh
+```
+
+The script writes those credentials to a temporary NuGet config only for the
+duration of the run. It then restores and builds `Honua.Mobile.sln`, runs
+`dotnet test Honua.Mobile.sln`, runs `Honua.Mobile.Smoke.Tests`, verifies
+format for the core source projects, and runs `npm ci`, `npm run build`, and
+`npm test` for `src/Honua.Embed`. Live server, cloud, Android emulator, and iOS
+simulator coverage still use their existing environment variables and hosted
+runner workflows described below.
+
 The relevant workflows under `.github/workflows/`:
 
 - `ci.yml` -- the main PR and trunk gate. Jobs and the test buckets
