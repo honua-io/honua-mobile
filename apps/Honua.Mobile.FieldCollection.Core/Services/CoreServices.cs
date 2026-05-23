@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Records;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Devices.Sensors;
 using Microsoft.Maui.Networking;
@@ -225,15 +227,38 @@ public class FormService : IFormService
     public Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)
     {
         var validationDefinition = EnsureValidationRules(definition);
-        var result = FormValidator.Validate(validationDefinition, formData.ToSdkFieldRecord(validationDefinition));
+        formData.Values = MobileFormRuleRuntime.ApplyCalculatedValues(validationDefinition, formData.Values);
 
         formData.ValidationErrors.Clear();
-        foreach (var error in result.Errors)
+
+        var nonRepeatDefinition = CreateNonRepeatDefinition(validationDefinition);
+        if (nonRepeatDefinition.Sections.Count > 0)
         {
-            formData.ValidationErrors[error.FieldId] = error.Message;
+            var result = FormValidator.Validate(nonRepeatDefinition, formData.ToSdkFieldRecord(nonRepeatDefinition));
+            foreach (var error in result.Errors)
+            {
+                formData.ValidationErrors[error.FieldId] = error.Message;
+            }
         }
 
-        return Task.FromResult(result.IsValid);
+        foreach (var section in validationDefinition.Sections.Where(section => section.Repeatable))
+        {
+            var repeatDefinition = CreateRepeatEntryDefinition(validationDefinition, section);
+            foreach (var repeatIndex in MobileFormRepeatKey.GetRepeatIndices(section, formData.Values))
+            {
+                var record = CreateRepeatEntryRecord(formData, section, repeatIndex, repeatDefinition.FormId);
+                var result = FormValidator.Validate(repeatDefinition, record);
+                foreach (var error in result.Errors)
+                {
+                    var errorKey = section.Fields.FirstOrDefault(field => string.Equals(field.FieldId, error.FieldId, StringComparison.Ordinal)) is { } errorField
+                        ? MobileFormRepeatKey.ForField(section, repeatIndex, errorField)
+                        : $"{section.SectionId}[{repeatIndex}].{error.FieldId}";
+                    formData.ValidationErrors[errorKey] = error.Message;
+                }
+            }
+        }
+
+        return Task.FromResult(formData.ValidationErrors.Count == 0);
     }
 
     private static FormDefinition EnsureValidationRules(FormDefinition definition)
@@ -242,6 +267,7 @@ public class FormService : IFormService
         {
             FormId = definition.FormId,
             Name = definition.Name,
+            Version = definition.Version,
             Description = definition.Description,
             Target = definition.Target,
             Sections = definition.Sections
@@ -249,27 +275,86 @@ public class FormService : IFormService
                 {
                     SectionId = section.SectionId,
                     Label = section.Label,
-                    Fields = section.Fields.Select(CloneField).ToList()
+                    Description = section.Description,
+                    Repeatable = section.Repeatable,
+                    Collapsible = section.Collapsible,
+                    InitiallyCollapsed = section.InitiallyCollapsed,
+                    Fields = section.Fields.Select(MobileFormRuleRuntime.CloneField).ToList()
                 })
                 .ToList(),
             Metadata = new Dictionary<string, string>(definition.Metadata, StringComparer.OrdinalIgnoreCase)
         };
     }
 
-    private static FormField CloneField(FormField field)
+    private static FormDefinition CreateNonRepeatDefinition(FormDefinition definition)
     {
-        return new FormField
+        return new FormDefinition
         {
-            FieldId = field.FieldId,
-            Label = field.Label,
-            Type = field.Type,
-            SourceFieldName = field.SourceFieldName,
-            Required = field.Required,
-            Choices = field.Choices,
-            Validation = field.Validation ?? new FieldValidationRule(),
-            VisibilityRule = field.VisibilityRule,
-            CalculatedExpression = field.CalculatedExpression,
-            HelpText = field.HelpText
+            FormId = definition.FormId,
+            Name = definition.Name,
+            Version = definition.Version,
+            Description = definition.Description,
+            Target = definition.Target,
+            Sections = definition.Sections
+                .Where(section => !section.Repeatable)
+                .Select(section => MobileFormRuleRuntime.CloneSection(section, repeatable: false))
+                .ToList(),
+            Metadata = new Dictionary<string, string>(definition.Metadata, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static FormDefinition CreateRepeatEntryDefinition(FormDefinition definition, FormSection section)
+    {
+        return new FormDefinition
+        {
+            FormId = definition.FormId,
+            Name = definition.Name,
+            Version = definition.Version,
+            Description = definition.Description,
+            Target = definition.Target,
+            Sections = [MobileFormRuleRuntime.CloneSection(section, repeatable: false)],
+            Metadata = new Dictionary<string, string>(definition.Metadata, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static FieldRecord CreateRepeatEntryRecord(
+        FormData formData,
+        FormSection section,
+        int repeatIndex,
+        string formId)
+    {
+        var values = MobileFormRuleRuntime.BuildRecordValuesForBinding(section, formData.Values, repeatIndex);
+        var repeatMedia = formData.Media
+            .Select(media => MobileFormRepeatKey.TryParse(media.FieldId, out var sectionId, out var mediaRepeatIndex, out var fieldId) &&
+                mediaRepeatIndex == repeatIndex &&
+                string.Equals(sectionId, section.SectionId, StringComparison.Ordinal)
+                    ? new FieldMediaAttachment
+                    {
+                        AttachmentId = media.AttachmentId,
+                        FieldId = fieldId,
+                        MediaType = media.MediaType,
+                        FileName = media.FileName,
+                        ContentType = media.ContentType,
+                        SizeBytes = media.SizeBytes,
+                        CaptureLocation = media.CaptureLocation,
+                        CapturedAtUtc = media.CapturedAtUtc,
+                        RequiresFaceBlur = media.RequiresFaceBlur
+                    }
+                    : null)
+            .Where(media => media != null)
+            .Cast<FieldMediaAttachment>()
+            .ToList();
+
+        return new FieldRecord
+        {
+            RecordId = formData.FeatureId ?? string.Empty,
+            FormId = formId,
+            Values = values,
+            Media = new System.Collections.ObjectModel.Collection<FieldMediaAttachment>(repeatMedia),
+            Location = formData.Location,
+            CreatedAtUtc = formData.CreatedAt == default
+                ? DateTimeOffset.UtcNow
+                : new DateTimeOffset(DateTime.SpecifyKind(formData.CreatedAt, DateTimeKind.Utc))
         };
     }
 

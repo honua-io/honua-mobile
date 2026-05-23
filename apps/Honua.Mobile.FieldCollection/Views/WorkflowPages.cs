@@ -248,6 +248,9 @@ internal static class WorkflowPageContent
 
     public static View CreateRecordEditContent()
     {
+        var repeatSections = RepeatSectionList();
+        repeatSections.SetBinding(ItemsView.ItemsSourceProperty, new Binding("RepeatSections"));
+
         var fields = FormFieldList();
         fields.SetBinding(ItemsView.ItemsSourceProperty, new Binding("FormFields"));
 
@@ -262,6 +265,7 @@ internal static class WorkflowPageContent
             BoundHeader("PageTitle", "Record"),
             BoundLabel("GeometrySummary", "Geometry"),
             validation,
+            repeatSections,
             SectionTitle("Fields"),
             fields,
             SectionTitle("Attachments"),
@@ -290,21 +294,26 @@ internal static class WorkflowPageContent
                 var singleLine = new Entry { Placeholder = "Value" };
                 singleLine.SetBinding(Entry.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
                 singleLine.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsSingleLineText)));
+                singleLine.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var numeric = new Entry { Placeholder = "Number", Keyboard = Keyboard.Numeric };
                 numeric.SetBinding(Entry.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
                 numeric.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsNumeric)));
+                numeric.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var multiline = new Editor { AutoSize = EditorAutoSizeOption.TextChanges, MinimumHeightRequest = 96 };
                 multiline.SetBinding(Editor.TextProperty, new Binding(nameof(EditableFormFieldItem.TextValue), mode: BindingMode.TwoWay));
                 multiline.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsMultilineText)));
+                multiline.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var date = new DatePicker();
                 date.SetBinding(DatePicker.DateProperty, new Binding(nameof(EditableFormFieldItem.DateValue), mode: BindingMode.TwoWay));
                 date.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsDate)));
+                date.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var dateTime = new HorizontalStackLayout { Spacing = 8 };
                 dateTime.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsDateTime)));
+                dateTime.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
                 var datePart = new DatePicker();
                 datePart.SetBinding(DatePicker.DateProperty, new Binding(nameof(EditableFormFieldItem.DateValue), mode: BindingMode.TwoWay));
                 var timePart = new TimePicker();
@@ -315,14 +324,17 @@ internal static class WorkflowPageContent
                 var yesNo = new Switch();
                 yesNo.SetBinding(Switch.IsToggledProperty, new Binding(nameof(EditableFormFieldItem.BoolValue), mode: BindingMode.TwoWay));
                 yesNo.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsYesNo)));
+                yesNo.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var choice = new Picker { ItemDisplayBinding = new Binding(nameof(FieldChoice.Label)) };
                 choice.SetBinding(Picker.ItemsSourceProperty, new Binding("Definition.Choices"));
                 choice.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(EditableFormFieldItem.SelectedChoice), mode: BindingMode.TwoWay));
                 choice.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsSingleChoice)));
+                choice.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var choices = new VerticalStackLayout { Spacing = 6 };
                 choices.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsMultipleChoice)));
+                choices.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
                 choices.SetBinding(BindableLayout.ItemsSourceProperty, new Binding(nameof(EditableFormFieldItem.Choices)));
                 BindableLayout.SetItemTemplate(choices, new DataTemplate(() =>
                 {
@@ -348,6 +360,7 @@ internal static class WorkflowPageContent
                 action.SetBinding(Button.CommandProperty, new Binding(nameof(EditableFormFieldItem.PrimaryActionCommand)));
                 action.SetBinding(Button.CommandParameterProperty, new Binding("."));
                 action.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.HasPrimaryAction)));
+                action.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableFormFieldItem.IsEditable)));
 
                 var unsupported = new Label { Text = "Unsupported field type", TextColor = Colors.DarkRed };
                 unsupported.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsUnsupported)));
@@ -356,7 +369,7 @@ internal static class WorkflowPageContent
                 error.SetBinding(Label.TextProperty, new Binding(nameof(EditableFormFieldItem.ValidationError)));
                 error.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.HasValidationError)));
 
-                return new VerticalStackLayout
+                var row = new VerticalStackLayout
                 {
                     Padding = new Thickness(0, 8),
                     Spacing = 6,
@@ -378,6 +391,54 @@ internal static class WorkflowPageContent
                         error
                     }
                 };
+                row.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsVisible)));
+                return row;
+            })
+        };
+    }
+
+    private static CollectionView RepeatSectionList()
+    {
+        return new CollectionView
+        {
+            ItemTemplate = new DataTemplate(() =>
+            {
+                var label = new Label { FontAttributes = FontAttributes.Bold, VerticalOptions = LayoutOptions.Center };
+                label.SetBinding(Label.TextProperty, new Binding(nameof(EditableRepeatSectionItem.Label)));
+
+                var count = new Label { FontSize = 12, TextColor = Colors.Gray, VerticalOptions = LayoutOptions.Center };
+                count.SetBinding(Label.TextProperty, new Binding(nameof(EditableRepeatSectionItem.EntryCount), stringFormat: "{0} entries"));
+
+                var add = new Button { Text = "Add" };
+                add.SetBinding(Button.CommandProperty, new Binding(nameof(EditableRepeatSectionItem.AddCommand)));
+                add.SetBinding(Button.CommandParameterProperty, new Binding("."));
+
+                var remove = new Button { Text = "Remove" };
+                remove.SetBinding(Button.CommandProperty, new Binding(nameof(EditableRepeatSectionItem.RemoveCommand)));
+                remove.SetBinding(Button.CommandParameterProperty, new Binding("."));
+                remove.SetBinding(VisualElement.IsEnabledProperty, new Binding(nameof(EditableRepeatSectionItem.CanRemove)));
+
+                var grid = new Grid
+                {
+                    Padding = new Thickness(0, 6),
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition { Width = GridLength.Star },
+                        new ColumnDefinition { Width = GridLength.Auto },
+                        new ColumnDefinition { Width = GridLength.Auto },
+                        new ColumnDefinition { Width = GridLength.Auto }
+                    },
+                    ColumnSpacing = 8
+                };
+                Grid.SetColumn(label, 0);
+                Grid.SetColumn(count, 1);
+                Grid.SetColumn(add, 2);
+                Grid.SetColumn(remove, 3);
+                grid.Children.Add(label);
+                grid.Children.Add(count);
+                grid.Children.Add(add);
+                grid.Children.Add(remove);
+                return grid;
             })
         };
     }
