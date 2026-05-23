@@ -661,6 +661,32 @@ const angularIframeComponent = createHonuaSceneAngularIframeSnippet({
 });
 ```
 
+## Embed Governance
+
+```ts
+import { bindHonuaMapGovernance } from '@honua-io/embed';
+
+const binding = bindHonuaMapGovernance(document.querySelector('honua-map')!, {
+  integrationId: 'city-work-orders',
+  origin: window.location.origin,
+  policy: {
+    requiredApiKey: true,
+    allowedOrigins: ['https://portal.example.com'],
+    allowedServiceOrigins: ['https://services.example.com'],
+    allowedLayerIds: ['assets', 'work-orders'],
+  },
+  sink: (event) => {
+    console.log(event.type, event.layerIds, event.apiKeyPresent);
+  },
+});
+```
+
+The governance helper records redacted view, config-change, search, identify,
+and policy-denied analytics from existing map events. It can evaluate
+server-provided API-key/domain/layer/rate-limit policy state on the client, but
+authoritative issuance, CORS, rate limiting, and analytics ingestion remain
+server/admin responsibilities.
+
 ## Host Extensions
 
 ```ts
