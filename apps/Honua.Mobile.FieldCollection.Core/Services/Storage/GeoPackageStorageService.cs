@@ -401,12 +401,41 @@ public class GeoPackageStorageService : IDisposable
             var deleted = 0;
             await ExecuteInImmediateTransactionAsync(async () =>
             {
+                var existing = await _connection.Table<LocalFeature>()
+                    .FirstOrDefaultAsync(f => f.Id == featureId && f.LayerId == layerId);
+                var existingFeature = existing == null ? null : ConvertToFeature(existing);
+                var changeData = existing == null
+                    ? null
+                    : CreateChangeData(existingFeature!, ChangeOperation.Delete);
+                var pendingFeatureChanges = await _connection.Table<ChangeRecord>()
+                    .Where(c =>
+                        c.FeatureId == featureId &&
+                        c.LayerId == layerId &&
+                        c.SyncStatus == StorageSyncStatus.PendingUpload)
+                    .ToListAsync();
+                var collapseLocalOnlyLifecycle = existingFeature != null &&
+                    pendingFeatureChanges.Any(change => change.Operation == ChangeOperation.Insert) &&
+                    !TryReadObjectId(existingFeature.Attributes, out _);
+
                 deleted = await _connection.Table<LocalFeature>()
                     .DeleteAsync(f => f.Id == featureId && f.LayerId == layerId);
 
                 if (deleted > 0)
                 {
-                    await RecordChange(featureId, layerId, ChangeOperation.Delete);
+                    if (collapseLocalOnlyLifecycle)
+                    {
+                        foreach (var change in pendingFeatureChanges)
+                        {
+                            await _connection.ExecuteAsync(
+                                "UPDATE change_records SET sync_status = ? WHERE id = ?",
+                                StorageSyncStatus.Synced,
+                                change.Id);
+                        }
+                    }
+                    else
+                    {
+                        await RecordChange(featureId, layerId, ChangeOperation.Delete, changeData);
+                    }
                 }
             });
 
@@ -490,10 +519,11 @@ public class GeoPackageStorageService : IDisposable
 
         if (trackChange)
         {
+            var changeData = CreateChangeData(feature, operation);
             await ExecuteInImmediateTransactionAsync(async () =>
             {
                 await _connection.InsertOrReplaceAsync(localFeature);
-                await RecordChange(feature.Id, feature.LayerId, operation);
+                await RecordChange(feature.Id, feature.LayerId, operation, changeData);
             });
         }
         else
@@ -531,7 +561,11 @@ public class GeoPackageStorageService : IDisposable
 
     #region Change Tracking
 
-    private async Task RecordChange(string featureId, int layerId, ChangeOperation operation)
+    private async Task RecordChange(
+        string featureId,
+        int layerId,
+        ChangeOperation operation,
+        string? changeData = null)
     {
         var changeRecord = new ChangeRecord
         {
@@ -540,10 +574,76 @@ public class GeoPackageStorageService : IDisposable
             LayerId = layerId,
             Operation = operation,
             Timestamp = DateTime.UtcNow,
-            SyncStatus = StorageSyncStatus.PendingUpload
+            SyncStatus = StorageSyncStatus.PendingUpload,
+            ChangeData = changeData
         };
 
         await _connection.InsertAsync(changeRecord);
+    }
+
+    private static string CreateChangeData(Feature feature, ChangeOperation operation)
+    {
+        JsonElement? geometry = feature.Geometry == null
+            ? null
+            : GeometryJson.ToJsonElement(feature.Geometry);
+
+        var payload = new
+        {
+            featureId = feature.Id,
+            layerId = feature.LayerId,
+            operation = operation.ToString(),
+            version = feature.Version,
+            objectId = TryReadObjectId(feature.Attributes, out var objectId) ? objectId : (long?)null,
+            attributes = feature.Attributes,
+            geometry,
+            timestamp = DateTime.UtcNow
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static bool TryReadObjectId(IReadOnlyDictionary<string, object?> attributes, out long objectId)
+    {
+        objectId = 0;
+        foreach (var attribute in attributes)
+        {
+            if (!attribute.Key.Equals("objectid", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("objectId", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("OBJECTID", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("FID", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (TryConvertInt64(attribute.Value, out objectId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertInt64(object? value, out long objectId)
+    {
+        objectId = 0;
+        return value switch
+        {
+            long longValue => Set(longValue, out objectId),
+            int intValue => Set(intValue, out objectId),
+            double doubleValue when Math.Abs(doubleValue % 1) < double.Epsilon => Set((long)doubleValue, out objectId),
+            decimal decimalValue when decimalValue == Math.Truncate(decimalValue) => Set((long)decimalValue, out objectId),
+            string stringValue => long.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId),
+            JsonElement { ValueKind: JsonValueKind.Number } element => element.TryGetInt64(out objectId),
+            JsonElement { ValueKind: JsonValueKind.String } element => long.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId),
+            _ => false
+        };
+
+        static bool Set(long value, out long target)
+        {
+            target = value;
+            return true;
+        }
     }
 
     public async Task<List<ChangeRecord>> GetPendingChangesAsync(int? layerId = null)

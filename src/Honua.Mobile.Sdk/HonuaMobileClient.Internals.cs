@@ -183,6 +183,14 @@ public sealed partial class HonuaMobileClient
         return new Uri($"{relativePath}?{queryText}", UriKind.Relative);
     }
 
+    private static string EscapePathSegments(string path)
+    {
+        return string.Join(
+            '/',
+            path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Uri.EscapeDataString));
+    }
+
     private Uri BuildAbsoluteUri(string relativePath, IReadOnlyDictionary<string, string?>? query)
     {
         var relative = BuildUri(relativePath, query);

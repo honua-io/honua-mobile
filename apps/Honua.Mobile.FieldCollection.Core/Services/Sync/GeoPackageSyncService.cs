@@ -83,7 +83,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
     [ObservableProperty]
     private string? syncMessage;
 
-    public bool IsRemoteSyncConfigured { get; }
+    public bool IsRemoteSyncConfigured =>
+        IsConfiguredRemoteTransport(_changeUploader) &&
+        IsConfiguredRemoteTransport(_changePuller);
 
     public GeoPackageSyncService(
         GeoPackageStorageService storage,
@@ -101,10 +103,6 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         _changePuller = changePuller ?? new UnconfiguredFieldCollectionChangePuller();
         _exceptionReporter = exceptionReporter ?? new NoOpMobileExceptionReporter();
         _logger = logger;
-        IsRemoteSyncConfigured =
-            IsConfiguredRemoteTransport(_changeUploader) &&
-            IsConfiguredRemoteTransport(_changePuller);
-
         // Update pending changes count periodically
         _pendingChangesTask = Task.Run(() => UpdatePendingChangesAsync(_pendingChangesCancellation.Token));
     }

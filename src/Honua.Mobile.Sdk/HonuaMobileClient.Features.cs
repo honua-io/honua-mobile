@@ -241,7 +241,7 @@ public sealed partial class HonuaMobileClient
 
     private async Task<JsonDocument> QueryFeaturesRestAsync(QueryFeaturesRequest request, CancellationToken ct)
     {
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
+        var path = $"/rest/services/{EscapePathSegments(request.ServiceId)}/FeatureServer/{request.LayerId}/query";
         return await SendJsonAsync(
             HttpMethod.Get,
             path,
@@ -252,7 +252,7 @@ public sealed partial class HonuaMobileClient
 
     private async Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
     {
-        var path = $"/rest/services/{Uri.EscapeDataString(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
+        var path = $"/rest/services/{EscapePathSegments(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
         return await SendJsonAsync(
             HttpMethod.Post,
             path,
@@ -432,7 +432,7 @@ public sealed partial class HonuaMobileClient
             ForceWrite = request.ForceWrite,
         };
 
-        var path = $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/{layerId}/applyEdits";
+        var path = $"/rest/services/{EscapePathSegments(serviceId)}/FeatureServer/{layerId}/applyEdits";
         return await SendJsonAsync(
             HttpMethod.Post,
             path,

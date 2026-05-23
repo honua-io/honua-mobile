@@ -57,8 +57,18 @@ public static class MauiProgram
         services.AddSingleton<IStorageService, StorageService>();
 
         // Register sync service factory
-        services.AddSingleton<IFieldCollectionChangeUploader, QueuedFieldCollectionChangeUploader>();
-        services.AddSingleton<IFieldCollectionChangePuller, LocalOnlyFieldCollectionChangePuller>();
+        services.AddHttpClient("HonuaFieldSync");
+        services.AddSingleton<IFieldCollectionFeatureSyncClient, HonuaSdkFieldCollectionFeatureSyncClient>();
+        services.AddSingleton<IFieldCollectionChangeUploader>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new HonuaFieldCollectionChangeUploader(
+                databaseService.GetStorageService(),
+                provider.GetRequiredService<IFieldCollectionMetadataService>(),
+                provider.GetRequiredService<IFieldCollectionFeatureSyncClient>(),
+                provider.GetService<ILogger<HonuaFieldCollectionChangeUploader>>());
+        });
+        services.AddSingleton<IFieldCollectionChangePuller, HonuaFieldCollectionChangePuller>();
         services.AddSingleton<ISyncService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
