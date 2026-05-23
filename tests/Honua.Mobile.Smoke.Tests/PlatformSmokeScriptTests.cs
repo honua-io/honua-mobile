@@ -7,6 +7,7 @@ public sealed class PlatformSmokeScriptTests
     [Theory]
     [InlineData("run-android-platform-smoke.sh", "Skipping Android live Honua platform smoke")]
     [InlineData("run-ios-platform-smoke.sh", "Skipping iOS live Honua platform smoke")]
+    [InlineData("run-field-workflow-appium-smoke.sh", "Skipping Appium field workflow smoke")]
     public void PlatformSmokeScript_SkipsWhenLiveHonuaConfigIsMissing(string scriptName, string expectedMessage)
     {
         if (!IsBashAvailable())
@@ -21,8 +22,44 @@ public sealed class PlatformSmokeScriptTests
         Assert.Contains(expectedMessage, result.Output);
     }
 
-    private static ScriptResult RunScript(string root, string scriptName)
+    [Fact]
+    public void FieldWorkflowAppiumSmokeScript_WritesSkippedArtifactWithRequiredSteps()
     {
+        if (!IsBashAvailable())
+        {
+            return;
+        }
+
+        var root = FindRepositoryRoot();
+        var artifactDirectory = Path.Combine(Path.GetTempPath(), $"honua-appium-smoke-{Guid.NewGuid():N}");
+
+        try
+        {
+            var result = RunScript(root, "run-field-workflow-appium-smoke.sh", artifactDirectory);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.NotNull(result.ArtifactJson);
+            Assert.Contains("\"status\": \"skipped\"", result.ArtifactJson);
+            Assert.Contains("\"launch\"", result.ArtifactJson);
+            Assert.Contains("\"configure-server\"", result.ArtifactJson);
+            Assert.Contains("\"download-project\"", result.ArtifactJson);
+            Assert.Contains("\"create-record\"", result.ArtifactJson);
+            Assert.Contains("\"sync\"", result.ArtifactJson);
+            Assert.Contains("HONUA_MOBILE_APPIUM_SMOKE", result.ArtifactJson);
+        }
+        finally
+        {
+            if (Directory.Exists(artifactDirectory))
+            {
+                Directory.Delete(artifactDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static ScriptResult RunScript(string root, string scriptName, string? artifactDirectory = null)
+    {
+        var appiumArtifactDirectory = artifactDirectory
+            ?? Path.Combine(Path.GetTempPath(), $"honua-appium-smoke-{Guid.NewGuid():N}");
         var startInfo = new ProcessStartInfo
         {
             FileName = "bash",
@@ -35,6 +72,11 @@ public sealed class PlatformSmokeScriptTests
         startInfo.Environment.Remove("HONUA_MOBILE_SMOKE_SERVICE_ID");
         startInfo.Environment.Remove("HONUA_MOBILE_SMOKE_LAYER_ID");
         startInfo.Environment.Remove("HONUA_MOBILE_SMOKE_API_KEY");
+        startInfo.Environment.Remove("HONUA_MOBILE_APPIUM_SMOKE");
+        startInfo.Environment.Remove("HONUA_MOBILE_APPIUM_SERVER_URL");
+        startInfo.Environment.Remove("HONUA_MOBILE_FIELD_APP_PATH");
+        startInfo.Environment.Remove("HONUA_MOBILE_APPIUM_COMMAND");
+        startInfo.Environment["HONUA_MOBILE_APPIUM_ARTIFACT_DIR"] = appiumArtifactDirectory;
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {scriptName}.");
@@ -42,7 +84,17 @@ public sealed class PlatformSmokeScriptTests
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        return new ScriptResult(process.ExitCode, stdout + stderr);
+        var artifactPath = Path.Combine(appiumArtifactDirectory, "honua-mobile-field-workflow-appium-smoke-result.json");
+        var artifactJson = File.Exists(artifactPath)
+            ? File.ReadAllText(artifactPath)
+            : null;
+
+        if (artifactDirectory is null && Directory.Exists(appiumArtifactDirectory))
+        {
+            Directory.Delete(appiumArtifactDirectory, recursive: true);
+        }
+
+        return new ScriptResult(process.ExitCode, stdout + stderr, artifactJson);
     }
 
     private static bool IsBashAvailable()
@@ -97,5 +149,5 @@ public sealed class PlatformSmokeScriptTests
         throw new InvalidOperationException("Could not locate repository root from test output directory.");
     }
 
-    private sealed record ScriptResult(int ExitCode, string Output);
+    private sealed record ScriptResult(int ExitCode, string Output, string? ArtifactJson);
 }
