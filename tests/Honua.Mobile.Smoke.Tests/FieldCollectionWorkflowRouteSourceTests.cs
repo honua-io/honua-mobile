@@ -53,6 +53,33 @@ public sealed partial class FieldCollectionWorkflowRouteSourceTests
         Assert.DoesNotContain("PlaceholderPage", pages, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MapPage_RendersMobileWorkflowFeaturesThroughPlatformMapAdapter()
+    {
+        var root = FindRepositoryRoot();
+        var mapPage = File.ReadAllText(Path.Combine(
+            root,
+            "apps",
+            "Honua.Mobile.FieldCollection",
+            "Views",
+            "MapPage.xaml.cs"));
+        var mapXaml = File.ReadAllText(Path.Combine(
+            root,
+            "apps",
+            "Honua.Mobile.FieldCollection",
+            "Views",
+            "MapPage.xaml"));
+
+        Assert.Contains("MapView.Pins.Add", mapPage, StringComparison.Ordinal);
+        Assert.Contains("MapView.MapElements.Add", mapPage, StringComparison.Ordinal);
+        Assert.Contains("IdentifyAtLocationCommand", mapPage, StringComparison.Ordinal);
+        Assert.Contains("AddFeaturePin", mapPage, StringComparison.Ordinal);
+        Assert.Contains("AddFeatureLine", mapPage, StringComparison.Ordinal);
+        Assert.Contains("AddFeaturePolygon", mapPage, StringComparison.Ordinal);
+        Assert.Contains("AddFeatureFromCurrentLocationCommand", mapXaml, StringComparison.Ordinal);
+        Assert.Contains("CurrentLocationMetadata", mapXaml, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

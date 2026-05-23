@@ -572,6 +572,9 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     public bool HasValidationSummary => !string.IsNullOrWhiteSpace(ValidationSummary);
 
     private FieldPoint? _location;
+    private string? _captureSource;
+    private DateTime? _capturedAtUtc;
+    private double? _gpsAccuracyMeters;
     private Feature? _existingFeature;
 
     public ObservableCollection<EditableAttributeItem> Attributes { get; } = [];
@@ -602,6 +605,9 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         FeatureId = RouteQuery.GetString(query, "featureId", FeatureId);
         IsNew = RouteQuery.GetBool(query, "isNew", string.IsNullOrWhiteSpace(FeatureId));
         _location = RouteQuery.GetValue<FieldPoint>(query, "location");
+        _captureSource = RouteQuery.GetString(query, "captureSource", _captureSource ?? string.Empty);
+        _capturedAtUtc = RouteQuery.GetDateTime(query, "capturedAtUtc", _capturedAtUtc);
+        _gpsAccuracyMeters = RouteQuery.GetDouble(query, "gpsAccuracyMeters", _gpsAccuracyMeters);
 
         if (RouteQuery.GetBool(query, "isEdit", false))
         {
@@ -659,6 +665,11 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     {
                         _repeatSectionCounts[repeatCount.Key] = repeatCount.Value;
                     }
+                }
+
+                if (IsNew)
+                {
+                    ApplyCaptureMetadata(source);
                 }
 
                 foreach (var attribute in source.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
@@ -1309,6 +1320,30 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             ["notes"] = string.Empty
         };
 
+    private void ApplyCaptureMetadata(IDictionary<string, object?> values)
+    {
+        if (!string.IsNullOrWhiteSpace(_captureSource))
+        {
+            values.TryAdd("capture_source", _captureSource);
+        }
+
+        if (_capturedAtUtc.HasValue)
+        {
+            values.TryAdd("captured_at_utc", _capturedAtUtc.Value);
+        }
+
+        if (_gpsAccuracyMeters.HasValue)
+        {
+            values.TryAdd("gps_accuracy_m", _gpsAccuracyMeters.Value);
+        }
+
+        if (_location != null)
+        {
+            values.TryAdd("capture_latitude", _location.Latitude);
+            values.TryAdd("capture_longitude", _location.Longitude);
+        }
+    }
+
     private static object? ParseAttributeValue(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1829,6 +1864,41 @@ internal static class RouteQuery
         {
             bool boolean => boolean,
             string text when bool.TryParse(text, out var parsed) => parsed,
+            _ => fallback
+        };
+    }
+
+    public static double? GetDouble(IDictionary<string, object> query, string key, double? fallback)
+    {
+        if (!query.TryGetValue(key, out var value) || value == null)
+        {
+            return fallback;
+        }
+
+        return value switch
+        {
+            double number => number,
+            float number => number,
+            decimal number => (double)number,
+            int number => number,
+            long number => number,
+            string text when double.TryParse(text, out var parsed) => parsed,
+            _ => fallback
+        };
+    }
+
+    public static DateTime? GetDateTime(IDictionary<string, object> query, string key, DateTime? fallback)
+    {
+        if (!query.TryGetValue(key, out var value) || value == null)
+        {
+            return fallback;
+        }
+
+        return value switch
+        {
+            DateTime dateTime => dateTime,
+            DateTimeOffset dateTimeOffset => dateTimeOffset.UtcDateTime,
+            string text when DateTime.TryParse(text, out var parsed) => parsed,
             _ => fallback
         };
     }
