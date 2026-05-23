@@ -1,6 +1,8 @@
 # 5-Minute Tutorial: Build Your First Field Data Collection App
 
-In just 5 minutes, you'll build a complete field data collection app that competes with expensive platforms like Fulcrum and Survey123 - completely free and open source!
+In just 5 minutes, you'll build an open-source field data collection app that
+demonstrates the same core workflow categories used by platforms like Fulcrum
+and Survey123.
 
 ## What You'll Build
 
@@ -11,7 +13,8 @@ A professional mobile app with:
 - ✅ Offline data storage and sync
 - ✅ Cross-platform (iOS, Android, Windows)
 
-**End Result**: A production-ready field data collection app in under 5 minutes!
+**End Result**: A field data collection app prototype you can extend and
+validate for your own workflow.
 
 ## Step 1: Create Project (30 seconds)
 
@@ -270,20 +273,26 @@ curl -H "X-API-Key: your-api-key" \
 
 ## Compare to Competition
 
-### What You Just Built vs. Fulcrum ($99/month)
+This table is a planning comparison for the template and SDK surface, not a
+claim that every item is fully shipped and validated in this repository. For
+source-backed status, use the [feature map](../features/README.md), the
+[validation strategy](../guides/validation-strategy.md), and the
+[mobile SDK backlog roadmap](../guides/mobile-sdk-backlog-roadmap.md).
 
-| Feature | Your App (Free) | Fulcrum ($99/mo) |
+### Template Direction vs. Fulcrum ($99/month)
+
+| Feature | Honua template direction | Fulcrum ($99/mo) |
 |---------|-----------------|------------------|
-| **Dynamic Forms** | ✅ Server-driven schemas | ✅ Web form builder |
-| **Offline Capability** | ✅ True offline-first | ⚠️ Limited offline |
-| **GPS Accuracy** | ✅ Real-time color-coded | ✅ Basic accuracy |
-| **Photo Management** | ✅ AI face blurring | ❌ Basic photos only |
-| **IoT Integration** | ✅ Bluetooth LE sensors | ❌ Not available |
-| **AR Visualization** | ✅ Native ARKit/ARCore | ❌ Not available |
-| **Customization** | ✅ Full source code access | ❌ Vendor lock-in |
-| **License Cost** | ✅ **$0 forever** | ❌ **$1,188/year** |
+| **Dynamic Forms** | SDK-backed schemas and rendering are active mobile scope | Web form builder |
+| **Offline Capability** | GeoPackage and sync runtime are implemented; app workflow parity is tracked in backlog | Offline field collection |
+| **GPS Accuracy** | Mobile location services and validation presentation are implemented; advanced field UX is backlog | Accuracy capture |
+| **Photo Management** | Media capture/local path handling is mobile scope; advanced AI hooks are backlog | Photo capture |
+| **IoT Integration** | Future extension track | Product-dependent |
+| **AR Visualization** | Future track after scene anchoring dependencies close | Not a core field form feature |
+| **Customization** | Source and template customization | Vendor-managed customization |
+| **License Cost** | Open-source client repository | Commercial subscription |
 
-**💰 Savings: $1,188/year per user**
+Commercial savings depend on hosting, support, and implementation choices.
 
 ## Next Steps (Choose Your Adventure)
 

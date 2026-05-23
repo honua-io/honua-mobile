@@ -7,21 +7,38 @@ epic. It covers open children #10, #12, #16, #23, #38, #42, #50, #51, and #57.
 It intentionally excludes #22, which owns Flutter and broader platform parity
 expansion.
 
-This page is a sequencing and closure matrix. It does not replace the detailed
-source-of-truth documents for contracts, 3D/AR, offline packaging, protected
-scene auth, or display implementation.
+This page is a sequencing and closure matrix. It also indexes the current
+Fulcrum/Survey123 parity backlog. It does not replace the detailed
+source-of-truth documents for implemented capabilities, validation coverage,
+contracts, 3D/AR, offline packaging, protected scene auth, or display
+implementation.
 
 ## Source Documents
 
 | Area | Source |
 |------|--------|
-| Phase 0 parity, innovation, and test baseline | [Phase 0 Summary](../phase-0/PHASE_0_SUMMARY.md) |
+| Current implemented capability map | [Feature Map](../features/README.md) |
+| Current validation and coverage map | [Validation Strategy](validation-strategy.md) |
+| Historical Phase 0 parity, innovation, and test baseline | [Phase 0 Summary](../phase-0/PHASE_0_SUMMARY.md) |
 | SDK/mobile contract ownership | [Mobile Contract Harmonization](mobile-contract-harmonization.md) |
 | 3D, scene, and AR dependency order | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) |
 | Offline 3D package policy | [Offline 3D Scene Packages](offline-3d-scene-packages.md) |
 | Protected scene auth handoff | [Protected 3D Scene Auth](protected-3d-scene-auth.md) |
 | Web scene rendering surface | [3D Scene Embed](3d-scene-embed.md) |
 | Web map embedding surface | [Embeddable Map](embeddable-map.md) |
+
+## Status Vocabulary
+
+Use these labels consistently when comparing Honua Mobile to Fulcrum,
+Survey123, or other field collection platforms:
+
+| Status | Meaning | Source of truth |
+|--------|---------|-----------------|
+| Implemented | Source exists in this repository and belongs in mobile. | [Feature Map](../features/README.md) plus `src/`, `apps/`, `examples/`, and `templates/`. |
+| Validated | Automated tests or CI jobs exercise the behavior. | [Validation Strategy](validation-strategy.md), `tests/`, `src/Honua.Embed/tests/`, and CI job status. |
+| Backlog | Product parity need is identified but not fully implemented or validated. | The backlog index below and linked GitHub issues. |
+| Cross-repo dependency | Required contracts or server behavior belong outside this repo. | Linked `honua-sdk-dotnet` or `honua-server` issues and dependency docs. |
+| Historical baseline | Phase 0 planning claim or target, not shipped status by itself. | `docs/phase-0/*` with the status notes at the top of each document. |
 
 ## Epic State
 
@@ -34,6 +51,18 @@ scene auth, or display implementation.
 | 3D, offline scene, and AR/VR | Policy and dependency order are documented; implementation depends on server, SDK, browser/WebView, and native platform decisions. | #12 remains the umbrella. #42 and #38 are immediate prerequisites for production offline scenes and native AR/VR work. |
 | Field location behavior | Geofencing acquisition remains a mobile-owned runtime slice once SDK evaluation contracts are available. | #51 should not define portable geofence rules; it should consume the SDK and own permissions, sensors, background behavior, and battery policy. |
 | Plugins | Mobile/web hosts own runtime loading and UI integration; non-UI manifests and permission contracts belong in shared SDK/server work. | #16 can consume SDK manifests from `Honua.Sdk.Abstractions`; server plugin APIs remain tracked in honua-io/honua-server#347. |
+
+## Fulcrum/Survey123 Parity Backlog Index
+
+These issues are the current execution backlog for closing the gap between the
+historical Phase 0 parity targets and source-backed shipped status.
+
+| Priority | Issues | Closure signal |
+|----------|--------|----------------|
+| P0 | [#208](https://github.com/honua-io/honua-mobile/issues/208) restore green validation; [#209](https://github.com/honua-io/honua-mobile/issues/209) reconcile parity docs. | Agents and reviewers can trust the local/CI baseline and source-backed docs. |
+| P1 | [#210](https://github.com/honua-io/honua-mobile/issues/210) functional FieldCollection workflows; [#211](https://github.com/honua-io/honua-mobile/issues/211) metadata-driven projects/layers/forms; [#212](https://github.com/honua-io/honua-mobile/issues/212) remote sync transports; [#213](https://github.com/honua-io/honua-mobile/issues/213) attachment storage/sync; [#214](https://github.com/honua-io/honua-mobile/issues/214) pilot field-type controls; [#215](https://github.com/honua-io/honua-mobile/issues/215) rules/calculations/conditional visibility/repeats; [#216](https://github.com/honua-io/honua-mobile/issues/216) real map workflow surface. | MVP field workflow is usable end to end from metadata load through capture, validation, map context, offline storage, and sync. |
+| P2 | [#217](https://github.com/honua-io/honua-mobile/issues/217) product acceptance suite; [#218](https://github.com/honua-io/honua-mobile/issues/218) auth/session hardening; [#219](https://github.com/honua-io/honua-mobile/issues/219) server/admin dependencies; [#220](https://github.com/honua-io/honua-mobile/issues/220) local record export; [#221](https://github.com/honua-io/honua-mobile/issues/221) diagnostics and sync health. | Beta hardening covers acceptance evidence, operational support, auth robustness, admin dependencies, and field troubleshooting. |
+| P3 | [#222](https://github.com/honua-io/honua-mobile/issues/222) external GNSS metadata; [#223](https://github.com/honua-io/honua-mobile/issues/223) geofence/proximity workflows; [#224](https://github.com/honua-io/honua-mobile/issues/224) AI-assisted capture hooks; [#225](https://github.com/honua-io/honua-mobile/issues/225) first AR/3D field workflow; [#226](https://github.com/honua-io/honua-mobile/issues/226) mobile/web plugin host hardening. | GA-oriented differentiators are implemented only after SDK/server dependencies and MVP/Beta workflow gaps are stable. |
 
 ## Acceptance Matrix
 
