@@ -164,7 +164,7 @@ public abstract class WorkflowPage<TViewModel> : ContentPage, IQueryAttributable
     {
         ViewModel = viewModel;
         BindingContext = viewModel;
-        SetBinding(TitleProperty, nameof(BaseViewModel.Title));
+        SetBinding(TitleProperty, new Binding(nameof(BaseViewModel.Title)));
     }
 
     protected TViewModel ViewModel { get; }
@@ -205,10 +205,10 @@ internal static class WorkflowPageContent
             ItemTemplate = new DataTemplate(() =>
             {
                 var key = new Label { FontAttributes = FontAttributes.Bold };
-                key.SetBinding(Label.TextProperty, nameof(AttributeDisplayItem.Key));
+                key.SetBinding(Label.TextProperty, new Binding(nameof(AttributeDisplayItem.Key)));
 
                 var value = new Label { LineBreakMode = LineBreakMode.WordWrap };
-                value.SetBinding(Label.TextProperty, nameof(AttributeDisplayItem.Value));
+                value.SetBinding(Label.TextProperty, new Binding(nameof(AttributeDisplayItem.Value)));
 
                 var grid = new Grid
                 {
@@ -227,7 +227,7 @@ internal static class WorkflowPageContent
                 return grid;
             })
         };
-        attributes.SetBinding(ItemsView.ItemsSourceProperty, "Attributes");
+        attributes.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attributes"));
 
         return PageScroll(
             BoundHeader("Feature.DisplayTitle", "Record"),
@@ -247,10 +247,10 @@ internal static class WorkflowPageContent
             ItemTemplate = new DataTemplate(() =>
             {
                 var key = new Entry { Placeholder = "Field" };
-                key.SetBinding(Entry.TextProperty, nameof(EditableAttributeItem.Key));
+                key.SetBinding(Entry.TextProperty, new Binding(nameof(EditableAttributeItem.Key)));
 
                 var value = new Entry { Placeholder = "Value" };
-                value.SetBinding(Entry.TextProperty, nameof(EditableAttributeItem.ValueText));
+                value.SetBinding(Entry.TextProperty, new Binding(nameof(EditableAttributeItem.ValueText)));
 
                 var grid = new Grid
                 {
@@ -269,7 +269,7 @@ internal static class WorkflowPageContent
                 return grid;
             })
         };
-        attributes.SetBinding(ItemsView.ItemsSourceProperty, "Attributes");
+        attributes.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attributes"));
 
         return PageScroll(
             BoundHeader("PageTitle", "Record"),
@@ -347,13 +347,13 @@ internal static class WorkflowPageContent
             ItemTemplate = new DataTemplate(() =>
             {
                 var status = new Label { FontAttributes = FontAttributes.Bold };
-                status.SetBinding(Label.TextProperty, nameof(SyncHistoryRow.Summary));
+                status.SetBinding(Label.TextProperty, new Binding(nameof(SyncHistoryRow.Summary)));
 
                 var started = new Label { FontSize = 12 };
                 started.SetBinding(Label.TextProperty, new Binding(nameof(SyncHistoryRow.StartTime), stringFormat: "Started {0:u}"));
 
                 var error = new Label { FontSize = 12, TextColor = Colors.DarkRed };
-                error.SetBinding(Label.TextProperty, nameof(SyncHistoryRow.ErrorMessage));
+                error.SetBinding(Label.TextProperty, new Binding(nameof(SyncHistoryRow.ErrorMessage)));
 
                 return new VerticalStackLayout
                 {
@@ -362,7 +362,7 @@ internal static class WorkflowPageContent
                 };
             })
         };
-        sessions.SetBinding(ItemsView.ItemsSourceProperty, "Sessions");
+        sessions.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Sessions"));
 
         return PageScroll(
             SectionTitle("Sync History"),
@@ -452,21 +452,21 @@ internal static class WorkflowPageContent
     private static Label BoundMultilineLabel(string path)
     {
         var label = new Label { LineBreakMode = LineBreakMode.WordWrap };
-        label.SetBinding(Label.TextProperty, path);
+        label.SetBinding(Label.TextProperty, new Binding(path));
         return label;
     }
 
     private static Entry BoundEntry(string path, string placeholder)
     {
         var entry = new Entry { Placeholder = placeholder };
-        entry.SetBinding(Entry.TextProperty, path);
+        entry.SetBinding(Entry.TextProperty, new Binding(path));
         return entry;
     }
 
     private static View Toggle(string path, string label)
     {
         var toggle = new Switch();
-        toggle.SetBinding(Switch.IsToggledProperty, path);
+        toggle.SetBinding(Switch.IsToggledProperty, new Binding(path));
 
         return new HorizontalStackLayout
         {
@@ -482,7 +482,7 @@ internal static class WorkflowPageContent
     private static Button CommandButton(string text, string commandPath)
     {
         var button = new Button { Text = text };
-        button.SetBinding(Button.CommandProperty, commandPath);
+        button.SetBinding(Button.CommandProperty, new Binding(commandPath));
         return button;
     }
 
