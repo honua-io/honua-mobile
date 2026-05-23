@@ -35,6 +35,7 @@ public sealed partial class EditableAttributeItem : ObservableObject
 public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
 {
     private readonly IFeatureService _featureService;
+    private readonly IAttachmentService _attachmentService;
 
     [ObservableProperty]
     private string featureId = string.Empty;
@@ -49,11 +50,16 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
     private string geometrySummary = "No geometry";
 
     public ObservableCollection<AttributeDisplayItem> Attributes { get; } = [];
+    public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
 
-    public RecordDetailViewModel(INavigationService navigationService, IFeatureService featureService)
+    public RecordDetailViewModel(
+        INavigationService navigationService,
+        IFeatureService featureService,
+        IAttachmentService attachmentService)
         : base(navigationService)
     {
         _featureService = featureService;
+        _attachmentService = attachmentService;
         Title = "Record Detail";
     }
 
@@ -77,6 +83,7 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
         {
             Feature = await _featureService.GetFeatureAsync(LayerId, FeatureId);
             Attributes.Clear();
+            Attachments.Clear();
 
             if (Feature == null)
             {
@@ -94,6 +101,11 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
             }
 
             GeometrySummary = FormatGeometry(Feature.Geometry);
+
+            foreach (var attachment in await _attachmentService.GetAttachmentsAsync(Feature.Id))
+            {
+                Attachments.Add(attachment);
+            }
         });
     }
 
@@ -141,6 +153,22 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
         });
     }
 
+    [RelayCommand]
+    private async Task OpenAttachment(AttachmentInfo attachment)
+    {
+        if (string.IsNullOrWhiteSpace(attachment.LocalPath) || !File.Exists(attachment.LocalPath))
+        {
+            using var _ = await _attachmentService.GetAttachmentAsync(attachment.Id);
+            await ShowMessage("Attachment", attachment.FileName);
+            return;
+        }
+
+        await Microsoft.Maui.ApplicationModel.Launcher.Default.OpenAsync(
+            new Microsoft.Maui.ApplicationModel.OpenFileRequest(
+                attachment.FileName,
+                new Microsoft.Maui.Storage.ReadOnlyFile(attachment.LocalPath, attachment.ContentType)));
+    }
+
     private static string FormatGeometry(Geometry? geometry)
     {
         return geometry switch
@@ -168,8 +196,11 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
 
 public sealed partial class FeatureDetailViewModel : RecordDetailViewModel
 {
-    public FeatureDetailViewModel(INavigationService navigationService, IFeatureService featureService)
-        : base(navigationService, featureService)
+    public FeatureDetailViewModel(
+        INavigationService navigationService,
+        IFeatureService featureService,
+        IAttachmentService attachmentService)
+        : base(navigationService, featureService, attachmentService)
     {
         Title = "Feature Detail";
     }
@@ -178,6 +209,7 @@ public sealed partial class FeatureDetailViewModel : RecordDetailViewModel
 public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareViewModel
 {
     private readonly IFeatureService _featureService;
+    private readonly IAttachmentService _attachmentService;
 
     [ObservableProperty]
     private int layerId = 1;
@@ -198,11 +230,16 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     private Feature? _existingFeature;
 
     public ObservableCollection<EditableAttributeItem> Attributes { get; } = [];
+    public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
 
-    public RecordEditViewModel(INavigationService navigationService, IFeatureService featureService)
+    public RecordEditViewModel(
+        INavigationService navigationService,
+        IFeatureService featureService,
+        IAttachmentService attachmentService)
         : base(navigationService)
     {
         _featureService = featureService;
+        _attachmentService = attachmentService;
         Title = "Create Record";
     }
 
@@ -227,8 +264,14 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         await ExecuteAsync(async () =>
         {
             Attributes.Clear();
+            Attachments.Clear();
             PageTitle = IsNew ? "Create Record" : "Edit Record";
             Title = PageTitle;
+
+            if (IsNew && string.IsNullOrWhiteSpace(FeatureId))
+            {
+                FeatureId = Guid.NewGuid().ToString("N");
+            }
 
             if (!IsNew && !string.IsNullOrWhiteSpace(FeatureId))
             {
@@ -246,6 +289,14 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
             }
 
             GeometrySummary = FormatGeometry(_existingFeature?.Geometry ?? _location);
+
+            if (!string.IsNullOrWhiteSpace(FeatureId))
+            {
+                foreach (var attachment in await _attachmentService.GetAttachmentsAsync(FeatureId))
+                {
+                    Attachments.Add(attachment);
+                }
+            }
         });
     }
 
@@ -264,6 +315,74 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     private void RemoveAttribute(EditableAttributeItem item)
     {
         Attributes.Remove(item);
+    }
+
+    [RelayCommand]
+    private async Task AddFileAttachment()
+    {
+        var picked = await Microsoft.Maui.Storage.FilePicker.Default.PickAsync();
+        if (picked == null)
+        {
+            return;
+        }
+
+        await AddAttachmentFromFileResultAsync(picked, AttachmentPayloadKind.File);
+    }
+
+    [RelayCommand]
+    private async Task AddPhotoAttachment()
+    {
+        Microsoft.Maui.Storage.FileResult? photo = null;
+        if (Microsoft.Maui.Media.MediaPicker.Default.IsCaptureSupported)
+        {
+            photo = await Microsoft.Maui.Media.MediaPicker.Default.CapturePhotoAsync();
+        }
+
+        photo ??= await Microsoft.Maui.Storage.FilePicker.Default.PickAsync(new Microsoft.Maui.Storage.PickOptions
+        {
+            FileTypes = Microsoft.Maui.Storage.FilePickerFileType.Images
+        });
+        if (photo == null)
+        {
+            return;
+        }
+
+        await AddAttachmentFromFileResultAsync(photo, AttachmentPayloadKind.Photo);
+    }
+
+    [RelayCommand]
+    private async Task RemoveAttachment(AttachmentInfo attachment)
+    {
+        await ExecuteAsync(async () =>
+        {
+            await _attachmentService.DeleteAttachmentAsync(attachment.Id);
+            Attachments.Remove(attachment);
+        });
+    }
+
+    private async Task AddAttachmentFromFileResultAsync(
+        Microsoft.Maui.Storage.FileResult file,
+        AttachmentPayloadKind payloadKind)
+    {
+        await ExecuteAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(FeatureId))
+            {
+                FeatureId = Guid.NewGuid().ToString("N");
+            }
+
+            await using var stream = await file.OpenReadAsync();
+            var attachment = await _attachmentService.SaveAttachmentAsync(
+                LayerId,
+                FeatureId,
+                stream,
+                file.FileName,
+                string.IsNullOrWhiteSpace(file.ContentType)
+                    ? "application/octet-stream"
+                    : file.ContentType,
+                payloadKind);
+            Attachments.Add(attachment);
+        });
     }
 
     [RelayCommand]
@@ -309,7 +428,18 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     }
 
     [RelayCommand]
-    private Task Cancel() => NavigationService.GoBackAsync();
+    private async Task Cancel()
+    {
+        if (IsNew && !string.IsNullOrWhiteSpace(FeatureId))
+        {
+            foreach (var attachment in Attachments.ToList())
+            {
+                await _attachmentService.DeleteAttachmentAsync(attachment.Id);
+            }
+        }
+
+        await NavigationService.GoBackAsync();
+    }
 
     private static Dictionary<string, object?> CreateDefaultAttributes() =>
         new(StringComparer.OrdinalIgnoreCase)
@@ -486,6 +616,8 @@ public sealed partial class DiagnosticsViewModel : BaseViewModel, IRouteAwareVie
             $"Online {report.Connectivity.IsConnected}\n" +
             $"Remote sync configured {report.Sync.IsRemoteSyncConfigured}\n" +
             $"Pending changes {report.Sync.PendingChanges}\n" +
+            $"Pending attachments {report.OfflineCache.Operations.AttachmentPendingCount}\n" +
+            $"Attachment failures {report.OfflineCache.Operations.AttachmentFailedCount}\n" +
             $"Conflicts {report.Sync.ConflictCount}\n" +
             $"Database {report.Database.DatabaseSize}\n" +
             $"Offline cache {report.OfflineCache.PackageSizeDisplay}";

@@ -51,6 +51,82 @@ public class LocalFeature
 }
 
 /// <summary>
+/// Locally stored feature attachment metadata and sync state.
+/// </summary>
+[Table("local_attachments")]
+public class LocalAttachment
+{
+    [PrimaryKey]
+    [Column("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [Column("feature_id")]
+    [Indexed]
+    public string FeatureId { get; set; } = string.Empty;
+
+    [Column("layer_id")]
+    [Indexed]
+    public int LayerId { get; set; }
+
+    [Column("remote_attachment_id")]
+    [Indexed]
+    public long? RemoteAttachmentId { get; set; }
+
+    [Column("remote_global_id")]
+    public string? RemoteGlobalId { get; set; }
+
+    [Column("file_name")]
+    public string FileName { get; set; } = string.Empty;
+
+    [Column("content_type")]
+    public string ContentType { get; set; } = "application/octet-stream";
+
+    [Column("payload_kind")]
+    public AttachmentPayloadKind PayloadKind { get; set; } = AttachmentPayloadKind.File;
+
+    [Column("size_bytes")]
+    public long SizeBytes { get; set; }
+
+    [Column("local_path")]
+    public string? LocalPath { get; set; }
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [Column("uploaded_at")]
+    public DateTime UploadedAt { get; set; }
+
+    [Column("last_synced_at")]
+    public DateTime? LastSyncedAt { get; set; }
+
+    [Column("description")]
+    public string? Description { get; set; }
+
+    [Column("thumbnail_url")]
+    public string? ThumbnailUrl { get; set; }
+
+    [Column("sync_status")]
+    [Indexed]
+    public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
+
+    [Column("retry_count")]
+    public int RetryCount { get; set; }
+
+    [Column("last_error")]
+    public string? LastError { get; set; }
+
+    [Column("is_deleted")]
+    [Indexed]
+    public bool IsDeleted { get; set; }
+
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
 /// Change tracking record for delta sync
 /// </summary>
 [Table("change_records")]

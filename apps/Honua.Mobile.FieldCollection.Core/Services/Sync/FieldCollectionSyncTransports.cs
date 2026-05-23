@@ -21,7 +21,26 @@ public interface IFieldCollectionFeatureSyncClient
     Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken cancellationToken = default);
 }
 
-public sealed class HonuaSdkFieldCollectionFeatureSyncClient : IFieldCollectionFeatureSyncClient
+public interface IFieldCollectionAttachmentSyncClient
+{
+    bool IsConfigured { get; }
+    Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken cancellationToken = default);
+    Task<FeatureAttachmentContent> DownloadAttachmentAsync(
+        FeatureAttachmentDownloadRequest request,
+        CancellationToken cancellationToken = default);
+    Task<FeatureAttachmentResult> AddAttachmentAsync(
+        FeatureAttachmentAddRequest request,
+        CancellationToken cancellationToken = default);
+    Task<FeatureAttachmentResult> DeleteAttachmentAsync(
+        FeatureAttachmentDeleteRequest request,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class HonuaSdkFieldCollectionFeatureSyncClient :
+    IFieldCollectionFeatureSyncClient,
+    IFieldCollectionAttachmentSyncClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IAuthenticationService _authenticationService;
@@ -53,6 +72,38 @@ public sealed class HonuaSdkFieldCollectionFeatureSyncClient : IFieldCollectionF
     {
         using var client = CreateClient();
         return await client.QueryAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<FeatureAttachmentInfo>> ListAttachmentsAsync(
+        FeatureAttachmentListRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        using var client = CreateClient();
+        return await client.ListAttachmentsAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FeatureAttachmentContent> DownloadAttachmentAsync(
+        FeatureAttachmentDownloadRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        using var client = CreateClient();
+        return await client.DownloadAttachmentAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FeatureAttachmentResult> AddAttachmentAsync(
+        FeatureAttachmentAddRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        using var client = CreateClient();
+        return await client.AddAttachmentAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FeatureAttachmentResult> DeleteAttachmentAsync(
+        FeatureAttachmentDeleteRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        using var client = CreateClient();
+        return await client.DeleteAttachmentAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private HonuaMobileClient CreateClient()
@@ -810,6 +861,439 @@ public sealed class HonuaFieldCollectionChangePuller :
             target = value;
             return true;
         }
+    }
+
+    private static string? ResolveServiceId(LayerInfo layer)
+    {
+        if (!string.IsNullOrWhiteSpace(layer.ServiceId))
+        {
+            return layer.ServiceId;
+        }
+
+        const string separator = "/FeatureServer/";
+        if (!string.IsNullOrWhiteSpace(layer.SourceId) &&
+            layer.SourceId.IndexOf(separator, StringComparison.OrdinalIgnoreCase) is var index and >= 0)
+        {
+            return layer.SourceId[..index];
+        }
+
+        return null;
+    }
+}
+
+public sealed class HonuaFieldCollectionAttachmentSynchronizer :
+    IFieldCollectionAttachmentSynchronizer,
+    IFieldCollectionRemoteSyncCapability
+{
+    private readonly GeoPackageStorageService _storage;
+    private readonly IAttachmentService _attachmentService;
+    private readonly IFieldCollectionMetadataService _metadataService;
+    private readonly IFieldCollectionAttachmentSyncClient _attachmentClient;
+    private readonly ILogger<HonuaFieldCollectionAttachmentSynchronizer>? _logger;
+
+    public HonuaFieldCollectionAttachmentSynchronizer(
+        GeoPackageStorageService storage,
+        IAttachmentService attachmentService,
+        IFieldCollectionMetadataService metadataService,
+        IFieldCollectionAttachmentSyncClient attachmentClient,
+        ILogger<HonuaFieldCollectionAttachmentSynchronizer>? logger = null)
+    {
+        _storage = storage;
+        _attachmentService = attachmentService;
+        _metadataService = metadataService;
+        _attachmentClient = attachmentClient;
+        _logger = logger;
+    }
+
+    public bool IsRemoteSyncConfigured => _attachmentClient.IsConfigured;
+
+    public async Task<AttachmentSyncResult> PushPendingAttachmentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsRemoteSyncConfigured)
+        {
+            return new AttachmentSyncResult();
+        }
+
+        var result = new AttachmentSyncResult();
+        var layers = await _metadataService.GetLayersAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var pendingAttachments = await _storage.GetPendingAttachmentChangesAsync().ConfigureAwait(false);
+
+        foreach (var attachment in pendingAttachments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (attachment.SyncStatus is AttachmentSyncStatus.PendingDownload or AttachmentSyncStatus.DownloadFailed)
+            {
+                continue;
+            }
+
+            var layer = layers.FirstOrDefault(layer => layer.Id == attachment.LayerId);
+            var serviceId = layer == null ? null : ResolveServiceId(layer);
+            if (string.IsNullOrWhiteSpace(serviceId))
+            {
+                await MarkAttachmentFailureAsync(
+                    attachment,
+                    attachment.IsDeleted ? AttachmentSyncStatus.DeleteFailed : AttachmentSyncStatus.UploadFailed,
+                    $"Layer {attachment.LayerId} has no FeatureServer service id.").ConfigureAwait(false);
+                result.Failed++;
+                continue;
+            }
+
+            var objectId = await ResolveObjectIdAsync(attachment).ConfigureAwait(false);
+            if (!objectId.HasValue)
+            {
+                await MarkAttachmentFailureAsync(
+                    attachment,
+                    attachment.IsDeleted ? AttachmentSyncStatus.DeleteFailed : AttachmentSyncStatus.UploadFailed,
+                    $"Feature {attachment.FeatureId} does not have a server object id yet.").ConfigureAwait(false);
+                result.Failed++;
+                continue;
+            }
+
+            try
+            {
+                if (attachment.IsDeleted ||
+                    attachment.SyncStatus is AttachmentSyncStatus.PendingDelete or AttachmentSyncStatus.DeleteFailed)
+                {
+                    if (await PushAttachmentDeleteAsync(attachment, serviceId, objectId.Value, cancellationToken)
+                            .ConfigureAwait(false))
+                    {
+                        result.Deleted++;
+                    }
+                    else
+                    {
+                        result.Failed++;
+                    }
+                }
+                else if (await PushAttachmentUploadAsync(attachment, serviceId, objectId.Value, cancellationToken)
+                             .ConfigureAwait(false))
+                {
+                    result.Uploaded++;
+                }
+                else
+                {
+                    result.Failed++;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await MarkAttachmentFailureAsync(
+                    attachment,
+                    attachment.IsDeleted ? AttachmentSyncStatus.DeleteFailed : AttachmentSyncStatus.UploadFailed,
+                    ex.Message).ConfigureAwait(false);
+                _logger?.LogWarning(
+                    ex,
+                    "Attachment sync failed for local attachment {AttachmentId}",
+                    attachment.Id);
+                result.Failed++;
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<AttachmentSyncResult> PullRemoteAttachmentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsRemoteSyncConfigured)
+        {
+            return new AttachmentSyncResult();
+        }
+
+        var result = new AttachmentSyncResult();
+        var layers = await _metadataService.GetLayersAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        foreach (var layer in layers.Where(layer => layer.IsEditable))
+        {
+            var serviceId = ResolveServiceId(layer);
+            if (string.IsNullOrWhiteSpace(serviceId))
+            {
+                continue;
+            }
+
+            var features = await _storage.QueryFeaturesAsync(layer.Id).ConfigureAwait(false);
+            foreach (var feature in features)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!TryReadObjectId(feature, out var objectId))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<FeatureAttachmentInfo> remoteAttachments;
+                try
+                {
+                    remoteAttachments = await _attachmentClient.ListAttachmentsAsync(
+                        new FeatureAttachmentListRequest
+                        {
+                            Source = new FeatureSource { ServiceId = serviceId, LayerId = layer.Id },
+                            ObjectId = objectId
+                        },
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger?.LogWarning(
+                        ex,
+                        "Failed to list attachments for feature {FeatureId} in layer {LayerId}",
+                        feature.Id,
+                        layer.Id);
+                    result.Failed++;
+                    continue;
+                }
+
+                foreach (var remoteAttachment in remoteAttachments)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var remoteAttachmentId = remoteAttachment.AttachmentId.GetValueOrDefault();
+                    if (remoteAttachmentId <= 0)
+                    {
+                        continue;
+                    }
+
+                    var existing = await _storage.GetAttachmentByRemoteIdAsync(layer.Id, feature.Id, remoteAttachmentId)
+                        .ConfigureAwait(false);
+
+                    if (existing is { IsDeleted: true } &&
+                        existing.SyncStatus is AttachmentSyncStatus.PendingDelete or AttachmentSyncStatus.DeleteFailed)
+                    {
+                        continue;
+                    }
+
+                    if (existing is { IsDeleted: false } &&
+                        await _attachmentService.AttachmentContentExistsAsync(existing.Id).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var content = await _attachmentClient.DownloadAttachmentAsync(
+                            new FeatureAttachmentDownloadRequest
+                            {
+                                Source = new FeatureSource { ServiceId = serviceId, LayerId = layer.Id },
+                                ObjectId = objectId,
+                                AttachmentId = remoteAttachmentId
+                            },
+                            cancellationToken).ConfigureAwait(false);
+                        using var contentStream = content.Content;
+
+                        var info = content.Info.AttachmentId > 0
+                            ? content.Info
+                            : remoteAttachment;
+                        await _attachmentService.SaveDownloadedAttachmentAsync(
+                            layer.Id,
+                            feature.Id,
+                            info,
+                            contentStream,
+                            cancellationToken).ConfigureAwait(false);
+                        result.Downloaded++;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await StoreDownloadFailureAsync(layer.Id, feature.Id, remoteAttachment, ex.Message)
+                            .ConfigureAwait(false);
+                        _logger?.LogWarning(
+                            ex,
+                            "Attachment download failed for remote attachment {AttachmentId} on feature {FeatureId}",
+                            remoteAttachment.AttachmentId,
+                            feature.Id);
+                        result.Failed++;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<bool> PushAttachmentUploadAsync(
+        AttachmentInfo attachment,
+        string serviceId,
+        long objectId,
+        CancellationToken cancellationToken)
+    {
+        if (!await _attachmentService.AttachmentContentExistsAsync(attachment.Id).ConfigureAwait(false))
+        {
+            await MarkAttachmentFailureAsync(
+                attachment,
+                AttachmentSyncStatus.UploadFailed,
+                "Attachment content file is missing.").ConfigureAwait(false);
+            return false;
+        }
+
+        using var content = await _attachmentService.GetAttachmentAsync(attachment.Id).ConfigureAwait(false);
+        var response = await _attachmentClient.AddAttachmentAsync(
+            new FeatureAttachmentAddRequest
+            {
+                Source = new FeatureSource { ServiceId = serviceId, LayerId = attachment.LayerId },
+                ObjectId = objectId,
+                Name = attachment.FileName,
+                ContentType = string.IsNullOrWhiteSpace(attachment.ContentType)
+                    ? "application/octet-stream"
+                    : attachment.ContentType,
+                Content = content,
+                Keywords = attachment.Description
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (response.Succeeded)
+        {
+            var remoteAttachmentId = response.AttachmentId.GetValueOrDefault();
+            if (remoteAttachmentId <= 0)
+            {
+                await MarkAttachmentFailureAsync(
+                    attachment,
+                    AttachmentSyncStatus.UploadFailed,
+                    "Attachment upload response did not include a remote attachment id.").ConfigureAwait(false);
+                return false;
+            }
+
+            await _storage.MarkAttachmentUploadedAsync(
+                attachment.Id,
+                remoteAttachmentId,
+                response.GlobalId,
+                DateTime.UtcNow).ConfigureAwait(false);
+            return true;
+        }
+
+        await MarkAttachmentFailureAsync(
+            attachment,
+            AttachmentSyncStatus.UploadFailed,
+            GetFailureMessage(response, "Attachment upload failed.")).ConfigureAwait(false);
+        return false;
+    }
+
+    private async Task<bool> PushAttachmentDeleteAsync(
+        AttachmentInfo attachment,
+        string serviceId,
+        long objectId,
+        CancellationToken cancellationToken)
+    {
+        if (!attachment.RemoteAttachmentId.HasValue || attachment.RemoteAttachmentId.Value <= 0)
+        {
+            await _storage.MarkAttachmentDeletedSyncedAsync(attachment.Id).ConfigureAwait(false);
+            return true;
+        }
+
+        var response = await _attachmentClient.DeleteAttachmentAsync(
+            new FeatureAttachmentDeleteRequest
+            {
+                Source = new FeatureSource { ServiceId = serviceId, LayerId = attachment.LayerId },
+                ObjectId = objectId,
+                AttachmentId = attachment.RemoteAttachmentId.Value
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (response.Succeeded)
+        {
+            await _storage.MarkAttachmentDeletedSyncedAsync(attachment.Id).ConfigureAwait(false);
+            return true;
+        }
+
+        await MarkAttachmentFailureAsync(
+            attachment,
+            AttachmentSyncStatus.DeleteFailed,
+            GetFailureMessage(response, "Attachment delete failed.")).ConfigureAwait(false);
+        return false;
+    }
+
+    private async Task StoreDownloadFailureAsync(
+        int layerId,
+        string featureId,
+        FeatureAttachmentInfo remoteAttachment,
+        string errorMessage)
+    {
+        var remoteAttachmentId = remoteAttachment.AttachmentId.GetValueOrDefault();
+        var existing = remoteAttachmentId > 0
+            ? await _storage.GetAttachmentByRemoteIdAsync(layerId, featureId, remoteAttachmentId)
+                .ConfigureAwait(false)
+            : null;
+        if (existing == null)
+        {
+            var now = DateTime.UtcNow;
+            existing = new AttachmentInfo
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                LayerId = layerId,
+                FeatureId = featureId,
+                RemoteAttachmentId = remoteAttachmentId <= 0 ? null : remoteAttachmentId,
+                RemoteGlobalId = remoteAttachment.GlobalId,
+                FileName = string.IsNullOrWhiteSpace(remoteAttachment.Name)
+                    ? "attachment.bin"
+                    : remoteAttachment.Name,
+                ContentType = string.IsNullOrWhiteSpace(remoteAttachment.ContentType)
+                    ? "application/octet-stream"
+                    : remoteAttachment.ContentType,
+                PayloadKind = !string.IsNullOrWhiteSpace(remoteAttachment.ContentType) &&
+                    remoteAttachment.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                    ? AttachmentPayloadKind.Photo
+                    : AttachmentPayloadKind.File,
+                SizeBytes = remoteAttachment.Size.GetValueOrDefault(),
+                CreatedAt = now,
+                UpdatedAt = now,
+                UploadedAt = now,
+                SyncStatus = AttachmentSyncStatus.PendingDownload
+            };
+            await _storage.StoreAttachmentMetadataAsync(existing).ConfigureAwait(false);
+        }
+
+        await _storage.MarkAttachmentSyncFailedAsync(
+            existing.Id,
+            AttachmentSyncStatus.DownloadFailed,
+            errorMessage).ConfigureAwait(false);
+    }
+
+    private Task MarkAttachmentFailureAsync(
+        AttachmentInfo attachment,
+        AttachmentSyncStatus failedStatus,
+        string errorMessage)
+    {
+        return _storage.MarkAttachmentSyncFailedAsync(attachment.Id, failedStatus, errorMessage);
+    }
+
+    private async Task<long?> ResolveObjectIdAsync(AttachmentInfo attachment)
+    {
+        var feature = await _storage.GetFeatureAsync(attachment.FeatureId, attachment.LayerId).ConfigureAwait(false);
+        if (feature != null && TryReadObjectId(feature, out var objectId))
+        {
+            return objectId;
+        }
+
+        return long.TryParse(attachment.FeatureId, NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId)
+            ? objectId
+            : null;
+    }
+
+    private static bool TryReadObjectId(Feature feature, out long objectId)
+    {
+        objectId = 0;
+        foreach (var attribute in feature.Attributes)
+        {
+            if (!attribute.Key.Equals("objectid", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("objectId", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("OBJECTID", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("FID", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (HonuaFieldCollectionChangeUploader.TryConvertInt64(attribute.Value, out objectId))
+            {
+                return true;
+            }
+        }
+
+        return long.TryParse(feature.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId);
+    }
+
+    private static string GetFailureMessage(FeatureAttachmentResult response, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(response.Error?.Message)
+            ? fallback
+            : response.Error.Message;
     }
 
     private static string? ResolveServiceId(LayerInfo layer)

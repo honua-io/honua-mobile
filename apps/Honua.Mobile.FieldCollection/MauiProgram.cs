@@ -58,7 +58,11 @@ public static class MauiProgram
 
         // Register sync service factory
         services.AddHttpClient("HonuaFieldSync");
-        services.AddSingleton<IFieldCollectionFeatureSyncClient, HonuaSdkFieldCollectionFeatureSyncClient>();
+        services.AddSingleton<HonuaSdkFieldCollectionFeatureSyncClient>();
+        services.AddSingleton<IFieldCollectionFeatureSyncClient>(provider =>
+            provider.GetRequiredService<HonuaSdkFieldCollectionFeatureSyncClient>());
+        services.AddSingleton<IFieldCollectionAttachmentSyncClient>(provider =>
+            provider.GetRequiredService<HonuaSdkFieldCollectionFeatureSyncClient>());
         services.AddSingleton<IFieldCollectionChangeUploader>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
@@ -69,6 +73,16 @@ public static class MauiProgram
                 provider.GetService<ILogger<HonuaFieldCollectionChangeUploader>>());
         });
         services.AddSingleton<IFieldCollectionChangePuller, HonuaFieldCollectionChangePuller>();
+        services.AddSingleton<IFieldCollectionAttachmentSynchronizer>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new HonuaFieldCollectionAttachmentSynchronizer(
+                databaseService.GetStorageService(),
+                provider.GetRequiredService<IAttachmentService>(),
+                provider.GetRequiredService<IFieldCollectionMetadataService>(),
+                provider.GetRequiredService<IFieldCollectionAttachmentSyncClient>(),
+                provider.GetService<ILogger<HonuaFieldCollectionAttachmentSynchronizer>>());
+        });
         services.AddSingleton<ISyncService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
@@ -76,6 +90,7 @@ public static class MauiProgram
             var connectivityService = provider.GetRequiredService<IConnectivityService>();
             var changeUploader = provider.GetRequiredService<IFieldCollectionChangeUploader>();
             var changePuller = provider.GetRequiredService<IFieldCollectionChangePuller>();
+            var attachmentSynchronizer = provider.GetRequiredService<IFieldCollectionAttachmentSynchronizer>();
             var logger = provider.GetRequiredService<ILogger<GeoPackageSyncService>>();
             var exceptionReporter = provider.GetRequiredService<IMobileExceptionReporter>();
             return databaseService.GetSyncService(
@@ -83,6 +98,7 @@ public static class MauiProgram
                 connectivityService,
                 changeUploader,
                 changePuller,
+                attachmentSynchronizer,
                 logger: logger,
                 exceptionReporter: exceptionReporter);
         });
@@ -126,7 +142,13 @@ public static class MauiProgram
         // Other feature services
         services.AddSingleton<IFormService>(provider =>
             new FormService(provider.GetRequiredService<IFieldCollectionMetadataService>()));
-        services.AddSingleton<IAttachmentService, AttachmentService>();
+        services.AddSingleton<IAttachmentService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new AttachmentService(
+                databaseService.GetStorageService(),
+                logger: provider.GetService<ILogger<AttachmentService>>());
+        });
 
         // Configuration services
         var buildConfiguration = MobileBuildConfiguration.FromAssembly(
