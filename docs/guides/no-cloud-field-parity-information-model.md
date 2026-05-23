@@ -236,7 +236,8 @@ No-cloud acceptance should use deterministic local sync-peer evidence:
 
 - `LocalReplayFieldSyncPeer`: in-process pull/push/attachment sync peer used
   only for local replay and CI. It is configured as a sync transport but never
-  connects to a cloud endpoint.
+  connects to a cloud endpoint. It can replay server changes, accept/reject
+  pending feature edits, and simulate retryable attachment failures.
 - `LocalFieldConflictReplayHarness`: creates local fixture edits, replays a
   simulated remote update/delete through `GeoPackageSyncService`, applies the
   selected resolution, and emits evidence.

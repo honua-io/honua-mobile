@@ -657,7 +657,7 @@ public sealed class GeoPackageSyncServiceTests
             Resolution = ConflictResolution.AcceptServer
         };
         var peer = new LocalReplayFieldSyncPeer([LocalFieldConflictReplayHarness.CreateServerUpdate(plan)]);
-        using var sync = CreateSyncService(storage, uploader: peer, puller: peer);
+        using var sync = CreateSyncService(storage, uploader: peer, puller: peer, attachmentSynchronizer: peer);
         var harness = new LocalFieldConflictReplayHarness(storage, sync, evidenceDirectory);
 
         var result = await harness.RunAsync(plan);
@@ -686,10 +686,44 @@ public sealed class GeoPackageSyncServiceTests
         Assert.DoesNotContain("secret-server", evidenceJson);
     }
 
+    [Fact]
+    public async Task LocalReplayFieldSyncPeer_WhenAttachmentUploadFails_ReturnsRetryableFailure()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreAttachmentMetadataAsync(new AttachmentInfo
+        {
+            Id = "attachment-retry-1",
+            LayerId = 1,
+            FeatureId = "asset-1",
+            FileName = "retry-photo.jpg",
+            ContentType = "image/jpeg",
+            PayloadKind = AttachmentPayloadKind.Photo,
+            SizeBytes = 128,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTime.UtcNow,
+            SyncStatus = AttachmentSyncStatus.PendingUpload
+        });
+        var peer = new LocalReplayFieldSyncPeer
+        {
+            PushAttachmentResult = new AttachmentSyncResult { Failed = 1 }
+        };
+        using var sync = CreateSyncService(storage, uploader: peer, puller: peer, attachmentSynchronizer: peer);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("failed to upload", result.ErrorMessage, StringComparison.Ordinal);
+        var diagnostics = await storage.GetOfflineCacheDiagnosticsAsync();
+        Assert.Equal(1, diagnostics.Operations.AttachmentPendingCount);
+    }
+
     private static GeoPackageSyncService CreateSyncService(
         GeoPackageStorageService storage,
         IFieldCollectionChangeUploader? uploader = null,
         IFieldCollectionChangePuller? puller = null,
+        IFieldCollectionAttachmentSynchronizer? attachmentSynchronizer = null,
         IAuthenticationService? authService = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
@@ -699,6 +733,7 @@ public sealed class GeoPackageSyncServiceTests
             new TestConnectivityService(),
             uploader ?? new FixedResultUploader(true),
             puller ?? new FixedPuller([]),
+            attachmentSynchronizer,
             exceptionReporter: exceptionReporter);
     }
 
