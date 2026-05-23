@@ -41,6 +41,22 @@ public sealed class MobileParityBacklogDocsTests
         }
     }
 
+    [Fact]
+    public void MobileSdkBacklogRoadmap_TracksBackOfficeDependencyOwners()
+    {
+        var root = FindRepositoryRoot();
+        var roadmapPath = Path.Combine(root, "docs", "guides", "mobile-sdk-backlog-roadmap.md");
+        var roadmap = File.ReadAllText(roadmapPath);
+
+        Assert.Contains("## Back-Office Dependency Handoff", roadmap);
+        Assert.Contains("Mobile should consume the resulting `Honua.Sdk.*` contracts", roadmap);
+
+        foreach (var issue in new[] { 1158, 1159, 1160, 348, 346, 349, 350, 507, 509 })
+        {
+            Assert.Contains($"honua-io/honua-server/issues/{issue}", roadmap);
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
