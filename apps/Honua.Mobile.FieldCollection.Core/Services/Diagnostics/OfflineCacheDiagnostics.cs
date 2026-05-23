@@ -196,7 +196,16 @@ public static partial class DiagnosticRedactor
             normalized.Contains("password", StringComparison.Ordinal) ||
             normalized.Contains("apikey", StringComparison.Ordinal) ||
             normalized.Contains("accesskey", StringComparison.Ordinal) ||
-            normalized.Contains("authorization", StringComparison.Ordinal);
+            normalized.Contains("authorization", StringComparison.Ordinal) ||
+            normalized.Contains("localpath", StringComparison.Ordinal) ||
+            normalized.Contains("rawmedia", StringComparison.Ordinal) ||
+            normalized.Contains("mediapayload", StringComparison.Ordinal) ||
+            normalized.Contains("photopayload", StringComparison.Ordinal) ||
+            normalized.Contains("imagepayload", StringComparison.Ordinal) ||
+            normalized.Contains("audiopayload", StringComparison.Ordinal) ||
+            normalized.Contains("voicetranscript", StringComparison.Ordinal) ||
+            normalized.Contains("biometric", StringComparison.Ordinal) ||
+            normalized.Contains("faceembedding", StringComparison.Ordinal);
     }
 
     [GeneratedRegex("Bearer\\s+[A-Za-z0-9._~+/=-]+", RegexOptions.IgnoreCase)]

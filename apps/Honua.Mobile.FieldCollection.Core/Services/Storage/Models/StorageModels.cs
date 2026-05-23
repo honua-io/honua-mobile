@@ -111,6 +111,9 @@ public class LocalAttachment
     [Column("thumbnail_url")]
     public string? ThumbnailUrl { get; set; }
 
+    [Column("ai_media_state_json")]
+    public string? AiMediaStateJson { get; set; }
+
     [Column("sync_status")]
     [Indexed]
     public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;

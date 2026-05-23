@@ -1,5 +1,6 @@
 using CommunityToolkit.Maui;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
@@ -161,6 +162,9 @@ public static class MauiProgram
                 databaseService.GetStorageService(),
                 logger: provider.GetService<ILogger<LocalRecordExportService>>());
         });
+        services.AddSingleton<IMobileAiCaptureProvider, NullMobileAiCaptureProvider>();
+        services.AddSingleton<IMobileAiCaptureQueue, SettingsMobileAiCaptureQueue>();
+        services.AddSingleton<IMobileAiCaptureService, MobileAiCaptureCoordinator>();
 
         // Configuration services
         var buildConfiguration = MobileBuildConfiguration.FromAssembly(

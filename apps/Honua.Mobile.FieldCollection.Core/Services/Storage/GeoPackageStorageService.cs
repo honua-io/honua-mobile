@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
@@ -198,6 +199,11 @@ public class GeoPackageStorageService : IDisposable
         if (!columnNames.Contains("capture_location_json"))
         {
             await _connection.ExecuteAsync("ALTER TABLE local_attachments ADD COLUMN capture_location_json TEXT");
+        }
+
+        if (!columnNames.Contains("ai_media_state_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE local_attachments ADD COLUMN ai_media_state_json TEXT");
         }
 
         await _connection.ExecuteAsync(
@@ -984,6 +990,29 @@ public class GeoPackageStorageService : IDisposable
         }
     }
 
+    public async Task UpdateAttachmentAiStateAsync(string attachmentId, MobileAiMediaState? state)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET ai_media_state_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                SerializeAiMediaState(state),
+                DateTime.UtcNow,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     public async Task<int> GetPendingAttachmentChangesCountAsync()
     {
         await EnsureInitializedAsync();
@@ -1045,6 +1074,7 @@ public class GeoPackageStorageService : IDisposable
             Description = attachment.Description,
             CaptureLocationJson = FieldLocationMetadataMapper.SerializeEvidence(attachment.CaptureLocation),
             ThumbnailUrl = attachment.ThumbnailUrl,
+            AiMediaStateJson = SerializeAiMediaState(attachment.AiMediaState),
             SyncStatus = attachment.SyncStatus,
             RetryCount = attachment.RetryCount,
             LastError = attachment.LastError,
@@ -1074,12 +1104,33 @@ public class GeoPackageStorageService : IDisposable
             Description = attachment.Description,
             CaptureLocation = FieldLocationMetadataMapper.DeserializeEvidence(attachment.CaptureLocationJson),
             ThumbnailUrl = attachment.ThumbnailUrl,
+            AiMediaState = DeserializeAiMediaState(attachment.AiMediaStateJson),
             SyncStatus = attachment.SyncStatus,
             RetryCount = attachment.RetryCount,
             LastError = attachment.LastError,
             IsDeleted = attachment.IsDeleted,
             DeletedAt = attachment.DeletedAt
         };
+    }
+
+    private static string? SerializeAiMediaState(MobileAiMediaState? state)
+        => state is null ? null : JsonSerializer.Serialize(state, SchemaJsonOptions);
+
+    private static MobileAiMediaState? DeserializeAiMediaState(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<MobileAiMediaState>(json, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     #endregion

@@ -261,10 +261,23 @@ internal static class WorkflowPageContent
         var attachments = AttachmentList("RemoveAttachmentCommand");
         attachments.SetBinding(ItemsView.ItemsSourceProperty, new Binding("Attachments"));
 
+        var aiSummary = BoundMultilineLabel("AiCaptureSummary");
+        aiSummary.SetBinding(VisualElement.IsVisibleProperty, new Binding("HasAiCaptureSummary"));
+
+        var aiSuggestions = AiSuggestionList();
+        aiSuggestions.SetBinding(ItemsView.ItemsSourceProperty, new Binding("AiSuggestions"));
+
         return PageScroll(
             BoundHeader("PageTitle", "Record"),
             BoundLabel("GeometrySummary", "Geometry"),
             validation,
+            Toggle("AiAssistanceEnabled", "AI assistance"),
+            aiSummary,
+            aiSuggestions,
+            ButtonRow(
+                CommandButton("Suggest fields", "RequestAiSuggestionsCommand"),
+                CommandButton("Apply suggestions", "ApplyAiSuggestionsCommand"),
+                CommandButton("Reject suggestions", "RejectAiSuggestionsCommand")),
             repeatSections,
             SectionTitle("Fields"),
             fields,
@@ -393,6 +406,47 @@ internal static class WorkflowPageContent
                 };
                 row.SetBinding(VisualElement.IsVisibleProperty, new Binding(nameof(EditableFormFieldItem.IsVisible)));
                 return row;
+            })
+        };
+    }
+
+    private static CollectionView AiSuggestionList()
+    {
+        return new CollectionView
+        {
+            EmptyView = new Label { Text = string.Empty },
+            ItemTemplate = new DataTemplate(() =>
+            {
+                var selected = new CheckBox { VerticalOptions = LayoutOptions.Center };
+                selected.SetBinding(CheckBox.IsCheckedProperty, new Binding(nameof(MobileAiFieldSuggestionItem.IsSelected), mode: BindingMode.TwoWay));
+
+                var label = new Label { FontAttributes = FontAttributes.Bold };
+                label.SetBinding(Label.TextProperty, new Binding(nameof(MobileAiFieldSuggestionItem.Label)));
+
+                var value = new Label { LineBreakMode = LineBreakMode.WordWrap };
+                value.SetBinding(Label.TextProperty, new Binding(nameof(MobileAiFieldSuggestionItem.ValueText)));
+
+                var detail = new Label { FontSize = 12, TextColor = Colors.Gray };
+                detail.SetBinding(Label.TextProperty, new Binding(nameof(MobileAiFieldSuggestionItem.DetailText)));
+
+                var text = new VerticalStackLayout
+                {
+                    Spacing = 2,
+                    Children = { label, value, detail }
+                };
+                Grid.SetColumn(text, 1);
+
+                return new Grid
+                {
+                    Padding = new Thickness(0, 6),
+                    ColumnDefinitions =
+                    [
+                        new ColumnDefinition(GridLength.Auto),
+                        new ColumnDefinition(GridLength.Star)
+                    ],
+                    ColumnSpacing = 8,
+                    Children = { selected, text }
+                };
             })
         };
     }
@@ -639,7 +693,7 @@ internal static class WorkflowPageContent
                 var details = new Label { FontSize = 12, TextColor = Colors.Gray };
                 details.SetBinding(
                     Label.TextProperty,
-                    new Binding(nameof(AttachmentInfo.SyncStatus), stringFormat: "{0}"));
+                    new Binding(nameof(AttachmentInfo.StatusSummary)));
 
                 var action = new Button { Text = commandPath.StartsWith("Open", StringComparison.Ordinal) ? "Open" : "Remove" };
                 action.SetBinding(
