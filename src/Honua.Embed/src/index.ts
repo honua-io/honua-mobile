@@ -14,7 +14,10 @@ export type {
   HonuaEmbedExtensionContext,
   HonuaEmbedExtensionDescriptor,
   HonuaEmbedExtensionErrorDetail,
+  HonuaEmbedExtensionPermission,
   HonuaEmbedExtensionRegistration,
+  HonuaEmbedExtensionRegistrationOptions,
+  HonuaEmbedExtensionTrustState,
   HonuaEmbedTarget,
 } from './extensions';
 export {

@@ -1,6 +1,6 @@
 # Plugin Client Extension Hosts
 
-Issue [#16](https://github.com/honua-io/honua-mobile/issues/16) is scoped to
+Issue [#226](https://github.com/honua-io/honua-mobile/issues/226) is scoped to
 client host/runtime extension points for mobile and web. Portable plugin
 contracts remain outside this repo.
 
@@ -29,6 +29,8 @@ registration.
   extensions, and native feature renderer adapters.
 - `HonuaPluginManifest` adapters that preflight SDK-owned manifest validation
   and mobile host compatibility before plugin activation.
+- `IHonuaMapPluginTrustService` and `IHonuaMapPluginPermissionService` adapter
+  points for host trust checks and permission prompts.
 - `AddHonuaMapPluginHost` and `AddHonuaMapPlugin<TPlugin>` DI helpers in a
   separate plugin-host registration extension file.
 
@@ -105,17 +107,26 @@ public sealed class TenantInspectionMapPlugin : IHonuaMapPlugin
 throws while activating, or registers duplicate contributions, is reported in
 `HonuaMapPluginActivationReport.Failures`. Contributions from that failed
 plugin are not merged into the host snapshot, so other plugins can continue to
-load.
+load. Failure messages in activation reports are redacted with the mobile
+exception redactor before they are exposed to diagnostics.
 
 This is runtime failure isolation, not a process sandbox. Code signing,
-enterprise trust, permission enforcement, and package provenance require the SDK
-and server work linked above.
+enterprise trust, and package provenance still require the SDK and server work
+linked above. The mobile host can fail closed today when its trust service marks
+a plugin untrusted or revoked. SDK-owned manifest permissions are passed to the
+mobile permission service before activation; required permissions block loading
+when not granted, while optional permissions are omitted from the plugin
+context.
 
 `HonuaMapPluginDescriptor.SdkManifest` is optional for purely host-local
 extensions, but plugin packages that publish portable manifests should attach
 the SDK `HonuaPluginManifest` or call `ToMapPluginDescriptor`. The MAUI host
 then uses SDK validation and rejects manifests that do not include the `mobile`
 host kind before plugin code is activated.
+
+Runtime unload is represented by dropping a plugin contribution snapshot or by
+reactivating with `HonuaMapPluginActivationOptions.DisabledPluginIds`. Hosts
+that mount toolbar buttons or panels should re-render from the new snapshot.
 
 ### Mobile Adapter Checklist
 
@@ -142,11 +153,18 @@ Web hosts should expose browser/runtime extension points only:
 - Failure events that identify which extension failed without tearing down the
   host component.
 
+`@honua-io/embed` registration options now support runtime trust state,
+required permission gates, and granted permission checks for browser host
+extensions. These are not durable plugin manifests; they are host-side loading
+guards. Command click failures are emitted through
+`honua-embed-extension-error` with a redacted message and do not remove the
+control or break the map/scene element.
+
 Web host plugins should consume SDK-owned TypeScript or generated contract
-packages when they need shared manifests, permissions, validation, feature
-queries, routing, scenes, or data transforms. Until a shared TypeScript package
-is published, `@honua-io/embed` should keep extension metadata runtime-only and
-avoid adding local manifest or permission schemas.
+packages when they need shared manifests, validation, feature queries, routing,
+scenes, or data transforms. Until a shared TypeScript package is published,
+`@honua-io/embed` should keep extension metadata runtime-only and avoid adding
+local manifest schemas.
 
 ## Intentionally Not Implemented Here
 

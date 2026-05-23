@@ -14,9 +14,13 @@ public static class HonuaMapPluginServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.TryAddSingleton<IHonuaMapPluginTrustService, LocalHonuaMapPluginTrustService>();
+        services.TryAddSingleton<IHonuaMapPluginPermissionService, DenyByDefaultHonuaMapPluginPermissionService>();
         services.TryAddSingleton(sp => new HonuaMapPluginHost(
             sp.GetServices<IHonuaMapPlugin>(),
             sp,
+            sp.GetRequiredService<IHonuaMapPluginTrustService>(),
+            sp.GetRequiredService<IHonuaMapPluginPermissionService>(),
             sp.GetService<ILogger<HonuaMapPluginHost>>()));
         return services;
     }
