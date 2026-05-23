@@ -213,7 +213,7 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         CancellationToken cancellationToken)
     {
         var serviceInfo = await GetJsonAsync<FeatureServerServiceInfo>(
-            $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer?f=json",
+            $"/rest/services/{EscapeServicePath(serviceId)}/FeatureServer?f=json",
             cancellationToken).ConfigureAwait(false);
 
         var layerSummaries = serviceInfo.Layers ?? [];
@@ -221,7 +221,7 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         foreach (var layerSummary in layerSummaries)
         {
             var layerInfo = await GetJsonAsync<FeatureServerLayerInfo>(
-                $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/{layerSummary.Id}?f=json",
+                $"/rest/services/{EscapeServicePath(serviceId)}/FeatureServer/{layerSummary.Id}?f=json",
                 cancellationToken).ConfigureAwait(false);
 
             layers.Add(FieldCollectionMetadataMapper.ToLayerInfo(serviceId, layerInfo));
@@ -320,5 +320,13 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
             ? property.GetString()
             : null;
+    }
+
+    private static string EscapeServicePath(string serviceId)
+    {
+        return string.Join(
+            '/',
+            serviceId.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Uri.EscapeDataString));
     }
 }

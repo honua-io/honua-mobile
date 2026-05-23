@@ -131,6 +131,49 @@ public sealed class FieldCollectionMetadataServiceTests
     }
 
     [Fact]
+    public async Task GetLayersAsync_WithFolderedServiceId_PreservesServicePathSeparators()
+    {
+        var requestedPaths = new List<string>();
+        using var http = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            requestedPaths.Add(request.RequestUri!.PathAndQuery);
+            return request.RequestUri!.PathAndQuery switch
+            {
+                "/rest/services/Utilities/Assets/FeatureServer?f=json" => JsonResponse("""
+                    {
+                      "layers": [
+                        { "id": 0, "name": "Meters" }
+                      ]
+                    }
+                    """),
+                "/rest/services/Utilities/Assets/FeatureServer/0?f=json" => JsonResponse("""
+                    {
+                      "id": 0,
+                      "name": "Meters",
+                      "geometryType": "esriGeometryPoint",
+                      "capabilities": "Query",
+                      "fields": []
+                    }
+                    """),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            };
+        }));
+
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-metadata-foldered-{Guid.NewGuid():N}.gpkg");
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var service = CreateService(storage, http);
+
+        await service.SelectProjectAsync("Utilities/Assets");
+        var layers = await service.GetLayersAsync(refresh: true);
+
+        Assert.Single(layers);
+        Assert.Contains("/rest/services/Utilities/Assets/FeatureServer?f=json", requestedPaths);
+        Assert.Contains("/rest/services/Utilities/Assets/FeatureServer/0?f=json", requestedPaths);
+        Assert.DoesNotContain(requestedPaths, path => path.Contains("Utilities%2FAssets", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task GetLayersAsync_WhenOffline_ReturnsCachedLayerMetadata()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-metadata-offline-{Guid.NewGuid():N}.gpkg");
@@ -184,6 +227,45 @@ public sealed class FieldCollectionMetadataServiceTests
 
         Assert.NotNull(cachedForm);
         Assert.Equal("assets/FeatureServer/42", cachedForm.Target?.SourceId);
+    }
+
+    [Fact]
+    public async Task GeoPackageStorageService_CreateLayerAsync_KeysMetadataByServiceAndLayerId()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-metadata-service-key-{Guid.NewGuid():N}.gpkg");
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        await storage.CreateLayerAsync(new LayerInfo
+        {
+            Id = 0,
+            ServiceId = "Utilities/Assets",
+            SourceId = "Utilities/Assets/FeatureServer/0",
+            Name = "Utility Assets",
+            GeometryType = FeatureSpatialGeometryType.Point
+        });
+        await storage.CreateLayerAsync(new LayerInfo
+        {
+            Id = 0,
+            ServiceId = "Parks/Assets",
+            SourceId = "Parks/Assets/FeatureServer/0",
+            Name = "Park Assets",
+            GeometryType = FeatureSpatialGeometryType.Polygon
+        });
+
+        var layers = await storage.GetLayersAsync();
+
+        Assert.Equal(2, layers.Count);
+        Assert.Contains(layers, layer =>
+            layer.Id == 0 &&
+            layer.ServiceId == "Utilities/Assets" &&
+            layer.Name == "Utility Assets" &&
+            layer.GeometryType == FeatureSpatialGeometryType.Point);
+        Assert.Contains(layers, layer =>
+            layer.Id == 0 &&
+            layer.ServiceId == "Parks/Assets" &&
+            layer.Name == "Park Assets" &&
+            layer.GeometryType == FeatureSpatialGeometryType.Polygon);
     }
 
     private static FieldCollectionMetadataService CreateService(
