@@ -187,6 +187,10 @@ leaving platform APIs behind app-provided adapters:
 - `HonuaBackgroundLocationLifecycleController` owns the active background
   session/geofence lifecycle, including suspend shutdown and battery-saver
   deferral.
+- `HonuaSdkGeofenceWorkflowController` consumes SDK-owned
+  `Honua.Sdk.Geometry.HonuaGeofenceDefinition` instances, maps them to native
+  monitoring regions, and emits workflow/sync events through
+  `IHonuaGeofenceWorkflowEventSink`.
 
 ```csharp
 builder.Services
@@ -209,6 +213,68 @@ var location = await locations.AcquireCurrentLocationAsync(
     },
     ct);
 ```
+
+### SDK Geofence and Proximity Workflows
+
+Portable geofence rules and transition state stay in `honua-sdk-dotnet`. The
+mobile adapter only performs native runtime work:
+
+- Convert SDK geofence definitions into OS geofence regions broad enough to
+  wake the app for enter, exit, and proximity workflows.
+- Delegate foreground/background permission checks to the platform permission
+  adapter.
+- Keep background polling off by default. If a workflow enables background
+  updates, the controller clamps the interval to at least five minutes unless
+  the app sets a stricter `MinimumBackgroundInterval`.
+- Defer active background sessions when battery saver is enabled and restart
+  when the lifecycle controller receives `BatterySaverDisabled`.
+- Publish native transitions as `HonuaGeofenceWorkflowEvent` values so field UI,
+  local persistence, and sync queues can register sinks without owning platform
+  geofence APIs.
+
+```csharp
+using Honua.Mobile.Maui.Location;
+using Honua.Sdk.Geometry;
+
+builder.Services.AddSingleton<IHonuaGeofenceWorkflowEventSink, FieldSyncQueueSink>();
+
+var workflow = serviceProvider.GetRequiredService<HonuaSdkGeofenceWorkflowController>();
+await workflow.StartAsync(
+    new HonuaSdkGeofenceWorkflowRequest
+    {
+        Definitions = sdkGeofenceDefinitions,
+        BackgroundUpdates = null, // OS geofence wakeups only; no GPS polling.
+        MinimumNativeRadiusMeters = 25,
+        Metadata = new Dictionary<string, object?>
+        {
+            ["workflow"] = "inspection-arrival",
+        },
+    },
+    ct);
+```
+
+Android platform notes:
+
+- Request foreground location before background location, and surface the
+  Android 10+ background permission handoff clearly in the app UX.
+- Use native geofencing APIs or a fused-location monitor inside the app adapter;
+  keep exact geofence evaluation in the SDK evaluator when the app has a fresh
+  position sample.
+- Prefer OS geofence wakeups for enter/exit/proximity starts. Enable background
+  updates only for workflows that need continuous progress and keep the minimum
+  interval/distance bounded.
+
+iOS platform notes:
+
+- Include `NSLocationWhenInUseUsageDescription` and
+  `NSLocationAlwaysAndWhenInUseUsageDescription`; request Always access only
+  after the user has accepted foreground location.
+- Use Core Location region monitoring for wakeups. Significant-change or
+  standard background location updates should be reserved for workflows that
+  need them and should respect battery-saver lifecycle events.
+- Persist emitted `HonuaGeofenceWorkflowEvent` values before starting network
+  sync so transitions are not lost when iOS suspends the app shortly after a
+  region callback.
 
 ### External GNSS and High-Accuracy Capture
 
