@@ -212,6 +212,8 @@ public enum AttachmentSyncStatus
 public class LayerInfo
 {
     public int Id { get; set; }
+    public string? ServiceId { get; set; }
+    public string? SourceId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public GeometryType GeometryType { get; set; }
@@ -220,6 +222,16 @@ public class LayerInfo
     public FormDefinition? Form { get; set; }
     public List<FieldDefinition> Schema { get; set; } = new();
     public LayerStyle Style { get; set; } = new();
+}
+
+public class FieldProjectInfo
+{
+    public string ServiceId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int LayerCount { get; set; }
+    public bool IsAvailableOffline { get; set; }
+    public List<LayerInfo> Layers { get; set; } = new();
 }
 
 public class LayerStyle

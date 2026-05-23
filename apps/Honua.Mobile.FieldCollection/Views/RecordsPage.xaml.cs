@@ -17,7 +17,7 @@ public partial class RecordsPage : ContentPage
     {
         base.OnAppearing();
 
-        // Load records when page appears
-        await _viewModel.LoadRecordsCommand.ExecuteAsync(null);
+        // Load metadata and records when page appears
+        await _viewModel.LoadMetadataCommand.ExecuteAsync(null);
     }
 }

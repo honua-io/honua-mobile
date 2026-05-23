@@ -176,8 +176,17 @@ public class ConflictRecord
 public class LayerMetadata
 {
     [PrimaryKey]
+    [Column("storage_key")]
+    public string StorageKey { get; set; } = string.Empty;
+
     [Column("id")]
     public int Id { get; set; }
+
+    [Column("service_id")]
+    public string? ServiceId { get; set; }
+
+    [Column("source_id")]
+    public string? SourceId { get; set; }
 
     [Column("name")]
     public string Name { get; set; } = string.Empty;

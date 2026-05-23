@@ -28,11 +28,20 @@ public interface IStorageService
 
 public interface IFeatureService
 {
+    Task<IReadOnlyList<LayerInfo>> GetLayersAsync();
     Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null);
     Task<Feature?> GetFeatureAsync(int layerId, string featureId);
     Task<Feature> CreateFeatureAsync(int layerId, Feature feature);
     Task<Feature> UpdateFeatureAsync(int layerId, Feature feature);
     Task DeleteFeatureAsync(int layerId, string featureId);
+}
+
+public interface IFieldCollectionMetadataService
+{
+    Task<IReadOnlyList<FieldProjectInfo>> GetProjectsAsync(bool refresh = false, CancellationToken cancellationToken = default);
+    Task<FieldProjectInfo?> GetSelectedProjectAsync(CancellationToken cancellationToken = default);
+    Task SelectProjectAsync(string serviceId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LayerInfo>> GetLayersAsync(bool refresh = false, CancellationToken cancellationToken = default);
 }
 
 public interface IFormService
@@ -141,6 +150,11 @@ public class StorageService : IStorageService
 
 public class FeatureService : IFeatureService
 {
+    public Task<IReadOnlyList<LayerInfo>> GetLayersAsync()
+    {
+        return Task.FromResult<IReadOnlyList<LayerInfo>>(Array.Empty<LayerInfo>());
+    }
+
     public Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null)
     {
         return Task.FromResult<IEnumerable<Feature>>(Array.Empty<Feature>());
@@ -169,9 +183,22 @@ public class FeatureService : IFeatureService
 
 public class FormService : IFormService
 {
-    public Task<FormDefinition?> GetFormDefinitionAsync(int layerId)
+    private readonly IFieldCollectionMetadataService? _metadataService;
+
+    public FormService(IFieldCollectionMetadataService? metadataService = null)
     {
-        return Task.FromResult<FormDefinition?>(null);
+        _metadataService = metadataService;
+    }
+
+    public async Task<FormDefinition?> GetFormDefinitionAsync(int layerId)
+    {
+        if (_metadataService == null)
+        {
+            return null;
+        }
+
+        var layers = await _metadataService.GetLayersAsync().ConfigureAwait(false);
+        return layers.FirstOrDefault(layer => layer.Id == layerId)?.Form;
     }
 
     public Task<bool> ValidateFormAsync(FormData formData, FormDefinition definition)

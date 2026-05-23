@@ -23,9 +23,9 @@ public partial class MapPage : ContentPage
     {
         base.OnAppearing();
 
-        // Load current location and features when page appears
+        // Load metadata, current location, and features when page appears
+        await _viewModel.LoadMetadataCommand.ExecuteAsync(null);
         await _viewModel.LoadCurrentLocationCommand.ExecuteAsync(null);
-        await _viewModel.LoadMapFeaturesCommand.ExecuteAsync(null);
 
         // Center map on current location if available
         if (_viewModel.CurrentLocation != null)

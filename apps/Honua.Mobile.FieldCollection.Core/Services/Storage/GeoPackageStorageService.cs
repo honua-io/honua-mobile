@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
@@ -129,6 +130,7 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<SyncSession>();
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
+        await EnsureLayerMetadataTableAsync();
     }
 
     private async Task EnsureLocalFeaturesTableAsync()
@@ -157,6 +159,92 @@ public class GeoPackageStorageService : IDisposable
         return columns.Any(column =>
             string.Equals(column.Name, "storage_key", StringComparison.OrdinalIgnoreCase) &&
             column.PrimaryKey > 0);
+    }
+
+    private async Task EnsureLayerMetadataTableAsync()
+    {
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(layer_metadata)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!columnNames.Contains("service_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN service_id TEXT");
+            columnNames.Add("service_id");
+        }
+
+        if (!columnNames.Contains("source_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN source_id TEXT");
+            columnNames.Add("source_id");
+        }
+
+        if (!columnNames.Contains("storage_key"))
+        {
+            await MigrateLayerMetadataTableAsync();
+        }
+    }
+
+    private async Task MigrateLayerMetadataTableAsync()
+    {
+        const string migrationTable = "layer_metadata_migration";
+
+        await _connection.ExecuteAsync("BEGIN IMMEDIATE");
+        try
+        {
+            await _connection.ExecuteAsync($"DROP TABLE IF EXISTS {migrationTable}");
+            await CreateLayerMetadataTableAsync(migrationTable);
+            await _connection.ExecuteAsync($@"
+                INSERT OR REPLACE INTO {migrationTable}
+                    (storage_key, id, service_id, source_id, name, description, geometry_type, spatial_reference,
+                     is_editable, schema, server_url, created_at, last_sync, sync_enabled)
+                SELECT
+                    COALESCE(NULLIF(source_id, ''), COALESCE(NULLIF(service_id, ''), 'mobile_offline_demo') || '/FeatureServer/' || id),
+                    id,
+                    service_id,
+                    source_id,
+                    name,
+                    description,
+                    geometry_type,
+                    spatial_reference,
+                    is_editable,
+                    schema,
+                    server_url,
+                    created_at,
+                    last_sync,
+                    sync_enabled
+                FROM layer_metadata");
+            await _connection.ExecuteAsync("DROP TABLE layer_metadata");
+            await _connection.ExecuteAsync($"ALTER TABLE {migrationTable} RENAME TO layer_metadata");
+            await _connection.ExecuteAsync("COMMIT");
+        }
+        catch
+        {
+            await _connection.ExecuteAsync("ROLLBACK");
+            throw;
+        }
+    }
+
+    private Task CreateLayerMetadataTableAsync(string tableName)
+    {
+        return _connection.ExecuteAsync($@"
+            CREATE TABLE IF NOT EXISTS {tableName} (
+                storage_key TEXT NOT NULL PRIMARY KEY,
+                id INTEGER NOT NULL,
+                service_id TEXT,
+                source_id TEXT,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                geometry_type TEXT NOT NULL,
+                spatial_reference TEXT NOT NULL,
+                is_editable INTEGER NOT NULL,
+                schema TEXT,
+                server_url TEXT,
+                created_at TEXT NOT NULL,
+                last_sync TEXT,
+                sync_enabled INTEGER NOT NULL DEFAULT 1
+            )");
     }
 
     private async Task MigrateLocalFeaturesTableAsync()
@@ -693,14 +781,18 @@ public class GeoPackageStorageService : IDisposable
         {
             var metadata = new LayerMetadata
             {
+                StorageKey = GetLayerMetadataStorageKey(layer),
                 Id = layer.Id,
+                ServiceId = layer.ServiceId,
+                SourceId = layer.SourceId,
                 Name = layer.Name,
                 Description = layer.Description,
                 GeometryType = layer.GeometryType.ToString(),
                 SpatialReference = "EPSG:4326",
                 IsEditable = layer.IsEditable,
                 Schema = JsonSerializer.Serialize(layer.Schema, SchemaJsonOptions),
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                LastSync = DateTime.UtcNow
             };
 
             await _connection.InsertOrReplaceAsync(metadata);
@@ -763,9 +855,11 @@ public class GeoPackageStorageService : IDisposable
 
     private LayerInfo ConvertToLayerInfo(LayerMetadata metadata)
     {
-        return new LayerInfo
+        var layer = new LayerInfo
         {
             Id = metadata.Id,
+            ServiceId = metadata.ServiceId,
+            SourceId = metadata.SourceId,
             Name = metadata.Name,
             Description = metadata.Description,
             GeometryType = ParseGeometryType(metadata.GeometryType),
@@ -773,6 +867,23 @@ public class GeoPackageStorageService : IDisposable
             IsVisible = true,
             Schema = DeserializeLayerSchema(metadata.Schema)
         };
+
+        layer.Form = FieldCollectionMetadataMapper.CreateFormDefinition(layer);
+        return layer;
+    }
+
+    private static string GetLayerMetadataStorageKey(LayerInfo layer)
+    {
+        if (!string.IsNullOrWhiteSpace(layer.SourceId))
+        {
+            return layer.SourceId;
+        }
+
+        var serviceId = string.IsNullOrWhiteSpace(layer.ServiceId)
+            ? "mobile_offline_demo"
+            : layer.ServiceId.Trim();
+
+        return FieldCollectionMetadataMapper.BuildSourceId(serviceId, layer.Id);
     }
 
     private static GeometryType ParseGeometryType(string? value)

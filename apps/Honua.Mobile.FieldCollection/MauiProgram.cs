@@ -3,6 +3,7 @@ using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
+using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.Maui;
@@ -80,6 +81,7 @@ public static class MauiProgram
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<ILocationService, LocationService>();
         services.AddHttpClient("HonuaFieldAuthentication");
+        services.AddHttpClient("HonuaFieldMetadata");
         services.AddSingleton<IAuthenticationService>(provider =>
         {
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
@@ -98,9 +100,22 @@ public static class MauiProgram
             var logger = provider.GetRequiredService<ILogger<GeoPackageFeatureService>>();
             return new GeoPackageFeatureService(storageService, syncService, logger);
         });
+        services.AddSingleton<IFieldCollectionMetadataService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var logger = provider.GetService<ILogger<FieldCollectionMetadataService>>();
+            return new FieldCollectionMetadataService(
+                provider.GetRequiredService<IAuthenticationService>(),
+                provider.GetRequiredService<ISettingsService>(),
+                databaseService.GetStorageService(),
+                httpClientFactory.CreateClient("HonuaFieldMetadata"),
+                logger);
+        });
 
         // Other feature services
-        services.AddSingleton<IFormService, FormService>();
+        services.AddSingleton<IFormService>(provider =>
+            new FormService(provider.GetRequiredService<IFieldCollectionMetadataService>()));
         services.AddSingleton<IAttachmentService, AttachmentService>();
 
         // Configuration services
