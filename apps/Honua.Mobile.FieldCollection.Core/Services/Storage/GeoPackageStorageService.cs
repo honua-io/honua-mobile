@@ -190,6 +190,15 @@ public class GeoPackageStorageService : IDisposable
     private async Task EnsureLocalAttachmentsTableAsync()
     {
         await _connection.CreateTableAsync<LocalAttachment>();
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(local_attachments)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!columnNames.Contains("capture_location_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE local_attachments ADD COLUMN capture_location_json TEXT");
+        }
 
         await _connection.ExecuteAsync(
             "CREATE INDEX IF NOT EXISTS idx_local_attachments_feature_layer ON local_attachments(feature_id, layer_id)");
@@ -1034,6 +1043,7 @@ public class GeoPackageStorageService : IDisposable
             UploadedAt = attachment.UploadedAt,
             LastSyncedAt = attachment.LastSyncedAt,
             Description = attachment.Description,
+            CaptureLocationJson = FieldLocationMetadataMapper.SerializeEvidence(attachment.CaptureLocation),
             ThumbnailUrl = attachment.ThumbnailUrl,
             SyncStatus = attachment.SyncStatus,
             RetryCount = attachment.RetryCount,
@@ -1062,6 +1072,7 @@ public class GeoPackageStorageService : IDisposable
             UploadedAt = attachment.UploadedAt,
             LastSyncedAt = attachment.LastSyncedAt,
             Description = attachment.Description,
+            CaptureLocation = FieldLocationMetadataMapper.DeserializeEvidence(attachment.CaptureLocationJson),
             ThumbnailUrl = attachment.ThumbnailUrl,
             SyncStatus = attachment.SyncStatus,
             RetryCount = attachment.RetryCount,

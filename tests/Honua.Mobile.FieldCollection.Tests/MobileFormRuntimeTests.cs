@@ -115,6 +115,7 @@ public sealed class MobileFormRuntimeTests
                     FieldId = "photos",
                     FileName = "site.jpg",
                     MediaType = FieldMediaType.Photo,
+                    CaptureLocation = new FieldGeoPoint(21.3, -157.8, 4),
                 },
             ],
         };
@@ -126,6 +127,7 @@ public sealed class MobileFormRuntimeTests
         var record = formData.ToSdkFieldRecord(form);
         Assert.Single(record.Media);
         Assert.Equal(21.3, record.Location?.Latitude);
+        Assert.Equal(4, record.Media[0].CaptureLocation?.AccuracyMeters);
     }
 
     [Fact]

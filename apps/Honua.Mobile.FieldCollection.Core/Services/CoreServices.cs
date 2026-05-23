@@ -17,10 +17,19 @@ namespace Honua.Mobile.FieldCollection.Services;
 public interface ILocationService
 {
     Task<Location?> GetCurrentLocationAsync();
+    Task<FieldLocationFix?> GetCurrentLocationFixAsync(CancellationToken cancellationToken = default);
     Task<Location?> GetLastKnownLocationAsync();
+    Task<FieldLocationFix?> GetLastKnownLocationFixAsync(CancellationToken cancellationToken = default);
     Task StartLocationTracking();
     Task StopLocationTracking();
     bool IsLocationEnabled { get; }
+}
+
+public interface IHighAccuracyLocationMetadataProvider
+{
+    ValueTask<FieldLocationCaptureMetadata?> GetMetadataAsync(
+        Location location,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IStorageService
@@ -67,6 +76,7 @@ public interface IAttachmentService
         string contentType,
         AttachmentPayloadKind payloadKind = AttachmentPayloadKind.File,
         string? description = null,
+        FieldLocationCaptureEvidence? captureLocation = null,
         CancellationToken cancellationToken = default);
     Task<AttachmentInfo> SaveDownloadedAttachmentAsync(
         int layerId,
@@ -100,30 +110,73 @@ public interface IConnectivityService : INotifyPropertyChanged
 // Platform-backed/default implementations
 public class LocationService : ILocationService
 {
+    private static readonly GeolocationRequest HighAccuracyRequest = new(
+        GeolocationAccuracy.Best,
+        TimeSpan.FromSeconds(20));
+
+    private readonly IHighAccuracyLocationMetadataProvider? _metadataProvider;
+    private readonly ILogger<LocationService>? _logger;
+
+    public LocationService()
+    {
+    }
+
+    public LocationService(
+        IHighAccuracyLocationMetadataProvider? metadataProvider = null,
+        ILogger<LocationService>? logger = null)
+    {
+        _metadataProvider = metadataProvider;
+        _logger = logger;
+    }
+
     public bool IsLocationEnabled => true;
 
     public async Task<Location?> GetCurrentLocationAsync()
     {
+        var fix = await GetCurrentLocationFixAsync().ConfigureAwait(false);
+        return fix?.Location;
+    }
+
+    public async Task<FieldLocationFix?> GetCurrentLocationFixAsync(CancellationToken cancellationToken = default)
+    {
         try
         {
-            var location = await Geolocation.GetLocationAsync();
-            return location;
+            var location = await Geolocation.GetLocationAsync(HighAccuracyRequest, cancellationToken).ConfigureAwait(false);
+            return await BuildLocationFixAsync(location, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
+            _logger?.LogDebug("Current location acquisition failed.");
             return null;
         }
     }
 
     public async Task<Location?> GetLastKnownLocationAsync()
     {
+        var fix = await GetLastKnownLocationFixAsync().ConfigureAwait(false);
+        return fix?.Location;
+    }
+
+    public async Task<FieldLocationFix?> GetLastKnownLocationFixAsync(CancellationToken cancellationToken = default)
+    {
         try
         {
-            var location = await Geolocation.GetLastKnownLocationAsync();
-            return location ?? await GetCurrentLocationAsync();
+            var location = await Geolocation.GetLastKnownLocationAsync().ConfigureAwait(false);
+            return location == null
+                ? await GetCurrentLocationFixAsync(cancellationToken).ConfigureAwait(false)
+                : await BuildLocationFixAsync(location, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
+            _logger?.LogDebug("Last known location acquisition failed.");
             return null;
         }
     }
@@ -136,6 +189,35 @@ public class LocationService : ILocationService
     public async Task StopLocationTracking()
     {
         await Task.CompletedTask;
+    }
+
+    internal async Task<FieldLocationFix?> BuildLocationFixAsync(
+        Location? location,
+        CancellationToken cancellationToken)
+    {
+        if (location is null)
+        {
+            return null;
+        }
+
+        FieldLocationCaptureMetadata? metadata = null;
+        if (_metadataProvider is not null)
+        {
+            try
+            {
+                metadata = await _metadataProvider.GetMetadataAsync(location, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                _logger?.LogDebug("High accuracy location metadata enrichment failed.");
+            }
+        }
+
+        return FieldLocationMetadataMapper.FromMauiLocation(location, metadata);
     }
 }
 
@@ -405,6 +487,7 @@ public class AttachmentService : IAttachmentService
             fileName,
             contentType,
             InferPayloadKind(fileName, contentType),
+            captureLocation: null,
             cancellationToken: default).ConfigureAwait(false);
         return attachment.Id;
     }
@@ -417,6 +500,7 @@ public class AttachmentService : IAttachmentService
         string contentType,
         AttachmentPayloadKind payloadKind = AttachmentPayloadKind.File,
         string? description = null,
+        FieldLocationCaptureEvidence? captureLocation = null,
         CancellationToken cancellationToken = default)
     {
         var storage = EnsureStorageConfigured();
@@ -454,6 +538,7 @@ public class AttachmentService : IAttachmentService
                 CreatedAt = now,
                 UpdatedAt = now,
                 Description = description,
+                CaptureLocation = captureLocation,
                 SyncStatus = AttachmentSyncStatus.PendingUpload
             };
 

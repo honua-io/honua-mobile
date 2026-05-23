@@ -291,6 +291,7 @@ public static class MobileFormValueConverter
                     ContentType = attachment.ContentType,
                     SizeBytes = attachment.SizeBytes,
                     CapturedAtUtc = new DateTimeOffset(attachment.CreatedAt == default ? DateTime.UtcNow : attachment.CreatedAt),
+                    CaptureLocation = attachment.CaptureLocation?.ToFieldGeoPoint(),
                     MediaType = ToSdkMediaType(field.Type, attachment.PayloadKind)
                 });
             }

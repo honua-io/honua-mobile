@@ -284,6 +284,20 @@ public sealed partial class EditableFormFieldItem : ObservableObject
         RaiseValueChanged();
     }
 
+    public void SetLocation(FieldLocationFix locationFix)
+    {
+        ArgumentNullException.ThrowIfNull(locationFix);
+
+        var evidence = locationFix.ToEvidence();
+        var value = MobileFormValueConverter.FromLocation(
+            evidence.Latitude,
+            evidence.Longitude,
+            evidence.HorizontalAccuracyMeters);
+        SetValue(value);
+        ValueSummary = FieldLocationMetadataMapper.FormatEvidence(evidence);
+        RaiseValueChanged();
+    }
+
     public void AddMediaAttachment(AttachmentInfo attachment)
     {
         var ids = MobileFormValueConverter.ToChoiceValues(TextValue).ToList();
@@ -575,7 +589,12 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     private string? _captureSource;
     private DateTime? _capturedAtUtc;
     private double? _gpsAccuracyMeters;
+    private FieldLocationCaptureEvidence? _captureLocationEvidence;
     private Feature? _existingFeature;
+    private readonly Dictionary<string, FieldLocationCaptureEvidence> _locationEvidenceByField =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, object?> _supplementalFormValues =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<EditableAttributeItem> Attributes { get; } = [];
     public ObservableCollection<EditableFormFieldItem> FormFields { get; } = [];
@@ -608,6 +627,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         _captureSource = RouteQuery.GetString(query, "captureSource", _captureSource ?? string.Empty);
         _capturedAtUtc = RouteQuery.GetDateTime(query, "capturedAtUtc", _capturedAtUtc);
         _gpsAccuracyMeters = RouteQuery.GetDouble(query, "gpsAccuracyMeters", _gpsAccuracyMeters);
+        _captureLocationEvidence = RouteQuery.GetValue<FieldLocationCaptureEvidence>(query, "locationEvidence") ??
+            _captureLocationEvidence;
 
         if (RouteQuery.GetBool(query, "isEdit", false))
         {
@@ -635,6 +656,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 RepeatSections.Clear();
                 Attachments.Clear();
                 _repeatSectionCounts.Clear();
+                _locationEvidenceByField.Clear();
+                _supplementalFormValues.Clear();
                 ValidationSummary = string.Empty;
                 PageTitle = IsNew ? "Create Record" : "Edit Record";
                 Title = PageTitle;
@@ -694,6 +717,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 _formDefinition = await _formService.GetFormDefinitionAsync(LayerId)
                     ?? CreateAdHocFormDefinition(LayerId, source);
                 LoadFormFields(_formDefinition, source);
+                PreserveSupplementalValues(source);
                 if (draft?.ValidationErrors.Count > 0)
                 {
                     ApplyValidationErrors(draft.ValidationErrors);
@@ -774,14 +798,15 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
     {
         await ExecuteAsync(async () =>
         {
-            var location = await _locationService.GetCurrentLocationAsync();
-            if (location == null)
+            var locationFix = await _locationService.GetCurrentLocationFixAsync();
+            if (locationFix == null)
             {
                 await ShowError("Location Unavailable", "Unable to determine current location.");
                 return;
             }
 
-            field.SetLocation(location);
+            field.SetLocation(locationFix);
+            _locationEvidenceByField[field.ValueKey] = locationFix.ToEvidence();
             await SaveDraftSnapshotAsync();
         });
     }
@@ -895,6 +920,9 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                 FeatureId = Guid.NewGuid().ToString("N");
             }
 
+            var captureLocation = payloadKind == AttachmentPayloadKind.Photo
+                ? await TryCaptureCurrentLocationEvidenceAsync()
+                : null;
             await using var stream = await file.OpenReadAsync();
             var attachment = await _attachmentService.SaveAttachmentAsync(
                 LayerId,
@@ -905,7 +933,8 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     ? "application/octet-stream"
                     : file.ContentType,
                 payloadKind,
-                ownerField?.Definition.FieldId);
+                ownerField?.Definition.FieldId,
+                captureLocation);
             Attachments.Add(attachment);
             ownerField?.AddMediaAttachment(attachment);
             await SaveDraftSnapshotAsync();
@@ -1110,10 +1139,44 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         if (sender is EditableFormFieldItem item)
         {
             item.ValidationError = null;
+            ClearStaleLocationEvidence(item);
         }
 
         RefreshFormRules();
         _ = SaveDraftSnapshotAsync();
+    }
+
+    private void ClearStaleLocationEvidence(EditableFormFieldItem item)
+    {
+        if (item.Definition.Type != FormFieldType.Location || string.IsNullOrWhiteSpace(item.ValueKey))
+        {
+            return;
+        }
+
+        if (!_locationEvidenceByField.TryGetValue(item.ValueKey, out var evidence))
+        {
+            RemoveSupplementalLocationEvidence(item.ValueKey);
+            return;
+        }
+
+        if (!MobileFormValueConverter.TryGetLocation(item.ToValue(), out var point) ||
+            !FieldLocationMetadataMapper.MatchesFieldLocation(point, evidence))
+        {
+            _locationEvidenceByField.Remove(item.ValueKey);
+            RemoveSupplementalLocationEvidence(item.ValueKey);
+        }
+    }
+
+    private void RemoveSupplementalLocationEvidence(string valueKey)
+    {
+        var prefix = FieldLocationMetadataMapper.BuildFieldEvidencePrefix(valueKey);
+        var keyPrefix = $"{prefix}_";
+        foreach (var key in _supplementalFormValues.Keys
+            .Where(key => key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToArray())
+        {
+            _supplementalFormValues.Remove(key);
+        }
     }
 
     private async Task SaveDraftSnapshotAsync()
@@ -1136,6 +1199,44 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         });
     }
 
+    private async Task<FieldLocationCaptureEvidence?> TryCaptureCurrentLocationEvidenceAsync()
+    {
+        try
+        {
+            return (await _locationService.GetCurrentLocationFixAsync())?.ToEvidence();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void PreserveSupplementalValues(IReadOnlyDictionary<string, object?> source)
+    {
+        _supplementalFormValues.Clear();
+        if (FormFields.Count == 0)
+        {
+            return;
+        }
+
+        var formValueKeys = FormFields
+            .Select(field => field.ValueKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var value in source)
+        {
+            if (!formValueKeys.Contains(value.Key))
+            {
+                _supplementalFormValues[value.Key] = value.Value;
+            }
+        }
+    }
+
     private Dictionary<string, object?> BuildFormValues(bool includeHidden = true)
     {
         if (FormFields.Count == 0)
@@ -1149,12 +1250,28 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     StringComparer.OrdinalIgnoreCase);
         }
 
-        return FormFields
-            .Where(field => !string.IsNullOrWhiteSpace(field.ValueKey) && (includeHidden || field.IsVisible))
-            .ToDictionary(
-                field => field.ValueKey,
-                field => field.ToValue(),
-                StringComparer.OrdinalIgnoreCase);
+        var values = new Dictionary<string, object?>(_supplementalFormValues, StringComparer.OrdinalIgnoreCase);
+        foreach (var field in FormFields.Where(field =>
+            !string.IsNullOrWhiteSpace(field.ValueKey) && (includeHidden || field.IsVisible)))
+        {
+            values[field.ValueKey] = field.ToValue();
+        }
+
+        foreach (var item in _locationEvidenceByField)
+        {
+            if (FormFields.Any(field =>
+                string.Equals(field.ValueKey, item.Key, StringComparison.OrdinalIgnoreCase) &&
+                (includeHidden || field.IsVisible)))
+            {
+                FieldLocationMetadataMapper.AddAttributes(
+                    values,
+                    FieldLocationMetadataMapper.BuildFieldEvidencePrefix(item.Key),
+                    item.Value,
+                    overwrite: true);
+            }
+        }
+
+        return values;
     }
 
     private FormData BuildFormData(Dictionary<string, object?> values)
@@ -1206,6 +1323,7 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
                     ContentType = attachment.ContentType,
                     SizeBytes = attachment.SizeBytes,
                     CapturedAtUtc = new DateTimeOffset(attachment.CreatedAt == default ? DateTime.UtcNow : attachment.CreatedAt),
+                    CaptureLocation = attachment.CaptureLocation?.ToFieldGeoPoint(),
                     MediaType = MobileFormValueConverter.ToSdkMediaType(field.Definition.Type, attachment.PayloadKind)
                 });
             }
@@ -1322,6 +1440,11 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
 
     private void ApplyCaptureMetadata(IDictionary<string, object?> values)
     {
+        if (_captureLocationEvidence is not null)
+        {
+            FieldLocationMetadataMapper.AddAttributes(values, "gps", _captureLocationEvidence);
+        }
+
         if (!string.IsNullOrWhiteSpace(_captureSource))
         {
             values.TryAdd("capture_source", _captureSource);
@@ -1335,6 +1458,16 @@ public sealed partial class RecordEditViewModel : BaseViewModel, IRouteAwareView
         if (_gpsAccuracyMeters.HasValue)
         {
             values.TryAdd("gps_accuracy_m", _gpsAccuracyMeters.Value);
+        }
+
+        if (_captureLocationEvidence is not null)
+        {
+            values.TryAdd("gps_source", _captureLocationEvidence.SourceKind.ToString());
+            values.TryAdd("gps_source_label", FieldLocationMetadataMapper.FormatSource(_captureLocationEvidence.SourceKind));
+            if (!string.IsNullOrWhiteSpace(_captureLocationEvidence.Provider))
+            {
+                values.TryAdd("gps_provider", _captureLocationEvidence.Provider);
+            }
         }
 
         if (_location != null)

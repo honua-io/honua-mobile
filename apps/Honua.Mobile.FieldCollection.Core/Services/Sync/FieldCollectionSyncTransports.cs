@@ -1136,7 +1136,9 @@ public sealed class HonuaFieldCollectionAttachmentSynchronizer :
                     ? "application/octet-stream"
                     : attachment.ContentType,
                 Content = content,
-                Keywords = attachment.Description
+                Keywords = FieldLocationMetadataMapper.ToAttachmentKeywords(
+                    attachment.Description,
+                    attachment.CaptureLocation)
             },
             cancellationToken).ConfigureAwait(false);
 

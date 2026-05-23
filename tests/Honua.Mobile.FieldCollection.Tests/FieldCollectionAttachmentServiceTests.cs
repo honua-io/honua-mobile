@@ -55,6 +55,44 @@ public sealed class FieldCollectionAttachmentServiceTests
     }
 
     [Fact]
+    public async Task SaveAttachmentAsync_PersistsPhotoCaptureLocationMetadata()
+    {
+        var databasePath = CreateDatabasePath();
+        var attachmentRoot = CreateAttachmentRoot();
+        await using var cleanup = new FileCleanup(databasePath, attachmentRoot);
+        var captureLocation = CreateExternalGnssEvidence();
+
+        using (var storage = new GeoPackageStorageService(databasePath))
+        {
+            var service = new AttachmentService(storage, attachmentRoot);
+            await using var content = new MemoryStream(Encoding.UTF8.GetBytes("photo"));
+
+            var attachment = await service.SaveAttachmentAsync(
+                1,
+                "asset-1",
+                content,
+                "asset.jpg",
+                "image/jpeg",
+                AttachmentPayloadKind.Photo,
+                description: "photos",
+                captureLocation: captureLocation);
+
+            Assert.Equal(FieldLocationSourceKind.ExternalGnss, attachment.CaptureLocation?.SourceKind);
+            Assert.Equal(0.8, attachment.CaptureLocation?.HorizontalAccuracyMeters);
+        }
+
+        using (var restartedStorage = new GeoPackageStorageService(databasePath))
+        {
+            var restartedService = new AttachmentService(restartedStorage, attachmentRoot);
+            var attachment = Assert.Single(await restartedService.GetAttachmentsAsync("asset-1"));
+
+            Assert.Equal(FieldLocationSourceKind.ExternalGnss, attachment.CaptureLocation?.SourceKind);
+            Assert.Equal("Trimble R12", attachment.CaptureLocation?.Receiver?.Name);
+            Assert.Equal(21.3069, attachment.CaptureLocation?.Latitude);
+        }
+    }
+
+    [Fact]
     public async Task DeleteAttachmentAsync_WhenUnsynced_RemovesContentAndClearsPendingQueue()
     {
         var databasePath = CreateDatabasePath();
@@ -136,7 +174,8 @@ public sealed class FieldCollectionAttachmentServiceTests
             content,
             "asset.jpg",
             "image/jpeg",
-            AttachmentPayloadKind.Photo);
+            AttachmentPayloadKind.Photo,
+            captureLocation: CreateExternalGnssEvidence());
 
         var attachmentClient = new RecordingAttachmentSyncClient
         {
@@ -165,6 +204,9 @@ public sealed class FieldCollectionAttachmentServiceTests
         var request = attachmentClient.AddRequests.Last();
         Assert.Equal(42, request.ObjectId);
         Assert.Equal("asset.jpg", request.Name);
+        var keywords = Assert.IsType<string>(request.Keywords);
+        Assert.Contains("honua.location.source=ExternalGnss", keywords, StringComparison.Ordinal);
+        Assert.Contains("honua.location.accuracy_m=0.8", keywords, StringComparison.Ordinal);
 
         var syncedMetadata = await storage.GetAttachmentMetadataAsync(attachment.Id);
         Assert.Equal(AttachmentSyncStatus.Synced, syncedMetadata?.SyncStatus);
@@ -327,6 +369,26 @@ public sealed class FieldCollectionAttachmentServiceTests
     private static string CreateAttachmentRoot()
     {
         return Path.Combine(Path.GetTempPath(), $"honua-field-attachments-{Guid.NewGuid():N}");
+    }
+
+    private static FieldLocationCaptureEvidence CreateExternalGnssEvidence()
+    {
+        return new FieldLocationCaptureEvidence
+        {
+            Latitude = 21.3069,
+            Longitude = -157.8583,
+            HorizontalAccuracyMeters = 0.8,
+            VerticalAccuracyMeters = 1.6,
+            CapturedAtUtc = new DateTimeOffset(2026, 5, 23, 9, 15, 0, TimeSpan.Zero),
+            SourceKind = FieldLocationSourceKind.ExternalGnss,
+            Provider = "bluetooth-nmea",
+            Receiver = new FieldLocationReceiverMetadata
+            {
+                Name = "Trimble R12",
+                Model = "R12",
+                IsExternal = true
+            }
+        };
     }
 
     private sealed class RecordingAttachmentSyncClient : IFieldCollectionAttachmentSyncClient
