@@ -302,6 +302,83 @@ public class LayerMetadata
 }
 
 /// <summary>
+/// Mobile-owned local project or survey catalog entry for no-cloud package lifecycle state.
+/// </summary>
+[Table("field_project_catalog")]
+public class LocalFieldProjectCatalogEntry
+{
+    [PrimaryKey]
+    [Column("project_id")]
+    public string ProjectId { get; set; } = string.Empty;
+
+    [Column("service_id")]
+    [Indexed]
+    public string ServiceId { get; set; } = string.Empty;
+
+    [Column("package_id")]
+    [Indexed]
+    public string? PackageId { get; set; }
+
+    [Column("version")]
+    public string? Version { get; set; }
+
+    [Column("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [Column("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [Column("state")]
+    [Indexed]
+    public FieldProjectCatalogState State { get; set; } = FieldProjectCatalogState.Installed;
+
+    [Column("validation_status")]
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+
+    [Column("validation_issue_count")]
+    public int ValidationIssueCount { get; set; }
+
+    [Column("layer_count")]
+    public int LayerCount { get; set; }
+
+    [Column("package_size_bytes")]
+    public long PackageSizeBytes { get; set; }
+
+    [Column("media_size_bytes")]
+    public long MediaSizeBytes { get; set; }
+
+    [Column("local_storage_path")]
+    public string? LocalStoragePath { get; set; }
+
+    [Column("manifest_path")]
+    public string? ManifestPath { get; set; }
+
+    [Column("import_source")]
+    public string? ImportSource { get; set; }
+
+    [Column("package_digest")]
+    public string? PackageDigest { get; set; }
+
+    [Column("imported_at_utc")]
+    public DateTime ImportedAtUtc { get; set; }
+
+    [Column("updated_at_utc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    [Column("last_opened_at_utc")]
+    public DateTime? LastOpenedAtUtc { get; set; }
+
+    [Column("last_validation_at_utc")]
+    public DateTime? LastValidationAtUtc { get; set; }
+
+    [Column("last_simulation_run_at_utc")]
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+
+    [Column("last_export_at_utc")]
+    public DateTime? LastExportAtUtc { get; set; }
+}
+
+/// <summary>
 /// OGC GeoPackage contents table
 /// </summary>
 [Table("gpkg_contents")]

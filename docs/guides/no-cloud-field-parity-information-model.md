@@ -187,11 +187,14 @@ be derived from policy and validation, not from screen-specific rules.
 
 Mobile-owned catalog state should wrap the portable package with runtime facts:
 
+- runtime model: `FieldProjectCatalogEntry`;
+- UI-facing projection: `FieldProjectInfo`;
+- persisted table: `field_project_catalog`;
 - installed, invalid, stale, archived, removable;
 - local storage paths;
 - package size, media size, and cache size;
 - validation diagnostics;
-- last opened, last local acceptance run, last export;
+- last opened, last validation, last local acceptance/simulation run, last export;
 - local import source and package digest.
 
 UI implication: catalog cards/lists should distinguish portable package metadata

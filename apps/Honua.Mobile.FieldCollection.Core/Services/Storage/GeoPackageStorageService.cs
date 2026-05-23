@@ -132,6 +132,7 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
         await EnsureLayerMetadataTableAsync();
+        await EnsureProjectCatalogTableAsync();
         await EnsureLocalAttachmentsTableAsync();
     }
 
@@ -214,6 +215,17 @@ public class GeoPackageStorageService : IDisposable
             "CREATE INDEX IF NOT EXISTS idx_local_attachments_sync_status ON local_attachments(sync_status)");
         await _connection.ExecuteAsync(
             "CREATE INDEX IF NOT EXISTS idx_local_attachments_deleted ON local_attachments(is_deleted)");
+    }
+
+    private async Task EnsureProjectCatalogTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalFieldProjectCatalogEntry>();
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_service_id ON field_project_catalog(service_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_package_id ON field_project_catalog(package_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_state ON field_project_catalog(state)");
     }
 
     private async Task MigrateLayerMetadataTableAsync()
@@ -1312,6 +1324,236 @@ public class GeoPackageStorageService : IDisposable
             StorageSpatialRelationship.Touches => geometry.Touches(queryGeometry),
             StorageSpatialRelationship.Crosses => geometry.Crosses(queryGeometry),
             _ => geometry.Intersects(queryGeometry)
+        };
+    }
+
+    #endregion
+
+    #region Project Catalog
+
+    public async Task UpsertProjectCatalogEntryAsync(FieldProjectCatalogEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var projectId = NormalizeProjectId(entry.ProjectId);
+        var now = DateTime.UtcNow;
+        if (entry.ImportedAtUtc == default)
+        {
+            entry.ImportedAtUtc = now;
+        }
+
+        entry.UpdatedAtUtc = now;
+        if (string.IsNullOrWhiteSpace(entry.ServiceId))
+        {
+            entry.ServiceId = projectId;
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.Name))
+        {
+            entry.Name = projectId;
+        }
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(ToLocalProjectCatalogEntry(entry, projectId));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<FieldProjectCatalogEntry?> GetProjectCatalogEntryAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var row = await _connection.Table<LocalFieldProjectCatalogEntry>()
+                .FirstOrDefaultAsync(entry => entry.ProjectId == projectId);
+            return row == null ? null : ToProjectCatalogEntry(row);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<FieldProjectCatalogEntry>> GetProjectCatalogEntriesAsync(bool includeArchived = false)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalFieldProjectCatalogEntry>().ToListAsync();
+            return rows
+                .Where(row => includeArchived || row.State != FieldProjectCatalogState.Archived)
+                .OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.ProjectId, StringComparer.OrdinalIgnoreCase)
+                .Select(ToProjectCatalogEntry)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public Task UpdateProjectCatalogStateAsync(
+        string projectId,
+        FieldProjectCatalogState state,
+        DateTime? updatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "state = ?",
+            [state],
+            updatedAtUtc);
+
+    public Task MarkProjectCatalogEntryOpenedAsync(string projectId, DateTime? openedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_opened_at_utc = ?",
+            [openedAtUtc ?? DateTime.UtcNow],
+            openedAtUtc);
+
+    public Task MarkProjectCatalogValidationAsync(
+        string projectId,
+        FieldProjectValidationStatus status,
+        int issueCount,
+        DateTime? validatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "validation_status = ?, validation_issue_count = ?, last_validation_at_utc = ?",
+            [status, Math.Max(0, issueCount), validatedAtUtc ?? DateTime.UtcNow],
+            validatedAtUtc);
+
+    public Task MarkProjectCatalogSimulationRunAsync(string projectId, DateTime? simulatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_simulation_run_at_utc = ?",
+            [simulatedAtUtc ?? DateTime.UtcNow],
+            simulatedAtUtc);
+
+    public Task MarkProjectCatalogExportedAsync(string projectId, DateTime? exportedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_export_at_utc = ?",
+            [exportedAtUtc ?? DateTime.UtcNow],
+            exportedAtUtc);
+
+    public async Task<bool> DeleteProjectCatalogEntryAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.Table<LocalFieldProjectCatalogEntry>()
+                .DeleteAsync(entry => entry.ProjectId == projectId) > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private async Task UpdateProjectCatalogFieldsAsync(
+        string projectId,
+        string assignmentSql,
+        IReadOnlyList<object?> values,
+        DateTime? updatedAtUtc = null)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var parameters = values
+                .Concat(new object?[] { updatedAtUtc ?? DateTime.UtcNow, projectId })
+                .ToArray();
+            await _connection.ExecuteAsync(
+                $"UPDATE field_project_catalog SET {assignmentSql}, updated_at_utc = ? WHERE project_id = ?",
+                parameters);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static string NormalizeProjectId(string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            throw new ArgumentException("Project ID is required.", nameof(projectId));
+        }
+
+        return projectId.Trim();
+    }
+
+    private static LocalFieldProjectCatalogEntry ToLocalProjectCatalogEntry(
+        FieldProjectCatalogEntry entry,
+        string projectId)
+    {
+        return new LocalFieldProjectCatalogEntry
+        {
+            ProjectId = projectId,
+            ServiceId = string.IsNullOrWhiteSpace(entry.ServiceId) ? projectId : entry.ServiceId.Trim(),
+            PackageId = string.IsNullOrWhiteSpace(entry.PackageId) ? null : entry.PackageId.Trim(),
+            Version = string.IsNullOrWhiteSpace(entry.Version) ? null : entry.Version.Trim(),
+            Name = string.IsNullOrWhiteSpace(entry.Name) ? projectId : entry.Name.Trim(),
+            Description = entry.Description,
+            State = entry.State,
+            ValidationStatus = entry.ValidationStatus,
+            ValidationIssueCount = Math.Max(0, entry.ValidationIssueCount),
+            LayerCount = Math.Max(0, entry.LayerCount),
+            PackageSizeBytes = Math.Max(0, entry.PackageSizeBytes),
+            MediaSizeBytes = Math.Max(0, entry.MediaSizeBytes),
+            LocalStoragePath = entry.LocalStoragePath,
+            ManifestPath = entry.ManifestPath,
+            ImportSource = entry.ImportSource,
+            PackageDigest = entry.PackageDigest,
+            ImportedAtUtc = entry.ImportedAtUtc,
+            UpdatedAtUtc = entry.UpdatedAtUtc,
+            LastOpenedAtUtc = entry.LastOpenedAtUtc,
+            LastValidationAtUtc = entry.LastValidationAtUtc,
+            LastSimulationRunAtUtc = entry.LastSimulationRunAtUtc,
+            LastExportAtUtc = entry.LastExportAtUtc
+        };
+    }
+
+    private static FieldProjectCatalogEntry ToProjectCatalogEntry(LocalFieldProjectCatalogEntry row)
+    {
+        return new FieldProjectCatalogEntry
+        {
+            ProjectId = row.ProjectId,
+            ServiceId = row.ServiceId,
+            PackageId = row.PackageId,
+            Version = row.Version,
+            Name = row.Name,
+            Description = row.Description,
+            State = row.State,
+            ValidationStatus = row.ValidationStatus,
+            ValidationIssueCount = row.ValidationIssueCount,
+            LayerCount = row.LayerCount,
+            PackageSizeBytes = row.PackageSizeBytes,
+            MediaSizeBytes = row.MediaSizeBytes,
+            LocalStoragePath = row.LocalStoragePath,
+            ManifestPath = row.ManifestPath,
+            ImportSource = row.ImportSource,
+            PackageDigest = row.PackageDigest,
+            ImportedAtUtc = row.ImportedAtUtc,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            LastOpenedAtUtc = row.LastOpenedAtUtc,
+            LastValidationAtUtc = row.LastValidationAtUtc,
+            LastSimulationRunAtUtc = row.LastSimulationRunAtUtc,
+            LastExportAtUtc = row.LastExportAtUtc
         };
     }
 
