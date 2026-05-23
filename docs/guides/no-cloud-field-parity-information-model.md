@@ -297,6 +297,45 @@ UI implication: a field-day review screen can be designed around step status,
 artifact links, counts, and follow-up markers without requiring hosted
 acceptance infrastructure.
 
+## Current Implementation Readiness
+
+This table is the practical UI-design handoff for the current mobile branch.
+`Ready` means the data shape exists in mobile code and has local automated
+coverage. `SDK-gated` means the UI information model is defined here and in
+honua-sdk-dotnet#162, but the mobile app should wait for a published SDK package
+instead of adding duplicate contracts locally.
+
+| Area | UI-facing data source | Current status | Automated evidence |
+| --- | --- | --- | --- |
+| Local project catalog | `FieldProjectInfo`, `FieldProjectCatalogEntry`, `field_project_catalog` | Ready | `FieldCollectionMetadataServiceTests`, `NoCloudFieldDayAcceptanceHarnessTests` |
+| Form runtime and validation | SDK `FormDefinition`, `FormData`, `FieldRecord`, `MobileFormRuleRuntime` | Ready for current SDK package; newer media policy/record-link metadata is SDK-gated | `MobileFormRuntimeTests`, `LocalFormParityGoldenFixtureTests` |
+| Media metadata | `AttachmentInfo`, `AttachmentPayloadKind`, SDK `FieldMediaAttachment` | Ready for local metadata, required counts, payload kind, export, and retry evidence; capture policy fields are SDK-gated | `FieldCollectionAttachmentServiceTests`, `LocalRecordExportServiceTests`, `GeoPackageSyncServiceTests` |
+| Conflict review | `ConflictInfo`, `OfflineConflictReviewItem`, `LocalFieldConflictReplayResult` | Ready for local replay, manual/deferred state, accept-server resolution, retryable media failure evidence | `GeoPackageSyncServiceTests` |
+| Export preview | `LocalRecordExportResult`, `attachments-manifest.json`, `honua-evidence.json` | Ready | `LocalRecordExportServiceTests` |
+| Field-day acceptance | `honua.mobile.no-cloud-field-day.evidence.v1` | Ready as local acceptance harness; assignment/lifecycle steps are explicit follow-ups | `NoCloudFieldDayAcceptanceHarnessTests` |
+| Package import | SDK `FieldProjectPackage` and validation result | SDK-gated | honua-sdk-dotnet#162, honua-mobile#249 |
+| Lifecycle transitions | SDK `FieldRecordLifecyclePolicy` and `RecordStatus` | SDK-gated for policy; current harness marks step as follow-up | honua-sdk-dotnet#162, honua-mobile#251 |
+| Assignment/task packets | SDK `FieldTaskPacket`, `FieldAssignment` | SDK-gated | honua-sdk-dotnet#162, honua-mobile#252 |
+
+UI design can proceed now for:
+
+- local project/survey catalog cards and filters;
+- form rendering, repeat sections, validation errors, calculated values, and
+  draft restore states supported by the current SDK package;
+- media galleries and export/media count previews;
+- conflict review lists and resolution evidence;
+- export preview/details;
+- field-day evidence review, including follow-up markers.
+
+UI design should model these as upcoming contract-backed surfaces, but avoid
+assuming mobile-local DTOs until the SDK package is published:
+
+- package import diagnostics;
+- assignment inbox and assignment completion state;
+- lifecycle badges, transition actions, and lifecycle-gated edit affordances;
+- richer media capture policy controls;
+- shared choice-set and record-link target metadata.
+
 ## Implementation Backlog
 
 Local parity backlog:
