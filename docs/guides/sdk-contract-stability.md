@@ -43,8 +43,8 @@ packages (from `.csproj` files under `src/`, `apps/`, `tests/`):
 | `Honua.Sdk.OgcFeatures` | OGC API Features client (models, conversion, exceptions). |
 | `Honua.Sdk.Scenes` | 3D scene client and scene-specific exceptions. |
 | `Honua.Sdk.Field` | Field forms (`FormDefinition`, `FormField`, `FormFieldType`) and `FieldRecord` types. |
-| `Honua.Sdk.Offline.Abstractions` | Interface contracts for the offline sync engine: `IOfflineChangeJournal`, `IOfflineFeatureStore`, `IOfflineSyncCheckpointStore`, `IOfflineSyncStateStore`, `OfflinePackageManifest`. Referenced directly by `Honua.Mobile.Offline` and `Honua.Mobile.Maui`. |
-| `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, and the concrete store/journal implementations behind `Honua.Sdk.Offline.Abstractions`. |
+| `Honua.Sdk.Abstractions` | Also carries the `Honua.Sdk.Offline.Abstractions` namespace for offline sync interfaces and DTOs: `IOfflineChangeJournal`, `IOfflineFeatureStore`, `IOfflineSyncCheckpointStore`, `IOfflineSyncStateStore`, `OfflinePackageManifest`. |
+| `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, and concrete behavior built on the offline abstractions namespace. |
 
 Any of these package IDs disappearing, splitting further, or being renamed
 constitutes a contract change for the purposes of this doc.

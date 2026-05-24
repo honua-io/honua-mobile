@@ -41,8 +41,8 @@ For DI-driven setup in MAUI apps, use the registration extensions in
 | `Honua.Mobile.Maui` | MAUI service registration, DI extensions, native display, native scene anchoring, device location |
 
 Reusable offline/journal/conflict/sync contracts live in `honua-sdk-dotnet`
-(`Honua.Sdk.Offline.Abstractions`, `Honua.Sdk.Offline`); this repo supplies the
-mobile runtime adapters.
+(`Honua.Sdk.Abstractions` with the `Honua.Sdk.Offline.Abstractions` namespace,
+plus `Honua.Sdk.Offline`); this repo supplies the mobile runtime adapters.
 
 ## Related guides
 
