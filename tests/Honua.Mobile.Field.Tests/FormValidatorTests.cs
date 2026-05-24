@@ -369,6 +369,29 @@ public sealed class FormValidatorTests
         Assert.True(sdkAttachment.RequiresFaceBlur);
     }
 
+    [Fact]
+    public void MobileMediaAttachment_WithEvidenceMetadata_MergesMobileOnlyEvidence()
+    {
+        var mobileAttachment = new MobileFieldMediaAttachment
+        {
+            AttachmentId = "a-local",
+            FieldId = "photos",
+            LocalPath = Path.Combine("offline", "captures", "asset.jpg"),
+            MediaType = FieldMediaType.Photo,
+            EvidenceMetadata = new Dictionary<string, object?> { ["existing"] = "kept" },
+        };
+
+        var updated = mobileAttachment.WithEvidenceMetadata(new Dictionary<string, object?>
+        {
+            ["honua.arEvidence"] = new Dictionary<string, object?> { ["sceneId"] = "downtown-honolulu" },
+        });
+        var sdkAttachment = updated.ToSdkAttachment();
+
+        Assert.Equal("kept", updated.EvidenceMetadata["existing"]);
+        Assert.True(updated.EvidenceMetadata.ContainsKey("honua.arEvidence"));
+        Assert.Equal("asset.jpg", sdkAttachment.FileName);
+    }
+
     private static MobileFieldCaptureWorkflow CreateWorkflow()
         => new(new DuplicateDetector());
 }

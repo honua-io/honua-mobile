@@ -1,22 +1,20 @@
 <Project>
   <PropertyGroup>
     <!--
-      Honua .NET SDK 0.1.17-alpha.1 — bundles the mobile-shim consolidation:
-        - Honua.Sdk.Geometry.GeographicBoundingBox (SDK PR #151)
-        - Mobile DTO consolidation (SDK PR #152)
-        - Honua.Sdk.Offline.ReplicaSyncClient (SDK PR #153)
-        - Transport-mapping migration (SDK PR #154)
-        - Public-API + transitive Geometry surface (SDK PR #155)
+      Honua .NET SDK 1.0.0 — published from honua-sdk-dotnet trunk:
+        - Mobile-shim consolidation through dotnet-sdk-v0.1.17-alpha.1
+        - Field project package contracts and validation hardening (SDK PR #162)
+        - Release and package install smoke repairs (SDK PRs #163-#167)
 
       See docs/guides/sdk-contract-stability.md for the stability roadmap and
-      exit criteria that govern when this train moves from alpha -> beta -> stable.
+      package ownership guidance for the SDK-owned contract surface.
     -->
-    <HonuaSdkDotNetTrainVersion>0.1.17-alpha.1</HonuaSdkDotNetTrainVersion>
-    <HonuaSdkDotNetTrainTag>dotnet-sdk-v$(HonuaSdkDotNetTrainVersion)</HonuaSdkDotNetTrainTag>
+    <HonuaSdkDotNetTrainVersion>1.0.0</HonuaSdkDotNetTrainVersion>
+    <HonuaSdkDotNetTrainTag>trunk</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
-    <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/$(HonuaSdkDotNetTrainTag)</HonuaSdkDotNetTrainReleaseUrl>
-    <HonuaSdkDotNetTrainReleaseCommit>77da0cf</HonuaSdkDotNetTrainReleaseCommit>
-    <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-20T07:42:55Z</HonuaSdkDotNetTrainReleasePublishedAt>
+    <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/actions/runs/26347851452</HonuaSdkDotNetTrainReleaseUrl>
+    <HonuaSdkDotNetTrainReleaseCommit>6db17ed</HonuaSdkDotNetTrainReleaseCommit>
+    <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-24T00:55:47Z</HonuaSdkDotNetTrainReleasePublishedAt>
     <MauiVersion>10.0.60</MauiVersion>
   </PropertyGroup>
 </Project>

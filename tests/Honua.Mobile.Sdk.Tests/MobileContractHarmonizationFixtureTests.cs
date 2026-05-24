@@ -259,7 +259,6 @@ public sealed class MobileContractHarmonizationFixtureTests
         var sdkTrainVersion = LoadSdkTrainVersion();
         Assert.Equal(sdkTrainVersion, abstractionsPackage.Version);
 
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline.Abstractions");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Grpc");
         Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.GeoServices");

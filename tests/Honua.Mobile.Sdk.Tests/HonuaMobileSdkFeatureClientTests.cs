@@ -126,13 +126,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Equal(7, result.DeleteResults[0].ObjectId);
     }
 
-    // GeoJSON Point -> {"x":,"y":} translation now lives in Honua.Sdk.GeoServices'
-    // FeatureServer converters. The 0.1.17-alpha.1 train surfaces FeatureEditFeature
-    // attributes/geometry verbatim through ToFeatureServerEditFormParameters; the
-    // explicit x/y projection that mobile previously performed before assembling
-    // the form payload is no longer mobile-owned. Re-enable once
-    // honua-sdk-dotnet adds the GeoJSON->FeatureServer geometry projection.
-    [Fact(Skip = "Tracked at honua-io/honua-mobile#199 — SDK 0.1.17-alpha.1 emits GeoJSON in adds payload; pending Honua.Sdk.GeoServices geometry projection.")]
+    [Fact]
     public async Task ApplyEditsAsync_FeatureServerRequest_AcceptsSparseLiveImageEditResponse()
     {
         string? capturedBody = null;
@@ -381,7 +375,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         var handler = new StubHttpMessageHandler((request, _) =>
         {
             requestedPaths.Add(request.RequestUri!.PathAndQuery);
-            if (request.RequestUri!.AbsolutePath == "/rest/services/assets/FeatureServer/0/queryAttachments")
+            if (request.RequestUri!.AbsolutePath == "/rest/services/Utilities/Assets/FeatureServer/0/queryAttachments")
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -420,11 +414,11 @@ public sealed class HonuaMobileSdkFeatureClientTests
 
         var listed = await attachments.ListAttachmentsAsync(new FeatureAttachmentListRequest
         {
-            Source = new FeatureSource { ServiceId = "assets", LayerId = 0 },
+            Source = new FeatureSource { ServiceId = "Utilities/Assets", LayerId = 0 },
             ObjectId = 42,
         });
 
-        Assert.Contains(requestedPaths, path => path.Contains("/rest/services/assets/FeatureServer/0/queryAttachments", StringComparison.Ordinal));
+        Assert.Contains(requestedPaths, path => path.Contains("/rest/services/Utilities/Assets/FeatureServer/0/queryAttachments", StringComparison.Ordinal));
         var attachment = Assert.Single(listed);
         Assert.Equal(42, attachment.ParentObjectId);
         Assert.Equal(7, attachment.AttachmentId);

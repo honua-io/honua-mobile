@@ -1,8 +1,7 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Honua.Sdk.Abstractions.Features;
-using Honua.Sdk.OgcFeatures.Exceptions;
-
-using OgcRequestConverters = Honua.Sdk.OgcFeatures.Conversion.RequestConverters;
 
 namespace Honua.Mobile.Sdk;
 
@@ -16,15 +15,12 @@ public sealed partial class HonuaMobileClient
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
     public async Task<JsonDocument> GetOgcCollectionsAsync(CancellationToken ct = default)
     {
-        try
-        {
-            var collections = await _ogcFeaturesClient.ListCollectionsAsync(ct).ConfigureAwait(false);
-            return OgcRequestConverters.ToJsonDocument(collections);
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        return await SendJsonAsync(
+            HttpMethod.Get,
+            "/ogc/features/collections",
+            query: null,
+            content: null,
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -39,17 +35,13 @@ public sealed partial class HonuaMobileClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        try
-        {
-            var response = await _ogcFeaturesClient
-                .GetItemsAsync(request.CollectionId, OgcRequestConverters.ToOgcItemsParams(request), ct)
-                .ConfigureAwait(false);
-            return OgcRequestConverters.ToJsonDocument(response);
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
+        return await SendJsonAsync(
+            HttpMethod.Get,
+            path,
+            BuildOgcItemsQueryParameters(request),
+            content: null,
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -64,17 +56,13 @@ public sealed partial class HonuaMobileClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        try
-        {
-            var response = await _ogcFeaturesClient
-                .CreateItemAsync(request.CollectionId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
-                .ConfigureAwait(false);
-            return OgcRequestConverters.ToJsonDocument(response);
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items";
+        return await SendJsonAsync(
+            HttpMethod.Post,
+            path,
+            query: null,
+            CreateJsonContent(request.Feature, "application/geo+json"),
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -89,17 +77,13 @@ public sealed partial class HonuaMobileClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        try
-        {
-            var response = await _ogcFeaturesClient
-                .UpdateItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToOgcFeature(request.Feature), ct)
-                .ConfigureAwait(false);
-            return OgcRequestConverters.ToJsonDocument(response);
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        return await SendJsonAsync(
+            HttpMethod.Put,
+            path,
+            query: null,
+            CreateJsonContent(request.Feature, "application/geo+json"),
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -114,17 +98,13 @@ public sealed partial class HonuaMobileClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        try
-        {
-            var response = await _ogcFeaturesClient
-                .PatchItemAsync(request.CollectionId, request.FeatureId, OgcRequestConverters.ToJsonElement(request.Patch), ct)
-                .ConfigureAwait(false);
-            return OgcRequestConverters.ToJsonDocument(response);
-        }
-        catch (HonuaOgcFeaturesException ex)
-        {
-            throw ToMobileApiException("OGC Features", ex);
-        }
+        var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
+        return await SendJsonAsync(
+            HttpMethod.Patch,
+            path,
+            query: null,
+            CreateJsonContent(request.Patch, "application/merge-patch+json"),
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -142,4 +122,39 @@ public sealed partial class HonuaMobileClient
         var path = $"/ogc/features/collections/{Uri.EscapeDataString(request.CollectionId)}/items/{Uri.EscapeDataString(request.FeatureId)}";
         return await SendJsonAsync(HttpMethod.Delete, path, null, null, ct).ConfigureAwait(false);
     }
+
+    private static IReadOnlyDictionary<string, string?> BuildOgcItemsQueryParameters(OgcItemsRequest request)
+    {
+        var query = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        if (request.Limit is { } limit)
+        {
+            query["limit"] = limit.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (request.Offset is { } offset)
+        {
+            query["offset"] = offset.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (request.PropertyNames is { Count: > 0 } propertyNames)
+        {
+            query["properties"] = string.Join(',', propertyNames);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CqlFilter))
+        {
+            query["filter"] = request.CqlFilter;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ResponseFormat))
+        {
+            query["f"] = request.ResponseFormat;
+        }
+
+        return query;
+    }
+
+    private static StringContent CreateJsonContent(JsonElement element, string mediaType)
+        => new(element.GetRawText(), Encoding.UTF8, mediaType);
 }

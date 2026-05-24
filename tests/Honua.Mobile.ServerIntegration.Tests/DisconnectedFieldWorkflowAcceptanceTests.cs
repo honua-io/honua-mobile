@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -6,6 +8,7 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
+using Microsoft.Data.Sqlite;
 
 // Disambiguate the mobile orchestrator from Honua.Sdk.Offline.OfflineSyncEngine.
 using OfflineSyncEngine = Honua.Mobile.Offline.Sync.OfflineSyncEngine;
@@ -20,6 +23,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
     private const string WorkflowName = "disconnected-field-workflow";
     private const string DefaultPackageId = "pkg_acceptance_field_workflow";
     private const string DefaultServiceId = "assets";
+    private const int FieldDayOperationCount = 500;
+    private static readonly TimeSpan FieldDayDatasetBudget = TimeSpan.FromSeconds(10);
     private const string FailureCategoryConfiguration = "configuration";
     private const string FailureCategoryPackage = "package";
     private const string FailureCategoryLocalCache = "local-cache";
@@ -219,6 +224,249 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         Assert.Equal(DefaultPackageId, createPayload.PackageId);
         Assert.Equal("0", createPayload.SourceId);
         Assert.Equal("op-acceptance-media-001", createPayload.Metadata!["mediaOperationId"]);
+    }
+
+    [Fact]
+    public void AcceptancePlan_CoversCompetitiveProductScenarios_AndGatedDeviceSmoke()
+    {
+        var config = AcceptanceHarnessConfiguration.Loopback(
+            new Uri("http://127.0.0.1:5000"),
+            Path.Combine(_rootDirectory, "evidence"));
+
+        var scenarioCoverage = AcceptanceWorkflowPlan.Create(config).ScenarioCoverage
+            .ToDictionary(scenario => scenario.Id, StringComparer.Ordinal);
+
+        Assert.Equal(
+            [
+                "offline-create-sync",
+                "offline-edit-delete-sync",
+                "conflict-manual-review",
+                "attachment-round-trip",
+                "form-rules-repeat-sections",
+                "bad-network-retry",
+                "restart-durability",
+                "field-day-scale-budget",
+                "appium-field-workflow-smoke",
+            ],
+            scenarioCoverage.Keys);
+
+        Assert.Equal("service", scenarioCoverage["offline-create-sync"].AutomationLevel);
+        Assert.Equal("loopback-server", scenarioCoverage["offline-edit-delete-sync"].AutomationLevel);
+        Assert.Equal("gated-device", scenarioCoverage["appium-field-workflow-smoke"].AutomationLevel);
+        Assert.Contains("launch", scenarioCoverage["appium-field-workflow-smoke"].Steps);
+        Assert.Contains("configure-server", scenarioCoverage["appium-field-workflow-smoke"].Steps);
+        Assert.Contains("download-project", scenarioCoverage["appium-field-workflow-smoke"].Steps);
+        Assert.Contains("create-record", scenarioCoverage["appium-field-workflow-smoke"].Steps);
+        Assert.Contains("sync", scenarioCoverage["appium-field-workflow-smoke"].Steps);
+        Assert.Equal(
+            "HONUA_MOBILE_APPIUM_SMOKE",
+            scenarioCoverage["appium-field-workflow-smoke"].Metadata["skipGate"]);
+    }
+
+    [Fact]
+    public async Task ManualConflictReviewScenario_LeavesFailedOperationAndEmitsEvidence()
+    {
+        var config = AcceptanceHarnessConfiguration.Loopback(
+            new Uri("http://127.0.0.1:5000"),
+            Path.Combine(_rootDirectory, "evidence"));
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = config.DatabasePath,
+        });
+        var plan = AcceptanceWorkflowPlan.Create(config);
+        var evidence = DisconnectedFieldWorkflowEvidence.Started(config, plan);
+        var conflictOperation = plan.SyncableOperations.Single(operation => operation.Kind == "feature-update");
+
+        await store.InitializeAsync();
+        await store.EnqueueAsync(conflictOperation.SyncOperation!);
+
+        await RunPhaseAsync(evidence, "manual-conflict-review", async phase =>
+        {
+            var sync = new OfflineSyncEngine(
+                store,
+                new ConflictUploader("server rejected base sync token; conflict requires manual review"),
+                new OfflineSyncEngineOptions
+                {
+                    BatchSize = 10,
+                    ConflictStrategy = SyncConflictStrategy.ManualReview,
+                });
+
+            var result = await sync.SyncAsync();
+            var rows = await ReadSyncQueueRowsAsync(config.DatabasePath);
+            var failed = Assert.Single(rows);
+
+            phase.Details["loaded"] = result.Loaded.ToString();
+            phase.Details["succeeded"] = result.Succeeded.ToString();
+            phase.Details["failed"] = result.Failed.ToString();
+            phase.Details["queueStatus"] = failed.Status;
+            phase.Details["lastError"] = failed.LastError ?? string.Empty;
+            evidence.FinalState.ManualReviewCount = rows.Count(row => row.Status == "failed");
+            evidence.FinalState.PendingOperationCount = await store.CountPendingAsync();
+            evidence.FinalState.LocalVerification = "manual-review conflict remains available in the GeoPackage sync queue";
+
+            Assert.Equal(1, result.Loaded);
+            Assert.Equal(0, result.Succeeded);
+            Assert.Equal(1, result.Failed);
+            Assert.Equal("failed", failed.Status);
+            Assert.Contains("manual review", failed.LastError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, evidence.FinalState.PendingOperationCount);
+        });
+
+        evidence.Status = "passed";
+        evidence.CompletedAtUtc = DateTimeOffset.UtcNow;
+        var evidencePath = await WriteEvidenceAsync(evidence);
+
+        Assert.True(File.Exists(evidencePath));
+        var evidenceJson = await File.ReadAllTextAsync(evidencePath);
+        Assert.Contains("\"manual-conflict-review\"", evidenceJson);
+        Assert.Contains("\"manualReviewCount\": 1", evidenceJson);
+    }
+
+    [Fact]
+    public async Task BadNetworkRetryScenario_PersistsRetryThroughRestart_AndDrainsOnReconnect()
+    {
+        var config = AcceptanceHarnessConfiguration.Loopback(
+            new Uri("http://127.0.0.1:5000"),
+            Path.Combine(_rootDirectory, "evidence"));
+        var plan = AcceptanceWorkflowPlan.Create(config);
+        var evidence = DisconnectedFieldWorkflowEvidence.Started(config, plan);
+        var uploader = new RetryThenSuccessUploader("Connection refused by field network");
+
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = config.DatabasePath,
+        });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(plan.SyncableOperations[0].SyncOperation!);
+
+        await RunPhaseAsync(evidence, "bad-network-retry", async phase =>
+        {
+            var firstSync = new OfflineSyncEngine(
+                store,
+                uploader,
+                new OfflineSyncEngineOptions { BatchSize = 10, MaxAttempts = 3 });
+            var firstResult = await firstSync.SyncAsync();
+            var retryRows = await ReadSyncQueueRowsAsync(config.DatabasePath);
+            var retry = Assert.Single(retryRows);
+
+            phase.Details["firstLoaded"] = firstResult.Loaded.ToString();
+            phase.Details["firstFailed"] = firstResult.Failed.ToString();
+            phase.Details["retryStatus"] = retry.Status;
+            phase.Details["retryAttemptCount"] = retry.AttemptCount.ToString();
+            phase.Details["retryError"] = retry.LastError ?? string.Empty;
+            evidence.FinalState.RetryOperationCount = retryRows.Count(row => row.Status == "retry");
+
+            Assert.Equal(1, firstResult.Failed);
+            Assert.Equal("retry", retry.Status);
+            Assert.Equal(1, retry.AttemptCount);
+            Assert.Contains("Connection refused", retry.LastError, StringComparison.Ordinal);
+        });
+
+        await RunPhaseAsync(evidence, "restart-durability", async phase =>
+        {
+            var restartedStore = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+            {
+                DatabasePath = config.DatabasePath,
+            });
+            var pendingAfterRestart = await restartedStore.CountPendingAsync();
+
+            var secondSync = new OfflineSyncEngine(
+                restartedStore,
+                uploader,
+                new OfflineSyncEngineOptions { BatchSize = 10, MaxAttempts = 3 });
+            var secondResult = await secondSync.SyncAsync();
+
+            phase.Details["pendingAfterRestart"] = pendingAfterRestart.ToString();
+            phase.Details["secondSucceeded"] = secondResult.Succeeded.ToString();
+            phase.Details["remainingQueueRows"] = (await ReadSyncQueueRowsAsync(config.DatabasePath)).Count.ToString();
+            evidence.FinalState.PendingOperationCountBeforeReconnect = pendingAfterRestart;
+            evidence.FinalState.PendingOperationCount = await restartedStore.CountPendingAsync();
+            evidence.FinalState.LocalVerification = "retry row survived service restart and drained after reconnect";
+
+            Assert.Equal(1, pendingAfterRestart);
+            Assert.Equal(1, secondResult.Succeeded);
+            Assert.Equal(0, evidence.FinalState.PendingOperationCount);
+            Assert.Empty(await ReadSyncQueueRowsAsync(config.DatabasePath));
+        });
+
+        evidence.Status = "passed";
+        evidence.CompletedAtUtc = DateTimeOffset.UtcNow;
+        var evidencePath = await WriteEvidenceAsync(evidence);
+
+        Assert.True(File.Exists(evidencePath));
+        var evidenceJson = await File.ReadAllTextAsync(evidencePath);
+        Assert.Contains("\"bad-network-retry\"", evidenceJson);
+        Assert.Contains("\"restart-durability\"", evidenceJson);
+        Assert.Contains("\"retryOperationCount\": 1", evidenceJson);
+    }
+
+    [Fact]
+    public async Task FieldDayDatasetScenario_QueuesAndSyncsWithinPerformanceBudget()
+    {
+        var config = AcceptanceHarnessConfiguration.Loopback(
+            new Uri("http://127.0.0.1:5000"),
+            Path.Combine(_rootDirectory, "evidence"));
+        var plan = AcceptanceWorkflowPlan.Create(config);
+        var evidence = DisconnectedFieldWorkflowEvidence.Started(config, plan);
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = config.DatabasePath,
+        });
+        await store.InitializeAsync();
+
+        await RunPhaseAsync(evidence, "field-day-scale-budget", async phase =>
+        {
+            var enqueueStopwatch = Stopwatch.StartNew();
+            for (var index = 0; index < FieldDayOperationCount; index++)
+            {
+                await store.EnqueueAsync(CreateFieldDayOperation(config, index));
+            }
+
+            enqueueStopwatch.Stop();
+
+            var pendingBeforeSync = await store.CountPendingAsync();
+            var syncStopwatch = Stopwatch.StartNew();
+            var sync = new OfflineSyncEngine(
+                new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+                {
+                    DatabasePath = config.DatabasePath,
+                }),
+                new AlwaysSuccessUploader(),
+                new OfflineSyncEngineOptions
+                {
+                    BatchSize = FieldDayOperationCount,
+                    MaxAttempts = 1,
+                });
+            var result = await sync.SyncAsync();
+            syncStopwatch.Stop();
+
+            phase.Details["operationCount"] = FieldDayOperationCount.ToString();
+            phase.Details["pendingBeforeSync"] = pendingBeforeSync.ToString();
+            phase.Details["succeeded"] = result.Succeeded.ToString();
+            phase.Details["enqueueElapsedMilliseconds"] = enqueueStopwatch.ElapsedMilliseconds.ToString();
+            phase.Details["syncElapsedMilliseconds"] = syncStopwatch.ElapsedMilliseconds.ToString();
+            phase.Details["budgetMilliseconds"] = FieldDayDatasetBudget.TotalMilliseconds.ToString("F0");
+            evidence.FinalState.FieldDayOperationCount = FieldDayOperationCount;
+            evidence.FinalState.FieldDaySyncElapsedMilliseconds = syncStopwatch.ElapsedMilliseconds;
+            evidence.FinalState.PendingOperationCount = await store.CountPendingAsync();
+
+            Assert.Equal(FieldDayOperationCount, pendingBeforeSync);
+            Assert.Equal(FieldDayOperationCount, result.Succeeded);
+            Assert.Equal(0, result.Failed);
+            Assert.Equal(0, evidence.FinalState.PendingOperationCount);
+            Assert.True(
+                enqueueStopwatch.Elapsed + syncStopwatch.Elapsed < FieldDayDatasetBudget,
+                $"Field-day enqueue+sync budget exceeded: enqueue={enqueueStopwatch.Elapsed}, sync={syncStopwatch.Elapsed}, budget={FieldDayDatasetBudget}.");
+        });
+
+        evidence.Status = "passed";
+        evidence.CompletedAtUtc = DateTimeOffset.UtcNow;
+        var evidencePath = await WriteEvidenceAsync(evidence);
+
+        Assert.True(File.Exists(evidencePath));
+        var evidenceJson = await File.ReadAllTextAsync(evidencePath);
+        Assert.Contains("\"field-day-scale-budget\"", evidenceJson);
+        Assert.Contains($"\"fieldDayOperationCount\": {FieldDayOperationCount}", evidenceJson);
     }
 
     [Theory]
@@ -613,6 +861,72 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         };
     }
 
+    private static OfflineEditOperation CreateFieldDayOperation(AcceptanceHarnessConfiguration config, int index)
+    {
+        var objectId = 10_000 + index;
+        var feature = JsonSerializer.SerializeToElement(new
+        {
+            attributes = new
+            {
+                objectid = objectId,
+                name = $"Field Day Asset {index:D4}",
+                status = "created-offline",
+                honua_acceptance_run = config.RunId,
+            },
+            geometry = new
+            {
+                x = -157.8 + index * 0.000001,
+                y = 21.3 + index * 0.000001,
+            },
+        }, JsonOptions);
+
+        return CreateFeatureOperation(
+            config,
+            $"op-field-day-{index:D4}",
+            "field-day-create",
+            OfflineOperationType.Add,
+            config.LayerIds[0],
+            priority: index + 1,
+            feature: feature,
+            extraMetadata: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["dataset"] = "field-day-scale-budget",
+                ["sequence"] = index.ToString(CultureInfo.InvariantCulture),
+            });
+    }
+
+    private static async Task<IReadOnlyList<SyncQueueRow>> ReadSyncQueueRowsAsync(string databasePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT operation_id, status, attempt_count, last_error
+            FROM honua_sync_queue
+            ORDER BY operation_id;
+            """;
+
+        var rows = new List<SyncQueueRow>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new SyncQueueRow(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
+        }
+
+        return rows;
+    }
+
+    private sealed record SyncQueueRow(
+        string OperationId,
+        string Status,
+        int AttemptCount,
+        string? LastError);
+
     private static IReplicaSyncClient CreateReplicaClient(AcceptanceHarnessConfiguration config)
     {
         var http = new HttpClient { BaseAddress = config.BaseUri };
@@ -665,6 +979,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         public required IReadOnlyList<string> Sequence { get; init; }
 
         public required IReadOnlyList<PlannedAcceptanceOperation> Operations { get; init; }
+
+        public required IReadOnlyList<AcceptanceScenarioEvidence> ScenarioCoverage { get; init; }
 
         public IReadOnlyList<PlannedAcceptanceOperation> SyncableOperations
             => Operations.Where(operation => operation.IsSyncable).ToArray();
@@ -756,6 +1072,7 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             return new AcceptanceWorkflowPlan
             {
                 Sequence = ["online-download", "offline-edit", "reconnect-sync", "verify"],
+                ScenarioCoverage = CreateScenarioCoverage(),
                 Operations =
                 [
                     new PlannedAcceptanceOperation
@@ -802,6 +1119,79 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 ],
             };
         }
+
+        private static IReadOnlyList<AcceptanceScenarioEvidence> CreateScenarioCoverage()
+            =>
+            [
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "offline-create-sync",
+                    AutomationLevel = "service",
+                    Steps = ["queue-create", "reconnect-sync", "verify-server"],
+                    Artifacts = ["sync-state", "geopackage-state", "server-apply-edits"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "offline-edit-delete-sync",
+                    AutomationLevel = "loopback-server",
+                    Steps = ["queue-update", "queue-delete", "reconnect-sync", "verify-server"],
+                    Artifacts = ["sync-state", "geopackage-state", "server-apply-edits"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "conflict-manual-review",
+                    AutomationLevel = "service",
+                    Steps = ["queue-conflicting-edit", "sync", "verify-manual-review"],
+                    Artifacts = ["sync-queue-state", "failure-category"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "attachment-round-trip",
+                    AutomationLevel = "service",
+                    Steps = ["capture-media", "queue-metadata", "push-attachment", "pull-attachment"],
+                    Artifacts = ["attachment-metadata", "local-media-path"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "form-rules-repeat-sections",
+                    AutomationLevel = "service",
+                    Steps = ["apply-defaults", "calculate-values", "validate-repeat", "queue-record"],
+                    Artifacts = ["form-validation-state", "offline-operation-payload"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "bad-network-retry",
+                    AutomationLevel = "service",
+                    Steps = ["sync-temporary-failure", "persist-retry", "sync-success"],
+                    Artifacts = ["sync-queue-state", "retry-attempt-count"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "restart-durability",
+                    AutomationLevel = "service",
+                    Steps = ["queue-offline-change", "restart-store", "resume-sync"],
+                    Artifacts = ["geopackage-state", "sync-queue-state"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "field-day-scale-budget",
+                    AutomationLevel = "service",
+                    Steps = ["queue-large-dataset", "sync-large-dataset", "assert-budget"],
+                    Artifacts = ["operation-count", "elapsed-milliseconds"],
+                },
+                new AcceptanceScenarioEvidence
+                {
+                    Id = "appium-field-workflow-smoke",
+                    AutomationLevel = "gated-device",
+                    Steps = ["launch", "configure-server", "download-project", "create-record", "sync"],
+                    Artifacts = ["device-run-json", "appium-log", "sync-state"],
+                    Metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["skipGate"] = "HONUA_MOBILE_APPIUM_SMOKE",
+                        ["skipReason"] = "Device/Appium smoke is gated because it needs a simulator or device plus live server credentials.",
+                    },
+                },
+            ];
     }
 
     private sealed class PlannedAcceptanceOperation
@@ -852,6 +1242,19 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         public required Dictionary<string, string> Metadata { get; init; }
     }
 
+    private sealed class AcceptanceScenarioEvidence
+    {
+        public required string Id { get; init; }
+
+        public required string AutomationLevel { get; init; }
+
+        public required IReadOnlyList<string> Steps { get; init; }
+
+        public required IReadOnlyList<string> Artifacts { get; init; }
+
+        public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.Ordinal);
+    }
+
     private sealed class SyncRunFailedException : Exception
     {
         private SyncRunFailedException(string message, string failureCategory)
@@ -868,6 +1271,54 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
                 ?? $"Expected all planned operations to sync; loaded={result.Loaded}, succeeded={result.Succeeded}, failed={result.Failed}.";
             return new SyncRunFailedException(reason, ClassifySyncFailureReason(reason));
         }
+    }
+
+    private sealed class ConflictUploader : IOfflineOperationUploader
+    {
+        private readonly string _message;
+
+        public ConflictUploader(string message)
+        {
+            _message = message;
+        }
+
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => Task.FromResult(new UploadResult
+            {
+                Outcome = UploadOutcome.Conflict,
+                Message = _message,
+            });
+    }
+
+    private sealed class RetryThenSuccessUploader : IOfflineOperationUploader
+    {
+        private readonly string _firstFailureMessage;
+        private readonly HashSet<string> _failedOnce = new(StringComparer.Ordinal);
+
+        public RetryThenSuccessUploader(string firstFailureMessage)
+        {
+            _firstFailureMessage = firstFailureMessage;
+        }
+
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        {
+            if (_failedOnce.Add(operation.OperationId))
+            {
+                return Task.FromResult(new UploadResult
+                {
+                    Outcome = UploadOutcome.RetryableFailure,
+                    Message = _firstFailureMessage,
+                });
+            }
+
+            return Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
+        }
+    }
+
+    private sealed class AlwaysSuccessUploader : IOfflineOperationUploader
+    {
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+            => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
     }
 
     private sealed class AcceptanceHarnessConfiguration
@@ -1016,6 +1467,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
         public List<PlannedOperationEvidence> PlannedOperations { get; } = [];
 
+        public List<AcceptanceScenarioEvidence> ScenarioCoverage { get; } = [];
+
         public IReadOnlyDictionary<string, string> FailureCategories { get; init; } =
             DisconnectedFieldWorkflowAcceptanceTests.FailureCategories();
 
@@ -1033,6 +1486,8 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
             };
             evidence.OperationIds.AddRange(plan.Operations.Select(operation => operation.OperationId));
             evidence.PlannedOperations.AddRange(plan.Operations.Select(operation => operation.ToEvidence()));
+            evidence.ScenarioCoverage.AddRange(plan.ScenarioCoverage);
+            evidence.FinalState.GeoPackagePath = config.DatabasePath;
             return evidence;
         }
 
@@ -1104,11 +1559,25 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
 
     private sealed class AcceptanceFinalStateEvidence
     {
+        public string? GeoPackagePath { get; set; }
+
         public int LocalFeatureCount { get; set; }
 
         public int PendingOperationCountBeforeReconnect { get; set; }
 
         public int PendingOperationCount { get; set; }
+
+        public int ManualReviewCount { get; set; }
+
+        public int RetryOperationCount { get; set; }
+
+        public int AttachmentRoundTripCount { get; set; }
+
+        public int FormRepeatEntryCount { get; set; }
+
+        public int FieldDayOperationCount { get; set; }
+
+        public long FieldDaySyncElapsedMilliseconds { get; set; }
 
         public int RunTaggedFeatureCountBeforeReconnect { get; set; }
 

@@ -21,6 +21,24 @@ public sealed record HonuaMapPluginContributionSnapshot
 
     public IReadOnlyList<HonuaMapPluginContribution<HonuaMapPluginFeatureRenderer>> FeatureRenderers { get; init; } =
         [];
+
+    public HonuaMapPluginContributionSnapshot WithoutPlugin(string pluginId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
+
+        return new HonuaMapPluginContributionSnapshot
+        {
+            ToolbarButtons = ToolbarButtons
+                .Where(item => !string.Equals(item.PluginId, pluginId, StringComparison.Ordinal))
+                .ToArray(),
+            UiExtensions = UiExtensions
+                .Where(item => !string.Equals(item.PluginId, pluginId, StringComparison.Ordinal))
+                .ToArray(),
+            FeatureRenderers = FeatureRenderers
+                .Where(item => !string.Equals(item.PluginId, pluginId, StringComparison.Ordinal))
+                .ToArray(),
+        };
+    }
 }
 
 /// <summary>

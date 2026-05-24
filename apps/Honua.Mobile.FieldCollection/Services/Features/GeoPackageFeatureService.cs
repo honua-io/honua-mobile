@@ -46,16 +46,20 @@ public class GeoPackageFeatureService : IFeatureService
         {
             if (spatialFilter != null)
             {
-                return await _storage.QueryFeaturesAsync(
+                var filtered = await _storage.QueryFeaturesAsync(
                     layerId,
                     new StorageSpatialQuery
                 {
                     Bounds = ConvertToBoundingBox(spatialFilter),
                     Relationship = StorageSpatialRelationship.Intersects
                 });
+                await PopulateAttachmentsAsync(filtered);
+                return filtered;
             }
 
-            return await _storage.QueryFeaturesAsync(layerId);
+            var features = await _storage.QueryFeaturesAsync(layerId);
+            await PopulateAttachmentsAsync(features);
+            return features;
         }
         catch (Exception ex)
         {
@@ -68,7 +72,13 @@ public class GeoPackageFeatureService : IFeatureService
     {
         try
         {
-            return await _storage.GetFeatureAsync(featureId, layerId);
+            var feature = await _storage.GetFeatureAsync(featureId, layerId);
+            if (feature != null)
+            {
+                await PopulateAttachmentsAsync([feature]);
+            }
+
+            return feature;
         }
         catch (Exception ex)
         {
@@ -128,6 +138,7 @@ public class GeoPackageFeatureService : IFeatureService
                 features = features.Take(query.Limit.Value).ToList();
             }
 
+            await PopulateAttachmentsAsync(features);
             return features;
         }
         catch (Exception ex) when (ex is not NotSupportedException and not ArgumentException)
@@ -138,6 +149,14 @@ public class GeoPackageFeatureService : IFeatureService
     }
 
     #endregion
+
+    private async Task PopulateAttachmentsAsync(IEnumerable<Feature> features)
+    {
+        foreach (var feature in features)
+        {
+            feature.Attachments = await _storage.GetAttachmentsForFeatureAsync(feature.Id, feature.LayerId);
+        }
+    }
 
     #region Feature Modification
 
@@ -333,7 +352,7 @@ public class GeoPackageFeatureService : IFeatureService
         }
     }
 
-    public async Task<List<LayerInfo>> GetLayersAsync()
+    public async Task<IReadOnlyList<LayerInfo>> GetLayersAsync()
     {
         try
         {

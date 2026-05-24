@@ -1,18 +1,5 @@
 namespace Honua.Mobile.FieldCollection.Services;
 
-public interface INavigationService
-{
-    Task NavigateToAsync(string route);
-    Task NavigateToAsync(string route, IDictionary<string, object> parameters);
-    Task NavigateToAsync<T>(IDictionary<string, object> parameters) where T : ContentPage;
-    Task GoBackAsync();
-    Task PopToRootAsync();
-    Task DisplayAlert(string title, string message, string cancel);
-    Task<bool> DisplayAlert(string title, string message, string accept, string cancel);
-    Task<string> DisplayActionSheet(string title, string cancel, string destruction, params string[] buttons);
-    Task<string> DisplayPromptAsync(string title, string message, string accept = "OK", string cancel = "Cancel", string placeholder = "", int maxLength = -1, Keyboard? keyboard = null, string initialValue = "");
-}
-
 public class NavigationService : INavigationService
 {
     public async Task NavigateToAsync(string route)
@@ -23,12 +10,6 @@ public class NavigationService : INavigationService
     public async Task NavigateToAsync(string route, IDictionary<string, object> parameters)
     {
         await Shell.Current.GoToAsync(route, parameters);
-    }
-
-    public async Task NavigateToAsync<T>(IDictionary<string, object> parameters) where T : ContentPage
-    {
-        var route = typeof(T).Name.Replace("Page", "").ToLowerInvariant();
-        await NavigateToAsync(route, parameters);
     }
 
     public async Task GoBackAsync()
@@ -56,8 +37,8 @@ public class NavigationService : INavigationService
         return await Shell.Current.DisplayActionSheetAsync(title, cancel, destruction, buttons);
     }
 
-    public async Task<string> DisplayPromptAsync(string title, string message, string accept = "OK", string cancel = "Cancel", string placeholder = "", int maxLength = -1, Keyboard? keyboard = null, string initialValue = "")
+    public async Task<string> DisplayPromptAsync(string title, string message, string accept = "OK", string cancel = "Cancel", string placeholder = "", int maxLength = -1, string initialValue = "")
     {
-        return await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxLength, keyboard, initialValue);
+        return await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxLength, keyboard: null, initialValue: initialValue);
     }
 }

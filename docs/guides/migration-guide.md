@@ -1,29 +1,35 @@
 # Migration Guide: From Proprietary Platforms to Honua
 
-**Break free from vendor lock-in and save thousands per year while gaining superior capabilities.**
+**Plan migrations away from proprietary field platforms using Honua's
+open-source mobile runtime and SDK-backed workflows.**
 
-This guide helps you migrate from expensive proprietary platforms to the open-source Honua Mobile SDK.
+This guide is a migration planning aid. It includes target-state examples and
+future roadmap items; it is not a guarantee that every compared capability is
+fully shipped and validated in this repository. For source-backed status, use
+[docs/features/README.md](../features/README.md),
+[docs/guides/validation-strategy.md](validation-strategy.md), and
+[docs/guides/mobile-sdk-backlog-roadmap.md](mobile-sdk-backlog-roadmap.md).
 
 ---
 
 ## 🎯 Migration Overview
 
-### Why Migrate to Honua?
+### Why Evaluate Honua?
 
 | Benefit | Savings/Improvement |
 |---------|-------------------|
-| **Cost Elimination** | Save $1,200-$3,600 per user per year |
+| **Cost Control** | Open-source client code can reduce per-seat licensing pressure depending on hosting and support choices |
 | **No Vendor Lock-in** | Full source code access and control |
 | **Superior Technology** | Native performance vs web wrappers |
-| **Advanced Features** | IoT integration and AR capabilities unavailable elsewhere |
+| **Advanced Features** | IoT and AR are roadmap tracks with mobile/server dependencies |
 | **Future-Proof** | Open standards and community-driven development |
 
 ### Migration Timeline
 
 - **🚀 Quick Start**: 1-2 hours to working prototype
-- **📱 Basic App**: 1-2 days to feature-complete app
+- **📱 Basic App**: 1-2 days to a field workflow prototype
 - **🎨 Customization**: 1 week to fully branded solution
-- **📊 Full Migration**: 2-4 weeks including data migration and training
+- **📊 Full Migration**: Plan as a project with data migration, acceptance testing, and training
 
 ---
 
@@ -37,9 +43,9 @@ Fulcrum is a popular field data collection platform charging $99-299/month per u
 |---------|-----------|-------------|
 | **Cost** | ✅ **$0** (open source) | ❌ **$99-299/month/user** |
 | **Performance** | ✅ **Native mobile** | ❌ Web wrapper |
-| **Offline Capability** | ✅ **True offline-first** | ⚠️ Limited offline |
-| **IoT Integration** | ✅ **Bluetooth LE, LoRa, WiFi** | ❌ Not available |
-| **AR Visualization** | ✅ **Native ARKit/ARCore** | ❌ Not available |
+| **Offline Capability** | ✅ **GeoPackage/sync runtime; app parity tracked in backlog** | Offline field collection |
+| **IoT Integration** | Roadmap extension track | Product-dependent |
+| **AR Visualization** | Roadmap after scene anchoring dependencies | Product-dependent |
 | **Custom Branding** | ✅ **Full customization** | ⚠️ Limited options |
 | **Data Ownership** | ✅ **Full control** | ❌ Vendor hosted |
 | **API Access** | ✅ **Full gRPC + REST APIs** | ⚠️ Limited REST API |
@@ -711,14 +717,15 @@ console.log(calculateROI('survey123', 100, 3));
 
 **[Contact Migration Services](mailto:migration@honua.com)**
 
-### Migration Guarantee
+### Migration Acceptance Checklist
 
-We're so confident in Honua's capabilities that we offer a **30-day migration guarantee**:
+Before replacing an existing field platform, validate the pilot against explicit
+acceptance criteria:
 
-✅ **Full feature parity** with your current platform
-✅ **Data migration accuracy** of 99.9%+
-✅ **Performance improvements** or money back
-✅ **Team training** until proficient
+- Define required feature parity against your current platform
+- Validate data migration accuracy with sample exports before production cutover
+- Measure performance on representative field workflows
+- Train the team until the pilot acceptance checklist passes
 
 ---
 

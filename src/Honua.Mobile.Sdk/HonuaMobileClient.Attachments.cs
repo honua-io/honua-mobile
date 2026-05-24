@@ -130,7 +130,7 @@ public sealed partial class HonuaMobileClient
             ?? throw new InvalidOperationException("FeatureServer attachments require a service ID.");
         var layerId = request.Source.LayerId
             ?? throw new InvalidOperationException("FeatureServer attachments require a layer ID.");
-        var path = $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/{layerId}/queryAttachments";
+        var path = $"/rest/services/{EscapePathSegments(serviceId)}/FeatureServer/{layerId}/queryAttachments";
 
         using var response = await SendJsonAsync(
             HttpMethod.Get,

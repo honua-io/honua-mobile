@@ -1,5 +1,13 @@
 # Honua Mobile SDK - Innovation Specification
 
+> Status note, May 2026: this Phase 0 document is an innovation roadmap and
+> planning baseline, not shipped-product status. Use
+> [docs/features/README.md](../features/README.md) for source-backed current
+> capabilities, [docs/guides/validation-strategy.md](../guides/validation-strategy.md)
+> for validated coverage, and
+> [docs/guides/mobile-sdk-backlog-roadmap.md](../guides/mobile-sdk-backlog-roadmap.md)
+> for open parity backlog issues and dependencies.
+
 ## Executive Summary
 
 This document defines Honua's innovation roadmap beyond competitive parity, focusing on breakthrough capabilities that establish market leadership and create new industry standards. These innovations leverage our **open gRPC geospatial protocols** to democratize mobile field work while delivering superior performance and developer experience.

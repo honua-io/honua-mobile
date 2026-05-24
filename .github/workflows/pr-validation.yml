@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-      issues: read
+      issues: write
       statuses: write
     steps:
       - name: Check PR Requirements
@@ -169,18 +169,22 @@ jobs:
               });
             }
 
-            const statusState = issues.length > 0 ? 'failure' : 'success';
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.payload.pull_request.head.sha,
-              state: statusState,
-              context: 'Validate Mobile SDK PR',
-              description: issues.length > 0
-                ? `Mobile SDK PR validation failed: ${issues.length} critical issue(s)`
-                : 'Mobile SDK PR validation passed',
-              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            });
+            try {
+              const statusState = issues.length > 0 ? 'failure' : 'success';
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.payload.pull_request.head.sha,
+                state: statusState,
+                context: 'Validate Mobile SDK PR',
+                description: issues.length > 0
+                  ? `Mobile SDK PR validation failed: ${issues.length} critical issue(s)`
+                  : 'Mobile SDK PR validation passed',
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              });
+            } catch (error) {
+              core.warning(`Unable to publish optional commit status: ${error.message}`);
+            }
 
             // Fail if critical issues found
             if (issues.length > 0) {

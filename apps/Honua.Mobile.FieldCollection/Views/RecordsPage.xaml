@@ -23,9 +23,20 @@
 
         <!-- Layer Selection and Statistics -->
         <Frame Grid.Row="0" Style="{StaticResource CardFrameStyle}" Margin="10,10,10,5">
-            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-                <!-- Layer Picker -->
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+                <!-- Project Picker -->
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Label Grid.Column="0" Text="Project:" FontAttributes="Bold" VerticalOptions="Center" />
+
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding AvailableProjects}"
+                            SelectedItem="{Binding SelectedProject}"
+                            ItemDisplayBinding="{Binding Name}"
+                            Title="Select Project" />
+                </Grid>
+
+                <!-- Layer Picker -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                     <Label Grid.Column="0" Text="Layer:" FontAttributes="Bold" VerticalOptions="Center" />
 
                     <Picker Grid.Column="1"
@@ -41,7 +52,7 @@
                 </Grid>
 
                 <!-- Record Statistics -->
-                <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="15">
+                <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="15">
                     <StackLayout Grid.Column="0">
                         <Label Text="{Binding TotalRecordCount}"
                                FontSize="18" FontAttributes="Bold"

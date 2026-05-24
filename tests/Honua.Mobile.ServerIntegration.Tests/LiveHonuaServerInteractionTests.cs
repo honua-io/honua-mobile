@@ -128,14 +128,6 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             });
             AssertEditSucceeded(update, "updateResults");
 
-            // Tracked at https://github.com/honua-io/honua-mobile/issues/199 -- the SDK
-            // provider-neutral ApplyEdits.Adds path sends GeoJSON-shaped geometry that
-            // the FeatureServer rejects with "Invalid GeoServices JSON geometry format"
-            // (error code 1000). Skip just this branch (the REST overload above is
-            // exercised, and the trunk server contract is verified) until the
-            // GeoServices request-converter shape divergence is resolved.
-            Skip.If(true, "Tracked at #199 -- SDK ApplyEdits.Adds geometry shape divergence (GeoJSON vs GeoServices x/y).");
-
             var sdkEdit = await client.ApplyEditsAsync(new FeatureEditRequest
             {
                 Source = FeatureSource(),
@@ -232,16 +224,6 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         // with REST fallback disabled so any pure-streaming bug surfaces here rather
         // than being silently masked by the unary REST path.
         using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
-
-        // Tracked at https://github.com/honua-io/honua-mobile/issues/202 -- the live
-        // server-streaming RPC currently rejects this request with
-        // "InvalidArgument: Invalid request parameters" even though the unary RPC
-        // accepts the same shape (see LiveImage_GrpcFeatureQueryAndEdit_RoundTrip).
-        // The mobile-side converter (GrpcRequestConverters.ToGrpcQueryRequest) is
-        // identical for both paths, so the divergence is in the server's request
-        // validation. Skip narrowly until the streaming contract is reconciled; the
-        // assertion below is preserved so it activates as soon as #202 lands.
-        Skip.If(true, "Tracked at #202 -- live gRPC streaming RPC rejects Where/OutFields/ReturnGeometry that unary accepts.");
 
         JsonDocument? page = null;
         await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
@@ -1020,6 +1002,14 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
         public bool IsAuthenticated => true;
 
+        public bool RequiresReauthentication => false;
+
+        public string? SessionStatusMessage => "Session active";
+
+        public DateTimeOffset? ExpiresAtUtc => null;
+
+        public HonuaAuthScheme? AuthScheme => HonuaAuthScheme.ApiKey;
+
         public string? CurrentUserId => "live-image";
 
         public string? CurrentUserName => "Live Image";
@@ -1043,7 +1033,12 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             string password)
             => Task.FromResult(FieldServices.AuthenticationResult.Failure("Credentials are not used in live image tests."));
 
-        public Task<bool> RefreshTokenAsync() => Task.FromResult(true);
+        public Task<bool> RefreshTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task<bool> EnsureValidSessionAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public ValueTask<HonuaAuthToken?> GetAuthTokenAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<HonuaAuthToken?>(new HonuaAuthToken(HonuaAuthScheme.ApiKey, ApiKey!));
 
         public Task LogoutAsync() => Task.CompletedTask;
 

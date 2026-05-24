@@ -1,10 +1,17 @@
 using CommunityToolkit.Maui;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Ai;
+using Honua.Mobile.FieldCollection.Services.Assignments;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
+using Honua.Mobile.FieldCollection.Services.Forms;
+using Honua.Mobile.FieldCollection.Services.Metadata;
+using Honua.Mobile.FieldCollection.Services.Packages;
+using Honua.Mobile.FieldCollection.Services.Sharing;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Honua.Mobile.FieldCollection.Services.Workflow;
 using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.FieldCollection.ViewModels;
@@ -52,12 +59,38 @@ public static class MauiProgram
     {
         // Database and Storage Services
         services.AddSingleton<DatabaseService>();
+        services.AddSingleton<GeoPackageStorageService>(provider =>
+            provider.GetRequiredService<DatabaseService>().GetStorageService());
 
         services.AddSingleton<IStorageService, StorageService>();
 
         // Register sync service factory
-        services.AddSingleton<IFieldCollectionChangeUploader, QueuedFieldCollectionChangeUploader>();
-        services.AddSingleton<IFieldCollectionChangePuller, LocalOnlyFieldCollectionChangePuller>();
+        services.AddHttpClient("HonuaFieldSync");
+        services.AddSingleton<HonuaSdkFieldCollectionFeatureSyncClient>();
+        services.AddSingleton<IFieldCollectionFeatureSyncClient>(provider =>
+            provider.GetRequiredService<HonuaSdkFieldCollectionFeatureSyncClient>());
+        services.AddSingleton<IFieldCollectionAttachmentSyncClient>(provider =>
+            provider.GetRequiredService<HonuaSdkFieldCollectionFeatureSyncClient>());
+        services.AddSingleton<IFieldCollectionChangeUploader>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new HonuaFieldCollectionChangeUploader(
+                databaseService.GetStorageService(),
+                provider.GetRequiredService<IFieldCollectionMetadataService>(),
+                provider.GetRequiredService<IFieldCollectionFeatureSyncClient>(),
+                provider.GetService<ILogger<HonuaFieldCollectionChangeUploader>>());
+        });
+        services.AddSingleton<IFieldCollectionChangePuller, HonuaFieldCollectionChangePuller>();
+        services.AddSingleton<IFieldCollectionAttachmentSynchronizer>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new HonuaFieldCollectionAttachmentSynchronizer(
+                databaseService.GetStorageService(),
+                provider.GetRequiredService<IAttachmentService>(),
+                provider.GetRequiredService<IFieldCollectionMetadataService>(),
+                provider.GetRequiredService<IFieldCollectionAttachmentSyncClient>(),
+                provider.GetService<ILogger<HonuaFieldCollectionAttachmentSynchronizer>>());
+        });
         services.AddSingleton<ISyncService>(provider =>
         {
             var databaseService = provider.GetRequiredService<DatabaseService>();
@@ -65,6 +98,7 @@ public static class MauiProgram
             var connectivityService = provider.GetRequiredService<IConnectivityService>();
             var changeUploader = provider.GetRequiredService<IFieldCollectionChangeUploader>();
             var changePuller = provider.GetRequiredService<IFieldCollectionChangePuller>();
+            var attachmentSynchronizer = provider.GetRequiredService<IFieldCollectionAttachmentSynchronizer>();
             var logger = provider.GetRequiredService<ILogger<GeoPackageSyncService>>();
             var exceptionReporter = provider.GetRequiredService<IMobileExceptionReporter>();
             return databaseService.GetSyncService(
@@ -72,14 +106,19 @@ public static class MauiProgram
                 connectivityService,
                 changeUploader,
                 changePuller,
+                attachmentSynchronizer,
                 logger: logger,
                 exceptionReporter: exceptionReporter);
         });
 
         // Core services
         services.AddSingleton<INavigationService, NavigationService>();
-        services.AddSingleton<ILocationService, LocationService>();
+        services.AddSingleton<ILocationService>(provider =>
+            new LocationService(
+                provider.GetService<IHighAccuracyLocationMetadataProvider>(),
+                provider.GetService<ILogger<LocationService>>()));
         services.AddHttpClient("HonuaFieldAuthentication");
+        services.AddHttpClient("HonuaFieldMetadata");
         services.AddSingleton<IAuthenticationService>(provider =>
         {
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
@@ -98,10 +137,65 @@ public static class MauiProgram
             var logger = provider.GetRequiredService<ILogger<GeoPackageFeatureService>>();
             return new GeoPackageFeatureService(storageService, syncService, logger);
         });
+        services.AddSingleton<IFieldCollectionMetadataService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var logger = provider.GetService<ILogger<FieldCollectionMetadataService>>();
+            return new FieldCollectionMetadataService(
+                provider.GetRequiredService<IAuthenticationService>(),
+                provider.GetRequiredService<ISettingsService>(),
+                databaseService.GetStorageService(),
+                httpClientFactory.CreateClient("HonuaFieldMetadata"),
+                logger);
+        });
 
         // Other feature services
-        services.AddSingleton<IFormService, FormService>();
-        services.AddSingleton<IAttachmentService, AttachmentService>();
+        services.AddSingleton<IFormService>(provider =>
+            new FormService(provider.GetRequiredService<IFieldCollectionMetadataService>()));
+        services.AddSingleton<IFormDraftService, SettingsFormDraftService>();
+        services.AddSingleton<IAttachmentService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new AttachmentService(
+                databaseService.GetStorageService(),
+                logger: provider.GetService<ILogger<AttachmentService>>());
+        });
+        services.AddSingleton<ILocalRecordExportService>(provider =>
+        {
+            return new LocalRecordExportService(
+                provider.GetRequiredService<GeoPackageStorageService>(),
+                logger: provider.GetService<ILogger<LocalRecordExportService>>());
+        });
+        services.AddSingleton<ILocalRecordExportShareService, MauiLocalRecordExportShareService>();
+        services.AddHttpClient("HonuaFieldPackageDownload");
+        services.AddSingleton<IFieldProjectPackageDownloadRequestCustomizer, FieldProjectPackageDownloadAuthHeader>();
+        services.AddSingleton(provider =>
+        {
+            return new LocalFieldProjectPackageImportService(
+                provider.GetRequiredService<GeoPackageStorageService>(),
+                provider.GetService<ILogger<LocalFieldProjectPackageImportService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new LocalFieldProjectPackageDownloadService(
+                httpClientFactory.CreateClient("HonuaFieldPackageDownload"),
+                provider.GetRequiredService<LocalFieldProjectPackageImportService>(),
+                provider.GetServices<IFieldProjectPackageDownloadRequestCustomizer>(),
+                provider.GetService<ILogger<LocalFieldProjectPackageDownloadService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            return new LocalFieldRecordLifecycleService(provider.GetRequiredService<GeoPackageStorageService>());
+        });
+        services.AddSingleton<ILocalFieldAssignmentService>(provider =>
+        {
+            return new LocalFieldAssignmentService(provider.GetRequiredService<GeoPackageStorageService>());
+        });
+        services.AddSingleton<IMobileAiCaptureProvider, NullMobileAiCaptureProvider>();
+        services.AddSingleton<IMobileAiCaptureQueue, SettingsMobileAiCaptureQueue>();
+        services.AddSingleton<IMobileAiCaptureService, MobileAiCaptureCoordinator>();
 
         // Configuration services
         var buildConfiguration = MobileBuildConfiguration.FromAssembly(
@@ -136,17 +230,41 @@ public static class MauiProgram
     {
         services.AddTransient<MainViewModel>();
         services.AddTransient<MapViewModel>();
+        services.AddTransient<FieldOperationsViewModel>();
         services.AddTransient<RecordsViewModel>();
         services.AddTransient<SyncCenterViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<RecordDetailViewModel>();
+        services.AddTransient<RecordEditViewModel>();
+        services.AddTransient<AuthenticationViewModel>();
+        services.AddTransient<DiagnosticsViewModel>();
+        services.AddTransient<LayerSettingsViewModel>();
+        services.AddTransient<FeatureDetailViewModel>();
+        services.AddTransient<ConflictResolutionViewModel>();
+        services.AddTransient<SyncHistoryViewModel>();
+        services.AddTransient<ServerConfigViewModel>();
+        services.AddTransient<UserProfileViewModel>();
+        services.AddTransient<AboutViewModel>();
     }
 
     private static void RegisterViews(IServiceCollection services)
     {
         services.AddTransient<MainPage>();
         services.AddTransient<MapPage>();
+        services.AddTransient<FieldOperationsPage>();
         services.AddTransient<RecordsPage>();
         services.AddTransient<SyncCenterPage>();
         services.AddTransient<SettingsPage>();
+        services.AddTransient<RecordDetailPage>();
+        services.AddTransient<RecordEditPage>();
+        services.AddTransient<AuthenticationPage>();
+        services.AddTransient<DiagnosticsPage>();
+        services.AddTransient<LayerSettingsPage>();
+        services.AddTransient<FeatureDetailPage>();
+        services.AddTransient<ConflictResolutionPage>();
+        services.AddTransient<SyncHistoryPage>();
+        services.AddTransient<ServerConfigPage>();
+        services.AddTransient<UserProfilePage>();
+        services.AddTransient<AboutPage>();
     }
 }

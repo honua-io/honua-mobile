@@ -51,6 +51,88 @@ public class LocalFeature
 }
 
 /// <summary>
+/// Locally stored feature attachment metadata and sync state.
+/// </summary>
+[Table("local_attachments")]
+public class LocalAttachment
+{
+    [PrimaryKey]
+    [Column("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [Column("feature_id")]
+    [Indexed]
+    public string FeatureId { get; set; } = string.Empty;
+
+    [Column("layer_id")]
+    [Indexed]
+    public int LayerId { get; set; }
+
+    [Column("remote_attachment_id")]
+    [Indexed]
+    public long? RemoteAttachmentId { get; set; }
+
+    [Column("remote_global_id")]
+    public string? RemoteGlobalId { get; set; }
+
+    [Column("file_name")]
+    public string FileName { get; set; } = string.Empty;
+
+    [Column("content_type")]
+    public string ContentType { get; set; } = "application/octet-stream";
+
+    [Column("payload_kind")]
+    public AttachmentPayloadKind PayloadKind { get; set; } = AttachmentPayloadKind.File;
+
+    [Column("size_bytes")]
+    public long SizeBytes { get; set; }
+
+    [Column("local_path")]
+    public string? LocalPath { get; set; }
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [Column("uploaded_at")]
+    public DateTime UploadedAt { get; set; }
+
+    [Column("last_synced_at")]
+    public DateTime? LastSyncedAt { get; set; }
+
+    [Column("description")]
+    public string? Description { get; set; }
+
+    [Column("capture_location_json")]
+    public string? CaptureLocationJson { get; set; }
+
+    [Column("thumbnail_url")]
+    public string? ThumbnailUrl { get; set; }
+
+    [Column("ai_media_state_json")]
+    public string? AiMediaStateJson { get; set; }
+
+    [Column("sync_status")]
+    [Indexed]
+    public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
+
+    [Column("retry_count")]
+    public int RetryCount { get; set; }
+
+    [Column("last_error")]
+    public string? LastError { get; set; }
+
+    [Column("is_deleted")]
+    [Indexed]
+    public bool IsDeleted { get; set; }
+
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>
 /// Change tracking record for delta sync
 /// </summary>
 [Table("change_records")]
@@ -176,8 +258,17 @@ public class ConflictRecord
 public class LayerMetadata
 {
     [PrimaryKey]
+    [Column("storage_key")]
+    public string StorageKey { get; set; } = string.Empty;
+
     [Column("id")]
     public int Id { get; set; }
+
+    [Column("service_id")]
+    public string? ServiceId { get; set; }
+
+    [Column("source_id")]
+    public string? SourceId { get; set; }
 
     [Column("name")]
     public string Name { get; set; } = string.Empty;
@@ -197,6 +288,9 @@ public class LayerMetadata
     [Column("schema")]
     public string? Schema { get; set; }
 
+    [Column("form_json")]
+    public string? FormJson { get; set; }
+
     [Column("server_url")]
     public string? ServerUrl { get; set; }
 
@@ -208,6 +302,150 @@ public class LayerMetadata
 
     [Column("sync_enabled")]
     public bool SyncEnabled { get; set; } = true;
+}
+
+/// <summary>
+/// Mobile-owned local project or survey catalog entry for no-cloud package lifecycle state.
+/// </summary>
+[Table("field_project_catalog")]
+public class LocalFieldProjectCatalogEntry
+{
+    [PrimaryKey]
+    [Column("project_id")]
+    public string ProjectId { get; set; } = string.Empty;
+
+    [Column("service_id")]
+    [Indexed]
+    public string ServiceId { get; set; } = string.Empty;
+
+    [Column("package_id")]
+    [Indexed]
+    public string? PackageId { get; set; }
+
+    [Column("version")]
+    public string? Version { get; set; }
+
+    [Column("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [Column("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [Column("state")]
+    [Indexed]
+    public FieldProjectCatalogState State { get; set; } = FieldProjectCatalogState.Installed;
+
+    [Column("validation_status")]
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+
+    [Column("validation_issue_count")]
+    public int ValidationIssueCount { get; set; }
+
+    [Column("layer_count")]
+    public int LayerCount { get; set; }
+
+    [Column("package_size_bytes")]
+    public long PackageSizeBytes { get; set; }
+
+    [Column("media_size_bytes")]
+    public long MediaSizeBytes { get; set; }
+
+    [Column("local_storage_path")]
+    public string? LocalStoragePath { get; set; }
+
+    [Column("manifest_path")]
+    public string? ManifestPath { get; set; }
+
+    [Column("import_source")]
+    public string? ImportSource { get; set; }
+
+    [Column("package_digest")]
+    public string? PackageDigest { get; set; }
+
+    [Column("imported_at_utc")]
+    public DateTime ImportedAtUtc { get; set; }
+
+    [Column("updated_at_utc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    [Column("last_opened_at_utc")]
+    public DateTime? LastOpenedAtUtc { get; set; }
+
+    [Column("last_validation_at_utc")]
+    public DateTime? LastValidationAtUtc { get; set; }
+
+    [Column("last_simulation_run_at_utc")]
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+
+    [Column("last_export_at_utc")]
+    public DateTime? LastExportAtUtc { get; set; }
+}
+
+/// <summary>
+/// Locally persisted no-cloud assignment state imported from SDK task packets.
+/// </summary>
+[Table("field_assignments")]
+public class LocalFieldAssignmentEntry
+{
+    [PrimaryKey]
+    [Column("assignment_id")]
+    public string AssignmentId { get; set; } = string.Empty;
+
+    [Column("task_packet_id")]
+    [Indexed]
+    public string TaskPacketId { get; set; } = string.Empty;
+
+    [Column("project_id")]
+    [Indexed]
+    public string ProjectId { get; set; } = string.Empty;
+
+    [Column("binding_id")]
+    [Indexed]
+    public string BindingId { get; set; } = string.Empty;
+
+    [Column("source_id")]
+    [Indexed]
+    public string? SourceId { get; set; }
+
+    [Column("assignee_user_id")]
+    [Indexed]
+    public string? AssigneeUserId { get; set; }
+
+    [Column("crew_id")]
+    [Indexed]
+    public string? CrewId { get; set; }
+
+    [Column("priority")]
+    [Indexed]
+    public Honua.Sdk.Field.Projects.FieldAssignmentPriority Priority { get; set; } =
+        Honua.Sdk.Field.Projects.FieldAssignmentPriority.Normal;
+
+    [Column("status")]
+    [Indexed]
+    public Honua.Sdk.Field.Projects.FieldAssignmentStatus Status { get; set; } =
+        Honua.Sdk.Field.Projects.FieldAssignmentStatus.NotStarted;
+
+    [Column("due_at_utc")]
+    [Indexed]
+    public DateTime? DueAtUtc { get; set; }
+
+    [Column("work_query_json")]
+    public string? WorkQueryJson { get; set; }
+
+    [Column("record_ids_json")]
+    public string? RecordIdsJson { get; set; }
+
+    [Column("metadata_json")]
+    public string? MetadataJson { get; set; }
+
+    [Column("imported_at_utc")]
+    public DateTime ImportedAtUtc { get; set; }
+
+    [Column("updated_at_utc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    [Column("completed_at_utc")]
+    public DateTime? CompletedAtUtc { get; set; }
 }
 
 /// <summary>

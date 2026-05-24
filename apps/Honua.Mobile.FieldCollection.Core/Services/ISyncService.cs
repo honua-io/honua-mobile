@@ -36,6 +36,9 @@ public class SyncResult
     public string? ErrorMessage { get; set; }
     public int ChangesPulled { get; set; }
     public int ChangesPushed { get; set; }
+    public int AttachmentsPulled { get; set; }
+    public int AttachmentsPushed { get; set; }
+    public int AttachmentsFailed { get; set; }
     public int ConflictsDetected { get; set; }
     public TimeSpan Duration { get; set; }
     public DateTime CompletedAt { get; set; }

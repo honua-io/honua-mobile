@@ -1,6 +1,7 @@
 using Microsoft.Maui.Devices.Sensors;
 using System.Globalization;
 using System.Text.Json;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Field.Records;
 
@@ -145,6 +146,8 @@ public class FormData
     public int LayerId { get; set; }
     public string? FeatureId { get; set; }
     public Dictionary<string, object?> Values { get; set; } = new();
+    public List<FieldMediaAttachment> Media { get; set; } = new();
+    public FieldGeoPoint? Location { get; set; }
     public Dictionary<string, string> ValidationErrors { get; set; } = new();
     public bool IsValid => ValidationErrors.Count == 0;
     public DateTime CreatedAt { get; set; }
@@ -157,6 +160,8 @@ public class FormData
             RecordId = FeatureId ?? string.Empty,
             FormId = definition?.FormId ?? LayerId.ToString(CultureInfo.InvariantCulture),
             Values = new Dictionary<string, object?>(Values),
+            Media = new System.Collections.ObjectModel.Collection<FieldMediaAttachment>(Media),
+            Location = Location,
             CreatedAtUtc = ToDateTimeOffset(CreatedAt),
         };
     }
@@ -168,6 +173,8 @@ public class FormData
             LayerId = layerId,
             FeatureId = record.RecordId,
             Values = new Dictionary<string, object?>(record.Values),
+            Media = record.Media.ToList(),
+            Location = record.Location,
             CreatedAt = record.CreatedAtUtc.UtcDateTime,
             UpdatedAt = record.SubmittedAtUtc?.UtcDateTime ?? record.CompletedAtUtc?.UtcDateTime
         };
@@ -189,13 +196,39 @@ public class FormData
 public class AttachmentInfo
 {
     public string Id { get; set; } = string.Empty;
+    public int LayerId { get; set; }
+    public string FeatureId { get; set; } = string.Empty;
+    public long? RemoteAttachmentId { get; set; }
+    public string? RemoteGlobalId { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string ContentType { get; set; } = string.Empty;
+    public AttachmentPayloadKind PayloadKind { get; set; } = AttachmentPayloadKind.File;
     public long SizeBytes { get; set; }
+    public string? LocalPath { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public DateTime UploadedAt { get; set; }
+    public DateTime? LastSyncedAt { get; set; }
     public string? Description { get; set; }
+    public FieldLocationCaptureEvidence? CaptureLocation { get; set; }
     public string? ThumbnailUrl { get; set; }
+    public MobileAiMediaState? AiMediaState { get; set; }
     public AttachmentSyncStatus SyncStatus { get; set; } = AttachmentSyncStatus.Synced;
+    public int RetryCount { get; set; }
+    public string? LastError { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+
+    public string StatusSummary
+    {
+        get
+        {
+            var aiSummary = AiMediaState?.Summary;
+            return string.IsNullOrWhiteSpace(aiSummary)
+                ? SyncStatus.ToString()
+                : $"{SyncStatus} - {aiSummary}";
+        }
+    }
 }
 
 public enum AttachmentSyncStatus
@@ -206,12 +239,28 @@ public enum AttachmentSyncStatus
     UploadFailed,
     PendingDownload,
     Downloading,
-    DownloadFailed
+    DownloadFailed,
+    PendingDelete,
+    Deleting,
+    DeleteFailed
+}
+
+public enum AttachmentPayloadKind
+{
+    File,
+    Photo,
+    Signature,
+    Video,
+    Audio,
+    Sketch,
+    Barcode
 }
 
 public class LayerInfo
 {
     public int Id { get; set; }
+    public string? ServiceId { get; set; }
+    public string? SourceId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public GeometryType GeometryType { get; set; }
@@ -220,6 +269,78 @@ public class LayerInfo
     public FormDefinition? Form { get; set; }
     public List<FieldDefinition> Schema { get; set; } = new();
     public LayerStyle Style { get; set; } = new();
+}
+
+public class FieldProjectInfo
+{
+    public string ProjectId { get; set; } = string.Empty;
+    public string ServiceId { get; set; } = string.Empty;
+    public string? PackageId { get; set; }
+    public string? Version { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int LayerCount { get; set; }
+    public bool IsAvailableOffline { get; set; }
+    public FieldProjectCatalogState CatalogState { get; set; } = FieldProjectCatalogState.RemoteOnly;
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+    public int ValidationIssueCount { get; set; }
+    public long PackageSizeBytes { get; set; }
+    public long MediaSizeBytes { get; set; }
+    public string? LocalStoragePath { get; set; }
+    public string? ManifestPath { get; set; }
+    public string? ImportSource { get; set; }
+    public string? PackageDigest { get; set; }
+    public DateTime ImportedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public DateTime? LastOpenedAtUtc { get; set; }
+    public DateTime? LastValidationAtUtc { get; set; }
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+    public DateTime? LastExportAtUtc { get; set; }
+    public List<LayerInfo> Layers { get; set; } = new();
+}
+
+public class FieldProjectCatalogEntry
+{
+    public string ProjectId { get; set; } = string.Empty;
+    public string ServiceId { get; set; } = string.Empty;
+    public string? PackageId { get; set; }
+    public string? Version { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public FieldProjectCatalogState State { get; set; } = FieldProjectCatalogState.Installed;
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+    public int ValidationIssueCount { get; set; }
+    public int LayerCount { get; set; }
+    public long PackageSizeBytes { get; set; }
+    public long MediaSizeBytes { get; set; }
+    public string? LocalStoragePath { get; set; }
+    public string? ManifestPath { get; set; }
+    public string? ImportSource { get; set; }
+    public string? PackageDigest { get; set; }
+    public DateTime ImportedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public DateTime? LastOpenedAtUtc { get; set; }
+    public DateTime? LastValidationAtUtc { get; set; }
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+    public DateTime? LastExportAtUtc { get; set; }
+}
+
+public enum FieldProjectCatalogState
+{
+    RemoteOnly,
+    Installed,
+    Stale,
+    Invalid,
+    Archived,
+    Removable
+}
+
+public enum FieldProjectValidationStatus
+{
+    Unknown,
+    Valid,
+    Warning,
+    Error
 }
 
 public class LayerStyle

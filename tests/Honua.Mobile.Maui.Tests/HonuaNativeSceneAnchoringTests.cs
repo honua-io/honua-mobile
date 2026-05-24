@@ -1,5 +1,8 @@
 using Honua.Mobile.Maui;
+using Honua.Mobile.Field.Capture;
+using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.SceneAnchoring;
+using Honua.Sdk.Field.Records;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Honua.Mobile.Maui.Tests;
@@ -315,6 +318,141 @@ public sealed class HonuaNativeSceneAnchoringTests
     }
 
     [Fact]
+    public async Task FieldWorkflow_StartAsync_WhenOfflinePackageValid_MapsFieldContextAndOfflineBehavior()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.PlatformGeospatial,
+                packageState: HonuaNativeArScenePackageState.Valid,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 1.2,
+                yawAccuracyDegrees: 8,
+                isOnline: false),
+        };
+        var workflow = new HonuaNativeArFieldWorkflow(new HonuaNativeArSceneAnchoringController(adapter));
+        var request = CreateFieldWorkflowRequest(
+            isOffline: true,
+            packageId: "pkg-2026-05",
+            metadata: new Dictionary<string, object?> { ["inspectionType"] = "utility" });
+
+        var state = await workflow.StartAsync(request);
+
+        Assert.Equal(HonuaNativeArReadinessLevel.SiteReview, state.Readiness.Level);
+        Assert.Equal(HonuaNativeArFieldWorkflowDegradedMode.None, state.DegradedMode);
+        Assert.True(state.CanRenderOverlay);
+        Assert.True(state.CanCaptureFieldEvidence);
+        Assert.False(state.CanUsePrecisionTools);
+        Assert.Equal("record-1", state.FieldContext.RecordId);
+        Assert.Contains("pkg-2026-05", state.OfflineBehavior, StringComparison.Ordinal);
+        Assert.Contains("Captures will include AR scene", state.UserVisibleStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FieldWorkflow_StartAsync_WhenOfflinePackageExpired_MakesDegradedBehaviorVisible()
+    {
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.PlatformGeospatial,
+                packageState: HonuaNativeArScenePackageState.Expired,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 1,
+                yawAccuracyDegrees: 6,
+                isOnline: false),
+        };
+        var workflow = new HonuaNativeArFieldWorkflow(new HonuaNativeArSceneAnchoringController(adapter));
+        var request = CreateFieldWorkflowRequest(isOffline: true, packageId: "pkg-2026-05");
+
+        var state = await workflow.StartAsync(request);
+
+        Assert.Equal(HonuaNativeArReadinessLevel.Blocked, state.Readiness.Level);
+        Assert.Equal(HonuaNativeArFieldWorkflowDegradedMode.OfflinePackageUnavailable, state.DegradedMode);
+        Assert.False(state.CanRenderOverlay);
+        Assert.False(state.CanCaptureFieldEvidence);
+        Assert.Contains("Offline scene package", state.UserVisibleStatus, StringComparison.Ordinal);
+        Assert.Contains("2D field workflow", state.OfflineBehavior, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FieldWorkflow_CreateEvidenceAsync_AttachesArMetadataToMediaAnnotationsAndReports()
+    {
+        var capturedAt = new DateTimeOffset(2026, 5, 8, 9, 15, 0, TimeSpan.Zero);
+        var adapter = new RecordingNativeArSceneAnchorAdapter
+        {
+            StartStatus = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.ControlPointCalibration,
+                packageState: HonuaNativeArScenePackageState.Valid,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 0.4,
+                verticalAccuracyMeters: 0.6,
+                yawAccuracyDegrees: 3,
+                calibrationResidualMeters: 0.2,
+                confirmedControlPointCount: 3,
+                deviceModel: "Pixel 8 Pro",
+                isOnline: false,
+                updatedAt: capturedAt),
+            Status = CreateStatus(
+                activeAnchoringMode: HonuaNativeArAnchoringMode.ControlPointCalibration,
+                packageState: HonuaNativeArScenePackageState.Valid,
+                packageId: "pkg-2026-05",
+                horizontalAccuracyMeters: 0.4,
+                verticalAccuracyMeters: 0.6,
+                yawAccuracyDegrees: 3,
+                calibrationResidualMeters: 0.2,
+                confirmedControlPointCount: 3,
+                deviceModel: "Pixel 8 Pro",
+                isOnline: false,
+                updatedAt: capturedAt),
+        };
+        var workflow = new HonuaNativeArFieldWorkflow(new HonuaNativeArSceneAnchoringController(adapter));
+        var request = CreateFieldWorkflowRequest(
+            isOffline: true,
+            packageId: "pkg-2026-05",
+            requiresVerticalPlacement: true,
+            sourceDeclaresSurveyQuality: true,
+            requiresPrecisionEvidence: true,
+            controlPointIds: ["cp-a", "cp-b", "cp-c"]);
+
+        await workflow.StartAsync(request);
+        var evidence = await workflow.CreateEvidenceAsync();
+
+        var media = new MobileFieldMediaAttachment
+        {
+            AttachmentId = "photo-1",
+            FieldId = "photos",
+            LocalPath = Path.Combine("offline", "captures", "photo-1.jpg"),
+            MediaType = FieldMediaType.Photo,
+            EvidenceMetadata = new Dictionary<string, object?> { ["existing"] = "kept" },
+        };
+        var attachedMedia = workflow.AttachEvidence(media, evidence);
+        var sdkMedia = attachedMedia.ToSdkAttachment();
+        var mediaMetadata = AssertArEvidence(attachedMedia.EvidenceMetadata);
+
+        Assert.Equal("kept", attachedMedia.EvidenceMetadata["existing"]);
+        Assert.Equal("photo-1.jpg", sdkMedia.FileName);
+        Assert.Equal("record-1", mediaMetadata["recordId"]);
+        Assert.Equal("PrecisionInspection", mediaMetadata["readinessLevel"]);
+        Assert.Equal(["cp-a", "cp-b", "cp-c"], Assert.IsType<string[]>(mediaMetadata["controlPointIds"]));
+        Assert.Equal("2026-05-08T09:15:00.0000000+00:00", mediaMetadata["capturedAtUtc"]);
+
+        var annotation = new HonuaAnnotationLayer().DrawPoint(
+            new HonuaMapCoordinate(21.3069, -157.8583),
+            id: "note-1",
+            metadata: new Dictionary<string, object?> { ["source"] = "field-note" });
+        var attachedAnnotation = workflow.AttachEvidence(annotation, evidence);
+        var annotationMetadata = AssertArEvidence(attachedAnnotation.Metadata);
+
+        Assert.Equal("field-note", attachedAnnotation.Metadata["source"]);
+        Assert.Equal("pkg-2026-05", annotationMetadata["packageId"]);
+
+        var reportMetadata = AssertArEvidence(workflow.CreateReportMetadata(evidence));
+        Assert.Equal("honua.native-ar-field-evidence.v1", reportMetadata["kind"]);
+        Assert.Equal("field-ar-scene-review", reportMetadata["purpose"]);
+        Assert.Equal("utility-inspection", reportMetadata["field.inspectionType"]);
+    }
+
+    [Fact]
     public void AddHonuaNativeSceneAnchoring_RegistersControllerAndOptions()
     {
         var options = new HonuaNativeArSessionOptions
@@ -329,7 +467,43 @@ public sealed class HonuaNativeSceneAnchoringTests
 
         Assert.Same(options, provider.GetRequiredService<HonuaNativeArSessionOptions>());
         Assert.NotNull(provider.GetRequiredService<HonuaNativeArSceneAnchoringController>());
+        Assert.NotNull(provider.GetRequiredService<HonuaNativeArFieldWorkflow>());
     }
+
+    private static IReadOnlyDictionary<string, object?> AssertArEvidence(IReadOnlyDictionary<string, object?> metadata)
+    {
+        Assert.True(metadata.ContainsKey(HonuaNativeArFieldWorkflow.EvidenceMetadataKey));
+        return Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(
+            metadata[HonuaNativeArFieldWorkflow.EvidenceMetadataKey]);
+    }
+
+    private static HonuaNativeArFieldWorkflowRequest CreateFieldWorkflowRequest(
+        bool isOffline = false,
+        string? packageId = null,
+        bool requiresVerticalPlacement = false,
+        bool sourceDeclaresSurveyQuality = false,
+        bool requiresPrecisionEvidence = false,
+        IReadOnlyList<string>? controlPointIds = null,
+        IReadOnlyDictionary<string, object?>? metadata = null)
+        => new()
+        {
+            AnchorRequest = CreateRequest(
+                isOffline,
+                packageId,
+                requiresVerticalPlacement,
+                sourceDeclaresSurveyQuality,
+                controlPointIds),
+            FieldContext = new HonuaNativeArFieldContext
+            {
+                WorkflowId = "workflow-1",
+                FormId = "inspection",
+                RecordId = "record-1",
+                LayerId = "assets",
+                FeatureId = "asset-100",
+                Metadata = metadata ?? new Dictionary<string, object?> { ["inspectionType"] = "utility-inspection" },
+            },
+            RequiresPrecisionEvidence = requiresPrecisionEvidence,
+        };
 
     private static HonuaNativeArSceneAnchorRequest CreateRequest(
         bool isOffline = false,

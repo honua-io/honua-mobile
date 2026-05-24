@@ -5,6 +5,7 @@ export * from './scene-package-cache';
 export * from './display-adapter';
 export * from './builder';
 export * from './builder-element';
+export * from './governance';
 export type {
   HonuaEmbedConfigByTarget,
   HonuaEmbedContribution,
@@ -14,7 +15,10 @@ export type {
   HonuaEmbedExtensionContext,
   HonuaEmbedExtensionDescriptor,
   HonuaEmbedExtensionErrorDetail,
+  HonuaEmbedExtensionPermission,
   HonuaEmbedExtensionRegistration,
+  HonuaEmbedExtensionRegistrationOptions,
+  HonuaEmbedExtensionTrustState,
   HonuaEmbedTarget,
 } from './extensions';
 export {

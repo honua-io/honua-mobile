@@ -119,7 +119,7 @@ public sealed class HonuaMobileClientTransportSecurityTests
 
         var options = client.BuildGrpcClientOptions();
 
-        Assert.Equal("http://localhost:5000/", options.Address);
+        Assert.Equal(new Uri("http://localhost:5000/"), options.BaseAddress);
         Assert.Equal("test-key", options.ApiKey);
     }
 

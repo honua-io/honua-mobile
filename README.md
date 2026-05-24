@@ -185,7 +185,32 @@ proto/
 
 ## Building
 
+Fresh checkouts need access to the private Honua GitHub Packages feed for
+`Honua.Sdk.*` packages. Use a GitHub token that can read packages in the
+`honua-io` organization:
+
 ```bash
+gh auth refresh -s read:packages
+export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
+export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
+```
+
+Then run the local validation baseline:
+
+```bash
+scripts/validate-local.sh
+```
+
+The script restores, builds, runs .NET tests and smoke tests, verifies format
+for the core source projects, and runs the `@honua/embed` npm build/tests. It
+uses a temporary NuGet config for `HONUA_GITHUB_PACKAGES_TOKEN` and removes it
+on exit. Without those environment variables it falls back to any existing
+NuGet credentials already configured for the `github-honua` source.
+
+Equivalent manual commands:
+
+```bash
+dotnet restore Honua.Mobile.sln
 dotnet build Honua.Mobile.sln
 dotnet test Honua.Mobile.sln
 dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj

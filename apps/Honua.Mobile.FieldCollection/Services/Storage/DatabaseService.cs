@@ -58,6 +58,7 @@ public class DatabaseService : IDisposable
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,
         IFieldCollectionChangePuller? changePuller = null,
+        IFieldCollectionAttachmentSynchronizer? attachmentSynchronizer = null,
         ILogger<GeoPackageSyncService>? logger = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
@@ -69,6 +70,7 @@ public class DatabaseService : IDisposable
                 connectivityService,
                 changeUploader,
                 changePuller,
+                attachmentSynchronizer,
                 logger,
                 exceptionReporter);
             if (_storageService != null && !await _storageService.InitializeAsync())
@@ -90,6 +92,7 @@ public class DatabaseService : IDisposable
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,
         IFieldCollectionChangePuller? changePuller = null,
+        IFieldCollectionAttachmentSynchronizer? attachmentSynchronizer = null,
         ILogger<GeoPackageSyncService>? logger = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
@@ -104,6 +107,7 @@ public class DatabaseService : IDisposable
                     connectivityService,
                     changeUploader,
                     changePuller,
+                    attachmentSynchronizer,
                     logger,
                     exceptionReporter);
             }
@@ -208,6 +212,12 @@ public class DatabaseService : IDisposable
             if (File.Exists(_databasePath))
             {
                 File.Delete(_databasePath);
+            }
+
+            var attachmentDirectory = Path.Combine(Path.GetDirectoryName(_databasePath)!, "attachments");
+            if (Directory.Exists(attachmentDirectory))
+            {
+                Directory.Delete(attachmentDirectory, recursive: true);
             }
 
             _initialized = false;

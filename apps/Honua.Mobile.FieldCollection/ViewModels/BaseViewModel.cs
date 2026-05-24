@@ -4,110 +4,6 @@ using Honua.Mobile.FieldCollection.Services;
 
 namespace Honua.Mobile.FieldCollection.ViewModels;
 
-public partial class BaseViewModel : ObservableObject
-{
-    protected readonly INavigationService NavigationService;
-
-    [ObservableProperty]
-    private bool isBusy;
-
-    [ObservableProperty]
-    private string title = string.Empty;
-
-    [ObservableProperty]
-    private bool isRefreshing;
-
-    public BaseViewModel(INavigationService navigationService)
-    {
-        NavigationService = navigationService;
-    }
-
-    [RelayCommand]
-    protected virtual async Task Refresh()
-    {
-        if (IsBusy) return;
-
-        try
-        {
-            IsRefreshing = true;
-            await OnRefresh();
-        }
-        catch (Exception ex)
-        {
-            await ShowError("Refresh Failed", ex.Message);
-        }
-        finally
-        {
-            IsRefreshing = false;
-        }
-    }
-
-    protected virtual async Task OnRefresh()
-    {
-        await Task.CompletedTask;
-    }
-
-    [RelayCommand]
-    protected async Task GoBack()
-    {
-        await NavigationService.GoBackAsync();
-    }
-
-    protected async Task ShowError(string title, string message)
-    {
-        await NavigationService.DisplayAlert(title, message, "OK");
-    }
-
-    protected async Task ShowMessage(string title, string message)
-    {
-        await NavigationService.DisplayAlert(title, message, "OK");
-    }
-
-    protected async Task<bool> ShowConfirmation(string title, string message, string accept = "Yes", string cancel = "No")
-    {
-        return await NavigationService.DisplayAlert(title, message, accept, cancel);
-    }
-
-    protected async Task ExecuteAsync(Func<Task> operation, string? loadingMessage = null)
-    {
-        if (IsBusy) return;
-
-        try
-        {
-            IsBusy = true;
-            await operation();
-        }
-        catch (Exception ex)
-        {
-            await ShowError("Error", ex.Message);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    protected async Task<T?> ExecuteAsync<T>(Func<Task<T>> operation, string? loadingMessage = null)
-    {
-        if (IsBusy) return default;
-
-        try
-        {
-            IsBusy = true;
-            return await operation();
-        }
-        catch (Exception ex)
-        {
-            await ShowError("Error", ex.Message);
-            return default;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-}
-
 public partial class MainViewModel : BaseViewModel
 {
     private readonly IAuthenticationService _authService;
@@ -197,6 +93,12 @@ public partial class MainViewModel : BaseViewModel
     private async Task NavigateToRecords()
     {
         await NavigationService.NavigateToAsync("//records");
+    }
+
+    [RelayCommand]
+    private async Task NavigateToWork()
+    {
+        await NavigationService.NavigateToAsync("//work");
     }
 
     [RelayCommand]

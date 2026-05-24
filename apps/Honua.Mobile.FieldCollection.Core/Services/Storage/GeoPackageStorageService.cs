@@ -4,8 +4,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NetTopologySuite.IO;
 using Honua.Mobile.FieldCollection.Models;
+using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
+using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Projects;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
 using StorageConflictResolution = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictResolution;
@@ -129,6 +134,10 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<SyncSession>();
         await _connection.CreateTableAsync<ConflictRecord>();
         await _connection.CreateTableAsync<LayerMetadata>();
+        await EnsureLayerMetadataTableAsync();
+        await EnsureProjectCatalogTableAsync();
+        await EnsureFieldAssignmentsTableAsync();
+        await EnsureLocalAttachmentsTableAsync();
     }
 
     private async Task EnsureLocalFeaturesTableAsync()
@@ -157,6 +166,156 @@ public class GeoPackageStorageService : IDisposable
         return columns.Any(column =>
             string.Equals(column.Name, "storage_key", StringComparison.OrdinalIgnoreCase) &&
             column.PrimaryKey > 0);
+    }
+
+    private async Task EnsureLayerMetadataTableAsync()
+    {
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(layer_metadata)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!columnNames.Contains("service_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN service_id TEXT");
+            columnNames.Add("service_id");
+        }
+
+        if (!columnNames.Contains("source_id"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN source_id TEXT");
+            columnNames.Add("source_id");
+        }
+
+        if (!columnNames.Contains("form_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN form_json TEXT");
+            columnNames.Add("form_json");
+        }
+
+        if (!columnNames.Contains("storage_key"))
+        {
+            await MigrateLayerMetadataTableAsync();
+        }
+    }
+
+    private async Task EnsureLocalAttachmentsTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalAttachment>();
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(local_attachments)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!columnNames.Contains("capture_location_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE local_attachments ADD COLUMN capture_location_json TEXT");
+        }
+
+        if (!columnNames.Contains("ai_media_state_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE local_attachments ADD COLUMN ai_media_state_json TEXT");
+        }
+
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_feature_layer ON local_attachments(feature_id, layer_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_remote ON local_attachments(layer_id, feature_id, remote_attachment_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_sync_status ON local_attachments(sync_status)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_attachments_deleted ON local_attachments(is_deleted)");
+    }
+
+    private async Task EnsureProjectCatalogTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalFieldProjectCatalogEntry>();
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_service_id ON field_project_catalog(service_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_package_id ON field_project_catalog(package_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_state ON field_project_catalog(state)");
+    }
+
+    private async Task EnsureFieldAssignmentsTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalFieldAssignmentEntry>();
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_project_id ON field_assignments(project_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_binding_id ON field_assignments(binding_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_source_id ON field_assignments(source_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_status ON field_assignments(status)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_assignee ON field_assignments(assignee_user_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_due_at ON field_assignments(due_at_utc)");
+    }
+
+    private async Task MigrateLayerMetadataTableAsync()
+    {
+        const string migrationTable = "layer_metadata_migration";
+
+        await _connection.ExecuteAsync("BEGIN IMMEDIATE");
+        try
+        {
+            await _connection.ExecuteAsync($"DROP TABLE IF EXISTS {migrationTable}");
+            await CreateLayerMetadataTableAsync(migrationTable);
+            await _connection.ExecuteAsync($@"
+                INSERT OR REPLACE INTO {migrationTable}
+                    (storage_key, id, service_id, source_id, name, description, geometry_type, spatial_reference,
+                     is_editable, schema, form_json, server_url, created_at, last_sync, sync_enabled)
+                SELECT
+                    COALESCE(NULLIF(source_id, ''), COALESCE(NULLIF(service_id, ''), 'mobile_offline_demo') || '/FeatureServer/' || id),
+                    id,
+                    service_id,
+                    source_id,
+                    name,
+                    description,
+                    geometry_type,
+                    spatial_reference,
+                    is_editable,
+                    schema,
+                    NULL,
+                    server_url,
+                    created_at,
+                    last_sync,
+                    sync_enabled
+                FROM layer_metadata");
+            await _connection.ExecuteAsync("DROP TABLE layer_metadata");
+            await _connection.ExecuteAsync($"ALTER TABLE {migrationTable} RENAME TO layer_metadata");
+            await _connection.ExecuteAsync("COMMIT");
+        }
+        catch
+        {
+            await _connection.ExecuteAsync("ROLLBACK");
+            throw;
+        }
+    }
+
+    private Task CreateLayerMetadataTableAsync(string tableName)
+    {
+        return _connection.ExecuteAsync($@"
+            CREATE TABLE IF NOT EXISTS {tableName} (
+                storage_key TEXT NOT NULL PRIMARY KEY,
+                id INTEGER NOT NULL,
+                service_id TEXT,
+                source_id TEXT,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                geometry_type TEXT NOT NULL,
+                spatial_reference TEXT NOT NULL,
+                is_editable INTEGER NOT NULL,
+                schema TEXT,
+                form_json TEXT,
+                server_url TEXT,
+                created_at TEXT NOT NULL,
+                last_sync TEXT,
+                sync_enabled INTEGER NOT NULL DEFAULT 1
+            )");
     }
 
     private async Task MigrateLocalFeaturesTableAsync()
@@ -313,12 +472,41 @@ public class GeoPackageStorageService : IDisposable
             var deleted = 0;
             await ExecuteInImmediateTransactionAsync(async () =>
             {
+                var existing = await _connection.Table<LocalFeature>()
+                    .FirstOrDefaultAsync(f => f.Id == featureId && f.LayerId == layerId);
+                var existingFeature = existing == null ? null : ConvertToFeature(existing);
+                var changeData = existing == null
+                    ? null
+                    : CreateChangeData(existingFeature!, ChangeOperation.Delete);
+                var pendingFeatureChanges = await _connection.Table<ChangeRecord>()
+                    .Where(c =>
+                        c.FeatureId == featureId &&
+                        c.LayerId == layerId &&
+                        c.SyncStatus == StorageSyncStatus.PendingUpload)
+                    .ToListAsync();
+                var collapseLocalOnlyLifecycle = existingFeature != null &&
+                    pendingFeatureChanges.Any(change => change.Operation == ChangeOperation.Insert) &&
+                    !TryReadObjectId(existingFeature.Attributes, out _);
+
                 deleted = await _connection.Table<LocalFeature>()
                     .DeleteAsync(f => f.Id == featureId && f.LayerId == layerId);
 
                 if (deleted > 0)
                 {
-                    await RecordChange(featureId, layerId, ChangeOperation.Delete);
+                    if (collapseLocalOnlyLifecycle)
+                    {
+                        foreach (var change in pendingFeatureChanges)
+                        {
+                            await _connection.ExecuteAsync(
+                                "UPDATE change_records SET sync_status = ? WHERE id = ?",
+                                StorageSyncStatus.Synced,
+                                change.Id);
+                        }
+                    }
+                    else
+                    {
+                        await RecordChange(featureId, layerId, ChangeOperation.Delete, changeData);
+                    }
                 }
             });
 
@@ -402,10 +590,11 @@ public class GeoPackageStorageService : IDisposable
 
         if (trackChange)
         {
+            var changeData = CreateChangeData(feature, operation);
             await ExecuteInImmediateTransactionAsync(async () =>
             {
                 await _connection.InsertOrReplaceAsync(localFeature);
-                await RecordChange(feature.Id, feature.LayerId, operation);
+                await RecordChange(feature.Id, feature.LayerId, operation, changeData);
             });
         }
         else
@@ -443,7 +632,11 @@ public class GeoPackageStorageService : IDisposable
 
     #region Change Tracking
 
-    private async Task RecordChange(string featureId, int layerId, ChangeOperation operation)
+    private async Task RecordChange(
+        string featureId,
+        int layerId,
+        ChangeOperation operation,
+        string? changeData = null)
     {
         var changeRecord = new ChangeRecord
         {
@@ -452,10 +645,76 @@ public class GeoPackageStorageService : IDisposable
             LayerId = layerId,
             Operation = operation,
             Timestamp = DateTime.UtcNow,
-            SyncStatus = StorageSyncStatus.PendingUpload
+            SyncStatus = StorageSyncStatus.PendingUpload,
+            ChangeData = changeData
         };
 
         await _connection.InsertAsync(changeRecord);
+    }
+
+    private static string CreateChangeData(Feature feature, ChangeOperation operation)
+    {
+        JsonElement? geometry = feature.Geometry == null
+            ? null
+            : GeometryJson.ToJsonElement(feature.Geometry);
+
+        var payload = new
+        {
+            featureId = feature.Id,
+            layerId = feature.LayerId,
+            operation = operation.ToString(),
+            version = feature.Version,
+            objectId = TryReadObjectId(feature.Attributes, out var objectId) ? objectId : (long?)null,
+            attributes = feature.Attributes,
+            geometry,
+            timestamp = DateTime.UtcNow
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static bool TryReadObjectId(IReadOnlyDictionary<string, object?> attributes, out long objectId)
+    {
+        objectId = 0;
+        foreach (var attribute in attributes)
+        {
+            if (!attribute.Key.Equals("objectid", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("objectId", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("OBJECTID", StringComparison.OrdinalIgnoreCase) &&
+                !attribute.Key.Equals("FID", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (TryConvertInt64(attribute.Value, out objectId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertInt64(object? value, out long objectId)
+    {
+        objectId = 0;
+        return value switch
+        {
+            long longValue => Set(longValue, out objectId),
+            int intValue => Set(intValue, out objectId),
+            double doubleValue when Math.Abs(doubleValue % 1) < double.Epsilon => Set((long)doubleValue, out objectId),
+            decimal decimalValue when decimalValue == Math.Truncate(decimalValue) => Set((long)decimalValue, out objectId),
+            string stringValue => long.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId),
+            JsonElement { ValueKind: JsonValueKind.Number } element => element.TryGetInt64(out objectId),
+            JsonElement { ValueKind: JsonValueKind.String } element => long.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId),
+            _ => false
+        };
+
+        static bool Set(long value, out long target)
+        {
+            target = value;
+            return true;
+        }
     }
 
     public async Task<List<ChangeRecord>> GetPendingChangesAsync(int? layerId = null)
@@ -492,6 +751,476 @@ public class GeoPackageStorageService : IDisposable
                     "UPDATE change_records SET sync_status = ? WHERE id = ?",
                     StorageSyncStatus.Synced, changeId);
             }
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    #endregion
+
+    #region Attachment Storage
+
+    public async Task StoreAttachmentMetadataAsync(AttachmentInfo attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(attachment.Id))
+            {
+                attachment.Id = Guid.NewGuid().ToString("N");
+            }
+
+            if (attachment.CreatedAt == default)
+            {
+                attachment.CreatedAt = now;
+            }
+
+            attachment.UpdatedAt = now;
+            await _connection.InsertOrReplaceAsync(ToLocalAttachment(attachment));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<AttachmentInfo?> GetAttachmentMetadataAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var attachment = await _connection.Table<LocalAttachment>()
+                .FirstOrDefaultAsync(row => row.Id == attachmentId);
+            return attachment == null ? null : ToAttachmentInfo(attachment);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<AttachmentInfo?> GetAttachmentByRemoteIdAsync(
+        int layerId,
+        string featureId,
+        long remoteAttachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var attachment = await _connection.Table<LocalAttachment>()
+                .FirstOrDefaultAsync(row =>
+                    row.LayerId == layerId &&
+                    row.FeatureId == featureId &&
+                    row.RemoteAttachmentId == remoteAttachmentId);
+            return attachment == null ? null : ToAttachmentInfo(attachment);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<List<AttachmentInfo>> GetAttachmentsForFeatureAsync(
+        string featureId,
+        int? layerId = null,
+        bool includeDeleted = false)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var query = _connection.Table<LocalAttachment>()
+                .Where(row => row.FeatureId == featureId);
+
+            if (layerId.HasValue)
+            {
+                query = query.Where(row => row.LayerId == layerId.Value);
+            }
+
+            var rows = await query.ToListAsync();
+            return rows
+                .Where(row => includeDeleted || !row.IsDeleted)
+                .OrderBy(row => row.CreatedAt)
+                .Select(ToAttachmentInfo)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<List<AttachmentInfo>> GetPendingAttachmentChangesAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalAttachment>().ToListAsync();
+            return rows
+                .Where(row => IsPendingAttachmentStatus(row.SyncStatus))
+                .OrderBy(row => row.UpdatedAt ?? row.CreatedAt)
+                .Select(ToAttachmentInfo)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentUploadedAsync(
+        string attachmentId,
+        long remoteAttachmentId,
+        string? remoteGlobalId,
+        DateTime uploadedAt)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET remote_attachment_id = ?,
+                    remote_global_id = ?,
+                    uploaded_at = ?,
+                    last_synced_at = ?,
+                    updated_at = ?,
+                    sync_status = ?,
+                    retry_count = 0,
+                    last_error = NULL,
+                    is_deleted = 0,
+                    deleted_at = NULL
+                WHERE id = ?
+                """,
+                remoteAttachmentId,
+                remoteGlobalId,
+                uploadedAt,
+                uploadedAt,
+                DateTime.UtcNow,
+                AttachmentSyncStatus.Synced,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentSyncedAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET last_synced_at = ?,
+                    updated_at = ?,
+                    sync_status = ?,
+                    retry_count = 0,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                now,
+                now,
+                AttachmentSyncStatus.Synced,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentPendingDeleteAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    is_deleted = 1,
+                    deleted_at = ?,
+                    updated_at = ?,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                AttachmentSyncStatus.PendingDelete,
+                now,
+                now,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentDeletedSyncedAsync(string attachmentId)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var now = DateTime.UtcNow;
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    is_deleted = 1,
+                    deleted_at = COALESCE(deleted_at, ?),
+                    last_synced_at = ?,
+                    updated_at = ?,
+                    retry_count = 0,
+                    last_error = NULL
+                WHERE id = ?
+                """,
+                AttachmentSyncStatus.Synced,
+                now,
+                now,
+                now,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task MarkAttachmentSyncFailedAsync(
+        string attachmentId,
+        AttachmentSyncStatus failedStatus,
+        string errorMessage)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET sync_status = ?,
+                    retry_count = retry_count + 1,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                failedStatus,
+                errorMessage,
+                DateTime.UtcNow,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task UpdateAttachmentAiStateAsync(string attachmentId, MobileAiMediaState? state)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.ExecuteAsync(
+                """
+                UPDATE local_attachments
+                SET ai_media_state_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                SerializeAiMediaState(state),
+                DateTime.UtcNow,
+                attachmentId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<int> GetPendingAttachmentChangesCountAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalAttachment>().ToListAsync();
+            return rows.Count(row => IsPendingAttachmentStatus(row.SyncStatus));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    internal async Task<IReadOnlyList<AttachmentStatusCount>> GetAttachmentStatusCountsAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.QueryAsync<AttachmentStatusCount>(
+                "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM local_attachments GROUP BY sync_status");
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static bool IsPendingAttachmentStatus(AttachmentSyncStatus status)
+    {
+        return status is AttachmentSyncStatus.PendingUpload
+            or AttachmentSyncStatus.UploadFailed
+            or AttachmentSyncStatus.PendingDownload
+            or AttachmentSyncStatus.DownloadFailed
+            or AttachmentSyncStatus.PendingDelete
+            or AttachmentSyncStatus.DeleteFailed;
+    }
+
+    private static LocalAttachment ToLocalAttachment(AttachmentInfo attachment)
+    {
+        return new LocalAttachment
+        {
+            Id = attachment.Id,
+            FeatureId = attachment.FeatureId,
+            LayerId = attachment.LayerId,
+            RemoteAttachmentId = attachment.RemoteAttachmentId,
+            RemoteGlobalId = attachment.RemoteGlobalId,
+            FileName = attachment.FileName,
+            ContentType = attachment.ContentType,
+            PayloadKind = attachment.PayloadKind,
+            SizeBytes = attachment.SizeBytes,
+            LocalPath = attachment.LocalPath,
+            CreatedAt = attachment.CreatedAt,
+            UpdatedAt = attachment.UpdatedAt,
+            UploadedAt = attachment.UploadedAt,
+            LastSyncedAt = attachment.LastSyncedAt,
+            Description = attachment.Description,
+            CaptureLocationJson = FieldLocationMetadataMapper.SerializeEvidence(attachment.CaptureLocation),
+            ThumbnailUrl = attachment.ThumbnailUrl,
+            AiMediaStateJson = SerializeAiMediaState(attachment.AiMediaState),
+            SyncStatus = attachment.SyncStatus,
+            RetryCount = attachment.RetryCount,
+            LastError = attachment.LastError,
+            IsDeleted = attachment.IsDeleted,
+            DeletedAt = attachment.DeletedAt
+        };
+    }
+
+    private static AttachmentInfo ToAttachmentInfo(LocalAttachment attachment)
+    {
+        return new AttachmentInfo
+        {
+            Id = attachment.Id,
+            FeatureId = attachment.FeatureId,
+            LayerId = attachment.LayerId,
+            RemoteAttachmentId = attachment.RemoteAttachmentId,
+            RemoteGlobalId = attachment.RemoteGlobalId,
+            FileName = attachment.FileName,
+            ContentType = attachment.ContentType,
+            PayloadKind = attachment.PayloadKind,
+            SizeBytes = attachment.SizeBytes,
+            LocalPath = attachment.LocalPath,
+            CreatedAt = attachment.CreatedAt,
+            UpdatedAt = attachment.UpdatedAt,
+            UploadedAt = attachment.UploadedAt,
+            LastSyncedAt = attachment.LastSyncedAt,
+            Description = attachment.Description,
+            CaptureLocation = FieldLocationMetadataMapper.DeserializeEvidence(attachment.CaptureLocationJson),
+            ThumbnailUrl = attachment.ThumbnailUrl,
+            AiMediaState = DeserializeAiMediaState(attachment.AiMediaStateJson),
+            SyncStatus = attachment.SyncStatus,
+            RetryCount = attachment.RetryCount,
+            LastError = attachment.LastError,
+            IsDeleted = attachment.IsDeleted,
+            DeletedAt = attachment.DeletedAt
+        };
+    }
+
+    private static string? SerializeAiMediaState(MobileAiMediaState? state)
+        => state is null ? null : JsonSerializer.Serialize(state, SchemaJsonOptions);
+
+    private static MobileAiMediaState? DeserializeAiMediaState(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<MobileAiMediaState>(json, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    #endregion
+
+    #region Sync Session History
+
+    public async Task StoreSyncSessionAsync(SyncSession session)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(session);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task UpdateSyncSessionAsync(SyncSession session)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(session);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<SyncSession>> GetSyncSessionsAsync(int limit = 50)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var safeLimit = Math.Clamp(limit, 1, 250);
+            return await _connection.QueryAsync<SyncSession>(
+                """
+                SELECT *
+                FROM sync_sessions
+                ORDER BY COALESCE(end_time, start_time) DESC
+                LIMIT ?
+                """,
+                safeLimit);
         }
         finally
         {
@@ -629,6 +1358,456 @@ public class GeoPackageStorageService : IDisposable
 
     #endregion
 
+    #region Project Catalog
+
+    public async Task UpsertProjectCatalogEntryAsync(FieldProjectCatalogEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var projectId = NormalizeProjectId(entry.ProjectId);
+        var now = DateTime.UtcNow;
+        if (entry.ImportedAtUtc == default)
+        {
+            entry.ImportedAtUtc = now;
+        }
+
+        entry.UpdatedAtUtc = now;
+        if (string.IsNullOrWhiteSpace(entry.ServiceId))
+        {
+            entry.ServiceId = projectId;
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.Name))
+        {
+            entry.Name = projectId;
+        }
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await _connection.InsertOrReplaceAsync(ToLocalProjectCatalogEntry(entry, projectId));
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<FieldProjectCatalogEntry?> GetProjectCatalogEntryAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var row = await _connection.Table<LocalFieldProjectCatalogEntry>()
+                .FirstOrDefaultAsync(entry => entry.ProjectId == projectId);
+            return row == null ? null : ToProjectCatalogEntry(row);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<FieldProjectCatalogEntry>> GetProjectCatalogEntriesAsync(bool includeArchived = false)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalFieldProjectCatalogEntry>().ToListAsync();
+            return rows
+                .Where(row => includeArchived || row.State != FieldProjectCatalogState.Archived)
+                .OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.ProjectId, StringComparer.OrdinalIgnoreCase)
+                .Select(ToProjectCatalogEntry)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public Task UpdateProjectCatalogStateAsync(
+        string projectId,
+        FieldProjectCatalogState state,
+        DateTime? updatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "state = ?",
+            [state],
+            updatedAtUtc);
+
+    public Task MarkProjectCatalogEntryOpenedAsync(string projectId, DateTime? openedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_opened_at_utc = ?",
+            [openedAtUtc ?? DateTime.UtcNow],
+            openedAtUtc);
+
+    public Task MarkProjectCatalogValidationAsync(
+        string projectId,
+        FieldProjectValidationStatus status,
+        int issueCount,
+        DateTime? validatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "validation_status = ?, validation_issue_count = ?, last_validation_at_utc = ?",
+            [status, Math.Max(0, issueCount), validatedAtUtc ?? DateTime.UtcNow],
+            validatedAtUtc);
+
+    public Task MarkProjectCatalogSimulationRunAsync(string projectId, DateTime? simulatedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_simulation_run_at_utc = ?",
+            [simulatedAtUtc ?? DateTime.UtcNow],
+            simulatedAtUtc);
+
+    public Task MarkProjectCatalogExportedAsync(string projectId, DateTime? exportedAtUtc = null)
+        => UpdateProjectCatalogFieldsAsync(
+            projectId,
+            "last_export_at_utc = ?",
+            [exportedAtUtc ?? DateTime.UtcNow],
+            exportedAtUtc);
+
+    public async Task<bool> DeleteProjectCatalogEntryAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.Table<LocalFieldProjectCatalogEntry>()
+                .DeleteAsync(entry => entry.ProjectId == projectId) > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private async Task UpdateProjectCatalogFieldsAsync(
+        string projectId,
+        string assignmentSql,
+        IReadOnlyList<object?> values,
+        DateTime? updatedAtUtc = null)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var parameters = values
+                .Concat(new object?[] { updatedAtUtc ?? DateTime.UtcNow, projectId })
+                .ToArray();
+            await _connection.ExecuteAsync(
+                $"UPDATE field_project_catalog SET {assignmentSql}, updated_at_utc = ? WHERE project_id = ?",
+                parameters);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static string NormalizeProjectId(string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            throw new ArgumentException("Project ID is required.", nameof(projectId));
+        }
+
+        return projectId.Trim();
+    }
+
+    private static LocalFieldProjectCatalogEntry ToLocalProjectCatalogEntry(
+        FieldProjectCatalogEntry entry,
+        string projectId)
+    {
+        return new LocalFieldProjectCatalogEntry
+        {
+            ProjectId = projectId,
+            ServiceId = string.IsNullOrWhiteSpace(entry.ServiceId) ? projectId : entry.ServiceId.Trim(),
+            PackageId = string.IsNullOrWhiteSpace(entry.PackageId) ? null : entry.PackageId.Trim(),
+            Version = string.IsNullOrWhiteSpace(entry.Version) ? null : entry.Version.Trim(),
+            Name = string.IsNullOrWhiteSpace(entry.Name) ? projectId : entry.Name.Trim(),
+            Description = entry.Description,
+            State = entry.State,
+            ValidationStatus = entry.ValidationStatus,
+            ValidationIssueCount = Math.Max(0, entry.ValidationIssueCount),
+            LayerCount = Math.Max(0, entry.LayerCount),
+            PackageSizeBytes = Math.Max(0, entry.PackageSizeBytes),
+            MediaSizeBytes = Math.Max(0, entry.MediaSizeBytes),
+            LocalStoragePath = entry.LocalStoragePath,
+            ManifestPath = entry.ManifestPath,
+            ImportSource = entry.ImportSource,
+            PackageDigest = entry.PackageDigest,
+            ImportedAtUtc = entry.ImportedAtUtc,
+            UpdatedAtUtc = entry.UpdatedAtUtc,
+            LastOpenedAtUtc = entry.LastOpenedAtUtc,
+            LastValidationAtUtc = entry.LastValidationAtUtc,
+            LastSimulationRunAtUtc = entry.LastSimulationRunAtUtc,
+            LastExportAtUtc = entry.LastExportAtUtc
+        };
+    }
+
+    private static FieldProjectCatalogEntry ToProjectCatalogEntry(LocalFieldProjectCatalogEntry row)
+    {
+        return new FieldProjectCatalogEntry
+        {
+            ProjectId = row.ProjectId,
+            ServiceId = row.ServiceId,
+            PackageId = row.PackageId,
+            Version = row.Version,
+            Name = row.Name,
+            Description = row.Description,
+            State = row.State,
+            ValidationStatus = row.ValidationStatus,
+            ValidationIssueCount = row.ValidationIssueCount,
+            LayerCount = row.LayerCount,
+            PackageSizeBytes = row.PackageSizeBytes,
+            MediaSizeBytes = row.MediaSizeBytes,
+            LocalStoragePath = row.LocalStoragePath,
+            ManifestPath = row.ManifestPath,
+            ImportSource = row.ImportSource,
+            PackageDigest = row.PackageDigest,
+            ImportedAtUtc = row.ImportedAtUtc,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            LastOpenedAtUtc = row.LastOpenedAtUtc,
+            LastValidationAtUtc = row.LastValidationAtUtc,
+            LastSimulationRunAtUtc = row.LastSimulationRunAtUtc,
+            LastExportAtUtc = row.LastExportAtUtc
+        };
+    }
+
+    #endregion
+
+    #region Field Assignments
+
+    public async Task UpsertFieldTaskPacketsAsync(
+        string projectId,
+        IReadOnlyList<FieldTaskPacket> taskPackets,
+        IReadOnlyDictionary<string, string?> bindingSourceIds)
+    {
+        projectId = NormalizeProjectId(projectId);
+        ArgumentNullException.ThrowIfNull(taskPackets);
+        ArgumentNullException.ThrowIfNull(bindingSourceIds);
+
+        var now = DateTime.UtcNow;
+        var rows = taskPackets
+            .SelectMany(packet => packet.Assignments.Select(assignment =>
+                ToLocalFieldAssignmentEntry(projectId, packet.TaskPacketId, assignment, bindingSourceIds, now)))
+            .ToList();
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await ExecuteInImmediateTransactionAsync(async () =>
+            {
+                foreach (var row in rows)
+                {
+                    await _connection.InsertOrReplaceAsync(row);
+                }
+            });
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<LocalFieldAssignmentInfo>> GetFieldAssignmentsAsync(
+        LocalFieldAssignmentFilter? filter = null)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalFieldAssignmentEntry>().ToListAsync();
+            return rows
+                .Select(ToFieldAssignmentInfo)
+                .Where(assignment => MatchesAssignmentFilter(assignment, filter))
+                .OrderBy(assignment => assignment.DueAtUtc ?? DateTimeOffset.MaxValue)
+                .ThenByDescending(assignment => assignment.Priority)
+                .ThenBy(assignment => assignment.AssignmentId, StringComparer.Ordinal)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<bool> UpdateFieldAssignmentStatusAsync(
+        string assignmentId,
+        FieldAssignmentStatus status,
+        DateTime? updatedAtUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(assignmentId))
+        {
+            throw new ArgumentException("Assignment ID is required.", nameof(assignmentId));
+        }
+
+        var updatedAt = updatedAtUtc ?? DateTime.UtcNow;
+        var completedAt = status == FieldAssignmentStatus.Complete ? updatedAt : (DateTime?)null;
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.ExecuteAsync(
+                """
+                UPDATE field_assignments
+                SET status = ?,
+                    updated_at_utc = ?,
+                    completed_at_utc = ?
+                WHERE assignment_id = ?
+                """,
+                status,
+                updatedAt,
+                completedAt,
+                assignmentId.Trim()) > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<int> DeleteFieldAssignmentsForProjectAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.Table<LocalFieldAssignmentEntry>()
+                .DeleteAsync(row => row.ProjectId == projectId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static LocalFieldAssignmentEntry ToLocalFieldAssignmentEntry(
+        string projectId,
+        string taskPacketId,
+        FieldAssignment assignment,
+        IReadOnlyDictionary<string, string?> bindingSourceIds,
+        DateTime now)
+    {
+        bindingSourceIds.TryGetValue(assignment.BindingId, out var sourceId);
+
+        return new LocalFieldAssignmentEntry
+        {
+            AssignmentId = assignment.AssignmentId.Trim(),
+            TaskPacketId = taskPacketId.Trim(),
+            ProjectId = projectId,
+            BindingId = assignment.BindingId.Trim(),
+            SourceId = string.IsNullOrWhiteSpace(sourceId) ? null : sourceId.Trim(),
+            AssigneeUserId = string.IsNullOrWhiteSpace(assignment.AssigneeUserId) ? null : assignment.AssigneeUserId.Trim(),
+            CrewId = string.IsNullOrWhiteSpace(assignment.CrewId) ? null : assignment.CrewId.Trim(),
+            Priority = assignment.Priority,
+            Status = assignment.Status,
+            DueAtUtc = assignment.DueAtUtc?.UtcDateTime,
+            WorkQueryJson = assignment.WorkQuery is null ? null : JsonSerializer.Serialize(assignment.WorkQuery, SchemaJsonOptions),
+            RecordIdsJson = JsonSerializer.Serialize(assignment.RecordIds, SchemaJsonOptions),
+            MetadataJson = JsonSerializer.Serialize(assignment.Metadata, SchemaJsonOptions),
+            ImportedAtUtc = now,
+            UpdatedAtUtc = now,
+            CompletedAtUtc = assignment.Status == FieldAssignmentStatus.Complete ? now : null
+        };
+    }
+
+    private static LocalFieldAssignmentInfo ToFieldAssignmentInfo(LocalFieldAssignmentEntry row)
+        => new()
+        {
+            AssignmentId = row.AssignmentId,
+            TaskPacketId = row.TaskPacketId,
+            ProjectId = row.ProjectId,
+            BindingId = row.BindingId,
+            SourceId = row.SourceId,
+            AssigneeUserId = row.AssigneeUserId,
+            CrewId = row.CrewId,
+            Priority = row.Priority,
+            Status = row.Status,
+            DueAtUtc = row.DueAtUtc.HasValue
+                ? new DateTimeOffset(DateTime.SpecifyKind(row.DueAtUtc.Value, DateTimeKind.Utc))
+                : null,
+            WorkQuery = DeserializeJson<SourceQuery>(row.WorkQueryJson),
+            RecordIds = DeserializeJson<IReadOnlyList<string>>(row.RecordIdsJson) ?? [],
+            Metadata = DeserializeJson<IReadOnlyDictionary<string, string>>(row.MetadataJson) ??
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            ImportedAtUtc = row.ImportedAtUtc,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            CompletedAtUtc = row.CompletedAtUtc
+        };
+
+    private static bool MatchesAssignmentFilter(
+        LocalFieldAssignmentInfo assignment,
+        LocalFieldAssignmentFilter? filter)
+    {
+        if (filter is null)
+        {
+            return true;
+        }
+
+        return Matches(filter.ProjectId, assignment.ProjectId) &&
+            Matches(filter.BindingId, assignment.BindingId) &&
+            Matches(filter.SourceId, assignment.SourceId) &&
+            Matches(filter.AssigneeUserId, assignment.AssigneeUserId) &&
+            Matches(filter.CrewId, assignment.CrewId) &&
+            (!filter.Status.HasValue || assignment.Status == filter.Status.Value) &&
+            (!filter.MinimumPriority.HasValue || (int)assignment.Priority >= (int)filter.MinimumPriority.Value) &&
+            (!filter.DueBeforeUtc.HasValue || assignment.DueAtUtc <= filter.DueBeforeUtc.Value) &&
+            Intersects(assignment.WorkQuery?.Bbox, filter.IntersectsExtent);
+
+        static bool Matches(string? expected, string? actual)
+            => string.IsNullOrWhiteSpace(expected) ||
+                string.Equals(expected.Trim(), actual?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool Intersects(FeatureBoundingBox? assignmentExtent, FeatureBoundingBox? filterExtent)
+    {
+        if (filterExtent is null || assignmentExtent is null)
+        {
+            return true;
+        }
+
+        return assignmentExtent.MinX <= filterExtent.MaxX &&
+            assignmentExtent.MaxX >= filterExtent.MinX &&
+            assignmentExtent.MinY <= filterExtent.MaxY &&
+            assignmentExtent.MaxY >= filterExtent.MinY;
+    }
+
+    private static T? DeserializeJson<T>(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    #endregion
+
     #region Layer Management
 
     public async Task<bool> CreateLayerAsync(LayerInfo layer)
@@ -639,14 +1818,19 @@ public class GeoPackageStorageService : IDisposable
         {
             var metadata = new LayerMetadata
             {
+                StorageKey = GetLayerMetadataStorageKey(layer),
                 Id = layer.Id,
+                ServiceId = layer.ServiceId,
+                SourceId = layer.SourceId,
                 Name = layer.Name,
                 Description = layer.Description,
                 GeometryType = layer.GeometryType.ToString(),
                 SpatialReference = "EPSG:4326",
                 IsEditable = layer.IsEditable,
-                Schema = JsonSerializer.Serialize(layer.Schema, SchemaJsonOptions),
-                CreatedAt = DateTime.UtcNow
+                Schema = JsonSerializer.Serialize(GetLayerSchema(layer), SchemaJsonOptions),
+                FormJson = layer.Form is null ? null : JsonSerializer.Serialize(layer.Form, SchemaJsonOptions),
+                CreatedAt = DateTime.UtcNow,
+                LastSync = DateTime.UtcNow
             };
 
             await _connection.InsertOrReplaceAsync(metadata);
@@ -709,9 +1893,11 @@ public class GeoPackageStorageService : IDisposable
 
     private LayerInfo ConvertToLayerInfo(LayerMetadata metadata)
     {
-        return new LayerInfo
+        var layer = new LayerInfo
         {
             Id = metadata.Id,
+            ServiceId = metadata.ServiceId,
+            SourceId = metadata.SourceId,
             Name = metadata.Name,
             Description = metadata.Description,
             GeometryType = ParseGeometryType(metadata.GeometryType),
@@ -719,6 +1905,35 @@ public class GeoPackageStorageService : IDisposable
             IsVisible = true,
             Schema = DeserializeLayerSchema(metadata.Schema)
         };
+
+        layer.Form = DeserializeFormDefinition(metadata.FormJson) ?? FieldCollectionMetadataMapper.CreateFormDefinition(layer);
+        return layer;
+    }
+
+    private static IReadOnlyList<FormField> GetLayerSchema(LayerInfo layer)
+    {
+        if (layer.Schema.Count > 0)
+        {
+            return layer.Schema;
+        }
+
+        return layer.Form?.Sections
+            .SelectMany(section => section.Fields)
+            .ToList() ?? [];
+    }
+
+    private static string GetLayerMetadataStorageKey(LayerInfo layer)
+    {
+        if (!string.IsNullOrWhiteSpace(layer.SourceId))
+        {
+            return layer.SourceId;
+        }
+
+        var serviceId = string.IsNullOrWhiteSpace(layer.ServiceId)
+            ? "mobile_offline_demo"
+            : layer.ServiceId.Trim();
+
+        return FieldCollectionMetadataMapper.BuildSourceId(serviceId, layer.Id);
     }
 
     private static GeometryType ParseGeometryType(string? value)
@@ -748,6 +1963,23 @@ public class GeoPackageStorageService : IDisposable
         catch (JsonException)
         {
             return DeserializeLegacyLayerSchema(schema);
+        }
+    }
+
+    private static FormDefinition? DeserializeFormDefinition(string? formJson)
+    {
+        if (string.IsNullOrWhiteSpace(formJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<FormDefinition>(formJson, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
@@ -973,6 +2205,8 @@ public class GeoPackageStorageService : IDisposable
                 "SELECT layer_id AS layer_id, COUNT(*) AS feature_count FROM local_features GROUP BY layer_id ORDER BY layer_id");
             var operationCounts = await _connection.QueryAsync<OperationStatusCount>(
                 "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM change_records GROUP BY sync_status");
+            var attachmentCounts = await _connection.QueryAsync<AttachmentStatusCount>(
+                "SELECT sync_status AS sync_status, COUNT(*) AS item_count FROM local_attachments GROUP BY sync_status");
             var unresolvedConflictCount = await _connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM conflict_records WHERE resolved_at IS NULL");
             var conflicts = await _connection.QueryAsync<ConflictRecord>(
@@ -1011,7 +2245,7 @@ public class GeoPackageStorageService : IDisposable
                 })
                 .ToList();
 
-            var operations = MapOperationCounts(operationCounts, unresolvedConflictCount);
+            var operations = MapOperationCounts(operationCounts, attachmentCounts, unresolvedConflictCount);
             var session = latestSession.FirstOrDefault();
             var lastSyncTimes = metadataRows
                 .Select(row => row.LastSync)
@@ -1056,18 +2290,38 @@ public class GeoPackageStorageService : IDisposable
 
     private static OfflineOperationDiagnostics MapOperationCounts(
         IEnumerable<OperationStatusCount> counts,
+        IEnumerable<AttachmentStatusCount> attachmentCounts,
         int unresolvedConflictCount)
     {
         var byStatus = counts.ToDictionary(row => row.SyncStatus, row => row.ItemCount);
+        var attachmentsByStatus = attachmentCounts.ToDictionary(row => row.SyncStatus, row => row.ItemCount);
+        var attachmentPending =
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingUpload) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingDownload) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.PendingDelete) +
+            attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed);
+
         return new OfflineOperationDiagnostics
         {
             PendingCount = byStatus.GetValueOrDefault(StorageSyncStatus.PendingUpload) +
-                byStatus.GetValueOrDefault(StorageSyncStatus.PendingDownload),
+                byStatus.GetValueOrDefault(StorageSyncStatus.PendingDownload) +
+                attachmentPending,
             ClaimedCount = 0,
             SucceededCount = byStatus.GetValueOrDefault(StorageSyncStatus.Synced),
             FailedCount = byStatus.GetValueOrDefault(StorageSyncStatus.Error),
             RetryCount = 0,
-            ConflictCount = unresolvedConflictCount + byStatus.GetValueOrDefault(StorageSyncStatus.Conflict)
+            ConflictCount = unresolvedConflictCount + byStatus.GetValueOrDefault(StorageSyncStatus.Conflict),
+            AttachmentPendingCount = attachmentPending,
+            AttachmentSucceededCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.Synced),
+            AttachmentFailedCount =
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed) +
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed) +
+                attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed),
+            AttachmentUploadFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.UploadFailed),
+            AttachmentDownloadFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DownloadFailed),
+            AttachmentDeleteFailedCount = attachmentsByStatus.GetValueOrDefault(AttachmentSyncStatus.DeleteFailed)
         };
     }
 
@@ -1154,6 +2408,15 @@ internal sealed class OperationStatusCount
 {
     [Column("sync_status")]
     public StorageSyncStatus SyncStatus { get; set; }
+
+    [Column("item_count")]
+    public int ItemCount { get; set; }
+}
+
+internal sealed class AttachmentStatusCount
+{
+    [Column("sync_status")]
+    public AttachmentSyncStatus SyncStatus { get; set; }
 
     [Column("item_count")]
     public int ItemCount { get; set; }

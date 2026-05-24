@@ -93,10 +93,11 @@ public partial class SyncCenterViewModel : BaseViewModel
 
     private void OnAuthServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated))
+        if (e.PropertyName == nameof(IAuthenticationService.IsAuthenticated) ||
+            e.PropertyName == nameof(IAuthenticationService.RequiresReauthentication) ||
+            e.PropertyName == nameof(IAuthenticationService.SessionStatusMessage))
         {
-            UpdateSyncActionState();
-            UpdateSyncStatusMessage();
+            UpdateFromSyncService();
         }
     }
 
@@ -118,24 +119,27 @@ public partial class SyncCenterViewModel : BaseViewModel
             IsRemoteSyncConfigured &&
             IsOnline &&
             _authService.IsAuthenticated &&
+            !_authService.RequiresReauthentication &&
             !IsSyncing;
     }
 
     private void UpdateSyncStatusMessage()
     {
-        if (!IsRemoteSyncConfigured)
-        {
-            SyncStatusMessage = PendingChangesCount > 0
-                ? $"Remote sync not configured - {PendingChangesCount} changes remain on this device"
-                : "Remote sync not configured";
-        }
-        else if (!IsOnline)
+        if (!IsOnline)
         {
             SyncStatusMessage = "Offline - sync unavailable";
         }
         else if (!_authService.IsAuthenticated)
         {
-            SyncStatusMessage = "Not authenticated";
+            SyncStatusMessage = _authService.RequiresReauthentication
+                ? _authService.SessionStatusMessage ?? "Session expired - sign in again"
+                : "Not authenticated";
+        }
+        else if (!IsRemoteSyncConfigured)
+        {
+            SyncStatusMessage = PendingChangesCount > 0
+                ? $"Remote sync not configured - {PendingChangesCount} changes remain on this device"
+                : "Remote sync not configured";
         }
         else
         {
@@ -170,12 +174,6 @@ public partial class SyncCenterViewModel : BaseViewModel
             return;
         }
 
-        if (!IsRemoteSyncConfigured)
-        {
-            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
-            return;
-        }
-
         if (!IsOnline)
         {
             await ShowError("No Connection", "Please check your internet connection and try again.");
@@ -184,7 +182,15 @@ public partial class SyncCenterViewModel : BaseViewModel
 
         if (!_authService.IsAuthenticated)
         {
-            await ShowError("Not Authenticated", "Please sign in before syncing.");
+            await ShowError(
+                _authService.RequiresReauthentication ? "Sign In Required" : "Not Authenticated",
+                _authService.SessionStatusMessage ?? "Please sign in before syncing.");
+            return;
+        }
+
+        if (!IsRemoteSyncConfigured)
+        {
+            await ShowError("Sync Not Configured", "Remote field sync is not configured for this app build. Pending changes remain on this device.");
             return;
         }
 
@@ -199,6 +205,8 @@ public partial class SyncCenterViewModel : BaseViewModel
                     LastSyncTime = result.CompletedAt,
                     FeaturesPulled = result.ChangesPulled,
                     FeaturesPushed = result.ChangesPushed,
+                    AttachmentsDownloaded = result.AttachmentsPulled,
+                    AttachmentsUploaded = result.AttachmentsPushed,
                     ConflictsDetected = result.ConflictsDetected,
                     LastSyncDuration = result.Duration
                 };
@@ -220,6 +228,8 @@ public partial class SyncCenterViewModel : BaseViewModel
                     $"Sync completed successfully!\n" +
                     $"Downloaded: {result.ChangesPulled} changes\n" +
                     $"Uploaded: {result.ChangesPushed} changes\n" +
+                    $"Attachments downloaded: {result.AttachmentsPulled}\n" +
+                    $"Attachments uploaded/deleted: {result.AttachmentsPushed}\n" +
                     $"Duration: {result.Duration:mm\\:ss}");
 
                 // Refresh conflicts if any were detected
@@ -268,7 +278,9 @@ public partial class SyncCenterViewModel : BaseViewModel
             var result = await _syncService.PullChangesAsync();
             if (result.IsSuccess)
             {
-                await ShowMessage("Pull Complete", $"Downloaded {result.ChangesPulled} changes from server.");
+                await ShowMessage(
+                    "Pull Complete",
+                    $"Downloaded {result.ChangesPulled} changes and {result.AttachmentsPulled} attachments from server.");
             }
             else
             {
@@ -303,7 +315,9 @@ public partial class SyncCenterViewModel : BaseViewModel
             var result = await _syncService.PushChangesAsync();
             if (result.IsSuccess)
             {
-                await ShowMessage("Push Complete", $"Uploaded {result.ChangesPushed} changes to server.");
+                await ShowMessage(
+                    "Push Complete",
+                    $"Uploaded {result.ChangesPushed} changes and {result.AttachmentsPushed} attachments to server.");
             }
             else
             {

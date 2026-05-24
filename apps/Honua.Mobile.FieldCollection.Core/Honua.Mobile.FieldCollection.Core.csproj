@@ -12,6 +12,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Honua.Sdk.GeoServices" Version="$(HonuaSdkDotNetTrainVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.60" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
