@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Honua.Mobile.FieldCollection.Models;assembly=Honua.Mobile.FieldCollection.Core"
+             xmlns:vm="clr-namespace:Honua.Mobile.FieldCollection.ViewModels;assembly=Honua.Mobile.FieldCollection.Core"
+             x:Class="Honua.Mobile.FieldCollection.Views.FieldOperationsPage"
+             Title="{Binding Title}"
+             x:DataType="vm:FieldOperationsViewModel">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Refresh"
+                     Command="{Binding LoadWorkspaceCommand}" />
+    </ContentPage.ToolbarItems>
+
+    <RefreshView IsRefreshing="{Binding IsRefreshing}"
+                 Command="{Binding RefreshCommand}">
+        <ScrollView>
+            <VerticalStackLayout Spacing="16" Padding="16">
+
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Packages" Style="{StaticResource SectionHeaderStyle}" />
+
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <Picker Grid.Column="0"
+                                    ItemsSource="{Binding Packages}"
+                                    SelectedItem="{Binding SelectedPackage}"
+                                    ItemDisplayBinding="{Binding Name}"
+                                    Title="Installed package" />
+                            <HorizontalStackLayout Grid.Column="1" Spacing="8">
+                                <CheckBox IsChecked="{Binding IncludeArchivedPackages}" />
+                                <Label Text="Archived"
+                                       VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                        </Grid>
+
+                        <Label Text="{Binding SelectedPackage.Description}"
+                               FontSize="13"
+                               TextColor="{StaticResource Gray600}"
+                               LineBreakMode="WordWrap" />
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Open"
+                                    Style="{StaticResource BaseButtonStyle}"
+                                    Command="{Binding MarkPackageOpenedCommand}" />
+                            <Button Grid.Column="1"
+                                    Text="Archive"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ArchivePackageCommand}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Package Intake" Style="{StaticResource SectionHeaderStyle}" />
+                        <Entry Text="{Binding PackageManifestUrl}"
+                               Placeholder="field project package manifest URL" />
+                        <Entry Text="{Binding PackageManifestPath}"
+                               Placeholder="field-project-package.json path" />
+                        <Entry Text="{Binding PackageDownloadRoot}"
+                               Placeholder="download cache folder" />
+                        <Entry Text="{Binding PackageDestinationRoot}"
+                               Placeholder="install destination folder" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Download"
+                                    Style="{StaticResource BaseButtonStyle}"
+                                    Command="{Binding DownloadPackageCommand}" />
+                            <Button Grid.Column="1"
+                                    Text="Import"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ImportPackageCommand}" />
+                        </Grid>
+                        <Label Text="{Binding LastImportSummary}"
+                               FontSize="13"
+                               TextColor="{StaticResource Gray600}" />
+
+                        <CollectionView ItemsSource="{Binding ImportDiagnostics}"
+                                        IsVisible="{Binding HasImportDiagnostics}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="models:LocalFieldProjectPackageDiagnostic">
+                                    <Grid Padding="0,4"
+                                          RowDefinitions="Auto,Auto"
+                                          ColumnDefinitions="Auto,*"
+                                          ColumnSpacing="8">
+                                        <Label Grid.Row="0"
+                                               Grid.Column="0"
+                                               Text="{Binding Severity}"
+                                               FontAttributes="Bold" />
+                                        <Label Grid.Row="0"
+                                               Grid.Column="1"
+                                               Text="{Binding Code}" />
+                                        <Label Grid.Row="1"
+                                               Grid.Column="1"
+                                               Text="{Binding Message}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray600}"
+                                               LineBreakMode="WordWrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Assignments" Style="{StaticResource SectionHeaderStyle}" />
+                        <CollectionView ItemsSource="{Binding Assignments}"
+                                        SelectionMode="Single"
+                                        SelectedItem="{Binding SelectedAssignment}">
+                            <CollectionView.EmptyView>
+                                <Label Text="No assignments in this package."
+                                       TextColor="{StaticResource Gray600}" />
+                            </CollectionView.EmptyView>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="models:LocalFieldAssignmentInfo">
+                                    <Frame Style="{StaticResource CardFrameStyle}" Margin="0,5">
+                                        <Grid RowDefinitions="Auto,Auto,Auto"
+                                              RowSpacing="6">
+                                            <Grid Grid.Row="0"
+                                                  ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="10">
+                                                <Label Grid.Column="0"
+                                                       Text="{Binding AssignmentId}"
+                                                       FontAttributes="Bold" />
+                                                <Label Grid.Column="1"
+                                                       Text="{Binding Status}"
+                                                       FontSize="12"
+                                                       TextColor="{StaticResource Gray600}" />
+                                            </Grid>
+
+                                            <Label Grid.Row="1"
+                                                   Text="{Binding BindingId}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray600}" />
+
+                                            <Grid Grid.Row="2"
+                                                  ColumnDefinitions="*,*,*,*"
+                                                  ColumnSpacing="6">
+                                                <Button Grid.Column="0"
+                                                        Text="Open"
+                                                        FontSize="12"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:FieldOperationsViewModel}}, Path=OpenAssignmentRecordCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                                <Button Grid.Column="1"
+                                                        Text="Start"
+                                                        FontSize="12"
+                                                        Style="{StaticResource BaseButtonStyle}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:FieldOperationsViewModel}}, Path=StartAssignmentCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                                <Button Grid.Column="2"
+                                                        Text="Done"
+                                                        FontSize="12"
+                                                        Style="{StaticResource BaseButtonStyle}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:FieldOperationsViewModel}}, Path=CompleteAssignmentCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                                <Button Grid.Column="3"
+                                                        Text="Reset"
+                                                        FontSize="12"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:FieldOperationsViewModel}}, Path=ReopenAssignmentCommand}"
+                                                        CommandParameter="{Binding .}" />
+                                            </Grid>
+                                        </Grid>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Style="{StaticResource CardFrameStyle}">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Export" Style="{StaticResource SectionHeaderStyle}" />
+                        <Picker ItemsSource="{Binding AvailableLayers}"
+                                SelectedItem="{Binding SelectedLayer}"
+                                ItemDisplayBinding="{Binding Name}"
+                                Title="Layer" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Export"
+                                    Style="{StaticResource BaseButtonStyle}"
+                                    Command="{Binding ExportSelectedLayerCommand}" />
+                            <Button Grid.Column="1"
+                                    Text="Share"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ShareLastExportCommand}"
+                                    IsEnabled="{Binding HasLastExport}" />
+                        </Grid>
+                        <Label Text="{Binding LastExportSummary}"
+                               FontSize="13"
+                               TextColor="{StaticResource Gray600}" />
+                        <Label Text="{Binding LastExportDirectory}"
+                               FontSize="12"
+                               TextColor="{StaticResource Gray600}"
+                               LineBreakMode="WordWrap" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Label Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       TextColor="{StaticResource Gray600}"
+                       LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+
+    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                       IsVisible="{Binding IsBusy}"
+                       Color="{StaticResource Primary}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+</ContentPage>

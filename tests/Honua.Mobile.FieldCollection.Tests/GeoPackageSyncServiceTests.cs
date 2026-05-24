@@ -719,6 +719,53 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Equal(1, diagnostics.Operations.AttachmentPendingCount);
     }
 
+    [Fact]
+    public async Task LocalFieldConflictReplayHarness_WithRemoteDeleteCanDeferForManualReview()
+    {
+        var databasePath = CreateDatabasePath();
+        var evidenceDirectory = Path.Combine(Path.GetTempPath(), $"honua-conflict-delete-replay-{Guid.NewGuid():N}");
+        await using var cleanup = new DatabaseCleanup(databasePath, evidenceDirectory);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var plan = new LocalFieldConflictReplayPlan
+        {
+            RunId = "local-delete-conflict-replay-test",
+            Layer = CreateLayer(),
+            FeatureId = "asset-delete-conflict",
+            LocalVersion = 3,
+            ServerVersion = 2,
+            LocalAttributes = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "local survivor",
+                ["status"] = "field-updated"
+            },
+            ServerAttributes = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "server deleted"
+            },
+            Resolution = ConflictResolution.Manual
+        };
+        var peer = new LocalReplayFieldSyncPeer([LocalFieldConflictReplayHarness.CreateServerDelete(plan)]);
+        using var sync = CreateSyncService(storage, uploader: peer, puller: peer, attachmentSynchronizer: peer);
+        var harness = new LocalFieldConflictReplayHarness(storage, sync, evidenceDirectory);
+
+        var result = await harness.RunAsync(plan);
+
+        Assert.True(result.PullResult.IsSuccess);
+        Assert.NotNull(result.Conflict);
+        Assert.True(result.ResolutionApplied);
+        Assert.NotNull(result.FinalFeature);
+        Assert.Equal("local survivor", result.FinalFeature.Attributes["name"]?.ToString());
+        Assert.Equal(1, result.Diagnostics.Operations.ConflictCount);
+
+        var evidenceJson = await File.ReadAllTextAsync(result.EvidencePath!);
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        Assert.Equal("Manual", evidence.RootElement.GetProperty("selectedResolution").GetString());
+        Assert.True(evidence.RootElement.GetProperty("resolutionApplied").GetBoolean());
+        Assert.True(evidence.RootElement.GetProperty("finalState").GetProperty("featureExists").GetBoolean());
+        Assert.Equal(1, evidence.RootElement.GetProperty("finalState").GetProperty("conflictCount").GetInt32());
+        Assert.Equal(4, evidence.RootElement.GetProperty("events").GetArrayLength());
+    }
+
     private static GeoPackageSyncService CreateSyncService(
         GeoPackageStorageService storage,
         IFieldCollectionChangeUploader? uploader = null,

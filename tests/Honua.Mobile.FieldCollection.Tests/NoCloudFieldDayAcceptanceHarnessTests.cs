@@ -1,10 +1,15 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.FieldCollection.Services.Assignments;
 using Honua.Mobile.FieldCollection.Services.Forms;
+using Honua.Mobile.FieldCollection.Services.Packages;
 using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.FieldCollection.Services.Workflow;
 using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Projects;
 using Honua.Sdk.Field.Records;
 
 namespace Honua.Mobile.FieldCollection.Tests;
@@ -19,6 +24,8 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
     private readonly string _databasePath;
     private readonly string _artifactRoot;
     private readonly string _mediaRoot;
+    private readonly string _packageRoot;
+    private readonly string _installRoot;
 
     public NoCloudFieldDayAcceptanceHarnessTests()
     {
@@ -26,34 +33,46 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
         _databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-day-{Guid.NewGuid():N}.gpkg");
         _artifactRoot = Path.Combine(Path.GetTempPath(), $"honua-field-day-artifacts-{Guid.NewGuid():N}");
         _mediaRoot = Path.Combine(Path.GetTempPath(), $"honua-field-day-media-{Guid.NewGuid():N}");
+        _packageRoot = Path.Combine(Path.GetTempPath(), $"honua-field-day-package-{Guid.NewGuid():N}");
+        _installRoot = Path.Combine(Path.GetTempPath(), $"honua-field-day-install-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_artifactRoot);
         Directory.CreateDirectory(_mediaRoot);
+        Directory.CreateDirectory(_packageRoot);
+        Directory.CreateDirectory(_installRoot);
     }
 
     [Fact]
     public async Task FieldDayHarness_RunsNoCloudWorkflowAndWritesEvidence()
     {
         using var storage = new GeoPackageStorageService(_databasePath);
-        var layer = CreateLayer();
-        await storage.CreateLayerAsync(layer);
-        await storage.UpsertProjectCatalogEntryAsync(new FieldProjectCatalogEntry
+        var package = LocalFieldProjectPackageImportServiceTests.CreatePackage();
+        var manifestPath = await WritePackageAsync(package);
+        var importResult = await new LocalFieldProjectPackageImportService(storage).ImportAsync(new LocalFieldProjectPackageImportRequest
         {
-            ProjectId = "field-day",
-            ServiceId = "field-day",
-            PackageId = "field-day-local-package",
-            Version = "2026.05.23",
-            Name = "Field Day Local Package",
-            Description = "No-cloud acceptance fixture",
-            State = FieldProjectCatalogState.Installed,
-            ValidationStatus = FieldProjectValidationStatus.Valid,
-            LayerCount = 1,
-            ImportedAtUtc = DateTime.UtcNow.AddHours(-1),
-            PackageDigest = "sha256:field-day-fixture"
+            ManifestPath = manifestPath,
+            DestinationRootDirectory = _installRoot,
+            ImportSource = "field-day-fixture",
+            OverwriteExisting = true
         });
-        await storage.MarkProjectCatalogEntryOpenedAsync("field-day");
+        Assert.True(importResult.Imported, string.Join(" | ", importResult.Diagnostics.Select(diagnostic => diagnostic.Message)));
+
+        var layer = (await storage.GetLayersAsync())
+            .Single(importedLayer => importedLayer.Form?.FormId == "asset-inspection");
+        await storage.MarkProjectCatalogEntryOpenedAsync(package.ProjectId);
+
+        var assignmentService = new LocalFieldAssignmentService(storage);
+        var assignments = await assignmentService.GetAssignmentsAsync(new LocalFieldAssignmentFilter
+        {
+            AssigneeUserId = "field-user-1",
+            Status = FieldAssignmentStatus.NotStarted,
+            SourceId = "assets"
+        });
+        var assignment = Assert.Single(assignments);
+        Assert.True(await assignmentService.UpdateStatusAsync(assignment.AssignmentId, FieldAssignmentStatus.InProgress));
 
         var form = layer.Form!;
         var formData = CreateCapturedFormData(form);
+        formData.LayerId = layer.Id;
         var formValid = await new FormService().ValidateFormAsync(formData, form);
         Assert.True(formValid, string.Join(" | ", formData.ValidationErrors.Select(error => $"{error.Key}: {error.Value}")));
         Assert.Empty(formData.ValidationErrors);
@@ -70,6 +89,16 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
             Attributes = new Dictionary<string, object?>(formData.Values, StringComparer.Ordinal)
         };
         await storage.StoreFeatureAsync(capturedFeature);
+        var lifecycleService = new LocalFieldRecordLifecycleService(storage);
+        Assert.True((await lifecycleService.TransitionAsync(layer.Id, capturedFeature.Id, RecordStatus.ReadyToSubmit)).Succeeded);
+        Assert.True((await lifecycleService.TransitionAsync(
+            layer.Id,
+            capturedFeature.Id,
+            RecordStatus.Submitted,
+            actorId: "field-user-1",
+            actorRole: "inspector",
+            note: "field day complete")).Succeeded);
+        Assert.True(await assignmentService.UpdateStatusAsync(assignment.AssignmentId, FieldAssignmentStatus.Complete));
 
         var localPhotoPath = Path.Combine(_mediaRoot, "capture", "field-day-photo.jpg");
         Directory.CreateDirectory(Path.GetDirectoryName(localPhotoPath)!);
@@ -124,7 +153,7 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
 
         var exportRoot = Path.Combine(_artifactRoot, "exports");
         var exportResult = await new LocalRecordExportService(storage, exportRoot).ExportLayerAsync(layer);
-        var catalogEntry = await storage.GetProjectCatalogEntryAsync("field-day");
+        var catalogEntry = await storage.GetProjectCatalogEntryAsync(package.ProjectId);
         var diagnostics = await storage.GetOfflineCacheDiagnosticsAsync();
         var evidencePath = Path.Combine(_artifactRoot, "field-day.evidence.json");
         var evidence = new FieldDayEvidence(
@@ -134,16 +163,18 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
             GeneratedAtUtc: DateTime.UtcNow,
             Steps:
             [
-                Step("package-catalog", "passed", "field_project_catalog row installed and opened", "field-day"),
-                Step("assignment-packet", "follow-up", "portable task packet adapters remain in honua-mobile#252", null),
+                Step("package-import", importResult.Imported ? "passed" : "failed", "SDK package manifest validated and installed locally", Path.GetFileName(importResult.InstalledManifestPath)),
+                Step("package-catalog", catalogEntry?.LastOpenedAtUtc is not null ? "passed" : "failed", "field_project_catalog row installed and opened", package.ProjectId),
+                Step("assignment-packet", "passed", "SDK task packet imported and completed locally", assignment.AssignmentId),
                 Step("record-collection", "passed", "form values validated and stored in GeoPackage", capturedFeature.Id),
                 Step("media-attachment", "passed", "local photo metadata stored and exported from device path", "field-day-photo-1"),
-                Step("lifecycle-transition", "follow-up", "formal lifecycle runtime remains in honua-mobile#251", null),
+                Step("lifecycle-transition", "passed", "record moved through ready-to-submit and submitted lifecycle states", capturedFeature.Id),
                 Step("conflict-replay", conflictResult.ResolutionApplied ? "passed" : "failed", "local peer replayed conflict and selected resolution", Path.GetFileName(conflictResult.EvidencePath)),
                 Step("export", File.Exists(exportResult.EvidenceManifestPath) ? "passed" : "failed", "local export package written", Path.GetFileName(exportResult.EvidenceManifestPath))
             ],
             Artifacts: new Dictionary<string, string?>(StringComparer.Ordinal)
             {
+                ["installedManifest"] = Path.GetFileName(importResult.InstalledManifestPath),
                 ["conflictEvidence"] = Path.GetFileName(conflictResult.EvidencePath),
                 ["exportDirectory"] = Path.GetFileName(exportResult.ExportDirectory),
                 ["exportEvidence"] = Path.GetFileName(exportResult.EvidenceManifestPath),
@@ -153,6 +184,7 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
             Counts: new Dictionary<string, int>(StringComparer.Ordinal)
             {
                 ["records"] = exportResult.RecordCount,
+                ["assignments"] = (await assignmentService.GetAssignmentsAsync()).Count,
                 ["attachments"] = exportResult.AttachmentCount,
                 ["copiedMediaFiles"] = exportResult.MediaFileCount,
                 ["pendingOperations"] = diagnostics.Operations.PendingCount,
@@ -176,8 +208,10 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
             parsed.RootElement.GetProperty("schemaVersion").GetString());
         Assert.True(parsed.RootElement.GetProperty("noCloud").GetBoolean());
         Assert.False(parsed.RootElement.GetProperty("cloudUploadIncluded").GetBoolean());
-        Assert.Equal(7, parsed.RootElement.GetProperty("steps").GetArrayLength());
-        Assert.Contains("\"status\": \"follow-up\"", evidenceJson);
+        Assert.Equal(8, parsed.RootElement.GetProperty("steps").GetArrayLength());
+        Assert.DoesNotContain("\"status\": \"follow-up\"", evidenceJson);
+        Assert.Contains("\"assignment-packet\"", evidenceJson);
+        Assert.Contains("\"lifecycle-transition\"", evidenceJson);
         Assert.DoesNotContain(_artifactRoot, evidenceJson);
         Assert.DoesNotContain(_mediaRoot, evidenceJson);
         Assert.DoesNotContain(localPhotoPath, evidenceJson);
@@ -197,6 +231,16 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
         if (Directory.Exists(_mediaRoot))
         {
             Directory.Delete(_mediaRoot, recursive: true);
+        }
+
+        if (Directory.Exists(_packageRoot))
+        {
+            Directory.Delete(_packageRoot, recursive: true);
+        }
+
+        if (Directory.Exists(_installRoot))
+        {
+            Directory.Delete(_installRoot, recursive: true);
         }
     }
 
@@ -261,6 +305,7 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
         var values = MobileFormRuleRuntime.ApplyDefaultValues(form, new Dictionary<string, object?>
         {
             ["asset_id"] = "asset-field-day-1",
+            ["condition"] = "good",
             ["location"] = new FieldGeoPoint(21.3, -157.8, 3)
         });
         values = MobileFormRuleRuntime.ApplyCalculatedValues(form, values);
@@ -315,6 +360,34 @@ public sealed class NoCloudFieldDayAcceptanceHarnessTests : IDisposable
 
     private static FieldDayStep Step(string name, string status, string detail, string? artifact)
         => new(name, status, detail, artifact);
+
+    private async Task<string> WritePackageAsync(FieldProjectPackage package)
+    {
+        Directory.CreateDirectory(Path.Combine(_packageRoot, "data"));
+        var artifactPath = Path.Combine(_packageRoot, "data", "assets.gpkg");
+        await File.WriteAllTextAsync(artifactPath, "field day offline data");
+        package = package with
+        {
+            OfflinePackages =
+            [
+                package.OfflinePackages[0] with
+                {
+                    SizeBytes = new FileInfo(artifactPath).Length,
+                    Sha256 = ComputeSha256(artifactPath)
+                }
+            ]
+        };
+
+        var manifestPath = Path.Combine(_packageRoot, "field-project-package.json");
+        await File.WriteAllTextAsync(manifestPath, package.ToJson());
+        return manifestPath;
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
 
     private static void DeleteIfExists(string path)
     {

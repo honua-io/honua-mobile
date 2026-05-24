@@ -1,13 +1,17 @@
 using CommunityToolkit.Maui;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Ai;
+using Honua.Mobile.FieldCollection.Services.Assignments;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
 using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Metadata;
+using Honua.Mobile.FieldCollection.Services.Packages;
+using Honua.Mobile.FieldCollection.Services.Sharing;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Honua.Mobile.FieldCollection.Services.Workflow;
 using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.FieldCollection.ViewModels;
@@ -55,6 +59,8 @@ public static class MauiProgram
     {
         // Database and Storage Services
         services.AddSingleton<DatabaseService>();
+        services.AddSingleton<GeoPackageStorageService>(provider =>
+            provider.GetRequiredService<DatabaseService>().GetStorageService());
 
         services.AddSingleton<IStorageService, StorageService>();
 
@@ -157,10 +163,35 @@ public static class MauiProgram
         });
         services.AddSingleton<ILocalRecordExportService>(provider =>
         {
-            var databaseService = provider.GetRequiredService<DatabaseService>();
             return new LocalRecordExportService(
-                databaseService.GetStorageService(),
+                provider.GetRequiredService<GeoPackageStorageService>(),
                 logger: provider.GetService<ILogger<LocalRecordExportService>>());
+        });
+        services.AddSingleton<ILocalRecordExportShareService, MauiLocalRecordExportShareService>();
+        services.AddHttpClient("HonuaFieldPackageDownload");
+        services.AddSingleton<IFieldProjectPackageDownloadRequestCustomizer, FieldProjectPackageDownloadAuthHeader>();
+        services.AddSingleton(provider =>
+        {
+            return new LocalFieldProjectPackageImportService(
+                provider.GetRequiredService<GeoPackageStorageService>(),
+                provider.GetService<ILogger<LocalFieldProjectPackageImportService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new LocalFieldProjectPackageDownloadService(
+                httpClientFactory.CreateClient("HonuaFieldPackageDownload"),
+                provider.GetRequiredService<LocalFieldProjectPackageImportService>(),
+                provider.GetServices<IFieldProjectPackageDownloadRequestCustomizer>(),
+                provider.GetService<ILogger<LocalFieldProjectPackageDownloadService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            return new LocalFieldRecordLifecycleService(provider.GetRequiredService<GeoPackageStorageService>());
+        });
+        services.AddSingleton<ILocalFieldAssignmentService>(provider =>
+        {
+            return new LocalFieldAssignmentService(provider.GetRequiredService<GeoPackageStorageService>());
         });
         services.AddSingleton<IMobileAiCaptureProvider, NullMobileAiCaptureProvider>();
         services.AddSingleton<IMobileAiCaptureQueue, SettingsMobileAiCaptureQueue>();
@@ -199,6 +230,7 @@ public static class MauiProgram
     {
         services.AddTransient<MainViewModel>();
         services.AddTransient<MapViewModel>();
+        services.AddTransient<FieldOperationsViewModel>();
         services.AddTransient<RecordsViewModel>();
         services.AddTransient<SyncCenterViewModel>();
         services.AddTransient<SettingsViewModel>();
@@ -219,6 +251,7 @@ public static class MauiProgram
     {
         services.AddTransient<MainPage>();
         services.AddTransient<MapPage>();
+        services.AddTransient<FieldOperationsPage>();
         services.AddTransient<RecordsPage>();
         services.AddTransient<SyncCenterPage>();
         services.AddTransient<SettingsPage>();

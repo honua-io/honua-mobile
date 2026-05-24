@@ -5,6 +5,13 @@ on:
     branches: [main, trunk]
   pull_request:
     branches: [main, trunk]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 10 * * *'
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -24,7 +31,11 @@ jobs:
       contents: read
     outputs:
       src_changed: ${{ steps.filter.outputs.src_changed }}
+      core_changed: ${{ steps.filter.outputs.core_changed }}
       test_changed: ${{ steps.filter.outputs.test_changed }}
+      platform_changed: ${{ steps.filter.outputs.platform_changed }}
+      android_smoke_changed: ${{ steps.filter.outputs.android_smoke_changed }}
+      full_mobile_requested: ${{ steps.filter.outputs.full_mobile_requested }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,34 +44,77 @@ jobs:
 
       - name: Check for source changes
         id: filter
+        env:
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
+          set -euo pipefail
+
+          FULL_MOBILE_REQUESTED=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }})
+            if printf '%s' "$PR_LABELS_JSON" | grep -Eiq '"(ci/full-mobile|ci/platform|full-mobile-ci)"'; then
+              FULL_MOBILE_REQUESTED=true
+            fi
+          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CHANGED_FILES="__full_mobile_ci__"
+            FULL_MOBILE_REQUESTED=true
           else
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }}..${{ github.sha }})
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -n "$BEFORE_SHA" ] && ! printf '%s' "$BEFORE_SHA" | grep -Eq '^0+$'; then
+              CHANGED_FILES=$(git diff --name-only "$BEFORE_SHA"..${{ github.sha }})
+            else
+              CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})
+            fi
           fi
 
-          SRC_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^(src/|apps/|proto/|quality/|scripts/|\.github/workflows/|tests/Honua.Mobile.PlatformSmoke/)' || true)
-          TEST_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^tests/' || true)
+          match_changed() {
+            local pattern="$1"
+            printf '%s\n' "$CHANGED_FILES" | grep -E "$pattern" || true
+          }
 
-          if [ -n "$SRC_CHANGED" ]; then
-            echo "src_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "src_changed=false" >> $GITHUB_OUTPUT
+          SRC_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|\.github/workflows/|tests/Honua\.Mobile\.PlatformSmoke/)')
+          CORE_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|tests/|\.github/workflows/|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config|package(-lock)?\.json)')
+          TEST_CHANGED=$(match_changed '^tests/')
+          PLATFORM_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|apps/Honua\.Mobile\.FieldCollection/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.Maui\.Tests/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-(android|ios)-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+          ANDROID_SMOKE_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|apps/Honua\.Mobile\.FieldCollection/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-android-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+
+          if [ "$FULL_MOBILE_REQUESTED" = "true" ]; then
+            SRC_CHANGED="${SRC_CHANGED:-__full_mobile_ci__}"
+            CORE_CHANGED="${CORE_CHANGED:-__full_mobile_ci__}"
+            PLATFORM_CHANGED="${PLATFORM_CHANGED:-__full_mobile_ci__}"
+            ANDROID_SMOKE_CHANGED="${ANDROID_SMOKE_CHANGED:-__full_mobile_ci__}"
           fi
 
-          if [ -n "$TEST_CHANGED" ]; then
-            echo "test_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "test_changed=false" >> $GITHUB_OUTPUT
-          fi
+          set_bool_output() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$name=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
 
+          set_bool_output src_changed "$SRC_CHANGED"
+          set_bool_output core_changed "$CORE_CHANGED"
+          set_bool_output test_changed "$TEST_CHANGED"
+          set_bool_output platform_changed "$PLATFORM_CHANGED"
+          set_bool_output android_smoke_changed "$ANDROID_SMOKE_CHANGED"
+          echo "full_mobile_requested=$FULL_MOBILE_REQUESTED" >> "$GITHUB_OUTPUT"
+
+          echo "Changed files:"
+          printf '%s\n' "$CHANGED_FILES"
           echo "Source files changed: $SRC_CHANGED"
+          echo "Core CI files changed: $CORE_CHANGED"
           echo "Test files changed: $TEST_CHANGED"
+          echo "Platform files changed: $PLATFORM_CHANGED"
+          echo "Android smoke files changed: $ANDROID_SMOKE_CHANGED"
+          echo "Full mobile CI requested: $FULL_MOBILE_REQUESTED"
 
   build:
     name: Build & Format Check
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.core_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -134,7 +188,8 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
-    needs: build
+    needs: changes
+    if: ${{ needs.changes.outputs.core_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -262,8 +317,8 @@ jobs:
   maui-android:
     name: MAUI Android Build & Trim Smoke
     runs-on: ubuntu-latest
-    needs: [build, changes]
-    if: needs.changes.outputs.src_changed == 'true'
+    needs: changes
+    if: ${{ needs.changes.outputs.platform_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -374,6 +429,7 @@ jobs:
             /p:TreatWarningsAsErrors=true
 
       - name: Android trim smoke
+        if: needs.changes.outputs.android_smoke_changed == 'true'
         run: |
           # Keep direct mobile-code trim warnings blocking, but do not fail on assembly-level
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
@@ -389,6 +445,7 @@ jobs:
             /p:AndroidPackageFormat=apk
 
       - name: Enable KVM for Android emulator
+        if: needs.changes.outputs.android_smoke_changed == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -396,6 +453,7 @@ jobs:
           ls -l /dev/kvm
 
       - name: Android API 33 platform smoke
+        if: needs.changes.outputs.android_smoke_changed == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         env:
           HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
@@ -416,8 +474,8 @@ jobs:
   maui-ios:
     name: MAUI iOS Build & AOT Smoke
     runs-on: macos-latest
-    needs: [build, changes]
-    if: needs.changes.outputs.src_changed == 'true'
+    needs: changes
+    if: ${{ needs.changes.outputs.platform_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -540,8 +598,8 @@ jobs:
   maui-windows:
     name: MAUI Windows Build
     runs-on: windows-latest
-    needs: [build, changes]
-    if: needs.changes.outputs.src_changed == 'true'
+    needs: changes
+    if: ${{ needs.changes.outputs.platform_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -610,7 +668,8 @@ jobs:
   grpc-validation:
     name: gRPC Protocol Validation
     runs-on: ubuntu-latest
-    needs: build
+    needs: changes
+    if: ${{ needs.changes.outputs.core_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -649,7 +708,8 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: build
+    needs: changes
+    if: ${{ needs.changes.outputs.core_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -704,7 +764,8 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
-    needs: build
+    needs: changes
+    if: ${{ needs.changes.outputs.core_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
       packages: read
@@ -812,20 +873,24 @@ jobs:
           path: TestResults/
           retention-days: 7
 
-  # Gate job that requires all checks to pass
-  ci-gate:
-    name: CI Gate
+  fast-pr-gate:
+    name: Fast PR Gate
     runs-on: ubuntu-latest
-    needs: [build, test, maui-android, maui-ios, maui-windows, grpc-validation, security, quality-gates]
+    needs: [changes, build, test, grpc-validation, security, quality-gates]
     if: always()
     steps:
-      - name: Check all required jobs succeeded
+      - name: Check fast feedback jobs
         run: |
-          echo "🔍 Checking job results..."
+          echo "Checking fast feedback job results..."
           dependabot_pr="${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}"
+          core_changed="${{ needs.changes.outputs.core_changed }}"
 
-          # Core requirements (must pass)
-          require_core_job() {
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "Detect Changes failed with result: ${{ needs.changes.result }}"
+            exit 1
+          fi
+
+          require_fast_job() {
             local name="$1"
             local result="$2"
 
@@ -838,34 +903,81 @@ jobs:
               return 0
             fi
 
-            echo "❌ $name failed with result: $result"
+            if [[ "$core_changed" != "true" && "$result" == "skipped" ]]; then
+              echo "$name skipped because no core CI paths changed"
+              return 0
+            fi
+
+            echo "$name failed with result: $result"
             exit 1
           }
 
-          require_core_job "Build job" "${{ needs.build.result }}"
-          require_core_job "Test job" "${{ needs.test.result }}"
-          require_core_job "gRPC validation" "${{ needs.grpc-validation.result }}"
-          require_core_job "Security scan" "${{ needs.security.result }}"
-          require_core_job "Quality gates" "${{ needs.quality-gates.result }}"
+          require_fast_job "Build job" "${{ needs.build.result }}"
+          require_fast_job "Test job" "${{ needs.test.result }}"
+          require_fast_job "gRPC validation" "${{ needs.grpc-validation.result }}"
+          require_fast_job "Security scan" "${{ needs.security.result }}"
+          require_fast_job "Quality gates" "${{ needs.quality-gates.result }}"
 
-          # Platform builds (can be skipped if no source changes)
-          android_result="${{ needs.maui-android.result }}"
-          ios_result="${{ needs.maui-ios.result }}"
-          windows_result="${{ needs.maui-windows.result }}"
+          echo "Fast feedback checks passed."
 
-          if [[ "$android_result" == "failure" ]]; then
-            echo "❌ Android build failed"
+  full-platform-confidence:
+    name: Full Platform Confidence
+    runs-on: ubuntu-latest
+    needs: [changes, maui-android, maui-ios, maui-windows]
+    if: always()
+    steps:
+      - name: Check platform confidence jobs
+        run: |
+          echo "Checking platform confidence job results..."
+          dependabot_pr="${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}"
+          platform_changed="${{ needs.changes.outputs.platform_changed }}"
+
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "Detect Changes failed with result: ${{ needs.changes.result }}"
             exit 1
           fi
 
-          if [[ "$ios_result" == "failure" ]]; then
-            echo "❌ iOS build failed"
+          require_platform_job() {
+            local name="$1"
+            local result="$2"
+
+            if [[ "$result" == "success" ]]; then
+              return 0
+            fi
+
+            if [[ "$dependabot_pr" == "true" && "$result" == "skipped" ]]; then
+              echo "$name skipped for Dependabot PR"
+              return 0
+            fi
+
+            if [[ "$platform_changed" != "true" && "$result" == "skipped" ]]; then
+              echo "$name skipped because no app/platform paths changed"
+              return 0
+            fi
+
+            echo "$name failed with result: $result"
+            exit 1
+          }
+
+          require_platform_job "Android build" "${{ needs.maui-android.result }}"
+          require_platform_job "iOS build" "${{ needs.maui-ios.result }}"
+          require_platform_job "Windows build" "${{ needs.maui-windows.result }}"
+
+          echo "Platform confidence checks passed."
+
+  # Required fast gate. The full platform confidence check reports separately.
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs: [fast-pr-gate]
+    if: always()
+    steps:
+      - name: Check required fast gate succeeded
+        run: |
+          echo "Checking required CI result..."
+          if [[ "${{ needs.fast-pr-gate.result }}" != "success" ]]; then
+            echo "Fast PR Gate failed with result: ${{ needs.fast-pr-gate.result }}"
             exit 1
           fi
 
-          if [[ "$windows_result" == "failure" ]]; then
-            echo "❌ Windows build failed"
-            exit 1
-          fi
-
-          echo "✅ All required CI checks passed!"
+          echo "Required CI checks passed."

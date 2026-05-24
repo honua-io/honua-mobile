@@ -6,6 +6,7 @@ using Honua.Sdk.GeoServices.FeatureServer;
 using Honua.Sdk.GeoServices.FeatureServer.Exceptions;
 using Honua.Sdk.Grpc;
 using Honua.Sdk.OgcFeatures.Exceptions;
+using FeatureServerRequestConverters = Honua.Sdk.GeoServices.FeatureServer.Conversion.RequestConverters;
 
 namespace Honua.Mobile.Sdk;
 
@@ -437,7 +438,7 @@ public sealed partial class HonuaMobileClient
             HttpMethod.Post,
             path,
             query: null,
-            new FormUrlEncodedContent(BuildFeatureServerEditFormParameters(editRequest)),
+            new FormUrlEncodedContent(FeatureServerRequestConverters.ToFeatureServerEditFormParameters(editRequest)),
             ct).ConfigureAwait(false);
     }
 

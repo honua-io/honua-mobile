@@ -126,13 +126,7 @@ public sealed class HonuaMobileSdkFeatureClientTests
         Assert.Equal(7, result.DeleteResults[0].ObjectId);
     }
 
-    // GeoJSON Point -> {"x":,"y":} translation now lives in Honua.Sdk.GeoServices'
-    // FeatureServer converters. The 0.1.17-alpha.1 train surfaces FeatureEditFeature
-    // attributes/geometry verbatim through ToFeatureServerEditFormParameters; the
-    // explicit x/y projection that mobile previously performed before assembling
-    // the form payload is no longer mobile-owned. Re-enable once
-    // honua-sdk-dotnet adds the GeoJSON->FeatureServer geometry projection.
-    [Fact(Skip = "Tracked at honua-io/honua-mobile#199 — SDK 0.1.17-alpha.1 emits GeoJSON in adds payload; pending Honua.Sdk.GeoServices geometry projection.")]
+    [Fact]
     public async Task ApplyEditsAsync_FeatureServerRequest_AcceptsSparseLiveImageEditResponse()
     {
         string? capturedBody = null;

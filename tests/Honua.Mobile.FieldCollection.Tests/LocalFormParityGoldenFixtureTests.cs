@@ -95,9 +95,7 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
             summaries,
             UnsupportedFollowUps:
             [
-                "SDK follow-up honua-sdk-dotnet#161: shared choice-set ids, record-link target metadata, and media capture policy fields require the newer SDK package.",
-                "SDK follow-up honua-sdk-dotnet#161: full XLSForm/Arcade expression parity beyond supported concat/default/visibility rules.",
-                "Mobile follow-up honua-mobile#254: broader rejected-media and nested-repeat scenario fixtures."
+                "Mobile follow-up: full XLSForm/Arcade expression parity beyond supported concat/default/visibility rules remains a broader runtime slice."
             ]);
         var evidencePath = Path.Combine(_artifactDirectory, "local-form-parity-golden-fixtures.evidence.json");
         await File.WriteAllTextAsync(evidencePath, JsonSerializer.Serialize(evidence, JsonOptions));
@@ -120,7 +118,34 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
         Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Media constraints");
         Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Record links");
         Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Barcode capture");
+        Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Shared choice-set ids");
+        Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Record-link target metadata");
+        Assert.Contains(summaries.SelectMany(summary => summary.Capabilities), capability => capability == "Media capture policy");
         Assert.True(File.Exists(evidencePath));
+    }
+
+    [Fact]
+    public async Task GoldenFixture_RejectedMediaProducesDeterministicValidationError()
+    {
+        var fixture = CreateInspectionFixture();
+        var values = MobileFormRuleRuntime.ApplyDefaultValues(
+            fixture.Form,
+            fixture.Values,
+            fixture.InitialRepeatCount);
+        values = MobileFormRuleRuntime.ApplyCalculatedValues(fixture.Form, values);
+        var formData = new FormData
+        {
+            LayerId = fixture.LayerId,
+            FeatureId = "inspection-rejected-media",
+            Values = values,
+            Media = []
+        };
+
+        var valid = await new FormService().ValidateFormAsync(formData, fixture.Form);
+
+        Assert.False(valid);
+        Assert.Contains("photos", formData.ValidationErrors.Keys);
+        Assert.Contains("required", formData.ValidationErrors["photos"], StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()
@@ -159,7 +184,10 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                     Fields =
                     [
                         Field("asset_id", "Asset ID", FormFieldType.Text, required: true),
-                        ChoiceField("status", "Status", required: true, choices: ["open", "closed"]),
+                        ChoiceField("status", "Status", required: true, choices: ["open", "closed"]) with
+                        {
+                            ChoiceSetId = "inspection-statuses"
+                        },
                         new FormField
                         {
                             FieldId = "display_name",
@@ -189,7 +217,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                             Validation = new FieldValidationRule
                             {
                                 MinMediaCount = 1
-                            }
+                            },
+                            MediaPolicy = PhotoMediaPolicy()
                         }
                     ]
                 }
@@ -222,6 +251,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                 "Conditional visibility",
                 "Calculated values",
                 "Media constraints",
+                "Media capture policy",
+                "Shared choice-set ids",
                 "Choice sets",
                 "Draft restore"
             ]);
@@ -242,13 +273,17 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                     Fields =
                     [
                         Field("asset_tag", "Asset tag", FormFieldType.Barcode, required: true),
-                        ChoiceField("asset_type", "Asset type", required: true, choices: ["pump", "valve", "meter"]),
+                        ChoiceField("asset_type", "Asset type", required: true, choices: ["pump", "valve", "meter"]) with
+                        {
+                            ChoiceSetId = "asset-types"
+                        },
                         new FormField
                         {
                             FieldId = "condition_codes",
                             Label = "Condition codes",
                             Type = FormFieldType.MultipleChoice,
                             Required = true,
+                            ChoiceSetId = "condition-codes",
                             Choices =
                             [
                                 new FieldChoice { Value = "working", Label = "Working" },
@@ -261,7 +296,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                             FieldId = "linked_work_order",
                             Label = "Linked work order",
                             Type = FormFieldType.RecordLink,
-                            Required = true
+                            Required = true,
+                            ReferencedFormId = "work_order"
                         },
                         new FormField
                         {
@@ -298,6 +334,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
             [
                 "Barcode capture",
                 "Record links",
+                "Record-link target metadata",
+                "Shared choice-set ids",
                 "Choice sets",
                 "Required rules",
                 "Draft restore"
@@ -318,7 +356,10 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                     Label = "Incident",
                     Fields =
                     [
-                        ChoiceField("severity", "Severity", required: true, choices: ["low", "medium", "high"]),
+                        ChoiceField("severity", "Severity", required: true, choices: ["low", "medium", "high"]) with
+                        {
+                            ChoiceSetId = "incident-severity"
+                        },
                         new FormField
                         {
                             FieldId = "description",
@@ -352,7 +393,12 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                             Label = "Signature",
                             Type = FormFieldType.Signature,
                             Required = true,
-                            Validation = new FieldValidationRule { MinMediaCount = 1 }
+                            Validation = new FieldValidationRule { MinMediaCount = 1 },
+                            MediaPolicy = new FieldMediaCapturePolicy
+                            {
+                                AllowedContentTypes = ["image/png"],
+                                CaptureLocation = true
+                            }
                         }
                     ]
                 }
@@ -387,6 +433,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                 "Conditional visibility",
                 "Location capture",
                 "Media constraints",
+                "Media capture policy",
+                "Shared choice-set ids",
                 "Draft restore"
             ]);
     }
@@ -400,7 +448,10 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
             Repeatable = true,
             Fields =
             [
-                ChoiceField("condition", "Condition", required: true, choices: ["ok", "damaged"]),
+                ChoiceField("condition", "Condition", required: true, choices: ["ok", "damaged"]) with
+                {
+                    ChoiceSetId = "observation-condition"
+                },
                 new FormField
                 {
                     FieldId = "quantity",
@@ -439,7 +490,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                     Label = "Photos",
                     Type = FormFieldType.Photo,
                     Required = true,
-                    Validation = new FieldValidationRule { MinMediaCount = 1 }
+                    Validation = new FieldValidationRule { MinMediaCount = 1 },
+                    MediaPolicy = PhotoMediaPolicy()
                 }
             ]
         };
@@ -507,6 +559,8 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
                 "Conditional visibility",
                 "Calculated values",
                 "Media constraints",
+                "Media capture policy",
+                "Shared choice-set ids",
                 "Draft restore"
             ]);
     }
@@ -550,6 +604,15 @@ public sealed class LocalFormParityGoldenFixtureTests : IDisposable
             ContentType = mediaType == FieldMediaType.Photo ? "image/jpeg" : "application/octet-stream",
             MediaType = mediaType,
             SizeBytes = 128
+        };
+
+    private static FieldMediaCapturePolicy PhotoMediaPolicy()
+        => new()
+        {
+            AllowedContentTypes = ["image/jpeg", "image/png"],
+            MaxAttachmentBytes = 10_485_760,
+            CaptureLocation = true,
+            RequiresFaceBlur = true
         };
 
     private sealed record GoldenFixture(
