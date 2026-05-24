@@ -15,6 +15,7 @@ public partial class FieldOperationsViewModel : BaseViewModel
     private readonly GeoPackageStorageService _storage;
     private readonly ILocalFieldAssignmentService _assignmentService;
     private readonly LocalFieldProjectPackageImportService _packageImportService;
+    private readonly LocalFieldProjectPackageDownloadService _packageDownloadService;
     private readonly ILocalRecordExportService _recordExportService;
     private readonly ILocalRecordExportShareService _exportShareService;
 
@@ -29,6 +30,12 @@ public partial class FieldOperationsViewModel : BaseViewModel
 
     [ObservableProperty]
     private string packageManifestPath = string.Empty;
+
+    [ObservableProperty]
+    private string packageManifestUrl = string.Empty;
+
+    [ObservableProperty]
+    private string packageDownloadRoot = string.Empty;
 
     [ObservableProperty]
     private string packageDestinationRoot = string.Empty;
@@ -67,6 +74,7 @@ public partial class FieldOperationsViewModel : BaseViewModel
         GeoPackageStorageService storage,
         ILocalFieldAssignmentService assignmentService,
         LocalFieldProjectPackageImportService packageImportService,
+        LocalFieldProjectPackageDownloadService packageDownloadService,
         ILocalRecordExportService recordExportService,
         ILocalRecordExportShareService exportShareService)
         : base(navigationService)
@@ -74,6 +82,7 @@ public partial class FieldOperationsViewModel : BaseViewModel
         _storage = storage;
         _assignmentService = assignmentService;
         _packageImportService = packageImportService;
+        _packageDownloadService = packageDownloadService;
         _recordExportService = recordExportService;
         _exportShareService = exportShareService;
         Title = "Work";
@@ -137,6 +146,57 @@ public partial class FieldOperationsViewModel : BaseViewModel
             LastImportSummary = result.Imported
                 ? $"Imported {result.ProjectId} with {result.ImportedFiles.Count} artifact(s), {result.CopiedBytes} byte(s)."
                 : $"Package import failed for {result.ProjectId ?? Path.GetFileName(manifestPath)}.";
+            StatusMessage = LastImportSummary;
+
+            await RefreshWorkspaceCoreAsync();
+        });
+    }
+
+    [RelayCommand]
+    private async Task DownloadPackage()
+    {
+        if (string.IsNullOrWhiteSpace(PackageManifestUrl))
+        {
+            await ShowError("Package Required", "Enter a field project package manifest URL before downloading.");
+            return;
+        }
+
+        if (!Uri.TryCreate(PackageManifestUrl.Trim(), UriKind.Absolute, out var manifestUri))
+        {
+            await ShowError("Package URL Invalid", "Enter an absolute field project package manifest URL.");
+            return;
+        }
+
+        var downloadRoot = string.IsNullOrWhiteSpace(PackageDownloadRoot)
+            ? Path.Combine(GetLocalAppDataDirectory(), "Honua", "field-package-downloads")
+            : PackageDownloadRoot.Trim();
+        var destinationRoot = string.IsNullOrWhiteSpace(PackageDestinationRoot)
+            ? Path.Combine(GetLocalAppDataDirectory(), "Honua", "field-packages")
+            : PackageDestinationRoot.Trim();
+
+        await ExecuteAsync(async () =>
+        {
+            var result = await _packageDownloadService.DownloadAndImportAsync(new LocalFieldProjectPackageDownloadRequest
+            {
+                ManifestUri = manifestUri,
+                DownloadRootDirectory = downloadRoot,
+                DestinationRootDirectory = destinationRoot,
+                OverwriteExisting = true
+            });
+
+            ImportDiagnostics.Clear();
+            foreach (var diagnostic in result.Diagnostics)
+            {
+                ImportDiagnostics.Add(diagnostic);
+            }
+
+            HasImportDiagnostics = ImportDiagnostics.Count > 0;
+            PackageManifestPath = result.DownloadedManifestPath ?? PackageManifestPath;
+            LastImportSummary = result.Imported
+                ? $"Downloaded and imported {result.ProjectId} with {result.DownloadedFiles.Count} artifact(s), {result.DownloadedBytes} byte(s)."
+                : result.Downloaded
+                    ? $"Package downloaded but import failed for {result.ProjectId ?? manifestUri.Host}."
+                    : $"Package download failed for {result.ProjectId ?? manifestUri.Host}.";
             StatusMessage = LastImportSummary;
 
             await RefreshWorkspaceCoreAsync();
@@ -353,5 +413,13 @@ public partial class FieldOperationsViewModel : BaseViewModel
         return layer.Form?.Metadata.TryGetValue("honua:bindingId", out var bindingId) == true
             ? bindingId
             : null;
+    }
+
+    private static string GetLocalAppDataDirectory()
+    {
+        var directory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return string.IsNullOrWhiteSpace(directory)
+            ? Environment.CurrentDirectory
+            : directory;
     }
 }

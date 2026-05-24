@@ -47,6 +47,38 @@ public sealed class LocalFieldProjectPackageImportedFile
     public string? Sha256 { get; init; }
 }
 
+public sealed class LocalFieldProjectPackageDownloadRequest
+{
+    public required Uri ManifestUri { get; init; }
+    public required string DownloadRootDirectory { get; init; }
+    public required string DestinationRootDirectory { get; init; }
+    public Uri? ArtifactBaseUri { get; init; }
+    public bool OverwriteExisting { get; init; }
+    public bool CleanupPartialDownloadOnFailure { get; init; } = true;
+}
+
+public sealed class LocalFieldProjectPackageDownloadResult
+{
+    public string? ProjectId { get; init; }
+    public bool Downloaded { get; init; }
+    public bool Imported => ImportResult?.Imported == true;
+    public string? DownloadedManifestPath { get; init; }
+    public string? DownloadDirectory { get; init; }
+    public LocalFieldProjectPackageImportResult? ImportResult { get; init; }
+    public IReadOnlyList<LocalFieldProjectPackageDiagnostic> Diagnostics { get; init; } = [];
+    public IReadOnlyList<LocalFieldProjectPackageDownloadedFile> DownloadedFiles { get; init; } = [];
+    public long DownloadedBytes { get; init; }
+}
+
+public sealed class LocalFieldProjectPackageDownloadedFile
+{
+    public required string PackageId { get; init; }
+    public required Uri SourceUri { get; init; }
+    public required string RelativePath { get; init; }
+    public required string LocalPath { get; init; }
+    public long SizeBytes { get; init; }
+}
+
 public sealed class LocalFieldRecordLifecycleTransitionResult
 {
     public bool Succeeded { get; init; }

@@ -54,14 +54,25 @@
 
                 <Frame Style="{StaticResource CardFrameStyle}">
                     <VerticalStackLayout Spacing="10">
-                        <Label Text="Import Package" Style="{StaticResource SectionHeaderStyle}" />
+                        <Label Text="Package Intake" Style="{StaticResource SectionHeaderStyle}" />
+                        <Entry Text="{Binding PackageManifestUrl}"
+                               Placeholder="field project package manifest URL" />
                         <Entry Text="{Binding PackageManifestPath}"
                                Placeholder="field-project-package.json path" />
+                        <Entry Text="{Binding PackageDownloadRoot}"
+                               Placeholder="download cache folder" />
                         <Entry Text="{Binding PackageDestinationRoot}"
                                Placeholder="install destination folder" />
-                        <Button Text="Import"
-                                Style="{StaticResource BaseButtonStyle}"
-                                Command="{Binding ImportPackageCommand}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <Button Grid.Column="0"
+                                    Text="Download"
+                                    Style="{StaticResource BaseButtonStyle}"
+                                    Command="{Binding DownloadPackageCommand}" />
+                            <Button Grid.Column="1"
+                                    Text="Import"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ImportPackageCommand}" />
+                        </Grid>
                         <Label Text="{Binding LastImportSummary}"
                                FontSize="13"
                                TextColor="{StaticResource Gray600}" />
