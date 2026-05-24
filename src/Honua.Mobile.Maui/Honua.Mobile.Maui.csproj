@@ -11,7 +11,6 @@
     <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Geometry" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Offline" Version="$(HonuaSdkDotNetTrainVersion)" />
-    <PackageReference Include="Honua.Sdk.Offline.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.7" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.60" />

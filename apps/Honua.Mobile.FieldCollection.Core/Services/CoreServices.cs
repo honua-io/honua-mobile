@@ -806,9 +806,36 @@ public class AttachmentService : IAttachmentService
             return AttachmentPayloadKind.Signature;
         }
 
-        return contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-            ? AttachmentPayloadKind.Photo
-            : AttachmentPayloadKind.File;
+        if (fileName.Contains("sketch", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("markup", StringComparison.OrdinalIgnoreCase) ||
+            contentType.Equals("application/vnd.honua.sketch+json", StringComparison.OrdinalIgnoreCase))
+        {
+            return AttachmentPayloadKind.Sketch;
+        }
+
+        if (fileName.Contains("barcode", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("qr", StringComparison.OrdinalIgnoreCase) ||
+            contentType.Equals("application/vnd.honua.barcode+json", StringComparison.OrdinalIgnoreCase))
+        {
+            return AttachmentPayloadKind.Barcode;
+        }
+
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return AttachmentPayloadKind.Video;
+        }
+
+        if (contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return AttachmentPayloadKind.Audio;
+        }
+
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return AttachmentPayloadKind.Photo;
+        }
+
+        return AttachmentPayloadKind.File;
     }
 
     private static void DeleteFileIfExists(string? path)

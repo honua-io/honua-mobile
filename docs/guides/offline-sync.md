@@ -8,7 +8,7 @@ The Honua Mobile SDK provides comprehensive offline synchronization capabilities
 
 The reusable offline package, journal, checkpoint, conflict, and sync engine contracts are supplied by `honua-sdk-dotnet`:
 
-- `Honua.Sdk.Offline.Abstractions`
+- `Honua.Sdk.Abstractions` (`Honua.Sdk.Offline.Abstractions` namespace)
 - `Honua.Sdk.Offline`
 
 This mobile repo supplies the native runtime layer around those SDK contracts: GeoPackage/SQLite adapters, local file placement, MAUI dependency injection, app lifecycle integration, reachability checks, background scheduling, permissions, and field workflow UX.

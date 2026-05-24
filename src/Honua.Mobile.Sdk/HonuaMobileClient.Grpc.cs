@@ -25,7 +25,7 @@ public sealed partial class HonuaMobileClient
 
         return new HonuaGrpcClientOptions
         {
-            Address = address.ToString(),
+            BaseAddress = address,
             ApiKey = _options.ApiKey,
             ApiKeyProvider = BuildGrpcApiKeyProvider(),
             BearerToken = _options.BearerToken,

@@ -69,9 +69,11 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         [
             new FieldProjectInfo
             {
+                ProjectId = selectedServiceId,
                 ServiceId = selectedServiceId,
                 Name = selectedServiceId,
                 Description = "Configured Honua feature service",
+                CatalogState = FieldProjectCatalogState.RemoteOnly,
                 IsAvailableOffline = false
             }
         ];
@@ -93,7 +95,12 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
             throw new ArgumentException("Service ID is required.", nameof(serviceId));
         }
 
-        await _settingsService.SetSettingAsync(SelectedServiceIdKey, serviceId.Trim()).ConfigureAwait(false);
+        var selectedServiceId = serviceId.Trim();
+        await _settingsService.SetSettingAsync(SelectedServiceIdKey, selectedServiceId).ConfigureAwait(false);
+        if (await ResolveCatalogProjectIdAsync(selectedServiceId, cancellationToken).ConfigureAwait(false) is { } projectId)
+        {
+            await _storageService.MarkProjectCatalogEntryOpenedAsync(projectId, DateTime.UtcNow).ConfigureAwait(false);
+        }
     }
 
     public async Task<IReadOnlyList<LayerInfo>> GetLayersAsync(
@@ -129,21 +136,37 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         cancellationToken.ThrowIfCancellationRequested();
 
         var layers = await _storageService.GetLayersAsync().ConfigureAwait(false);
-        return layers
+        var catalogEntries = await _storageService.GetProjectCatalogEntriesAsync().ConfigureAwait(false);
+        var catalogProjects = catalogEntries
+            .Select(entry => MapCatalogProject(entry, layers))
+            .ToList();
+        var catalogServiceIds = catalogEntries
+            .Select(entry => string.IsNullOrWhiteSpace(entry.ServiceId) ? entry.ProjectId : entry.ServiceId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var layerProjects = layers
+            .Where(layer => !catalogServiceIds.Contains(string.IsNullOrWhiteSpace(layer.ServiceId) ? DefaultServiceId : layer.ServiceId))
             .GroupBy(layer => string.IsNullOrWhiteSpace(layer.ServiceId) ? DefaultServiceId : layer.ServiceId, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var projectLayers = group.ToList();
                 return new FieldProjectInfo
                 {
+                    ProjectId = group.Key,
                     ServiceId = group.Key,
                     Name = group.Key,
                     Description = "Cached Honua feature service",
                     LayerCount = projectLayers.Count,
                     IsAvailableOffline = true,
+                    CatalogState = FieldProjectCatalogState.Installed,
+                    ValidationStatus = FieldProjectValidationStatus.Unknown,
                     Layers = projectLayers
                 };
             })
+            .ToList();
+
+        return catalogProjects
+            .Concat(layerProjects)
             .OrderBy(project => project.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -196,9 +219,11 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
 
             projects.Add(new FieldProjectInfo
             {
+                ProjectId = serviceId,
                 ServiceId = serviceId,
                 Name = serviceId,
                 Description = ReadString(service, "description") ?? "Honua feature service",
+                CatalogState = FieldProjectCatalogState.RemoteOnly,
                 IsAvailableOffline = false
             });
         }
@@ -254,6 +279,16 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
         return string.IsNullOrWhiteSpace(selectedServiceId) ? DefaultServiceId : selectedServiceId.Trim();
     }
 
+    private async Task<string?> ResolveCatalogProjectIdAsync(string selectedServiceId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var catalogEntries = await _storageService.GetProjectCatalogEntriesAsync(includeArchived: true).ConfigureAwait(false);
+        return catalogEntries.FirstOrDefault(entry =>
+            string.Equals(entry.ProjectId, selectedServiceId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(entry.ServiceId, selectedServiceId, StringComparison.OrdinalIgnoreCase))?.ProjectId;
+    }
+
     private bool CanLoadRemoteMetadata()
     {
         return _authenticationService.IsAuthenticated &&
@@ -302,9 +337,72 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
                 project.IsAvailableOffline = true;
                 project.LayerCount = cachedProject.LayerCount;
                 project.Layers = cachedProject.Layers;
+                ApplyCatalogState(project, cachedProject);
                 return project;
             })
             .ToList();
+    }
+
+    private static FieldProjectInfo MapCatalogProject(
+        FieldProjectCatalogEntry entry,
+        IReadOnlyList<LayerInfo> layers)
+    {
+        var serviceId = string.IsNullOrWhiteSpace(entry.ServiceId) ? entry.ProjectId : entry.ServiceId;
+        var projectLayers = layers
+            .Where(layer => string.Equals(layer.ServiceId, serviceId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return new FieldProjectInfo
+        {
+            ProjectId = entry.ProjectId,
+            ServiceId = serviceId,
+            PackageId = entry.PackageId,
+            Version = entry.Version,
+            Name = string.IsNullOrWhiteSpace(entry.Name) ? entry.ProjectId : entry.Name,
+            Description = entry.Description,
+            LayerCount = entry.LayerCount > 0 ? entry.LayerCount : projectLayers.Count,
+            IsAvailableOffline = entry.State is not FieldProjectCatalogState.RemoteOnly and not FieldProjectCatalogState.Invalid,
+            CatalogState = entry.State,
+            ValidationStatus = entry.ValidationStatus,
+            ValidationIssueCount = entry.ValidationIssueCount,
+            PackageSizeBytes = entry.PackageSizeBytes,
+            MediaSizeBytes = entry.MediaSizeBytes,
+            LocalStoragePath = entry.LocalStoragePath,
+            ManifestPath = entry.ManifestPath,
+            ImportSource = entry.ImportSource,
+            PackageDigest = entry.PackageDigest,
+            ImportedAtUtc = entry.ImportedAtUtc,
+            UpdatedAtUtc = entry.UpdatedAtUtc,
+            LastOpenedAtUtc = entry.LastOpenedAtUtc,
+            LastValidationAtUtc = entry.LastValidationAtUtc,
+            LastSimulationRunAtUtc = entry.LastSimulationRunAtUtc,
+            LastExportAtUtc = entry.LastExportAtUtc,
+            Layers = projectLayers
+        };
+    }
+
+    private static void ApplyCatalogState(FieldProjectInfo project, FieldProjectInfo cachedProject)
+    {
+        project.ProjectId = string.IsNullOrWhiteSpace(cachedProject.ProjectId)
+            ? cachedProject.ServiceId
+            : cachedProject.ProjectId;
+        project.PackageId = cachedProject.PackageId;
+        project.Version = cachedProject.Version;
+        project.CatalogState = cachedProject.CatalogState;
+        project.ValidationStatus = cachedProject.ValidationStatus;
+        project.ValidationIssueCount = cachedProject.ValidationIssueCount;
+        project.PackageSizeBytes = cachedProject.PackageSizeBytes;
+        project.MediaSizeBytes = cachedProject.MediaSizeBytes;
+        project.LocalStoragePath = cachedProject.LocalStoragePath;
+        project.ManifestPath = cachedProject.ManifestPath;
+        project.ImportSource = cachedProject.ImportSource;
+        project.PackageDigest = cachedProject.PackageDigest;
+        project.ImportedAtUtc = cachedProject.ImportedAtUtc;
+        project.UpdatedAtUtc = cachedProject.UpdatedAtUtc;
+        project.LastOpenedAtUtc = cachedProject.LastOpenedAtUtc;
+        project.LastValidationAtUtc = cachedProject.LastValidationAtUtc;
+        project.LastSimulationRunAtUtc = cachedProject.LastSimulationRunAtUtc;
+        project.LastExportAtUtc = cachedProject.LastExportAtUtc;
     }
 
     private static bool IsFeatureServerService(JsonElement service)

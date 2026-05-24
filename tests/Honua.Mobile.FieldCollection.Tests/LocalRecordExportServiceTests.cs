@@ -23,10 +23,28 @@ public sealed class LocalRecordExportServiceTests
         using var storage = new GeoPackageStorageService(databasePath);
         var layer = CreateLayer();
         await storage.CreateLayerAsync(layer);
+        await storage.UpsertProjectCatalogEntryAsync(new FieldProjectCatalogEntry
+        {
+            ProjectId = "field-support",
+            ServiceId = "field-support",
+            PackageId = "field-package-001",
+            Name = "Field Support",
+            Description = "Local support package",
+            State = FieldProjectCatalogState.Installed,
+            ValidationStatus = FieldProjectValidationStatus.Valid,
+            LayerCount = 1,
+            LocalStoragePath = databasePath,
+            ManifestPath = Path.Combine(exportRoot, "imports", "manifest.json"),
+            ImportSource = Path.Combine(attachmentRoot, "incoming", "field-package.zip"),
+            PackageDigest = "sha256:fixture",
+            ImportedAtUtc = DateTime.UtcNow.AddHours(-2)
+        });
         await storage.ApplyRemoteFeatureAsync(CreateFeature("asset-synced", "synced", pendingSecret: "server-token"));
         await storage.StoreFeatureAsync(CreateFeature("asset-local", "pending", pendingSecret: "dont-export"));
 
         var localAttachmentPath = Path.Combine(attachmentRoot, "photos", "asset-local.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(localAttachmentPath)!);
+        await File.WriteAllTextAsync(localAttachmentPath, "fake image");
         await storage.StoreAttachmentMetadataAsync(new AttachmentInfo
         {
             Id = "attachment-1",
@@ -51,9 +69,12 @@ public sealed class LocalRecordExportServiceTests
 
         Assert.Equal(2, result.RecordCount);
         Assert.Equal(1, result.AttachmentCount);
+        Assert.Equal(1, result.MediaFileCount);
         Assert.True(File.Exists(result.CsvPath));
         Assert.True(File.Exists(result.GeoJsonPath));
         Assert.True(File.Exists(result.AttachmentManifestPath));
+        Assert.True(File.Exists(result.EvidenceManifestPath));
+        Assert.True(File.Exists(Path.Combine(result.ExportDirectory, "media", "0001_attachment-1.jpg")));
 
         var csv = await File.ReadAllTextAsync(result.CsvPath);
         Assert.Contains("pending_sync", csv);
@@ -76,15 +97,43 @@ public sealed class LocalRecordExportServiceTests
         Assert.Equal("pending", properties.GetProperty("attributes").GetProperty("status").GetString());
         Assert.Equal("[redacted]", properties.GetProperty("attributes").GetProperty("accessToken").GetString());
 
-        var manifest = await File.ReadAllTextAsync(result.AttachmentManifestPath);
-        Assert.Contains("\"localPathsRedacted\": true", manifest);
-        Assert.Contains("asset-local.jpg", manifest);
-        Assert.Contains("Bearer [redacted]", manifest);
-        Assert.Contains("https://example.test/thumbs/asset-local.jpg", manifest);
-        Assert.DoesNotContain(attachmentRoot, manifest);
-        Assert.DoesNotContain(localAttachmentPath, manifest);
-        Assert.DoesNotContain("abc.def.ghi", manifest);
-        Assert.DoesNotContain("token=secret", manifest);
+        var manifestJson = await File.ReadAllTextAsync(result.AttachmentManifestPath);
+        Assert.Contains("\"localPathsRedacted\": true", manifestJson);
+        Assert.Contains("asset-local.jpg", manifestJson);
+        Assert.Contains("Bearer [redacted]", manifestJson);
+        Assert.Contains("https://example.test/thumbs/asset-local.jpg", manifestJson);
+        Assert.DoesNotContain(attachmentRoot, manifestJson);
+        Assert.DoesNotContain(localAttachmentPath, manifestJson);
+        Assert.DoesNotContain("abc.def.ghi", manifestJson);
+        Assert.DoesNotContain("token=secret", manifestJson);
+
+        using var manifest = JsonDocument.Parse(manifestJson);
+        Assert.True(manifest.RootElement.GetProperty("contentIncluded").GetBoolean());
+        Assert.Equal(1, manifest.RootElement.GetProperty("copiedFileCount").GetInt32());
+        var exportedAttachment = manifest.RootElement.GetProperty("attachments").EnumerateArray().Single();
+        Assert.True(exportedAttachment.GetProperty("hasLocalContent").GetBoolean());
+        Assert.Equal("media/0001_attachment-1.jpg", exportedAttachment.GetProperty("exportedRelativePath").GetString());
+
+        var evidenceJson = await File.ReadAllTextAsync(result.EvidenceManifestPath);
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        Assert.Equal("honua.local-export-evidence.v1", evidence.RootElement.GetProperty("formatVersion").GetString());
+        Assert.True(evidence.RootElement.GetProperty("noCloud").GetBoolean());
+        Assert.False(evidence.RootElement.GetProperty("cloudUploadIncluded").GetBoolean());
+        Assert.Equal("records.csv", evidence.RootElement.GetProperty("files").GetProperty("recordsCsv").GetString());
+        Assert.Equal("media", evidence.RootElement.GetProperty("files").GetProperty("mediaDirectory").GetString());
+        Assert.Equal(2, evidence.RootElement.GetProperty("counts").GetProperty("records").GetInt32());
+        Assert.Equal(1, evidence.RootElement.GetProperty("counts").GetProperty("attachments").GetInt32());
+        Assert.Equal(1, evidence.RootElement.GetProperty("counts").GetProperty("copiedMediaFiles").GetInt32());
+        Assert.Equal("not-run", evidence.RootElement.GetProperty("validationSummary").GetProperty("status").GetString());
+        Assert.Equal("field-support", evidence.RootElement.GetProperty("projectCatalog").GetProperty("matchedProjectId").GetString());
+        Assert.DoesNotContain(attachmentRoot, evidenceJson);
+        Assert.DoesNotContain(localAttachmentPath, evidenceJson);
+        Assert.DoesNotContain(databasePath, evidenceJson);
+
+        var catalogEntry = await storage.GetProjectCatalogEntryAsync("field-support");
+        Assert.NotNull(catalogEntry);
+        Assert.NotNull(catalogEntry.LastExportAtUtc);
+        Assert.Equal(result.ExportedAtUtc, catalogEntry.LastExportAtUtc.Value, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -101,6 +150,8 @@ public sealed class LocalRecordExportServiceTests
 
         Assert.True(result.IsEmpty);
         Assert.Equal(0, result.AttachmentCount);
+        Assert.Equal(0, result.MediaFileCount);
+        Assert.True(File.Exists(result.EvidenceManifestPath));
 
         var csv = await File.ReadAllLinesAsync(result.CsvPath);
         Assert.Single(csv);
@@ -113,6 +164,11 @@ public sealed class LocalRecordExportServiceTests
         using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(result.AttachmentManifestPath));
         Assert.Equal(0, manifest.RootElement.GetProperty("recordCount").GetInt32());
         Assert.Equal(0, manifest.RootElement.GetProperty("attachmentCount").GetInt32());
+
+        using var evidence = JsonDocument.Parse(await File.ReadAllTextAsync(result.EvidenceManifestPath));
+        Assert.Equal(0, evidence.RootElement.GetProperty("counts").GetProperty("records").GetInt32());
+        Assert.Equal(0, evidence.RootElement.GetProperty("counts").GetProperty("copiedMediaFiles").GetInt32());
+        Assert.Equal(JsonValueKind.Null, evidence.RootElement.GetProperty("files").GetProperty("mediaDirectory").ValueKind);
     }
 
     [Fact]
@@ -137,6 +193,10 @@ public sealed class LocalRecordExportServiceTests
         Assert.True(statusIndex >= 0);
         Assert.Equal("synced", rows[1].Split(',')[statusIndex]);
         Assert.Equal("pending", rows[2].Split(',')[statusIndex]);
+        foreach (var row in rows.Skip(1))
+        {
+            Assert.Equal(headers.Length, row.Split(',').Length);
+        }
     }
 
     [Fact]
@@ -161,6 +221,7 @@ public sealed class LocalRecordExportServiceTests
         Assert.Equal(301, File.ReadLines(result.CsvPath).Count());
         Assert.True(new FileInfo(result.GeoJsonPath).Length > 0);
         Assert.True(new FileInfo(result.AttachmentManifestPath).Length > 0);
+        Assert.True(new FileInfo(result.EvidenceManifestPath).Length > 0);
     }
 
     private static LayerInfo CreateLayer()

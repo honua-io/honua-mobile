@@ -632,10 +632,98 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Equal(1, diagnostics.Operations.ConflictCount);
     }
 
+    [Fact]
+    public async Task LocalFieldConflictReplayHarness_WritesRedactedEvidenceAndAppliesResolution()
+    {
+        var databasePath = CreateDatabasePath();
+        var evidenceDirectory = Path.Combine(Path.GetTempPath(), $"honua-conflict-replay-{Guid.NewGuid():N}");
+        await using var cleanup = new DatabaseCleanup(databasePath, evidenceDirectory);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var plan = new LocalFieldConflictReplayPlan
+        {
+            RunId = "local-conflict-replay-test",
+            Layer = CreateLayer(),
+            FeatureId = "asset-1",
+            LocalAttributes = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "local",
+                ["apiKey"] = "secret-local"
+            },
+            ServerAttributes = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "server",
+                ["authorization"] = "Bearer secret-server"
+            },
+            Resolution = ConflictResolution.AcceptServer
+        };
+        var peer = new LocalReplayFieldSyncPeer([LocalFieldConflictReplayHarness.CreateServerUpdate(plan)]);
+        using var sync = CreateSyncService(storage, uploader: peer, puller: peer, attachmentSynchronizer: peer);
+        var harness = new LocalFieldConflictReplayHarness(storage, sync, evidenceDirectory);
+
+        var result = await harness.RunAsync(plan);
+
+        Assert.True(result.PullResult.IsSuccess);
+        Assert.NotNull(result.Conflict);
+        Assert.True(result.ResolutionApplied);
+        Assert.NotNull(result.FinalFeature);
+        Assert.Equal("server", result.FinalFeature.Attributes["name"]?.ToString());
+        Assert.Equal(0, result.Diagnostics.Operations.ConflictCount);
+        Assert.True(File.Exists(result.EvidencePath));
+
+        var evidenceJson = await File.ReadAllTextAsync(result.EvidencePath);
+        using var evidence = JsonDocument.Parse(evidenceJson);
+        Assert.Equal(
+            "honua.mobile.local-conflict-replay.evidence.v1",
+            evidence.RootElement.GetProperty("schemaVersion").GetString());
+        Assert.True(evidence.RootElement.GetProperty("noCloud").GetBoolean());
+        Assert.False(evidence.RootElement.GetProperty("cloudUploadIncluded").GetBoolean());
+        Assert.Equal("AcceptServer", evidence.RootElement.GetProperty("selectedResolution").GetString());
+        Assert.True(evidence.RootElement.GetProperty("resolutionApplied").GetBoolean());
+        Assert.Equal("UpdateUpdate", evidence.RootElement.GetProperty("conflict").GetProperty("type").GetString());
+        Assert.True(evidence.RootElement.GetProperty("finalState").GetProperty("featureExists").GetBoolean());
+        Assert.Equal(4, evidence.RootElement.GetProperty("events").GetArrayLength());
+        Assert.DoesNotContain("secret-local", evidenceJson);
+        Assert.DoesNotContain("secret-server", evidenceJson);
+    }
+
+    [Fact]
+    public async Task LocalReplayFieldSyncPeer_WhenAttachmentUploadFails_ReturnsRetryableFailure()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreAttachmentMetadataAsync(new AttachmentInfo
+        {
+            Id = "attachment-retry-1",
+            LayerId = 1,
+            FeatureId = "asset-1",
+            FileName = "retry-photo.jpg",
+            ContentType = "image/jpeg",
+            PayloadKind = AttachmentPayloadKind.Photo,
+            SizeBytes = 128,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTime.UtcNow,
+            SyncStatus = AttachmentSyncStatus.PendingUpload
+        });
+        var peer = new LocalReplayFieldSyncPeer
+        {
+            PushAttachmentResult = new AttachmentSyncResult { Failed = 1 }
+        };
+        using var sync = CreateSyncService(storage, uploader: peer, puller: peer, attachmentSynchronizer: peer);
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("failed to upload", result.ErrorMessage, StringComparison.Ordinal);
+        var diagnostics = await storage.GetOfflineCacheDiagnosticsAsync();
+        Assert.Equal(1, diagnostics.Operations.AttachmentPendingCount);
+    }
+
     private static GeoPackageSyncService CreateSyncService(
         GeoPackageStorageService storage,
         IFieldCollectionChangeUploader? uploader = null,
         IFieldCollectionChangePuller? puller = null,
+        IFieldCollectionAttachmentSynchronizer? attachmentSynchronizer = null,
         IAuthenticationService? authService = null,
         IMobileExceptionReporter? exceptionReporter = null)
     {
@@ -645,6 +733,7 @@ public sealed class GeoPackageSyncServiceTests
             new TestConnectivityService(),
             uploader ?? new FixedResultUploader(true),
             puller ?? new FixedPuller([]),
+            attachmentSynchronizer,
             exceptionReporter: exceptionReporter);
     }
 
@@ -924,18 +1013,36 @@ public sealed class GeoPackageSyncServiceTests
 
     private sealed class DatabaseCleanup : IAsyncDisposable
     {
-        private readonly string _databasePath;
+        private readonly string[] _paths;
 
-        public DatabaseCleanup(string databasePath)
+        public DatabaseCleanup(params string[] paths)
         {
-            _databasePath = databasePath;
+            _paths = paths;
         }
 
         public ValueTask DisposeAsync()
         {
-            if (File.Exists(_databasePath))
+            foreach (var path in _paths)
             {
-                File.Delete(_databasePath);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                if (File.Exists($"{path}-wal"))
+                {
+                    File.Delete($"{path}-wal");
+                }
+
+                if (File.Exists($"{path}-shm"))
+                {
+                    File.Delete($"{path}-shm");
+                }
+
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
             }
 
             return ValueTask.CompletedTask;

@@ -55,6 +55,45 @@ public sealed class FieldCollectionAttachmentServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("walkthrough.mp4", "video/mp4", AttachmentPayloadKind.Video)]
+    [InlineData("voice-note.m4a", "audio/mp4", AttachmentPayloadKind.Audio)]
+    [InlineData("damage-sketch.json", "application/vnd.honua.sketch+json", AttachmentPayloadKind.Sketch)]
+    [InlineData("asset-barcode.json", "application/vnd.honua.barcode+json", AttachmentPayloadKind.Barcode)]
+    [InlineData("signature.svg", "image/svg+xml", AttachmentPayloadKind.Signature)]
+    public async Task SaveAttachmentAsync_InfersAndPersistsLocalMediaParityKinds(
+        string fileName,
+        string contentType,
+        AttachmentPayloadKind expectedKind)
+    {
+        var databasePath = CreateDatabasePath();
+        var attachmentRoot = CreateAttachmentRoot();
+        await using var cleanup = new FileCleanup(databasePath, attachmentRoot);
+
+        using (var storage = new GeoPackageStorageService(databasePath))
+        {
+            var service = new AttachmentService(storage, attachmentRoot);
+            await using var content = new MemoryStream(Encoding.UTF8.GetBytes(fileName));
+
+            await service.SaveAttachmentAsync(
+                layerId: 1,
+                featureId: "asset-1",
+                content,
+                fileName,
+                contentType);
+        }
+
+        using (var restartedStorage = new GeoPackageStorageService(databasePath))
+        {
+            var restartedService = new AttachmentService(restartedStorage, attachmentRoot);
+            var attachment = Assert.Single(await restartedService.GetAttachmentsAsync("asset-1"));
+
+            Assert.Equal(expectedKind, attachment.PayloadKind);
+            Assert.Equal(contentType, attachment.ContentType);
+            Assert.True(File.Exists(attachment.LocalPath));
+        }
+    }
+
     [Fact]
     public async Task SaveAttachmentAsync_PersistsPhotoCaptureLocationMetadata()
     {

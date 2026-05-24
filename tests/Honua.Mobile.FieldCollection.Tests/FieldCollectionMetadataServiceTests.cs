@@ -268,6 +268,135 @@ public sealed class FieldCollectionMetadataServiceTests
             layer.GeometryType == FeatureSpatialGeometryType.Polygon);
     }
 
+    [Fact]
+    public async Task ProjectCatalogLifecycle_PersistsStateAcrossRestart()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-project-catalog-{Guid.NewGuid():N}.gpkg");
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        var importedAt = new DateTime(2026, 5, 23, 8, 0, 0, DateTimeKind.Utc);
+        var openedAt = importedAt.AddHours(1);
+        var validatedAt = importedAt.AddHours(2);
+        var simulatedAt = importedAt.AddHours(3);
+        var exportedAt = importedAt.AddHours(4);
+
+        using (var storage = new GeoPackageStorageService(databasePath))
+        {
+            await storage.UpsertProjectCatalogEntryAsync(new FieldProjectCatalogEntry
+            {
+                ProjectId = "local-inspection-demo",
+                ServiceId = "local-inspection-demo",
+                PackageId = "pkg-assets",
+                Version = "2026.05",
+                Name = "Local Inspection Demo",
+                Description = "Imported from local package",
+                State = FieldProjectCatalogState.Installed,
+                ValidationStatus = FieldProjectValidationStatus.Valid,
+                LayerCount = 2,
+                PackageSizeBytes = 4096,
+                MediaSizeBytes = 1024,
+                LocalStoragePath = "/device/projects/local-inspection-demo",
+                ManifestPath = "/device/projects/local-inspection-demo/field-project.json",
+                ImportSource = "usb",
+                PackageDigest = "sha256:abc123",
+                ImportedAtUtc = importedAt
+            });
+
+            await storage.UpdateProjectCatalogStateAsync("local-inspection-demo", FieldProjectCatalogState.Stale, openedAt);
+            await storage.MarkProjectCatalogEntryOpenedAsync("local-inspection-demo", openedAt);
+            await storage.MarkProjectCatalogValidationAsync("local-inspection-demo", FieldProjectValidationStatus.Warning, 2, validatedAt);
+            await storage.MarkProjectCatalogSimulationRunAsync("local-inspection-demo", simulatedAt);
+            await storage.MarkProjectCatalogExportedAsync("local-inspection-demo", exportedAt);
+        }
+
+        using (var restartedStorage = new GeoPackageStorageService(databasePath))
+        {
+            var entry = await restartedStorage.GetProjectCatalogEntryAsync("local-inspection-demo");
+
+            Assert.NotNull(entry);
+            Assert.Equal("pkg-assets", entry.PackageId);
+            Assert.Equal("2026.05", entry.Version);
+            Assert.Equal(FieldProjectCatalogState.Stale, entry.State);
+            Assert.Equal(FieldProjectValidationStatus.Warning, entry.ValidationStatus);
+            Assert.Equal(2, entry.ValidationIssueCount);
+            Assert.Equal(4096, entry.PackageSizeBytes);
+            Assert.Equal(1024, entry.MediaSizeBytes);
+            Assert.Equal(openedAt, entry.LastOpenedAtUtc);
+            Assert.Equal(validatedAt, entry.LastValidationAtUtc);
+            Assert.Equal(simulatedAt, entry.LastSimulationRunAtUtc);
+            Assert.Equal(exportedAt, entry.LastExportAtUtc);
+
+            await restartedStorage.UpdateProjectCatalogStateAsync("local-inspection-demo", FieldProjectCatalogState.Archived);
+
+            Assert.Empty(await restartedStorage.GetProjectCatalogEntriesAsync());
+            Assert.Single(await restartedStorage.GetProjectCatalogEntriesAsync(includeArchived: true));
+            Assert.True(await restartedStorage.DeleteProjectCatalogEntryAsync("local-inspection-demo"));
+            Assert.Null(await restartedStorage.GetProjectCatalogEntryAsync("local-inspection-demo"));
+        }
+    }
+
+    [Fact]
+    public async Task GetProjectsAsync_WithLocalCatalog_ExposesNoCloudCatalogState()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-field-project-catalog-metadata-{Guid.NewGuid():N}.gpkg");
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        await storage.UpsertProjectCatalogEntryAsync(new FieldProjectCatalogEntry
+        {
+            ProjectId = "local-inspection-demo",
+            ServiceId = "local-inspection-demo",
+            PackageId = "pkg-assets",
+            Name = "Local Inspection Demo",
+            Description = "No-cloud package",
+            State = FieldProjectCatalogState.Installed,
+            ValidationStatus = FieldProjectValidationStatus.Valid,
+            LayerCount = 1,
+            PackageSizeBytes = 8192,
+            MediaSizeBytes = 2048,
+            PackageDigest = "sha256:def456"
+        });
+        await storage.CreateLayerAsync(new LayerInfo
+        {
+            Id = 7,
+            ServiceId = "local-inspection-demo",
+            SourceId = "local-inspection-demo/FeatureServer/7",
+            Name = "Inspection Assets",
+            GeometryType = FeatureSpatialGeometryType.Point
+        });
+
+        using var http = new HttpClient(new StubHttpMessageHandler(_ =>
+            throw new InvalidOperationException("No-cloud catalog must not call the network.")));
+        var service = CreateService(
+            storage,
+            http,
+            new TestAuthenticationService
+            {
+                IsAuthenticated = false,
+                ServerUrl = null,
+                ApiKey = null
+            });
+
+        var projects = await service.GetProjectsAsync();
+
+        var project = Assert.Single(projects);
+        Assert.Equal("local-inspection-demo", project.ProjectId);
+        Assert.Equal("local-inspection-demo", project.ServiceId);
+        Assert.Equal("pkg-assets", project.PackageId);
+        Assert.Equal("Local Inspection Demo", project.Name);
+        Assert.True(project.IsAvailableOffline);
+        Assert.Equal(FieldProjectCatalogState.Installed, project.CatalogState);
+        Assert.Equal(FieldProjectValidationStatus.Valid, project.ValidationStatus);
+        Assert.Equal(8192, project.PackageSizeBytes);
+        Assert.Equal(2048, project.MediaSizeBytes);
+        Assert.Equal("sha256:def456", project.PackageDigest);
+        Assert.Single(project.Layers);
+
+        await service.SelectProjectAsync("local-inspection-demo");
+        var openedEntry = await storage.GetProjectCatalogEntryAsync("local-inspection-demo");
+
+        Assert.NotNull(openedEntry?.LastOpenedAtUtc);
+    }
+
     private static FieldCollectionMetadataService CreateService(
         GeoPackageStorageService storage,
         HttpClient http,

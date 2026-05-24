@@ -249,7 +249,11 @@ public enum AttachmentPayloadKind
 {
     File,
     Photo,
-    Signature
+    Signature,
+    Video,
+    Audio,
+    Sketch,
+    Barcode
 }
 
 public class LayerInfo
@@ -269,12 +273,74 @@ public class LayerInfo
 
 public class FieldProjectInfo
 {
+    public string ProjectId { get; set; } = string.Empty;
     public string ServiceId { get; set; } = string.Empty;
+    public string? PackageId { get; set; }
+    public string? Version { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int LayerCount { get; set; }
     public bool IsAvailableOffline { get; set; }
+    public FieldProjectCatalogState CatalogState { get; set; } = FieldProjectCatalogState.RemoteOnly;
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+    public int ValidationIssueCount { get; set; }
+    public long PackageSizeBytes { get; set; }
+    public long MediaSizeBytes { get; set; }
+    public string? LocalStoragePath { get; set; }
+    public string? ManifestPath { get; set; }
+    public string? ImportSource { get; set; }
+    public string? PackageDigest { get; set; }
+    public DateTime ImportedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public DateTime? LastOpenedAtUtc { get; set; }
+    public DateTime? LastValidationAtUtc { get; set; }
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+    public DateTime? LastExportAtUtc { get; set; }
     public List<LayerInfo> Layers { get; set; } = new();
+}
+
+public class FieldProjectCatalogEntry
+{
+    public string ProjectId { get; set; } = string.Empty;
+    public string ServiceId { get; set; } = string.Empty;
+    public string? PackageId { get; set; }
+    public string? Version { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public FieldProjectCatalogState State { get; set; } = FieldProjectCatalogState.Installed;
+    public FieldProjectValidationStatus ValidationStatus { get; set; } = FieldProjectValidationStatus.Unknown;
+    public int ValidationIssueCount { get; set; }
+    public int LayerCount { get; set; }
+    public long PackageSizeBytes { get; set; }
+    public long MediaSizeBytes { get; set; }
+    public string? LocalStoragePath { get; set; }
+    public string? ManifestPath { get; set; }
+    public string? ImportSource { get; set; }
+    public string? PackageDigest { get; set; }
+    public DateTime ImportedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public DateTime? LastOpenedAtUtc { get; set; }
+    public DateTime? LastValidationAtUtc { get; set; }
+    public DateTime? LastSimulationRunAtUtc { get; set; }
+    public DateTime? LastExportAtUtc { get; set; }
+}
+
+public enum FieldProjectCatalogState
+{
+    RemoteOnly,
+    Installed,
+    Stale,
+    Invalid,
+    Archived,
+    Removable
+}
+
+public enum FieldProjectValidationStatus
+{
+    Unknown,
+    Valid,
+    Warning,
+    Error
 }
 
 public class LayerStyle
