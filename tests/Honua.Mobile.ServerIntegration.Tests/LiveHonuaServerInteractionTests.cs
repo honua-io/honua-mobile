@@ -225,16 +225,6 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         // than being silently masked by the unary REST path.
         using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
 
-        // Tracked at https://github.com/honua-io/honua-mobile/issues/202 -- the live
-        // server-streaming RPC currently rejects this request with
-        // "InvalidArgument: Invalid request parameters" even though the unary RPC
-        // accepts the same shape (see LiveImage_GrpcFeatureQueryAndEdit_RoundTrip).
-        // The mobile-side converter (GrpcRequestConverters.ToGrpcQueryRequest) is
-        // identical for both paths, so the divergence is in the server's request
-        // validation. Skip narrowly until the streaming contract is reconciled; the
-        // assertion below is preserved so it activates as soon as #202 lands.
-        Skip.If(true, "Tracked at #202 -- live gRPC streaming RPC rejects Where/OutFields/ReturnGeometry that unary accepts.");
-
         JsonDocument? page = null;
         await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
         {
