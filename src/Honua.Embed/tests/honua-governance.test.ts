@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bindHonuaMapGovernance,
+  bindHonuaMapRemoteGovernance,
+  createHonuaMapGovernanceHttpSink,
   createHonuaMapGovernanceEvent,
   defineHonuaMapElement,
   evaluateHonuaMapPolicy,
+  fetchHonuaMapEmbedPolicy,
   type HonuaMapConfig,
   type HonuaMapElement,
   type HonuaMapGovernanceEvent,
@@ -135,6 +138,125 @@ describe('honua map governance', () => {
       serviceOrigin: 'https://services.example.test',
     });
     expect(JSON.stringify(event)).not.toContain('secret-browser-key');
+  });
+
+  it('posts redacted governance events to a configured analytics endpoint', async () => {
+    const fetchSpy = vi.fn(async () => new Response(null, { status: 204 }));
+    const event = createHonuaMapGovernanceEvent(createConfig(), 'view', {
+      occurredAt: '2026-05-23T17:20:00.000Z',
+      integrationId: 'city-work-orders',
+      origin: 'https://portal.example.test',
+      metadata: { tenantId: 'city' },
+    });
+    const sink = createHonuaMapGovernanceHttpSink({
+      url: 'https://admin.example.test/embed-analytics',
+      fetch: fetchSpy,
+      headers: { 'x-tenant': 'city' },
+    });
+
+    await sink.record(event);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://admin.example.test/embed-analytics');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers).toBeInstanceOf(Headers);
+    expect((init?.headers as Headers).get('content-type')).toBe('application/json');
+    expect((init?.headers as Headers).get('x-tenant')).toBe('city');
+
+    const payload = JSON.parse(init?.body as string) as HonuaMapGovernanceEvent;
+    expect(payload).toMatchObject({
+      type: 'view',
+      integrationId: 'city-work-orders',
+      apiKeyPresent: true,
+      metadata: { tenantId: 'city' },
+    });
+    expect(JSON.stringify(payload)).not.toContain('secret-browser-key');
+  });
+
+  it('fetches and normalizes server-provided embed policy without carrying credentials', async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({
+      requiredApiKey: true,
+      allowedOrigins: [' https://portal.example.test ', '', 42],
+      allowedServiceOrigins: ['https://services.example.test'],
+      allowedLayerIds: ['assets'],
+      rateLimit: {
+        remaining: 0,
+        resetAt: ' 2026-05-23T18:00:00Z ',
+      },
+      apiKey: 'secret-browser-key',
+      unknownServerField: 'ignored',
+    }), {
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const policy = await fetchHonuaMapEmbedPolicy({
+      url: 'https://admin.example.test/embed-policy/city-work-orders',
+      fetch: fetchSpy,
+      headers: { 'x-integration': 'city-work-orders' },
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('https://admin.example.test/embed-policy/city-work-orders', {
+      method: 'GET',
+      headers: { 'x-integration': 'city-work-orders' },
+      credentials: undefined,
+      signal: undefined,
+    });
+    expect(policy).toEqual({
+      requiredApiKey: true,
+      allowedOrigins: ['https://portal.example.test'],
+      allowedServiceOrigins: ['https://services.example.test'],
+      allowedLayerIds: ['assets'],
+      rateLimit: {
+        remaining: 0,
+        resetAt: '2026-05-23T18:00:00Z',
+      },
+    });
+    expect(JSON.stringify(policy)).not.toContain('secret-browser-key');
+  });
+
+  it('binds remote policy and analytics before recording map events', async () => {
+    const posts: RequestInit[] = [];
+    const fetchSpy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).includes('/embed-policy/')) {
+        return new Response(JSON.stringify({
+          requiredApiKey: true,
+          allowedOrigins: ['https://portal.example.test'],
+          allowedServiceOrigins: ['https://services.example.test'],
+          allowedLayerIds: ['assets'],
+        }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      posts.push(init ?? {});
+      return new Response(null, { status: 204 });
+    });
+    const denied = vi.fn();
+    const element = createConfiguredMap({ layerIds: 'assets,restricted' });
+    element.addEventListener('honua-map-policy-denied', denied);
+
+    const binding = await bindHonuaMapRemoteGovernance(element, {
+      policyUrl: 'https://admin.example.test/embed-policy/city-work-orders',
+      analyticsUrl: 'https://admin.example.test/embed-analytics',
+      fetch: fetchSpy,
+      origin: 'https://portal.example.test',
+      integrationId: 'city-work-orders',
+    });
+    document.body.append(element);
+
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://admin.example.test/embed-policy/city-work-orders');
+    expect(posts).toHaveLength(1);
+    const payload = JSON.parse(posts[0].body as string) as HonuaMapGovernanceEvent;
+    expect(payload.type).toBe('policy-denied');
+    expect(payload.policyDecision?.reasons).toEqual([
+      'Layer ids are not allowed for this API key: restricted',
+    ]);
+    expect(payload.integrationId).toBe('city-work-orders');
+    expect(JSON.stringify(payload)).not.toContain('secret-browser-key');
+    expect(denied).toHaveBeenCalledOnce();
+
+    binding.disconnect();
   });
 });
 

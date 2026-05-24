@@ -605,34 +605,28 @@ batches, and server-backed API-key/rate/CORS enforcement.
 
 `@honua-io/embed` does not issue API keys, enforce authoritative rate limits, or
 own CORS/domain policy. Those remain server/admin responsibilities. The package
-does provide a thin host-side governance adapter so admin portals can apply
+does provide thin host-side governance adapters so admin portals can fetch
 server-provided policy decisions and record redacted analytics from the existing
 map events.
 
 ```ts
-import { bindHonuaMapGovernance } from '@honua-io/embed';
+import {
+  bindHonuaMapGovernance,
+  createHonuaMapGovernanceHttpSink,
+  fetchHonuaMapEmbedPolicy,
+} from '@honua-io/embed';
 
 const map = document.querySelector('honua-map')!;
+const policy = await fetchHonuaMapEmbedPolicy({
+  url: '/internal/embed-policy/city-work-orders',
+});
 const binding = bindHonuaMapGovernance(map, {
   integrationId: 'city-work-orders',
   origin: window.location.origin,
-  policy: {
-    requiredApiKey: true,
-    allowedOrigins: ['https://portal.example.com'],
-    allowedServiceOrigins: ['https://services.example.com'],
-    allowedLayerIds: ['assets', 'work-orders'],
-    rateLimit: {
-      remaining: 1200,
-      resetAt: '2026-05-23T18:00:00Z',
-    },
-  },
-  sink: async (event) => {
-    await fetch('/internal/embed-analytics', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(event),
-    });
-  },
+  policy,
+  sink: createHonuaMapGovernanceHttpSink({
+    url: '/internal/embed-analytics',
+  }),
 });
 
 map.addEventListener('honua-map-policy-denied', (event) => {
@@ -641,6 +635,36 @@ map.addEventListener('honua-map-policy-denied', (event) => {
 
 // Later, for tenant switch or component teardown:
 binding.disconnect();
+```
+
+For the common remote-only path, `bindHonuaMapRemoteGovernance(...)` fetches the
+same policy payload before binding map events and posts analytics to the
+configured ingest URL:
+
+```ts
+import { bindHonuaMapRemoteGovernance } from '@honua-io/embed';
+
+const binding = await bindHonuaMapRemoteGovernance(map, {
+  integrationId: 'city-work-orders',
+  origin: window.location.origin,
+  policyUrl: '/internal/embed-policy/city-work-orders',
+  analyticsUrl: '/internal/embed-analytics',
+});
+```
+
+The fetched policy payload uses the existing client-owned policy shape:
+
+```json
+{
+  "requiredApiKey": true,
+  "allowedOrigins": ["https://portal.example.com"],
+  "allowedServiceOrigins": ["https://services.example.com"],
+  "allowedLayerIds": ["assets", "work-orders"],
+  "rateLimit": {
+    "remaining": 1200,
+    "resetAt": "2026-05-23T18:00:00Z"
+  }
+}
 ```
 
 Governance events include view, configuration-change, search, identify, and
