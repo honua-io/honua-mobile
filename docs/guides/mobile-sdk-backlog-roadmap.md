@@ -72,6 +72,26 @@ diagnostics, sync health, and the field-day acceptance harness.
 | Open AR/3D GA | [#225](https://github.com/honua-io/honua-mobile/issues/225) | Add ARCore/ARKit adapter evidence and physical-device validation for the first field workflow. |
 | Outside mobile/no-cloud scope | hosted designer/admin, supervisor review, hosted reports, tenancy, RBAC, audit, and hosted package catalog/publish | Owned by `honua-server`, admin UI, and SDK packages; mobile consumes published contracts through adapters, DI, local cache, UX, and tests. |
 
+Closed local parity issue links:
+[#208](https://github.com/honua-io/honua-mobile/issues/208),
+[#209](https://github.com/honua-io/honua-mobile/issues/209),
+[#210](https://github.com/honua-io/honua-mobile/issues/210),
+[#211](https://github.com/honua-io/honua-mobile/issues/211),
+[#212](https://github.com/honua-io/honua-mobile/issues/212),
+[#213](https://github.com/honua-io/honua-mobile/issues/213),
+[#214](https://github.com/honua-io/honua-mobile/issues/214),
+[#215](https://github.com/honua-io/honua-mobile/issues/215),
+[#216](https://github.com/honua-io/honua-mobile/issues/216),
+[#217](https://github.com/honua-io/honua-mobile/issues/217),
+[#218](https://github.com/honua-io/honua-mobile/issues/218),
+[#219](https://github.com/honua-io/honua-mobile/issues/219),
+[#220](https://github.com/honua-io/honua-mobile/issues/220),
+[#221](https://github.com/honua-io/honua-mobile/issues/221),
+[#222](https://github.com/honua-io/honua-mobile/issues/222),
+[#223](https://github.com/honua-io/honua-mobile/issues/223),
+[#224](https://github.com/honua-io/honua-mobile/issues/224), and
+[#226](https://github.com/honua-io/honua-mobile/issues/226).
+
 ## Back-Office Dependency Handoff
 
 #219 is a dependency-tracking issue, not a request to add server/admin clients to

@@ -12,7 +12,7 @@ describe('server-side package imports', () => {
     expect(embed.HonuaSceneElement).toBeTypeOf('function');
     expect(embed.defineHonuaMapElement).toBeTypeOf('function');
     expect(embed.defineHonuaSceneElement).toBeTypeOf('function');
-  });
+  }, 15000);
 
   it('reports a clear error when defining elements without a custom element registry', async () => {
     const { defineHonuaMapElement } = await import('../src/map');

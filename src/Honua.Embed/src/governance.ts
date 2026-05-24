@@ -64,6 +64,46 @@ export interface HonuaMapGovernanceBindingOptions {
   clock?: () => Date;
 }
 
+export type HonuaMapGovernanceFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export interface HonuaMapGovernanceHttpSinkOptions {
+  url: string | URL;
+  fetch?: HonuaMapGovernanceFetch;
+  headers?: HeadersInit | ((event: HonuaMapGovernanceEvent) => HeadersInit);
+  credentials?: RequestCredentials;
+  keepalive?: boolean;
+  signal?: AbortSignal | null;
+  onError?: (error: unknown, event: HonuaMapGovernanceEvent) => void;
+}
+
+export interface HonuaMapEmbedPolicyFetchOptions {
+  url: string | URL;
+  fetch?: HonuaMapGovernanceFetch;
+  headers?: HeadersInit;
+  credentials?: RequestCredentials;
+  signal?: AbortSignal | null;
+}
+
+export interface HonuaMapRemoteGovernanceBindingOptions
+  extends Omit<HonuaMapGovernanceBindingOptions, 'policy' | 'sink'> {
+  policy?: HonuaMapEmbedPolicy | null;
+  policyUrl?: string | URL | null;
+  policyHeaders?: HeadersInit;
+  analyticsUrl?: string | URL | null;
+  analyticsHeaders?: HeadersInit | ((event: HonuaMapGovernanceEvent) => HeadersInit);
+  sink?: HonuaMapGovernanceBindingOptions['sink'];
+  fetch?: HonuaMapGovernanceFetch;
+  credentials?: RequestCredentials;
+  policyCredentials?: RequestCredentials;
+  analyticsCredentials?: RequestCredentials;
+  signal?: AbortSignal | null;
+  keepalive?: boolean;
+  onAnalyticsError?: (error: unknown, event: HonuaMapGovernanceEvent) => void;
+}
+
 export interface HonuaMapGovernanceBinding {
   evaluate(): HonuaMapPolicyDecision;
   disconnect(): void;
@@ -157,6 +197,93 @@ export function bindHonuaMapGovernance(
   };
 }
 
+export function createHonuaMapGovernanceHttpSink(
+  options: HonuaMapGovernanceHttpSinkOptions,
+): HonuaMapAnalyticsSink {
+  const fetchImpl = resolveFetch(options.fetch);
+  const url = normalizeRequiredUrl(options.url, 'Analytics URL');
+
+  return {
+    async record(event: HonuaMapGovernanceEvent): Promise<void> {
+      try {
+        const response = await fetchImpl(url, {
+          method: 'POST',
+          headers: createJsonHeaders(resolveHeaders(options.headers, event)),
+          body: JSON.stringify(event),
+          credentials: options.credentials,
+          keepalive: options.keepalive,
+          signal: options.signal ?? undefined,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Honua map analytics request failed with HTTP ${response.status}.`);
+        }
+      } catch (error) {
+        options.onError?.(error, event);
+      }
+    },
+  };
+}
+
+export async function fetchHonuaMapEmbedPolicy(
+  options: HonuaMapEmbedPolicyFetchOptions,
+): Promise<HonuaMapEmbedPolicy | null> {
+  const fetchImpl = resolveFetch(options.fetch);
+  const url = normalizeRequiredUrl(options.url, 'Policy URL');
+  const response = await fetchImpl(url, {
+    method: 'GET',
+    headers: options.headers,
+    credentials: options.credentials,
+    signal: options.signal ?? undefined,
+  });
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Honua map policy request failed with HTTP ${response.status}.`);
+  }
+
+  return normalizeHonuaMapEmbedPolicy(await response.json());
+}
+
+export async function bindHonuaMapRemoteGovernance(
+  element: HonuaMapElement,
+  options: HonuaMapRemoteGovernanceBindingOptions = {},
+): Promise<HonuaMapGovernanceBinding> {
+  const policy = options.policyUrl !== undefined && options.policyUrl !== null
+    ? await fetchHonuaMapEmbedPolicy({
+      url: options.policyUrl,
+      fetch: options.fetch,
+      headers: options.policyHeaders,
+      credentials: options.policyCredentials ?? options.credentials,
+      signal: options.signal,
+    })
+    : options.policy ?? null;
+
+  const analyticsSink = options.analyticsUrl !== undefined && options.analyticsUrl !== null
+    ? createHonuaMapGovernanceHttpSink({
+      url: options.analyticsUrl,
+      fetch: options.fetch,
+      headers: options.analyticsHeaders,
+      credentials: options.analyticsCredentials ?? options.credentials,
+      keepalive: options.keepalive,
+      signal: options.signal,
+      onError: options.onAnalyticsError,
+    })
+    : null;
+
+  return bindHonuaMapGovernance(element, {
+    sink: combineSinks(options.sink, analyticsSink),
+    policy,
+    integrationId: options.integrationId,
+    origin: options.origin,
+    metadata: options.metadata,
+    clock: options.clock,
+  });
+}
+
 export function createHonuaMapGovernanceEvent(
   config: HonuaMapConfig,
   type: HonuaMapGovernanceEventType,
@@ -185,6 +312,40 @@ export function createHonuaMapGovernanceEvent(
     policyDecision: options.policyDecision,
     metadata: options.metadata,
   };
+}
+
+export function normalizeHonuaMapEmbedPolicy(value: unknown): HonuaMapEmbedPolicy | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const policy: HonuaMapEmbedPolicy = {};
+
+  if (typeof value.requiredApiKey === 'boolean' || value.requiredApiKey === null) {
+    policy.requiredApiKey = value.requiredApiKey;
+  }
+
+  const allowedOrigins = normalizeStringArray(value.allowedOrigins);
+  if (allowedOrigins) {
+    policy.allowedOrigins = allowedOrigins;
+  }
+
+  const allowedServiceOrigins = normalizeStringArray(value.allowedServiceOrigins);
+  if (allowedServiceOrigins) {
+    policy.allowedServiceOrigins = allowedServiceOrigins;
+  }
+
+  const allowedLayerIds = normalizeStringArray(value.allowedLayerIds);
+  if (allowedLayerIds) {
+    policy.allowedLayerIds = allowedLayerIds;
+  }
+
+  const rateLimit = normalizeRateLimit(value.rateLimit);
+  if (rateLimit) {
+    policy.rateLimit = rateLimit;
+  }
+
+  return policy;
 }
 
 export function evaluateHonuaMapPolicy(
@@ -263,6 +424,27 @@ function normalizeSink(
   return (event) => sink.record(event);
 }
 
+function combineSinks(
+  first: HonuaMapGovernanceBindingOptions['sink'],
+  second: HonuaMapGovernanceBindingOptions['sink'],
+): HonuaMapGovernanceBindingOptions['sink'] {
+  const sinks = [normalizeSink(first), normalizeSink(second)].filter(isNonNull);
+
+  if (sinks.length === 0) {
+    return null;
+  }
+
+  if (sinks.length === 1) {
+    return sinks[0];
+  }
+
+  return (event) => {
+    for (const sink of sinks) {
+      safeRecord(sink, event);
+    }
+  };
+}
+
 function safeRecord(
   sink: ((event: HonuaMapGovernanceEvent) => void | Promise<void>) | null,
   event: HonuaMapGovernanceEvent,
@@ -278,6 +460,40 @@ function safeRecord(
   } catch {
     // Analytics sinks are host-owned and must not break embed interactions.
   }
+}
+
+function resolveFetch(fetchImpl: HonuaMapGovernanceFetch | undefined): HonuaMapGovernanceFetch {
+  const resolved = fetchImpl ?? globalThis.fetch?.bind(globalThis);
+  if (!resolved) {
+    throw new Error('Honua map governance fetch API is not available.');
+  }
+
+  return resolved;
+}
+
+function normalizeRequiredUrl(url: string | URL, label: string): string {
+  const normalized = String(url).trim();
+  if (!normalized) {
+    throw new Error(`${label} is required for Honua map governance.`);
+  }
+
+  return normalized;
+}
+
+function resolveHeaders(
+  headers: HeadersInit | ((event: HonuaMapGovernanceEvent) => HeadersInit) | undefined,
+  event: HonuaMapGovernanceEvent,
+): HeadersInit | undefined {
+  return typeof headers === 'function' ? headers(event) : headers;
+}
+
+function createJsonHeaders(headers: HeadersInit | undefined): Headers {
+  const normalized = new Headers(headers);
+  if (!normalized.has('content-type')) {
+    normalized.set('content-type', 'application/json');
+  }
+
+  return normalized;
 }
 
 function serviceOrigin(serviceUrl: string | null): string | null {
@@ -298,9 +514,49 @@ function normalizeSet(values: readonly string[] | null | undefined): Set<string>
     .filter(Boolean));
 }
 
+function normalizeStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeOptionalString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeRateLimit(value: unknown): HonuaMapRateLimitState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rateLimit: HonuaMapRateLimitState = {};
+  if (typeof value.remaining === 'number' && Number.isFinite(value.remaining)) {
+    rateLimit.remaining = value.remaining;
+  } else if (value.remaining === null) {
+    rateLimit.remaining = null;
+  }
+
+  if (typeof value.resetAt === 'string') {
+    rateLimit.resetAt = normalizeOptionalString(value.resetAt);
+  } else if (value.resetAt === null) {
+    rateLimit.resetAt = null;
+  }
+
+  return Object.keys(rateLimit).length > 0 ? rateLimit : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNull<T>(value: T | null): value is T {
+  return value !== null;
 }
 
 function currentOrigin(): string | null {
