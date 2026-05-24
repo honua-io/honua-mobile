@@ -288,6 +288,9 @@ public class LayerMetadata
     [Column("schema")]
     public string? Schema { get; set; }
 
+    [Column("form_json")]
+    public string? FormJson { get; set; }
+
     [Column("server_url")]
     public string? ServerUrl { get; set; }
 
@@ -376,6 +379,73 @@ public class LocalFieldProjectCatalogEntry
 
     [Column("last_export_at_utc")]
     public DateTime? LastExportAtUtc { get; set; }
+}
+
+/// <summary>
+/// Locally persisted no-cloud assignment state imported from SDK task packets.
+/// </summary>
+[Table("field_assignments")]
+public class LocalFieldAssignmentEntry
+{
+    [PrimaryKey]
+    [Column("assignment_id")]
+    public string AssignmentId { get; set; } = string.Empty;
+
+    [Column("task_packet_id")]
+    [Indexed]
+    public string TaskPacketId { get; set; } = string.Empty;
+
+    [Column("project_id")]
+    [Indexed]
+    public string ProjectId { get; set; } = string.Empty;
+
+    [Column("binding_id")]
+    [Indexed]
+    public string BindingId { get; set; } = string.Empty;
+
+    [Column("source_id")]
+    [Indexed]
+    public string? SourceId { get; set; }
+
+    [Column("assignee_user_id")]
+    [Indexed]
+    public string? AssigneeUserId { get; set; }
+
+    [Column("crew_id")]
+    [Indexed]
+    public string? CrewId { get; set; }
+
+    [Column("priority")]
+    [Indexed]
+    public Honua.Sdk.Field.Projects.FieldAssignmentPriority Priority { get; set; } =
+        Honua.Sdk.Field.Projects.FieldAssignmentPriority.Normal;
+
+    [Column("status")]
+    [Indexed]
+    public Honua.Sdk.Field.Projects.FieldAssignmentStatus Status { get; set; } =
+        Honua.Sdk.Field.Projects.FieldAssignmentStatus.NotStarted;
+
+    [Column("due_at_utc")]
+    [Indexed]
+    public DateTime? DueAtUtc { get; set; }
+
+    [Column("work_query_json")]
+    public string? WorkQueryJson { get; set; }
+
+    [Column("record_ids_json")]
+    public string? RecordIdsJson { get; set; }
+
+    [Column("metadata_json")]
+    public string? MetadataJson { get; set; }
+
+    [Column("imported_at_utc")]
+    public DateTime ImportedAtUtc { get; set; }
+
+    [Column("updated_at_utc")]
+    public DateTime UpdatedAtUtc { get; set; }
+
+    [Column("completed_at_utc")]
+    public DateTime? CompletedAtUtc { get; set; }
 }
 
 /// <summary>

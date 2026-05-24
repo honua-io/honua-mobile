@@ -8,6 +8,9 @@ using Honua.Mobile.FieldCollection.Services.Ai;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Metadata;
 using Honua.Mobile.FieldCollection.Services.Storage.Models;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Field.Forms;
+using Honua.Sdk.Field.Projects;
 using ChangeOperation = Honua.Mobile.FieldCollection.Services.Storage.Models.ChangeOperation;
 using CoreModels = Honua.Mobile.FieldCollection.Models;
 using StorageConflictResolution = Honua.Mobile.FieldCollection.Services.Storage.Models.ConflictResolution;
@@ -133,6 +136,7 @@ public class GeoPackageStorageService : IDisposable
         await _connection.CreateTableAsync<LayerMetadata>();
         await EnsureLayerMetadataTableAsync();
         await EnsureProjectCatalogTableAsync();
+        await EnsureFieldAssignmentsTableAsync();
         await EnsureLocalAttachmentsTableAsync();
     }
 
@@ -183,6 +187,12 @@ public class GeoPackageStorageService : IDisposable
             columnNames.Add("source_id");
         }
 
+        if (!columnNames.Contains("form_json"))
+        {
+            await _connection.ExecuteAsync("ALTER TABLE layer_metadata ADD COLUMN form_json TEXT");
+            columnNames.Add("form_json");
+        }
+
         if (!columnNames.Contains("storage_key"))
         {
             await MigrateLayerMetadataTableAsync();
@@ -228,6 +238,23 @@ public class GeoPackageStorageService : IDisposable
             "CREATE INDEX IF NOT EXISTS idx_field_project_catalog_state ON field_project_catalog(state)");
     }
 
+    private async Task EnsureFieldAssignmentsTableAsync()
+    {
+        await _connection.CreateTableAsync<LocalFieldAssignmentEntry>();
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_project_id ON field_assignments(project_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_binding_id ON field_assignments(binding_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_source_id ON field_assignments(source_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_status ON field_assignments(status)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_assignee ON field_assignments(assignee_user_id)");
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_field_assignments_due_at ON field_assignments(due_at_utc)");
+    }
+
     private async Task MigrateLayerMetadataTableAsync()
     {
         const string migrationTable = "layer_metadata_migration";
@@ -240,7 +267,7 @@ public class GeoPackageStorageService : IDisposable
             await _connection.ExecuteAsync($@"
                 INSERT OR REPLACE INTO {migrationTable}
                     (storage_key, id, service_id, source_id, name, description, geometry_type, spatial_reference,
-                     is_editable, schema, server_url, created_at, last_sync, sync_enabled)
+                     is_editable, schema, form_json, server_url, created_at, last_sync, sync_enabled)
                 SELECT
                     COALESCE(NULLIF(source_id, ''), COALESCE(NULLIF(service_id, ''), 'mobile_offline_demo') || '/FeatureServer/' || id),
                     id,
@@ -252,6 +279,7 @@ public class GeoPackageStorageService : IDisposable
                     spatial_reference,
                     is_editable,
                     schema,
+                    NULL,
                     server_url,
                     created_at,
                     last_sync,
@@ -282,6 +310,7 @@ public class GeoPackageStorageService : IDisposable
                 spatial_reference TEXT NOT NULL,
                 is_editable INTEGER NOT NULL,
                 schema TEXT,
+                form_json TEXT,
                 server_url TEXT,
                 created_at TEXT NOT NULL,
                 last_sync TEXT,
@@ -1559,6 +1588,226 @@ public class GeoPackageStorageService : IDisposable
 
     #endregion
 
+    #region Field Assignments
+
+    public async Task UpsertFieldTaskPacketsAsync(
+        string projectId,
+        IReadOnlyList<FieldTaskPacket> taskPackets,
+        IReadOnlyDictionary<string, string?> bindingSourceIds)
+    {
+        projectId = NormalizeProjectId(projectId);
+        ArgumentNullException.ThrowIfNull(taskPackets);
+        ArgumentNullException.ThrowIfNull(bindingSourceIds);
+
+        var now = DateTime.UtcNow;
+        var rows = taskPackets
+            .SelectMany(packet => packet.Assignments.Select(assignment =>
+                ToLocalFieldAssignmentEntry(projectId, packet.TaskPacketId, assignment, bindingSourceIds, now)))
+            .ToList();
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await ExecuteInImmediateTransactionAsync(async () =>
+            {
+                foreach (var row in rows)
+                {
+                    await _connection.InsertOrReplaceAsync(row);
+                }
+            });
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<LocalFieldAssignmentInfo>> GetFieldAssignmentsAsync(
+        LocalFieldAssignmentFilter? filter = null)
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var rows = await _connection.Table<LocalFieldAssignmentEntry>().ToListAsync();
+            return rows
+                .Select(ToFieldAssignmentInfo)
+                .Where(assignment => MatchesAssignmentFilter(assignment, filter))
+                .OrderBy(assignment => assignment.DueAtUtc ?? DateTimeOffset.MaxValue)
+                .ThenByDescending(assignment => assignment.Priority)
+                .ThenBy(assignment => assignment.AssignmentId, StringComparer.Ordinal)
+                .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<bool> UpdateFieldAssignmentStatusAsync(
+        string assignmentId,
+        FieldAssignmentStatus status,
+        DateTime? updatedAtUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(assignmentId))
+        {
+            throw new ArgumentException("Assignment ID is required.", nameof(assignmentId));
+        }
+
+        var updatedAt = updatedAtUtc ?? DateTime.UtcNow;
+        var completedAt = status == FieldAssignmentStatus.Complete ? updatedAt : (DateTime?)null;
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.ExecuteAsync(
+                """
+                UPDATE field_assignments
+                SET status = ?,
+                    updated_at_utc = ?,
+                    completed_at_utc = ?
+                WHERE assignment_id = ?
+                """,
+                status,
+                updatedAt,
+                completedAt,
+                assignmentId.Trim()) > 0;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    public async Task<int> DeleteFieldAssignmentsForProjectAsync(string projectId)
+    {
+        projectId = NormalizeProjectId(projectId);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.Table<LocalFieldAssignmentEntry>()
+                .DeleteAsync(row => row.ProjectId == projectId);
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    private static LocalFieldAssignmentEntry ToLocalFieldAssignmentEntry(
+        string projectId,
+        string taskPacketId,
+        FieldAssignment assignment,
+        IReadOnlyDictionary<string, string?> bindingSourceIds,
+        DateTime now)
+    {
+        bindingSourceIds.TryGetValue(assignment.BindingId, out var sourceId);
+
+        return new LocalFieldAssignmentEntry
+        {
+            AssignmentId = assignment.AssignmentId.Trim(),
+            TaskPacketId = taskPacketId.Trim(),
+            ProjectId = projectId,
+            BindingId = assignment.BindingId.Trim(),
+            SourceId = string.IsNullOrWhiteSpace(sourceId) ? null : sourceId.Trim(),
+            AssigneeUserId = string.IsNullOrWhiteSpace(assignment.AssigneeUserId) ? null : assignment.AssigneeUserId.Trim(),
+            CrewId = string.IsNullOrWhiteSpace(assignment.CrewId) ? null : assignment.CrewId.Trim(),
+            Priority = assignment.Priority,
+            Status = assignment.Status,
+            DueAtUtc = assignment.DueAtUtc?.UtcDateTime,
+            WorkQueryJson = assignment.WorkQuery is null ? null : JsonSerializer.Serialize(assignment.WorkQuery, SchemaJsonOptions),
+            RecordIdsJson = JsonSerializer.Serialize(assignment.RecordIds, SchemaJsonOptions),
+            MetadataJson = JsonSerializer.Serialize(assignment.Metadata, SchemaJsonOptions),
+            ImportedAtUtc = now,
+            UpdatedAtUtc = now,
+            CompletedAtUtc = assignment.Status == FieldAssignmentStatus.Complete ? now : null
+        };
+    }
+
+    private static LocalFieldAssignmentInfo ToFieldAssignmentInfo(LocalFieldAssignmentEntry row)
+        => new()
+        {
+            AssignmentId = row.AssignmentId,
+            TaskPacketId = row.TaskPacketId,
+            ProjectId = row.ProjectId,
+            BindingId = row.BindingId,
+            SourceId = row.SourceId,
+            AssigneeUserId = row.AssigneeUserId,
+            CrewId = row.CrewId,
+            Priority = row.Priority,
+            Status = row.Status,
+            DueAtUtc = row.DueAtUtc.HasValue
+                ? new DateTimeOffset(DateTime.SpecifyKind(row.DueAtUtc.Value, DateTimeKind.Utc))
+                : null,
+            WorkQuery = DeserializeJson<SourceQuery>(row.WorkQueryJson),
+            RecordIds = DeserializeJson<IReadOnlyList<string>>(row.RecordIdsJson) ?? [],
+            Metadata = DeserializeJson<IReadOnlyDictionary<string, string>>(row.MetadataJson) ??
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            ImportedAtUtc = row.ImportedAtUtc,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            CompletedAtUtc = row.CompletedAtUtc
+        };
+
+    private static bool MatchesAssignmentFilter(
+        LocalFieldAssignmentInfo assignment,
+        LocalFieldAssignmentFilter? filter)
+    {
+        if (filter is null)
+        {
+            return true;
+        }
+
+        return Matches(filter.ProjectId, assignment.ProjectId) &&
+            Matches(filter.BindingId, assignment.BindingId) &&
+            Matches(filter.SourceId, assignment.SourceId) &&
+            Matches(filter.AssigneeUserId, assignment.AssigneeUserId) &&
+            Matches(filter.CrewId, assignment.CrewId) &&
+            (!filter.Status.HasValue || assignment.Status == filter.Status.Value) &&
+            (!filter.MinimumPriority.HasValue || (int)assignment.Priority >= (int)filter.MinimumPriority.Value) &&
+            (!filter.DueBeforeUtc.HasValue || assignment.DueAtUtc <= filter.DueBeforeUtc.Value) &&
+            Intersects(assignment.WorkQuery?.Bbox, filter.IntersectsExtent);
+
+        static bool Matches(string? expected, string? actual)
+            => string.IsNullOrWhiteSpace(expected) ||
+                string.Equals(expected.Trim(), actual?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool Intersects(FeatureBoundingBox? assignmentExtent, FeatureBoundingBox? filterExtent)
+    {
+        if (filterExtent is null || assignmentExtent is null)
+        {
+            return true;
+        }
+
+        return assignmentExtent.MinX <= filterExtent.MaxX &&
+            assignmentExtent.MaxX >= filterExtent.MinX &&
+            assignmentExtent.MinY <= filterExtent.MaxY &&
+            assignmentExtent.MaxY >= filterExtent.MinY;
+    }
+
+    private static T? DeserializeJson<T>(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    #endregion
+
     #region Layer Management
 
     public async Task<bool> CreateLayerAsync(LayerInfo layer)
@@ -1578,7 +1827,8 @@ public class GeoPackageStorageService : IDisposable
                 GeometryType = layer.GeometryType.ToString(),
                 SpatialReference = "EPSG:4326",
                 IsEditable = layer.IsEditable,
-                Schema = JsonSerializer.Serialize(layer.Schema, SchemaJsonOptions),
+                Schema = JsonSerializer.Serialize(GetLayerSchema(layer), SchemaJsonOptions),
+                FormJson = layer.Form is null ? null : JsonSerializer.Serialize(layer.Form, SchemaJsonOptions),
                 CreatedAt = DateTime.UtcNow,
                 LastSync = DateTime.UtcNow
             };
@@ -1656,8 +1906,20 @@ public class GeoPackageStorageService : IDisposable
             Schema = DeserializeLayerSchema(metadata.Schema)
         };
 
-        layer.Form = FieldCollectionMetadataMapper.CreateFormDefinition(layer);
+        layer.Form = DeserializeFormDefinition(metadata.FormJson) ?? FieldCollectionMetadataMapper.CreateFormDefinition(layer);
         return layer;
+    }
+
+    private static IReadOnlyList<FormField> GetLayerSchema(LayerInfo layer)
+    {
+        if (layer.Schema.Count > 0)
+        {
+            return layer.Schema;
+        }
+
+        return layer.Form?.Sections
+            .SelectMany(section => section.Fields)
+            .ToList() ?? [];
     }
 
     private static string GetLayerMetadataStorageKey(LayerInfo layer)
@@ -1701,6 +1963,23 @@ public class GeoPackageStorageService : IDisposable
         catch (JsonException)
         {
             return DeserializeLegacyLayerSchema(schema);
+        }
+    }
+
+    private static FormDefinition? DeserializeFormDefinition(string? formJson)
+    {
+        if (string.IsNullOrWhiteSpace(formJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<FormDefinition>(formJson, SchemaJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
