@@ -168,11 +168,22 @@ public static class MauiProgram
                 logger: provider.GetService<ILogger<LocalRecordExportService>>());
         });
         services.AddSingleton<ILocalRecordExportShareService, MauiLocalRecordExportShareService>();
+        services.AddHttpClient("HonuaFieldPackageDownload");
+        services.AddSingleton<IFieldProjectPackageDownloadRequestCustomizer, FieldProjectPackageDownloadAuthHeader>();
         services.AddSingleton(provider =>
         {
             return new LocalFieldProjectPackageImportService(
                 provider.GetRequiredService<GeoPackageStorageService>(),
                 provider.GetService<ILogger<LocalFieldProjectPackageImportService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            return new LocalFieldProjectPackageDownloadService(
+                httpClientFactory.CreateClient("HonuaFieldPackageDownload"),
+                provider.GetRequiredService<LocalFieldProjectPackageImportService>(),
+                provider.GetServices<IFieldProjectPackageDownloadRequestCustomizer>(),
+                provider.GetService<ILogger<LocalFieldProjectPackageDownloadService>>());
         });
         services.AddSingleton(provider =>
         {

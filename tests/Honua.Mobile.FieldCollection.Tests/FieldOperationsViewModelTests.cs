@@ -14,6 +14,7 @@ public sealed class FieldOperationsViewModelTests : IDisposable
 {
     private readonly string _databasePath;
     private readonly string _packageRoot;
+    private readonly string _downloadRoot;
     private readonly string _installRoot;
     private readonly string _exportRoot;
 
@@ -22,9 +23,11 @@ public sealed class FieldOperationsViewModelTests : IDisposable
         SQLitePCL.Batteries_V2.Init();
         _databasePath = Path.Combine(Path.GetTempPath(), $"honua-workspace-{Guid.NewGuid():N}.gpkg");
         _packageRoot = Path.Combine(Path.GetTempPath(), $"honua-workspace-package-{Guid.NewGuid():N}");
+        _downloadRoot = Path.Combine(Path.GetTempPath(), $"honua-workspace-download-{Guid.NewGuid():N}");
         _installRoot = Path.Combine(Path.GetTempPath(), $"honua-workspace-install-{Guid.NewGuid():N}");
         _exportRoot = Path.Combine(Path.GetTempPath(), $"honua-workspace-export-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_packageRoot);
+        Directory.CreateDirectory(_downloadRoot);
         Directory.CreateDirectory(_installRoot);
         Directory.CreateDirectory(_exportRoot);
     }
@@ -91,6 +94,55 @@ public sealed class FieldOperationsViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadPackageCommand_WithManifestUrl_DownloadsImportsAndSelectsPackage()
+    {
+        using var storage = new GeoPackageStorageService(_databasePath);
+        var artifactBytes = "offline feature data"u8.ToArray();
+        var basePackage = LocalFieldProjectPackageImportServiceTests.CreatePackage();
+        var package = basePackage with
+        {
+            OfflinePackages =
+            [
+                basePackage.OfflinePackages[0] with
+                {
+                    SizeBytes = artifactBytes.Length,
+                    Sha256 = ComputeSha256(artifactBytes)
+                }
+            ]
+        };
+
+        var requestedPaths = new List<string>();
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            requestedPaths.Add(request.RequestUri?.AbsolutePath ?? string.Empty);
+            return request.RequestUri?.AbsolutePath switch
+            {
+                "/packages/day-1/field-project-package.json" => JsonResponse(package.ToJson()),
+                "/packages/day-1/data/assets.gpkg" => BytesResponse(artifactBytes),
+                _ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+            };
+        }));
+        var importService = new LocalFieldProjectPackageImportService(storage);
+        var downloadService = new LocalFieldProjectPackageDownloadService(httpClient, importService);
+        var viewModel = CreateViewModel(storage, packageDownloadService: downloadService);
+        viewModel.PackageManifestUrl = "https://packages.honua.test/packages/day-1/field-project-package.json";
+        viewModel.PackageDownloadRoot = _downloadRoot;
+        viewModel.PackageDestinationRoot = _installRoot;
+
+        await viewModel.DownloadPackageCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            new[] { "/packages/day-1/field-project-package.json", "/packages/day-1/data/assets.gpkg" },
+            requestedPaths);
+        Assert.Single(viewModel.Packages);
+        Assert.Equal("local-inspection-demo", viewModel.SelectedPackage?.ProjectId);
+        Assert.Equal(2, viewModel.Assignments.Count);
+        Assert.False(viewModel.HasImportDiagnostics);
+        Assert.Contains("Downloaded and imported local-inspection-demo", viewModel.LastImportSummary, StringComparison.Ordinal);
+        Assert.True(File.Exists(viewModel.PackageManifestPath));
+    }
+
+    [Fact]
     public async Task ImportPackageCommand_WithInvalidPackage_RendersDeterministicDiagnostics()
     {
         using var storage = new GeoPackageStorageService(_databasePath);
@@ -113,13 +165,18 @@ public sealed class FieldOperationsViewModelTests : IDisposable
     private FieldOperationsViewModel CreateViewModel(
         GeoPackageStorageService storage,
         RecordingNavigationService? navigation = null,
-        ILocalRecordExportShareService? share = null)
+        ILocalRecordExportShareService? share = null,
+        LocalFieldProjectPackageDownloadService? packageDownloadService = null)
     {
+        var importService = new LocalFieldProjectPackageImportService(storage);
         return new FieldOperationsViewModel(
             navigation ?? new RecordingNavigationService(),
             storage,
             new LocalFieldAssignmentService(storage),
-            new LocalFieldProjectPackageImportService(storage),
+            importService,
+            packageDownloadService ?? new LocalFieldProjectPackageDownloadService(
+                new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.NotFound))),
+                importService),
             new LocalRecordExportService(storage, _exportRoot),
             share ?? new RecordingExportShareService());
     }
@@ -153,10 +210,26 @@ public sealed class FieldOperationsViewModelTests : IDisposable
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    private static string ComputeSha256(byte[] bytes)
+        => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static HttpResponseMessage JsonResponse(string json)
+        => new(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+        };
+
+    private static HttpResponseMessage BytesResponse(byte[] bytes)
+        => new(System.Net.HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(bytes)
+        };
+
     public void Dispose()
     {
         DeleteFile(_databasePath);
         DeleteDirectory(_packageRoot);
+        DeleteDirectory(_downloadRoot);
         DeleteDirectory(_installRoot);
         DeleteDirectory(_exportRoot);
     }
