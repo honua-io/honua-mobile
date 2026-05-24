@@ -1,13 +1,16 @@
 using CommunityToolkit.Maui;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.Services.Ai;
+using Honua.Mobile.FieldCollection.Services.Assignments;
 using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Features;
 using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Metadata;
+using Honua.Mobile.FieldCollection.Services.Packages;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.FieldCollection.Services.Sync;
+using Honua.Mobile.FieldCollection.Services.Workflow;
 using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.FieldCollection.ViewModels;
@@ -161,6 +164,23 @@ public static class MauiProgram
             return new LocalRecordExportService(
                 databaseService.GetStorageService(),
                 logger: provider.GetService<ILogger<LocalRecordExportService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new LocalFieldProjectPackageImportService(
+                databaseService.GetStorageService(),
+                provider.GetService<ILogger<LocalFieldProjectPackageImportService>>());
+        });
+        services.AddSingleton(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new LocalFieldRecordLifecycleService(databaseService.GetStorageService());
+        });
+        services.AddSingleton<ILocalFieldAssignmentService>(provider =>
+        {
+            var databaseService = provider.GetRequiredService<DatabaseService>();
+            return new LocalFieldAssignmentService(databaseService.GetStorageService());
         });
         services.AddSingleton<IMobileAiCaptureProvider, NullMobileAiCaptureProvider>();
         services.AddSingleton<IMobileAiCaptureQueue, SettingsMobileAiCaptureQueue>();
