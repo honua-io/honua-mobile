@@ -1,12 +1,12 @@
 # No-Cloud Field Parity Information Model
 
-Last reviewed: 2026-05-23.
+Last reviewed: 2026-05-24.
 
 This handoff describes the information model needed to design Honua field
 collection UI without requiring hosted cloud services or new visual design work.
 The model is intentionally data-first: UI can be designed from these entities
-while SDK and mobile engineers continue implementing import, catalog, lifecycle,
-assignment, media, conflict simulation, and export behavior.
+now that package intake, catalog state, lifecycle, assignment, media, conflict
+simulation, export, and Work tab behavior have mobile-owned local coverage.
 
 Authoritative portable contracts belong in `honua-sdk-dotnet`. Mobile consumes
 those contracts and owns native storage, local file placement, permissions,
@@ -16,17 +16,19 @@ capture adapters, diagnostics, and runtime state.
 
 In scope:
 
-- Local project package import.
+- Local project package import and direct manifest/artifact download.
 - Offline project and survey catalog.
 - Local form/runtime state.
 - Record lifecycle, assignments, media metadata, validation, conflicts, and
   export evidence.
+- Mobile Work tab integration for local package intake, assignment actions,
+  record open routing, lifecycle actions, export, and native share handoff.
 - Local fixtures and acceptance evidence that run without external services.
 
 Out of scope:
 
 - Hosted form designer or admin UI.
-- Cloud publish/download/sync.
+- Hosted package catalog, publish APIs, and full cloud sync.
 - Store release setup.
 - New visual system or screen layouts.
 
@@ -51,6 +53,27 @@ Core fields:
 
 UI implication: the first screen can be a local project/survey catalog sourced
 from imported `FieldProjectPackage` records. It does not need cloud discovery.
+
+## Direct Package Intake
+
+Mobile supports two local-first package intake paths:
+
+- `LocalFieldProjectPackageImportService` imports an SDK
+  `FieldProjectPackage`, validates bindings and artifacts, copies package
+  artifacts into device-local storage, creates local catalog/layer state, and
+  stores task packets for local assignments.
+- `LocalFieldProjectPackageDownloadService` downloads a manifest URI plus
+  package-relative offline artifacts into a local download cache, applies
+  same-origin auth headers through `FieldProjectPackageDownloadAuthHeader`, and
+  then hands off to the import service.
+
+The downloader intentionally does not define a mobile-local Honua Server package
+API client. Hosted package catalog and publish semantics remain server/SDK
+work; mobile owns direct URI intake, safe relative artifact resolution, local
+cache placement, diagnostics, and app wiring.
+
+UI implication: a no-cloud Work tab can offer file import and direct manifest
+URL download without waiting on hosted cloud package discovery.
 
 ## Sources And Bindings
 
@@ -223,8 +246,8 @@ current fixtures cover:
 
 Unsupported or package-version-gated fixture capabilities are explicitly listed
 in the evidence as follow-ups, currently shared choice-set ids, record-link
-target metadata, media capture policy fields, full XLSForm/Arcade expression
-parity, rejected-media fixtures, and nested-repeat scenario coverage.
+target metadata, richer media capture policy fields, full XLSForm/Arcade
+expression parity, rejected-media fixtures, and nested-repeat scenario coverage.
 
 UI implication: form design can treat these fixture records as no-cloud parity
 examples, while unsupported fixture items remain visible as SDK/mobile backlog
@@ -282,28 +305,31 @@ The no-cloud product acceptance harness is represented by
 from an empty GeoPackage and covers:
 
 - local project catalog install/open state;
+- package import diagnostics and local package handoff;
+- assignment packet import, inbox filtering, and local status completion;
+- record lifecycle transition and lifecycle metadata export;
 - form validation and calculated field application;
 - local record collection into GeoPackage storage;
 - local media metadata plus exportable device media content;
 - deterministic conflict replay through `LocalReplayFieldSyncPeer`;
 - local export package generation and catalog export timestamp marking.
 
-The evidence includes step-level status and artifact names. Assignment packets
-and formal lifecycle transitions are currently recorded as `follow-up` steps
-linked to honua-mobile#252 and honua-mobile#251 because those adapters depend on
-the SDK package work and are not silently treated as complete.
+The evidence includes step-level status and artifact names. Current field-day
+evidence should not contain `follow-up` steps for assignment packets or record
+lifecycle transitions; those local adapters are now covered by package import,
+assignment, lifecycle, Work tab, and export tests.
 
 UI implication: a field-day review screen can be designed around step status,
-artifact links, counts, and follow-up markers without requiring hosted
-acceptance infrastructure.
+artifact links, counts, and local evidence without requiring hosted acceptance
+infrastructure.
 
 ## Current Implementation Readiness
 
 This table is the practical UI-design handoff for the current mobile branch.
 `Ready` means the data shape exists in mobile code and has local automated
-coverage. `SDK-gated` means the UI information model is defined here and in
-honua-sdk-dotnet#162, but the mobile app should wait for a published SDK package
-instead of adding duplicate contracts locally.
+coverage. `SDK-gated` now applies only to remaining package-version or hosted
+contract gaps; mobile should wait for published SDK/server contracts instead of
+adding duplicate DTOs locally.
 
 | Area | UI-facing data source | Current status | Automated evidence |
 | --- | --- | --- | --- |
@@ -312,10 +338,12 @@ instead of adding duplicate contracts locally.
 | Media metadata | `AttachmentInfo`, `AttachmentPayloadKind`, SDK `FieldMediaAttachment` | Ready for local metadata, required counts, payload kind, export, and retry evidence; capture policy fields are SDK-gated | `FieldCollectionAttachmentServiceTests`, `LocalRecordExportServiceTests`, `GeoPackageSyncServiceTests` |
 | Conflict review | `ConflictInfo`, `OfflineConflictReviewItem`, `LocalFieldConflictReplayResult` | Ready for local replay, manual/deferred state, accept-server resolution, retryable media failure evidence | `GeoPackageSyncServiceTests` |
 | Export preview | `LocalRecordExportResult`, `attachments-manifest.json`, `honua-evidence.json` | Ready | `LocalRecordExportServiceTests` |
-| Field-day acceptance | `honua.mobile.no-cloud-field-day.evidence.v1` | Ready as local acceptance harness; assignment/lifecycle steps are explicit follow-ups | `NoCloudFieldDayAcceptanceHarnessTests` |
-| Package import | SDK `FieldProjectPackage` and validation result | SDK-gated | honua-sdk-dotnet#162, honua-mobile#249 |
-| Lifecycle transitions | SDK `FieldRecordLifecyclePolicy` and `RecordStatus` | SDK-gated for policy; current harness marks step as follow-up | honua-sdk-dotnet#162, honua-mobile#251 |
-| Assignment/task packets | SDK `FieldTaskPacket`, `FieldAssignment` | SDK-gated | honua-sdk-dotnet#162, honua-mobile#252 |
+| Field-day acceptance | `honua.mobile.no-cloud-field-day.evidence.v1` | Ready as local acceptance harness with package, assignment, lifecycle, media, conflict, and export steps | `NoCloudFieldDayAcceptanceHarnessTests` |
+| Package import | SDK `FieldProjectPackage` and validation result | Ready for local manifest import and diagnostics | `LocalFieldProjectPackageImportServiceTests`, `FieldOperationsViewModelTests` |
+| Package download | `LocalFieldProjectPackageDownloadRequest`, downloaded manifest/artifact cache, import result | Ready for direct manifest URI intake and safe relative artifact download | `LocalFieldProjectPackageDownloadServiceTests`, `FieldOperationsViewModelTests` |
+| Lifecycle transitions | SDK `FieldRecordLifecyclePolicy` and `RecordStatus` | Ready for local transition policy, edit affordances, lifecycle metadata, and export evidence | `LocalFieldRecordLifecycleServiceTests`, `NoCloudFieldDayAcceptanceHarnessTests` |
+| Assignment/task packets | SDK `FieldTaskPacket`, `FieldAssignment` | Ready for local task packet import, filtering, status updates, record routing, and Work tab actions | `LocalFieldProjectPackageImportServiceTests`, `FieldOperationsViewModelTests`, `NoCloudFieldDayAcceptanceHarnessTests` |
+| Work tab | `FieldOperationsViewModel`, `FieldOperationsPage` | Ready for package import/download, assignment actions, record open routing, export, and share handoff | `FieldOperationsViewModelTests` |
 
 UI design can proceed now for:
 
@@ -325,33 +353,51 @@ UI design can proceed now for:
 - media galleries and export/media count previews;
 - conflict review lists and resolution evidence;
 - export preview/details;
-- field-day evidence review, including follow-up markers.
-
-UI design should model these as upcoming contract-backed surfaces, but avoid
-assuming mobile-local DTOs until the SDK package is published:
-
-- package import diagnostics;
+- field-day evidence review;
+- package import/download diagnostics;
 - assignment inbox and assignment completion state;
 - lifecycle badges, transition actions, and lifecycle-gated edit affordances;
+- Work tab flows for local package intake, assignments, record routing, export,
+  and share handoff.
+
+UI design should model these as upcoming contract-backed surfaces, but avoid
+assuming mobile-local DTOs or hosted APIs until the owning repo ships them:
+
+- hosted cloud package catalogs, package publish, and supervisor/admin package
+  workflows;
 - richer media capture policy controls;
 - shared choice-set and record-link target metadata.
 
 ## Implementation Backlog
 
-Local parity backlog:
+Closed local parity backlog:
 
 - honua-mobile#249: local package import and validation.
 - honua-mobile#250: local project/survey catalog lifecycle.
 - honua-mobile#251: offline record lifecycle state machine.
 - honua-mobile#252: local assignment/task packets.
 - honua-mobile#253: local media parity adapters.
-- honua-mobile#254: local parity golden fixtures.
-- honua-mobile#255: local conflict simulation and sync replay.
-- honua-mobile#256: local export/evidence packages.
-- honua-mobile#257: no-cloud field day acceptance harness.
-- honua-mobile#258: parent tracker.
+- honua-mobile#254: local form parity golden fixtures.
+- honua-mobile#255: local conflict simulation and sync replay harness.
+- honua-mobile#256: local export/evidence package generation.
+- honua-mobile#257: no-cloud field day product acceptance harness.
+- honua-mobile#258: no-cloud/no-design parity parent tracker.
 
-SDK model dependencies:
+Current remaining parity blockers are outside this no-cloud/no-design local
+scope:
+
+- honua-mobile#92 remains open for final hosted cloud acceptance and is blocked
+  on honua-server#965 DNS/TLS remediation for `staging-api.honua.io`.
+- honua-mobile#225 remains open for AR/3D GA closure until ARCore/ARKit adapter
+  evidence and physical-device validation are attached.
+- Hosted designer, admin, supervisor review, hosted export/reporting, tenancy,
+  and RBAC parity remain server/admin/SDK-owned work consumed by mobile through
+  published contracts.
+
+Closed SDK contract inputs:
 
 - honua-sdk-dotnet#160: local field project package contracts.
 - honua-sdk-dotnet#161: non-cloud form/media/value parity contracts.
+- honua-sdk-dotnet#162: SDK PR that landed the local project package contracts
+  consumed by mobile package import/download, assignment, and lifecycle
+  adapters.
