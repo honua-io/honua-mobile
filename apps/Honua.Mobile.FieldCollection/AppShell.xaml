@@ -31,6 +31,13 @@
             Route="map"
             ContentTemplate="{DataTemplate views:MapPage}" />
 
+        <!-- Work Tab -->
+        <ShellContent
+            Title="Work"
+            Icon="list_icon.png"
+            Route="work"
+            ContentTemplate="{DataTemplate views:FieldOperationsPage}" />
+
         <!-- Records Tab -->
         <Tab Title="Records" Icon="list_icon.png">
             <ShellContent

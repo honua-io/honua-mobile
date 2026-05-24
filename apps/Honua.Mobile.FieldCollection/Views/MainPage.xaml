@@ -54,24 +54,30 @@
                 <!-- Quick Actions -->
                 <Label Text="Quick Actions" Style="{StaticResource SectionHeaderStyle}" />
 
-                <Grid ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="15" RowSpacing="15">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="*,*,*" ColumnSpacing="15" RowSpacing="15">
                     <Button Grid.Row="0" Grid.Column="0"
                             Text="📍 Map"
                             Style="{StaticResource BaseButtonStyle}"
                             Command="{Binding NavigateToMapCommand}" />
 
                     <Button Grid.Row="0" Grid.Column="1"
+                            Text="Work"
+                            Style="{StaticResource BaseButtonStyle}"
+                            Command="{Binding NavigateToWorkCommand}" />
+
+                    <Button Grid.Row="1" Grid.Column="0"
                             Text="📋 Records"
                             Style="{StaticResource BaseButtonStyle}"
                             Command="{Binding NavigateToRecordsCommand}" />
 
-                    <Button Grid.Row="1" Grid.Column="0"
+                    <Button Grid.Row="1" Grid.Column="1"
                             Text="🔄 Sync"
                             Style="{StaticResource SecondaryButtonStyle}"
                             Command="{Binding QuickSyncCommand}"
                             IsEnabled="{Binding IsOnline}" />
 
-                    <Button Grid.Row="1" Grid.Column="1"
+                    <Button Grid.Row="2" Grid.Column="0"
+                            Grid.ColumnSpan="2"
                             Text="⚙️ Settings"
                             Style="{StaticResource SecondaryButtonStyle}"
                             Command="{Binding NavigateToSettingsCommand}" />

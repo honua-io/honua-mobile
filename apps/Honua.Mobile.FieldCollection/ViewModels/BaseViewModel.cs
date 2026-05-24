@@ -96,6 +96,12 @@ public partial class MainViewModel : BaseViewModel
     }
 
     [RelayCommand]
+    private async Task NavigateToWork()
+    {
+        await NavigationService.NavigateToAsync("//work");
+    }
+
+    [RelayCommand]
     private async Task NavigateToSync()
     {
         await NavigationService.NavigateToAsync("//sync");
