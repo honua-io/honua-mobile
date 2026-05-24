@@ -9,6 +9,7 @@ using Honua.Mobile.FieldCollection.Services.Configuration;
 using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.FieldCollection.Services.Forms;
 using Honua.Mobile.FieldCollection.Services.Storage;
+using Honua.Mobile.FieldCollection.Services.Workflow;
 using Honua.Sdk.Field.Forms;
 using Honua.Sdk.Field.Records;
 using Microsoft.Maui.Devices.Sensors;
@@ -409,6 +410,7 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
 {
     private readonly IFeatureService _featureService;
     private readonly IAttachmentService _attachmentService;
+    private readonly LocalFieldRecordLifecycleService _lifecycleService;
 
     [ObservableProperty]
     private string featureId = string.Empty;
@@ -422,19 +424,42 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
     [ObservableProperty]
     private string geometrySummary = "No geometry";
 
+    [ObservableProperty]
+    private string lifecycleStatusText = RecordStatus.Draft.ToString();
+
+    [ObservableProperty]
+    private bool canMarkReadyToSubmit;
+
+    [ObservableProperty]
+    private bool canSubmitRecord;
+
+    [ObservableProperty]
+    private bool canReopenRecord;
+
     public ObservableCollection<AttributeDisplayItem> Attributes { get; } = [];
     public ObservableCollection<AttachmentInfo> Attachments { get; } = [];
 
     public RecordDetailViewModel(
         INavigationService navigationService,
         IFeatureService featureService,
-        IAttachmentService attachmentService)
+        IAttachmentService attachmentService,
+        LocalFieldRecordLifecycleService lifecycleService)
         : base(navigationService)
     {
         _featureService = featureService;
         _attachmentService = attachmentService;
+        _lifecycleService = lifecycleService;
         Title = "Record Detail";
     }
+
+    partial void OnCanMarkReadyToSubmitChanged(bool value)
+        => MarkReadyToSubmitCommand.NotifyCanExecuteChanged();
+
+    partial void OnCanSubmitRecordChanged(bool value)
+        => SubmitRecordCommand.NotifyCanExecuteChanged();
+
+    partial void OnCanReopenRecordChanged(bool value)
+        => ReopenRecordCommand.NotifyCanExecuteChanged();
 
     public virtual void ApplyQueryAttributes(IDictionary<string, object> query)
     {
@@ -461,19 +486,11 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
             if (Feature == null)
             {
                 GeometrySummary = "Record not found";
+                UpdateLifecycleState();
                 return;
             }
 
-            foreach (var attribute in Feature.Attributes.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                Attributes.Add(new AttributeDisplayItem
-                {
-                    Key = attribute.Key,
-                    Value = FormatValue(attribute.Value)
-                });
-            }
-
-            GeometrySummary = FormatGeometry(Feature.Geometry);
+            RenderFeatureDetails(Feature);
 
             foreach (var attachment in await _attachmentService.GetAttachmentsAsync(Feature.Id))
             {
@@ -526,6 +543,44 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
         });
     }
 
+    [RelayCommand(CanExecute = nameof(CanMarkReadyToSubmit))]
+    private Task MarkReadyToSubmit()
+        => TransitionRecord(RecordStatus.ReadyToSubmit);
+
+    [RelayCommand(CanExecute = nameof(CanSubmitRecord))]
+    private Task SubmitRecord()
+        => TransitionRecord(RecordStatus.Submitted);
+
+    [RelayCommand(CanExecute = nameof(CanReopenRecord))]
+    private Task ReopenRecord()
+        => TransitionRecord(RecordStatus.Reopened);
+
+    private async Task TransitionRecord(RecordStatus targetStatus)
+    {
+        if (Feature == null)
+        {
+            return;
+        }
+
+        var layerId = Feature.LayerId;
+        var featureId = Feature.Id;
+        await ExecuteAsync(async () =>
+        {
+            var result = await _lifecycleService.TransitionAsync(layerId, featureId, targetStatus);
+            if (!result.Succeeded)
+            {
+                await ShowError("Status Not Changed", result.Reason ?? "The record status could not be changed.");
+                return;
+            }
+
+            Feature = result.Feature;
+            if (Feature is not null)
+            {
+                RenderFeatureDetails(Feature);
+            }
+        });
+    }
+
     [RelayCommand]
     private async Task OpenAttachment(AttachmentInfo attachment)
     {
@@ -540,6 +595,37 @@ public partial class RecordDetailViewModel : BaseViewModel, IRouteAwareViewModel
             new Microsoft.Maui.ApplicationModel.OpenFileRequest(
                 attachment.FileName,
                 new Microsoft.Maui.Storage.ReadOnlyFile(attachment.LocalPath, attachment.ContentType)));
+    }
+
+    private void RenderFeatureDetails(Feature feature)
+    {
+        Attributes.Clear();
+        foreach (var attribute in feature.Attributes.OrderBy(attribute => attribute.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            Attributes.Add(new AttributeDisplayItem
+            {
+                Key = attribute.Key,
+                Value = FormatValue(attribute.Value)
+            });
+        }
+
+        GeometrySummary = FormatGeometry(feature.Geometry);
+        UpdateLifecycleState();
+    }
+
+    private void UpdateLifecycleState()
+    {
+        var status = Feature is null
+            ? RecordStatus.Draft
+            : LocalFieldRecordLifecycleService.GetStatus(Feature);
+
+        LifecycleStatusText = status.ToString();
+        CanMarkReadyToSubmit = Feature is not null &&
+            LocalFieldRecordLifecycleService.CanTransition(status, RecordStatus.ReadyToSubmit);
+        CanSubmitRecord = Feature is not null &&
+            LocalFieldRecordLifecycleService.CanTransition(status, RecordStatus.Submitted);
+        CanReopenRecord = Feature is not null &&
+            LocalFieldRecordLifecycleService.CanTransition(status, RecordStatus.Reopened);
     }
 
     private static string FormatGeometry(Geometry? geometry)
@@ -572,8 +658,9 @@ public sealed partial class FeatureDetailViewModel : RecordDetailViewModel
     public FeatureDetailViewModel(
         INavigationService navigationService,
         IFeatureService featureService,
-        IAttachmentService attachmentService)
-        : base(navigationService, featureService, attachmentService)
+        IAttachmentService attachmentService,
+        LocalFieldRecordLifecycleService lifecycleService)
+        : base(navigationService, featureService, attachmentService, lifecycleService)
     {
         Title = "Feature Detail";
     }

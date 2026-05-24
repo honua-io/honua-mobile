@@ -237,10 +237,15 @@ internal static class WorkflowPageContent
             BoundHeader("Feature.DisplayTitle", "Record"),
             BoundLabel("Feature.Id", "Record ID"),
             BoundLabel("GeometrySummary", "Geometry"),
+            BoundLabel("LifecycleStatusText", "Status"),
             SectionTitle("Attributes"),
             attributes,
             SectionTitle("Attachments"),
             attachments,
+            ButtonRow(
+                CommandButton("Ready", "MarkReadyToSubmitCommand"),
+                CommandButton("Submit", "SubmitRecordCommand"),
+                CommandButton("Reopen", "ReopenRecordCommand")),
             ButtonRow(
                 CommandButton("Edit", "EditRecordCommand"),
                 CommandButton("Delete", "DeleteRecordCommand")));
