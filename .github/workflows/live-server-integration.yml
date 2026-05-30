@@ -42,8 +42,17 @@ env:
   DOTNET_VERSION: "10.0.x"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
   DOTNET_NOLOGO: "true"
+  # Pinned honua-server image. `:nightly` tracks current trunk so the vendored
+  # seed schema (tests/seed/mobile-offline-demo-v1.sql) matches; it is the
+  # version the Compatibility-Train conformance checks run against. Recorded
+  # explicitly here and echoed in the run (see "Record pinned versions").
   HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
   HONUA_POSTGIS_IMAGE: "postgis/postgis:17-3.5-alpine"
+  # Pinned geospatial-grpc conformance fixtures version (Compatibility Train,
+  # epic geospatial-grpc#18). Mirror of <HonuaConformanceFixturesVersion> in
+  # Directory.Build.props; provenance recorded in tests/conformance/UPSTREAM.md.
+  HONUA_CONFORMANCE_FIXTURES_VERSION: "0.1.0-alpha.1"
+  HONUA_CONFORMANCE_FIXTURES_REPO: "honua-io/geospatial-grpc"
 
 jobs:
   live-server-integration:
@@ -57,6 +66,26 @@ jobs:
       HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
     steps:
       - uses: actions/checkout@v6
+
+      # Make the pinned versions this run gates against explicit in the log and
+      # the job summary, so a reviewer can see exactly which honua-server image
+      # and which geospatial-grpc conformance fixture version produced the result.
+      - name: Record pinned versions
+        run: |
+          set -e
+          server_digest="$(docker manifest inspect "${HONUA_SERVER_IMAGE}" 2>/dev/null \
+            | sha256sum | awk '{print $1}' || echo 'unavailable')"
+          {
+            echo "### Live Server Integration — pinned versions"
+            echo ""
+            echo "| Anchor | Value |"
+            echo "| --- | --- |"
+            echo "| honua-server image | \`${HONUA_SERVER_IMAGE}\` |"
+            echo "| PostGIS image | \`${HONUA_POSTGIS_IMAGE}\` |"
+            echo "| geospatial-grpc conformance fixtures | \`${HONUA_CONFORMANCE_FIXTURES_VERSION}\` (repo \`${HONUA_CONFORMANCE_FIXTURES_REPO}\`) |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Pinned honua-server image: ${HONUA_SERVER_IMAGE}"
+          echo "Pinned conformance fixtures: ${HONUA_CONFORMANCE_FIXTURES_VERSION} from ${HONUA_CONFORMANCE_FIXTURES_REPO}"
 
       - name: Verify Docker available
         run: |
@@ -119,6 +148,29 @@ jobs:
           mkdir -p TestResults
           mkdir -p "${HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR}"
 
+      # Pull the pinned, published geospatial-grpc conformance fixtures
+      # (Compatibility Train, epic geospatial-grpc#18). The helper downloads the
+      # conformance-fixtures-<version>.tar.gz release asset, verifies its SHA-256,
+      # extracts it, re-verifies every file against the in-tarball SHA256SUMS, and
+      # asserts the embedded VERSION equals the pin. The live suite asserts live
+      # FeatureServer/OGC responses against these canonical contracts. GITHUB_TOKEN
+      # has read scope for `gh release download` from the same org.
+      - name: Fetch pinned conformance fixtures
+        id: conformance-fixtures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          dest="${{ github.workspace }}/conformance-fixtures"
+          tests/conformance/fetch-fixtures.sh \
+            --version "${HONUA_CONFORMANCE_FIXTURES_VERSION}" \
+            --repo "${HONUA_CONFORMANCE_FIXTURES_REPO}" \
+            --dest "${dest}"
+          test -d "${dest}/fixtures"
+          test -s "${dest}/VERSION"
+          echo "fixtures_dir=${dest}" >> "$GITHUB_OUTPUT"
+          echo "Fetched conformance fixtures $(cat "${dest}/VERSION") into ${dest}"
+
       # The seed SQL is vendored at tests/seed/mobile-offline-demo-v1.sql
       # (see tests/seed/UPSTREAM.md for upstream provenance). PR-trigger runs
       # consume the vendored copy directly, so the live suite is fully seeded
@@ -158,6 +210,11 @@ jobs:
       # ref to be exercised.
       - name: Run LiveHonuaServerInteractionTests
         id: live-tests
+        env:
+          # Point the suite at the verified, pinned conformance fixtures so its
+          # FeatureServer/OGC contract checks assert against the shared canonical
+          # geospatial.v1 payloads (not hand-written shapes).
+          HONUA_MOBILE_CONFORMANCE_FIXTURES_DIR: ${{ steps.conformance-fixtures.outputs.fixtures_dir }}
         run: |
           dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-build --no-restore --configuration Release \
