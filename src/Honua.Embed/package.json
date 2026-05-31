@@ -44,6 +44,11 @@
     "dist",
     "README.md"
   ],
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/embed.js",
+    "./src/index.ts"
+  ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && npm run build:angular && node scripts/copy-cesium-assets.mjs",
     "build:angular": "ngc -p tsconfig.angular.json && node scripts/bundle-angular-entry.mjs",
