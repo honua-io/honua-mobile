@@ -16,5 +16,18 @@
     <HonuaSdkDotNetTrainReleaseCommit>6db17ed</HonuaSdkDotNetTrainReleaseCommit>
     <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-24T00:55:47Z</HonuaSdkDotNetTrainReleasePublishedAt>
     <MauiVersion>10.0.70</MauiVersion>
+
+    <!--
+      geospatial-grpc conformance fixtures — pinned source of truth for the
+      Live Server Integration contract checks (Compatibility Train, epic
+      geospatial-grpc#18). The Live Server Integration workflow pulls this exact
+      fixture version via tests/conformance/fetch-fixtures.sh from the
+      v$(HonuaConformanceFixturesVersion) GitHub Release of
+      honua-io/geospatial-grpc; the version maps 1:1 to a geospatial.v1 schema
+      release. Provenance is recorded in tests/conformance/UPSTREAM.md. Bump this
+      pin (and UPSTREAM.md) in lockstep when adopting a newer fixture release.
+    -->
+    <HonuaConformanceFixturesVersion>0.1.0-alpha.1</HonuaConformanceFixturesVersion>
+    <HonuaConformanceFixturesRepository>honua-io/geospatial-grpc</HonuaConformanceFixturesRepository>
   </PropertyGroup>
 </Project>

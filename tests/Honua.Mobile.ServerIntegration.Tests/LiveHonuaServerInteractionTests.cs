@@ -57,55 +57,78 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: false);
-        using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
-        {
-            ServiceId = _server.Options.ServiceId,
-            LayerId = _server.Options.LayerId,
-            Where = "1=1",
-            OutFields = ["*"],
-            ReturnGeometry = true,
-            ResultRecordCount = 1,
-        });
-        Assert.Equal(JsonValueKind.Object, query.RootElement.ValueKind);
 
-        JsonDocument? streamPage = null;
-        await foreach (var page in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
-        {
-            ServiceId = _server.Options.ServiceId,
-            LayerId = _server.Options.LayerId,
-            ResultRecordCount = 1,
-        }))
-        {
-            streamPage = page;
-            break;
-        }
+        // Conformance: the FeatureServer REST query response must conform to the
+        // canonical geospatial.v1.QueryFeaturesResponse contract (shared fixture
+        // feature_query_response.json). A #1238-class JSONB-projection regression
+        // returns HTTP 400 here; the runner attributes that to the named contract
+        // and marks it known-tracked-xfail rather than surfacing a bare 400.
+        await ConformanceContractRunner.RunAsync(
+            FeatureContractConformance.FeatureQueryContract,
+            async () =>
+            {
+                using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+                {
+                    ServiceId = _server.Options.ServiceId,
+                    LayerId = _server.Options.LayerId,
+                    Where = "1=1",
+                    OutFields = ["*"],
+                    ReturnGeometry = true,
+                    ResultRecordCount = 1,
+                });
+                AssertFeatureQueryContract(query.RootElement, requireFeature: true);
 
-        using (streamPage)
-        {
-            Assert.NotNull(streamPage);
-            Assert.Equal(JsonValueKind.Object, streamPage.RootElement.ValueKind);
-        }
+                JsonDocument? streamPage = null;
+                await foreach (var page in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
+                {
+                    ServiceId = _server.Options.ServiceId,
+                    LayerId = _server.Options.LayerId,
+                    ResultRecordCount = 1,
+                }))
+                {
+                    streamPage = page;
+                    break;
+                }
 
-        var sdkQuery = await client.QueryAsync(new FeatureQueryRequest
-        {
-            Source = FeatureSource(),
-            Limit = 1,
-        });
-        Assert.NotEmpty(sdkQuery.Features);
+                using (streamPage)
+                {
+                    if (streamPage is null)
+                    {
+                        throw new ContractDriftException(
+                            FeatureContractConformance.FeatureQueryContract,
+                            "server-streaming query yielded no page for the seeded layer.");
+                    }
 
-        FeatureQueryResult? sdkPage = null;
-        await foreach (var page in client.QueryPagesAsync(new FeatureQueryRequest
-        {
-            Source = FeatureSource(),
-            Limit = 1,
-        }))
-        {
-            sdkPage = page;
-            break;
-        }
+                    AssertFeatureQueryContract(streamPage.RootElement, requireFeature: false);
+                }
 
-        Assert.NotNull(sdkPage);
-        Assert.NotEmpty(sdkPage.Features);
+                var sdkQuery = await client.QueryAsync(new FeatureQueryRequest
+                {
+                    Source = FeatureSource(),
+                    Limit = 1,
+                });
+                AssertFeatureQueryContract(ToFeatureServerJson(sdkQuery), requireFeature: true);
+
+                FeatureQueryResult? sdkPage = null;
+                await foreach (var page in client.QueryPagesAsync(new FeatureQueryRequest
+                {
+                    Source = FeatureSource(),
+                    Limit = 1,
+                }))
+                {
+                    sdkPage = page;
+                    break;
+                }
+
+                if (sdkPage is null)
+                {
+                    throw new ContractDriftException(
+                        FeatureContractConformance.FeatureQueryContract,
+                        "SDK QueryPagesAsync yielded no page for the seeded layer.");
+                }
+
+                AssertFeatureQueryContract(ToFeatureServerJson(sdkPage), requireFeature: true);
+            });
 
         long? restObjectId = null;
         long? sdkObjectId = null;
@@ -166,15 +189,24 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         using var client = CreateMobileClient(preferGrpc: false);
         IHonuaFeatureQueryClient featureClient = new SdkFeatureClient(client);
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var result = await featureClient.QueryAsync(new FeatureQueryRequest
-        {
-            Source = FeatureSource(),
-            Limit = 1,
-        }, timeout.Token);
-
         Assert.Equal("honua-mobile", featureClient.ProviderName);
-        Assert.NotNull(result.Features);
+
+        // Conformance: the SDK feature-client adapter response must conform to the
+        // canonical FeatureService.QueryFeatures contract. A #1238-class regression
+        // returns HTTP 400 here; attributed + known-tracked-xfail by the runner.
+        await ConformanceContractRunner.RunAsync(
+            FeatureContractConformance.FeatureQueryContract,
+            async () =>
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                var result = await featureClient.QueryAsync(new FeatureQueryRequest
+                {
+                    Source = FeatureSource(),
+                    Limit = 1,
+                }, timeout.Token);
+
+                AssertFeatureQueryContract(ToFeatureServerJson(result), requireFeature: true);
+            });
     }
 
     [SkippableFact]
@@ -183,13 +215,21 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
-        using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
-        {
-            ServiceId = _server.Options.ServiceId,
-            LayerId = _server.Options.LayerId,
-            ResultRecordCount = 1,
-        });
-        Assert.Equal(JsonValueKind.Object, query.RootElement.ValueKind);
+
+        // Conformance: the gRPC query response (mapped to FeatureServer JSON) must
+        // conform to the canonical geospatial.v1.QueryFeaturesResponse contract.
+        await ConformanceContractRunner.RunAsync(
+            FeatureContractConformance.FeatureQueryContract,
+            async () =>
+            {
+                using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+                {
+                    ServiceId = _server.Options.ServiceId,
+                    LayerId = _server.Options.LayerId,
+                    ResultRecordCount = 1,
+                });
+                AssertFeatureQueryContract(query.RootElement, requireFeature: false);
+            });
 
         long? objectId = null;
         try
@@ -225,30 +265,39 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         // than being silently masked by the unary REST path.
         using var client = CreateMobileClient(preferGrpc: true, allowRestFallbackOnGrpcFailure: false);
 
-        JsonDocument? page = null;
-        await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
-        {
-            ServiceId = _server.Options.ServiceId,
-            LayerId = _server.Options.LayerId,
-            Where = "1=1",
-            OutFields = ["*"],
-            ReturnGeometry = true,
-            ResultRecordCount = 1,
-        }))
-        {
-            page = streamed;
-            break;
-        }
+        await ConformanceContractRunner.RunAsync(
+            FeatureContractConformance.FeatureQueryContract,
+            async () =>
+            {
+                JsonDocument? page = null;
+                await foreach (var streamed in client.QueryFeaturesStreamAsync(new QueryFeaturesRequest
+                {
+                    ServiceId = _server.Options.ServiceId,
+                    LayerId = _server.Options.LayerId,
+                    Where = "1=1",
+                    OutFields = ["*"],
+                    ReturnGeometry = true,
+                    ResultRecordCount = 1,
+                }))
+                {
+                    page = streamed;
+                    break;
+                }
 
-        using (page)
-        {
-            Assert.NotNull(page);
-            Assert.Equal(JsonValueKind.Object, page.RootElement.ValueKind);
-            Assert.True(
-                page.RootElement.TryGetProperty("features", out var features)
-                    && features.ValueKind == JsonValueKind.Array,
-                page.RootElement.GetRawText());
-        }
+                using (page)
+                {
+                    if (page is null)
+                    {
+                        throw new ContractDriftException(
+                            FeatureContractConformance.FeatureQueryContract,
+                            "gRPC server-streaming query yielded no page for the seeded layer.");
+                    }
+
+                    // Conformance: gRPC streaming page conforms to the canonical
+                    // QueryFeaturesResponse envelope (features array + per-feature shape).
+                    AssertFeatureQueryContract(page.RootElement, requireFeature: false);
+                }
+            });
     }
 
     [SkippableFact]
@@ -259,36 +308,56 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         using var client = CreateMobileClient(preferGrpc: false);
         var ogcSource = new FeatureSource { CollectionId = _server.Options.OgcCollectionId };
 
-        using var collections = await client.GetOgcCollectionsAsync();
-        Assert.Equal(JsonValueKind.Object, collections.RootElement.ValueKind);
+        // Conformance: the OGC Features read paths must conform to the canonical
+        // FeatureService query contract mapped onto GeoJSON (FeatureCollection of
+        // GeoJSON Features). A #1238-class regression returns HTTP 500 here; the
+        // runner attributes it to the OGC contract and marks it known-tracked-xfail.
+        await ConformanceContractRunner.RunAsync(
+            FeatureContractConformance.OgcItemsContract,
+            async () =>
+            {
+                using var collections = await client.GetOgcCollectionsAsync();
+                if (collections.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    throw new ContractDriftException(
+                        FeatureContractConformance.OgcItemsContract,
+                        $"GET collections root must be a JSON object, got {collections.RootElement.ValueKind}.");
+                }
 
-        using var items = await client.GetOgcItemsAsync(new OgcItemsRequest
-        {
-            CollectionId = _server.Options.OgcCollectionId,
-            Limit = 1,
-        });
-        Assert.Equal("FeatureCollection", items.RootElement.GetProperty("type").GetString());
+                using var items = await client.GetOgcItemsAsync(new OgcItemsRequest
+                {
+                    CollectionId = _server.Options.OgcCollectionId,
+                    Limit = 1,
+                });
+                AssertOgcItemsContract(items.RootElement, requireFeature: true);
 
-        var sdkQuery = await client.QueryAsync(new FeatureQueryRequest
-        {
-            Source = ogcSource,
-            Limit = 1,
-        });
-        Assert.NotEmpty(sdkQuery.Features);
+                var sdkQuery = await client.QueryAsync(new FeatureQueryRequest
+                {
+                    Source = ogcSource,
+                    Limit = 1,
+                });
+                AssertOgcItemsContract(ToOgcFeatureCollectionJson(sdkQuery), requireFeature: true);
 
-        FeatureQueryResult? sdkPage = null;
-        await foreach (var page in client.QueryPagesAsync(new FeatureQueryRequest
-        {
-            Source = ogcSource,
-            Limit = 1,
-        }))
-        {
-            sdkPage = page;
-            break;
-        }
+                FeatureQueryResult? sdkPage = null;
+                await foreach (var page in client.QueryPagesAsync(new FeatureQueryRequest
+                {
+                    Source = ogcSource,
+                    Limit = 1,
+                }))
+                {
+                    sdkPage = page;
+                    break;
+                }
 
-        Assert.NotNull(sdkPage);
-        Assert.NotEmpty(sdkPage.Features);
+                if (sdkPage is null)
+                {
+                    throw new ContractDriftException(
+                        FeatureContractConformance.OgcItemsContract,
+                        "SDK QueryPagesAsync (OGC source) yielded no page for the seeded collection.");
+                }
+
+                AssertOgcItemsContract(ToOgcFeatureCollectionJson(sdkPage), requireFeature: true);
+            });
 
         var featureId = $"mobile-live-ogc-{Guid.NewGuid():N}";
         var sdkFeatureId = $"mobile-live-ogc-sdk-{Guid.NewGuid():N}";
@@ -619,6 +688,89 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         {
             Directory.Delete(_rootDirectory, recursive: true);
         }
+    }
+
+    // --- Compatibility-Train conformance helpers ------------------------------
+    //
+    // Assert a live FeatureServer/OGC response against the shared, pinned
+    // geospatial-grpc conformance fixtures (see ConformanceFixtures /
+    // FeatureContractConformance). When the fixtures bundle has not been fetched
+    // (HONUA_MOBILE_CONFORMANCE_FIXTURES_DIR unset) the structural contract checks
+    // still run; the canonical fixture is consulted only to confirm it loads and
+    // names the contract, so a developer without the bundle is not blocked.
+
+    private static void AssertFeatureQueryContract(JsonElement live, bool requireFeature)
+    {
+        var canonical = ConformanceFixtures.Instance.Available
+            ? ConformanceFixtures.Instance.FeatureQueryResponse
+            : default;
+        FeatureContractConformance.AssertFeatureQueryResponse(live, canonical, requireFeature);
+    }
+
+    private static void AssertOgcItemsContract(JsonElement live, bool requireFeature)
+        => FeatureContractConformance.AssertOgcItemsResponse(live, requireFeature);
+
+    // Project the provider-neutral SDK FeatureQueryResult into the canonical
+    // FeatureServer JSON envelope (objectIdFieldName + features[].attributes/geometry)
+    // so it can be validated against the same QueryFeaturesResponse contract as the
+    // raw REST/gRPC responses.
+    private static JsonElement ToFeatureServerJson(FeatureQueryResult result)
+    {
+        var features = result.Features.Select(feature =>
+        {
+            var obj = new Dictionary<string, object?>
+            {
+                ["attributes"] = feature.Attributes.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value),
+            };
+            if (feature.Geometry is { } geometry)
+            {
+                obj["geometry"] = geometry;
+            }
+
+            return obj;
+        }).ToArray();
+
+        var envelope = new Dictionary<string, object?>
+        {
+            ["objectIdFieldName"] = result.ObjectIdFieldName ?? "OBJECTID",
+            ["features"] = features,
+        };
+
+        return JsonSerializer.SerializeToElement(envelope, JsonOptions);
+    }
+
+    // Project the provider-neutral SDK FeatureQueryResult into a GeoJSON
+    // FeatureCollection so the OGC read path can be validated against the OGC items
+    // contract.
+    private static JsonElement ToOgcFeatureCollectionJson(FeatureQueryResult result)
+    {
+        var features = result.Features.Select(feature =>
+        {
+            var obj = new Dictionary<string, object?>
+            {
+                ["type"] = "Feature",
+                ["properties"] = feature.Attributes.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value),
+            };
+            if (feature.Id is not null)
+            {
+                obj["id"] = feature.Id;
+            }
+
+            if (feature.Geometry is { } geometry)
+            {
+                obj["geometry"] = geometry;
+            }
+
+            return obj;
+        }).ToArray();
+
+        var envelope = new Dictionary<string, object?>
+        {
+            ["type"] = "FeatureCollection",
+            ["features"] = features,
+        };
+
+        return JsonSerializer.SerializeToElement(envelope, JsonOptions);
     }
 
     private HttpClient CreateHttpClient()
