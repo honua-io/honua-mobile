@@ -44,6 +44,11 @@
     "dist",
     "README.md"
   ],
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/embed.js",
+    "./src/index.ts"
+  ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly && npm run build:angular && node scripts/copy-cesium-assets.mjs",
     "build:angular": "ngc -p tsconfig.angular.json && node scripts/bundle-angular-entry.mjs",
@@ -79,9 +84,9 @@
     }
   },
   "devDependencies": {
-    "@angular/compiler": "^21.2.14",
-    "@angular/compiler-cli": "^21.2.14",
-    "@angular/core": "^21.2.14",
+    "@angular/compiler": "^21.2.15",
+    "@angular/compiler-cli": "^21.2.15",
+    "@angular/core": "^21.2.15",
     "@types/react": "^19.2.15",
     "happy-dom": "^20.0.10",
     "react": "^19.2.6",
@@ -89,7 +94,7 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "vitest": "^4.1.7",
-    "vue": "^3.5.34",
+    "vue": "^3.5.35",
     "zone.js": "^0.16.2"
   },
   "dependencies": {
