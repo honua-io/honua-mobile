@@ -158,7 +158,6 @@ jobs:
         run: |
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
-          dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
           npm ci --prefix src/Honua.Embed
 
       - name: Build Core Libraries (warnings as errors)
@@ -171,9 +170,6 @@ jobs:
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
-          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
-            --no-restore --configuration Release /p:TreatWarningsAsErrors=true
-
           npm run build --prefix src/Honua.Embed
 
       - name: Format Check
@@ -181,8 +177,6 @@ jobs:
           dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
           dotnet format src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
-            --no-restore --verify-no-changes --verbosity diagnostic
-          dotnet format src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
 
   test:
@@ -225,7 +219,6 @@ jobs:
         run: |
           dotnet restore tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj
           dotnet restore tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj
-          dotnet restore tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj
           dotnet restore tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj
           dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
           dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
@@ -239,8 +232,6 @@ jobs:
           dotnet build tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
-            --no-restore --configuration Release
-          dotnet build tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj \
             --no-restore --configuration Release
@@ -263,15 +254,6 @@ jobs:
           dotnet test tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
             --no-build --no-restore --configuration Release \
             --logger "trx;LogFileName=offline-tests.trx" \
-            --logger "console;verbosity=minimal" \
-            --results-directory ./TestResults \
-            --collect:"XPlat Code Coverage"
-
-      - name: Run Field Tests
-        run: |
-          dotnet test tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj \
-            --no-build --no-restore --configuration Release \
-            --logger "trx;LogFileName=field-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
@@ -378,13 +360,6 @@ jobs:
       - name: Build Android Project References
         run: |
           dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
-            --configuration Release \
-            --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
-            /p:RuntimeIdentifiers=android-x64 \
-            /p:TreatWarningsAsErrors=true
-
-          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj \
             --configuration Release \
             --no-restore \
             /p:RuntimeIdentifier=android-x64 \
@@ -752,11 +727,9 @@ jobs:
         run: |
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
-          dotnet restore src/Honua.Mobile.Field/Honua.Mobile.Field.csproj
           # Build cross-platform libraries for security analysis
           dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --configuration Release
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
-          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --no-restore --configuration Release
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
@@ -820,15 +793,12 @@ jobs:
 
           SDK_DLL="src/Honua.Mobile.Sdk/bin/Release/net10.0/Honua.Mobile.Sdk.dll"
           OFFLINE_DLL="src/Honua.Mobile.Offline/bin/Release/net10.0/Honua.Mobile.Offline.dll"
-          FIELD_DLL="src/Honua.Mobile.Field/bin/Release/net10.0/Honua.Mobile.Field.dll"
 
           # Build the source projects so we can measure assembly sizes
           dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release --no-restore 2>/dev/null || \
             dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --configuration Release --no-restore 2>/dev/null || \
             dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --configuration Release
-          dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --configuration Release --no-restore 2>/dev/null || \
-            dotnet build src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --configuration Release
 
           WARNING_KB=$(python3 -c "import json; print(json.load(open('$BUDGET_FILE'))['budgets']['sdk_package_size_kb']['warning'])")
           ERROR_KB=$(python3 -c "import json; print(json.load(open('$BUDGET_FILE'))['budgets']['sdk_package_size_kb']['error'])")
@@ -836,7 +806,7 @@ jobs:
           TOTAL_SIZE_KB=0
           BUDGET_EXCEEDED=false
 
-          for DLL in $SDK_DLL $OFFLINE_DLL $FIELD_DLL; do
+          for DLL in $SDK_DLL $OFFLINE_DLL; do
             if [ -f "$DLL" ]; then
               SIZE_BYTES=$(stat -c%s "$DLL")
               SIZE_KB=$((SIZE_BYTES / 1024))

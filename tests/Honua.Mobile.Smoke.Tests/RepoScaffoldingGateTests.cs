@@ -7,7 +7,6 @@ public sealed class RepoScaffoldingGateTests
     private static readonly string[] MobilePackageProjects =
     [
         "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj",
-        "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj",
         "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj",
         "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj",
     ];

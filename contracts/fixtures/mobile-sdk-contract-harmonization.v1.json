@@ -189,8 +189,6 @@
         "Honua.Sdk.Field.Records.RecordWorkflow"
       ],
       "mobileTypes": [
-        "Honua.Mobile.Field.Capture.MobileFieldCaptureWorkflow",
-        "Honua.Mobile.Field.Capture.MobileFieldMediaAttachment",
         "Honua.Mobile.Maui.HonuaMobileServiceCollectionExtensions",
         "Honua.Mobile.Offline.GeoPackage.GeoPackageSdkOfflineStoreAdapter"
       ],

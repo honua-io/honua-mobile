@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
-    <ProjectReference Include="..\Honua.Mobile.Field\Honua.Mobile.Field.csproj" />
     <ProjectReference Include="..\Honua.Mobile.Offline\Honua.Mobile.Offline.csproj" />
   </ItemGroup>
 

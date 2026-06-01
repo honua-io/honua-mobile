@@ -5,7 +5,6 @@ This repository owns mobile SDK packages, MAUI integration, offline field workfl
 ## Current Capabilities
 
 - `Honua.Mobile.Sdk`: transport, auth, gRPC-first feature queries, REST fallback, routing, scene metadata adapter, and secure transport checks.
-- `Honua.Mobile.Field`: SDK-backed field form validation, calculated fields, duplicate detection, media attachment metadata conversion, and record workflow.
 - Field collection reference workflow: opt-in AI capture adapter hooks for field suggestions, media redaction state, provider-unavailable queueing, and sanitized diagnostics.
 - FieldCollection local Work tab: SDK field package manifest import, direct manifest/artifact URL download, local project catalog state, package diagnostics, assignment inbox/actions, record open routing, lifecycle buttons, local export, and native share handoff.
 - `Honua.Mobile.Offline`: GeoPackage storage, sync queue, pull/push sync, conflicts, map area download, delta cursors, TTL/cache governance, and R-tree bbox lookup.

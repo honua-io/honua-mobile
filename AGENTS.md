@@ -16,7 +16,7 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 ## Tech Stack
 
-- **.NET 10** (`net10.0`) — library projects (`Sdk`, `Field`, `Offline`, `Maui`)
+- **.NET 10** (`net10.0`) — library projects (`Sdk`, `Offline`, `Maui`)
   target `net10.0` and build on any platform without the MAUI workload.
 - **.NET MAUI** `10.0.70` — app/platform projects (`apps/Honua.Mobile.App`,
   `apps/Honua.Mobile.FieldCollection`). Android targets need a configured
@@ -65,7 +65,7 @@ Format check (CI runs this on core libraries with warnings-as-errors):
 
 ```bash
 dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --verify-no-changes
-# (also Offline, Field, and equivalent for Maui)
+# (also Offline and equivalent for Maui)
 ```
 
 Embed web component package (`src/Honua.Embed`):
@@ -102,7 +102,6 @@ Wiring is via DI extension methods (e.g. `AddHonuaMobileSdk`,
 ```
 src/
   Honua.Mobile.Sdk/      Core mobile client: transport, auth, gRPC/REST, routing, scene adapter
-  Honua.Mobile.Field/    Mobile adapters over SDK-owned field forms/validation/capture
   Honua.Mobile.Offline/  GeoPackage storage, sync queue, map-area download, conflict resolution
   Honua.Mobile.Maui/     MAUI DI registration, native display, location, scene anchoring
   Honua.Mobile.IoT/      IoT sensor interfaces only — no implementation yet
@@ -110,7 +109,7 @@ src/
 apps/
   Honua.Mobile.App/                 Reference MAUI application
   Honua.Mobile.FieldCollection*/    Field collection app + core
-tests/                   Sdk / Field / FieldCollection / Offline / Maui / ServerIntegration /
+tests/                   Sdk / FieldCollection / Offline / Maui / ServerIntegration /
                          Smoke / PlatformSmoke test projects; tests/seed has vendored live seed SQL
 templates/  examples/    Field collector template and sample apps
 scripts/    quality/      Validation/release scripts, store-prereq validators, release checklists

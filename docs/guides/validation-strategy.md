@@ -180,8 +180,8 @@ The relevant workflows under `.github/workflows/`:
 
 - `ci.yml` -- the main PR and trunk gate. Jobs and the test buckets
   they run:
-  - `build` -- compiles `Honua.Mobile.Sdk`, `Honua.Mobile.Offline`,
-    `Honua.Mobile.Field` with `TreatWarningsAsErrors`, plus
+  - `build` -- compiles `Honua.Mobile.Sdk` and `Honua.Mobile.Offline`
+    with `TreatWarningsAsErrors`, plus
     `npm run build` for the embed package; runs `dotnet format` checks.
   - `test` -- runs the 5 unit projects (294 tests) plus the
     `Honua.Mobile.ServerIntegration.Tests` project; the 11

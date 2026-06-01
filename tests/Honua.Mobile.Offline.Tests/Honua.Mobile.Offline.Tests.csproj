@@ -12,6 +12,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- SDK field contracts: previously pulled transitively via Honua.Mobile.Field
+         (removed); the offline-adapter test validates SDK field records directly. -->
+    <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaSdkDotNetTrainVersion)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,7 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Honua.Mobile.Offline\Honua.Mobile.Offline.csproj" />
-    <ProjectReference Include="..\..\src\Honua.Mobile.Field\Honua.Mobile.Field.csproj" />
   </ItemGroup>
 
 </Project>

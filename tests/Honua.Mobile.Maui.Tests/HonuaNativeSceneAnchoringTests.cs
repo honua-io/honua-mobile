@@ -1,8 +1,6 @@
 using Honua.Mobile.Maui;
-using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.SceneAnchoring;
-using Honua.Sdk.Field.Records;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Honua.Mobile.Maui.Tests;
@@ -416,25 +414,6 @@ public sealed class HonuaNativeSceneAnchoringTests
 
         await workflow.StartAsync(request);
         var evidence = await workflow.CreateEvidenceAsync();
-
-        var media = new MobileFieldMediaAttachment
-        {
-            AttachmentId = "photo-1",
-            FieldId = "photos",
-            LocalPath = Path.Combine("offline", "captures", "photo-1.jpg"),
-            MediaType = FieldMediaType.Photo,
-            EvidenceMetadata = new Dictionary<string, object?> { ["existing"] = "kept" },
-        };
-        var attachedMedia = workflow.AttachEvidence(media, evidence);
-        var sdkMedia = attachedMedia.ToSdkAttachment();
-        var mediaMetadata = AssertArEvidence(attachedMedia.EvidenceMetadata);
-
-        Assert.Equal("kept", attachedMedia.EvidenceMetadata["existing"]);
-        Assert.Equal("photo-1.jpg", sdkMedia.FileName);
-        Assert.Equal("record-1", mediaMetadata["recordId"]);
-        Assert.Equal("PrecisionInspection", mediaMetadata["readinessLevel"]);
-        Assert.Equal(["cp-a", "cp-b", "cp-c"], Assert.IsType<string[]>(mediaMetadata["controlPointIds"]));
-        Assert.Equal("2026-05-08T09:15:00.0000000+00:00", mediaMetadata["capturedAtUtc"]);
 
         var annotation = new HonuaAnnotationLayer().DrawPoint(
             new HonuaMapCoordinate(21.3069, -157.8583),

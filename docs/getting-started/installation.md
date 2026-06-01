@@ -63,7 +63,6 @@ dotnet build
    - Install these packages:
 
 ```xml
-<PackageReference Include="Honua.Mobile.Field" Version="0.1.0-alpha.1" />
 <PackageReference Include="Honua.Mobile.Maui" Version="0.1.0-alpha.1" />
 <PackageReference Include="Honua.Mobile.Offline" Version="0.1.0-alpha.1" />
 <PackageReference Include="Honua.Mobile.Sdk" Version="0.1.0-alpha.1" />
@@ -77,7 +76,6 @@ dotnet new maui -n MyHonuaApp
 cd MyHonuaApp
 
 # Add Honua packages
-dotnet add package Honua.Mobile.Field --version 0.1.0-alpha.1
 dotnet add package Honua.Mobile.Maui --version 0.1.0-alpha.1
 dotnet add package Honua.Mobile.Offline --version 0.1.0-alpha.1
 dotnet add package Honua.Mobile.Sdk --version 0.1.0-alpha.1
@@ -90,7 +88,6 @@ dotnet restore
 
 ```powershell
 # In Visual Studio Package Manager Console
-Install-Package Honua.Mobile.Field -Version 0.1.0-alpha.1
 Install-Package Honua.Mobile.Maui -Version 0.1.0-alpha.1
 Install-Package Honua.Mobile.Offline -Version 0.1.0-alpha.1
 Install-Package Honua.Mobile.Sdk -Version 0.1.0-alpha.1

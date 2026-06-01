@@ -1,4 +1,3 @@
-using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Auth;
 using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.Diagnostics;
@@ -185,7 +184,6 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<DuplicateDetector>();
-        services.AddSingleton<MobileFieldCaptureWorkflow>();
         return services;
     }
 

@@ -84,7 +84,6 @@ jobs:
         run: |
           projects=(
             "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
-            "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj"
             "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"
             "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
           )
@@ -100,7 +99,6 @@ jobs:
         run: |
           tests=(
             "tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj"
-            "tests/Honua.Mobile.Field.Tests/Honua.Mobile.Field.Tests.csproj"
             "tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj"
             "tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj"
             "tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj"
@@ -118,7 +116,6 @@ jobs:
           mkdir -p nupkgs
           projects=(
             "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
-            "src/Honua.Mobile.Field/Honua.Mobile.Field.csproj"
             "src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"
             "src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"
           )
@@ -175,12 +172,11 @@ jobs:
 
           dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
           dotnet add package Honua.Mobile.Sdk --version "${PACKAGE_VERSION}"
-          dotnet add package Honua.Mobile.Field --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Offline --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Maui --version "${PACKAGE_VERSION}"
 
           cat > Program.cs <<'EOF'
-          using Honua.Mobile.Field.Forms;
+          using Honua.Sdk.Field.Forms;
           using Honua.Mobile.Maui;
           using Honua.Mobile.Offline.GeoPackage;
           using Honua.Mobile.Offline.Sync;

@@ -46,7 +46,6 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 
 		<!-- Honua Mobile SDK -->
-		<PackageReference Include="Honua.Mobile.Field" Version="0.1.0-alpha.1" />
 		<PackageReference Include="Honua.Mobile.Maui" Version="0.1.0-alpha.1" />
 		<PackageReference Include="Honua.Mobile.Offline" Version="0.1.0-alpha.1" />
 		<PackageReference Include="Honua.Mobile.Sdk" Version="0.1.0-alpha.1" />
