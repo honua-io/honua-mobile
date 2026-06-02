@@ -85,6 +85,48 @@ before the SDK geometry contracts have graduated. The safer shape is:
 - benchmark pan/zoom refresh, offline GeoPackage layer loading, and annotation
   redraw before making Mapsui the default renderer.
 
+## Annotation Styling
+
+`Honua.Mobile.Maui.Annotations` provides native field-collection annotation
+primitives (`HonuaAnnotation`, `HonuaAnnotationLayer`) styled by
+`HonuaAnnotationStyle`. The style record carries only local visual properties:
+
+- `FillColor`, `StrokeColor`, `StrokeWidth`, `Opacity`
+- `TextColor`, `TextSize`
+
+These values are applied by the native renderer/adapter when drawing
+annotations on the device. They describe how a field user's annotation looks
+locally; they are not a data-driven styling pipeline.
+
+### Orthogonal to server (MapLibre) styles
+
+`HonuaAnnotationStyle` is **intentionally orthogonal** to the Honua Server
+data-driven style system and is **not** part of the cross-repo style strategy:
+
+- It is **not** a server style. There is no MapLibre, SLD, or Esri style
+  document, no `styleId`, no `honua://styles/{styleId}` reference, and no
+  consumption of the server's `/ogc/styles` (OGC API – Styles) endpoints.
+- It styles a single user-authored annotation, not a feature collection by
+  attribute/zoom rules. There are no data-driven expressions, filters, or
+  layer-paint specifications.
+- Rendering happens locally/natively on the device. Server-side or
+  server-published style resolution is never involved.
+
+This boundary is deliberate per
+[`honua-server` ADR-0048 — OGC API – Styles and cross-repo style coherence](https://github.com/honua-io/honua-server/blob/trunk/docs/contributor/adr/0048-ogc-api-styles-and-cross-repo-style-coherence.md).
+Server style consumption (e.g. reading `/ogc/styles` or applying a
+`styleId`-keyed MapLibre/SLD/Esri style for offline data-driven rendering) is
+out of scope for annotation styling and would only be added if and when
+offline data-driven rendering is separately scoped.
+
+| Concern | `HonuaAnnotationStyle` (this package) | Server data-driven styles (ADR-0048) |
+|---------|---------------------------------------|--------------------------------------|
+| Purpose | Native styling of a user-authored annotation | Data-driven rendering of feature collections |
+| Format | Flat fill/stroke/opacity/text properties | MapLibre / SLD / Esri style documents |
+| Identity | None (instance carried with the annotation) | `styleId`, `honua://styles/{styleId}` |
+| Source | Authored on device | Published via `/ogc/styles` (OGC API – Styles) |
+| Rendering | Local/native renderer | Map renderer applying the data-driven style |
+
 ## Native Scene Anchoring Adapter
 
 `Honua.Mobile.Maui.SceneAnchoring` provides the mobile-owned boundary for #38
