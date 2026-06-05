@@ -9,7 +9,7 @@
       See docs/guides/sdk-contract-stability.md for the stability roadmap and
       package ownership guidance for the SDK-owned contract surface.
     -->
-    <HonuaSdkDotNetTrainVersion>1.0.0</HonuaSdkDotNetTrainVersion>
+    <HonuaSdkDotNetTrainVersion>1.2.0</HonuaSdkDotNetTrainVersion>
     <HonuaSdkDotNetTrainTag>trunk</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/actions/runs/26347851452</HonuaSdkDotNetTrainReleaseUrl>
