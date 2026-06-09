@@ -1,5 +1,7 @@
 # Honua Mobile SDK for .NET
 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/honua-io/honua-mobile/badge)](https://scorecard.dev/viewer/?uri=github.com/honua-io/honua-mobile)
+
 .NET MAUI mobile SDK for [Honua Server](https://github.com/honua-io/honua-server) --
 offline-first field data collection with GeoPackage storage, gRPC transport,
 dynamic forms, and background sync.
