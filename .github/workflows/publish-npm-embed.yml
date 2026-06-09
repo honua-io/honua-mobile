@@ -12,6 +12,9 @@ on:
     tags:
       - "mobile-embed-v*"
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "24.x"
 
