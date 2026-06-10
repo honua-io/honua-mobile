@@ -20,9 +20,8 @@ These tests verify:
   `mobile-dotnet-v*` release tags and keeps manual runs dry-run only.
 - Android API 33 emulator smoke, Android trim smoke, iOS 17+ simulator smoke,
   iOS trim smoke, and iOS AOT smoke remain wired in CI.
-- `Honua.Mobile.Sdk`, `Honua.Mobile.Field`, `Honua.Mobile.Offline`, and
-  `Honua.Mobile.Maui` keep Apache-2.0 NuGet metadata and package README
-  inclusion.
+- `Honua.Mobile.Sdk`, `Honua.Mobile.Offline`, and `Honua.Mobile.Maui` keep
+  Apache-2.0 NuGet metadata and package README inclusion.
 - Dependabot covers NuGet, npm, and GitHub Actions, while CI uploads Trivy
   SARIF for high and critical findings.
 - README keeps the honua-server #811 roadmap link.

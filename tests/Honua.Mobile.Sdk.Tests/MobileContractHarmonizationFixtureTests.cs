@@ -127,9 +127,13 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Sdk.Field.Records.FieldRecord",
             fields.AuthoritativeTypes);
-        Assert.Contains(
-            "Honua.Mobile.Field.Capture.MobileFieldCaptureWorkflow",
-            fields.MobileTypes);
+        // The mobile field-capture adapters (MobileFieldCaptureWorkflow /
+        // MobileFieldMediaAttachment) were removed from honua-mobile and ported
+        // into the Honua Collect product repo; honua-mobile no longer ships any
+        // Honua.Mobile.Field.* type.
+        Assert.DoesNotContain(
+            fields.MobileTypes,
+            type => type.StartsWith("Honua.Mobile.Field.", StringComparison.Ordinal));
         Assert.DoesNotContain(
             fields.MobileTypes,
             type => type.StartsWith("Honua.Mobile.Field.Forms.", StringComparison.Ordinal));

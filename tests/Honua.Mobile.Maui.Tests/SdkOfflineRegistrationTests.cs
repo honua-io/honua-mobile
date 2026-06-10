@@ -1,4 +1,3 @@
-using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
@@ -86,14 +85,13 @@ public sealed class SdkOfflineRegistrationTests
     }
 
     [Fact]
-    public void AddHonuaMobileFieldCollection_RegistersSdkBackedFieldWorkflow()
+    public void AddHonuaMobileFieldCollection_RegistersSdkDuplicateDetector()
     {
         using var provider = new ServiceCollection()
             .AddHonuaMobileFieldCollection()
             .BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<DuplicateDetector>());
-        Assert.NotNull(provider.GetRequiredService<MobileFieldCaptureWorkflow>());
     }
 
     private static OfflinePackageManifest CreateManifest()

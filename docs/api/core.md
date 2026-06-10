@@ -36,7 +36,6 @@ For DI-driven setup in MAUI apps, use the registration extensions in
 | Package | Purpose |
 |---------|---------|
 | `Honua.Mobile.Sdk` | Transport, auth, gRPC-first client, REST fallback, routing, SDK scene metadata adapter |
-| `Honua.Mobile.Field` | Mobile adapters for SDK-owned field forms, validation, media capture metadata, workflow |
 | `Honua.Mobile.Offline` | GeoPackage storage, sync queue, map area download, conflict resolution |
 | `Honua.Mobile.Maui` | MAUI service registration, DI extensions, native display, native scene anchoring, device location |
 

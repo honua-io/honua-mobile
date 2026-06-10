@@ -32,7 +32,6 @@ which bucket.
 | Package | Purpose |
 |---------|---------|
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter |
-| **Honua.Mobile.Field** | Mobile adapters for SDK-owned field forms, validation, media capture metadata, and workflow |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution |
 | **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration |
 | **@honua/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components for ISV embeds |
@@ -167,7 +166,6 @@ src/
   Honua.Embed/                Embeddable map web component package
     tests/                    Web component DOM behavior tests (17 tests)
   Honua.Mobile.Sdk/           Core mobile client
-  Honua.Mobile.Field/         SDK field workflow adapters
   Honua.Mobile.Offline/       GeoPackage sync engine
   Honua.Mobile.Maui/          MAUI platform integration, native display, location, and scene anchoring
   Honua.Mobile.IoT/           IoT sensor abstractions (interface-only, future)
@@ -175,7 +173,6 @@ apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
   Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (80 tests)
-  Honua.Mobile.Field.Tests/   SDK field adapter validation, calculated fields, workflow (11 tests)
   Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
   Honua.Mobile.ServerIntegration.Tests/ Loopback and opt-in live Honua image integration surface
   Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)

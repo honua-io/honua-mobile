@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Field.Forms;
@@ -20,7 +19,6 @@ public sealed class FieldWorkflowOfflineAdapterTests : IDisposable
     [Fact]
     public async Task ValidatedSdkFieldRecord_CanFlowIntoOfflineJournalMetadata()
     {
-        var workflow = new MobileFieldCaptureWorkflow(new DuplicateDetector());
         var form = new FormDefinition
         {
             FormId = "inspection",
@@ -48,7 +46,7 @@ public sealed class FieldWorkflowOfflineAdapterTests : IDisposable
             },
         };
 
-        var validation = workflow.Validate(form, fieldRecord);
+        var validation = FormValidator.Validate(form, fieldRecord);
         Assert.True(validation.IsValid);
 
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });

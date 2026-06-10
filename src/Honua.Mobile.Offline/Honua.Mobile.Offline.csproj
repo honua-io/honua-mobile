@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Honua.Mobile.Field\Honua.Mobile.Field.csproj" />
     <ProjectReference Include="..\Honua.Mobile.Sdk\Honua.Mobile.Sdk.csproj" />
   </ItemGroup>
 

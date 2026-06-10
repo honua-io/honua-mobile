@@ -1,5 +1,4 @@
 using System.Globalization;
-using Honua.Mobile.Field.Capture;
 using Honua.Mobile.Maui.Annotations;
 
 namespace Honua.Mobile.Maui.SceneAnchoring;
@@ -208,19 +207,6 @@ public sealed class HonuaNativeArFieldWorkflow
             ArContext = arContext,
             WorkflowState = state,
         };
-    }
-
-    public MobileFieldMediaAttachment AttachEvidence(
-        MobileFieldMediaAttachment attachment,
-        HonuaNativeArFieldEvidence evidence)
-    {
-        ArgumentNullException.ThrowIfNull(attachment);
-        ArgumentNullException.ThrowIfNull(evidence);
-
-        return attachment.WithEvidenceMetadata(new Dictionary<string, object?>
-        {
-            [EvidenceMetadataKey] = evidence.ToMetadata(),
-        });
     }
 
     public HonuaAnnotation AttachEvidence(
