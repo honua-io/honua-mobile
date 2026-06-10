@@ -84,24 +84,24 @@
     }
   },
   "devDependencies": {
-    "@angular/compiler": "^21.2.15",
-    "@angular/compiler-cli": "^21.2.15",
-    "@angular/core": "^21.2.15",
-    "@types/react": "^19.2.15",
-    "happy-dom": "^20.0.10",
-    "react": "^19.2.6",
+    "@angular/compiler": "^22.0.0",
+    "@angular/compiler-cli": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "@types/react": "^19.2.16",
+    "happy-dom": "^20.10.1",
+    "react": "^19.2.7",
     "rxjs": "^7.8.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8",
     "vue": "^3.5.35",
     "zone.js": "^0.16.2"
   },
   "dependencies": {
-    "@deck.gl/core": "^9.3.2",
-    "@deck.gl/layers": "^9.3.2",
-    "@deck.gl/mapbox": "^9.3.2",
-    "cesium": "^1.141.0",
+    "@deck.gl/core": "^9.3.3",
+    "@deck.gl/layers": "^9.3.3",
+    "@deck.gl/mapbox": "^9.3.3",
+    "cesium": "^1.142.0",
     "maplibre-gl": "^5.24.0"
   }
 }
