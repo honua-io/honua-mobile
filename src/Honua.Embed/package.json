@@ -86,7 +86,7 @@
   "devDependencies": {
     "@angular/compiler": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
-    "@angular/core": "^22.0.0",
+    "@angular/core": "^22.0.1",
     "@types/react": "^19.2.16",
     "happy-dom": "^20.10.1",
     "react": "^19.2.7",
