@@ -10,6 +10,14 @@ name: Android Internal Distribution
         required: true
         default: android-internal
         type: environment
+      target_environment:
+        description: "Backend the build points at. 'android-demo' bakes in the Pro demo backend (demo.honua.io) for external/customer demo builds; 'android-internal' keeps the existing internal-validation metadata."
+        required: true
+        default: android-internal
+        type: choice
+        options:
+          - android-internal
+          - android-demo
       channel:
         description: "Internal distribution channel."
         required: true
@@ -118,6 +126,20 @@ jobs:
             version_code="${GITHUB_RUN_NUMBER}"
           fi
 
+          # target_environment selects the backend the build is stamped against.
+          # The base URL is resolved by the shared MSBuild metadata props:
+          # 'android-demo' bakes in the public Pro demo backend (demo.honua.io);
+          # no secrets are read here. Signing/upload secrets still come from the
+          # protected GitHub Environment named by the separate 'environment' input.
+          build_environment="${{ inputs.target_environment }}"
+          case "${build_environment}" in
+            android-internal|android-demo) ;;
+            *)
+              echo "::error::Unsupported target_environment '${build_environment}'. Expected android-internal or android-demo."
+              exit 1
+              ;;
+          esac
+
           commit_sha="$(git rev-parse HEAD)"
           short_sha="$(git rev-parse --short=12 HEAD)"
           safe_ref="$(printf '%s' "${workflow_ref}" | tr -c '[:alnum:]._-' '-')"
@@ -130,6 +152,7 @@ jobs:
             echo "safe_ref=${safe_ref}"
             echo "version_code=${version_code}"
             echo "artifact_base=${artifact_base}"
+            echo "build_environment=${build_environment}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate protected environment inputs
@@ -244,6 +267,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets[steps.app.outputs.keystore_password_secret] }}
           ANDROID_KEY_ALIAS: ${{ secrets[steps.app.outputs.key_alias_secret] }}
           ANDROID_KEY_PASSWORD: ${{ secrets[steps.app.outputs.key_password_secret] }}
+          BUILD_ENVIRONMENT: ${{ steps.metadata.outputs.build_environment }}
+          CHECKOUT_SHA: ${{ steps.metadata.outputs.commit_sha }}
         run: |
           set -euo pipefail
           output_dir="${GITHUB_WORKSPACE}/artifacts/android"
@@ -260,7 +285,13 @@ jobs:
             -p:AndroidSigningStorePass="${ANDROID_KEYSTORE_PASSWORD}" \
             -p:AndroidSigningKeyPass="${ANDROID_KEY_PASSWORD}" \
             -p:ApplicationDisplayVersion="${{ inputs.version_name }}" \
-            -p:ApplicationVersion="${{ steps.metadata.outputs.version_code }}"
+            -p:ApplicationVersion="${{ steps.metadata.outputs.version_code }}" \
+            -p:HonuaMobileBuildEnvironment="${BUILD_ENVIRONMENT}" \
+            -p:HonuaMobileBuildRepository="${GITHUB_REPOSITORY}" \
+            -p:HonuaMobileBuildBranch="${GITHUB_REF_NAME}" \
+            -p:HonuaMobileBuildSha="${CHECKOUT_SHA}" \
+            -p:HonuaMobileBuildRunNumber="${GITHUB_RUN_NUMBER}" \
+            -p:HonuaMobileBuildRunId="${GITHUB_RUN_ID}"
 
           mapfile -t candidates < <(find "$(dirname "${{ steps.app.outputs.app_project }}")/bin/Release/${TARGET_FRAMEWORK}" \
             -type f -name "*.${{ inputs.artifact_type }}" | sort)
@@ -391,6 +422,7 @@ jobs:
             echo "| Field | Value |"
             echo "| --- | --- |"
             echo "| Environment | \`${{ inputs.environment }}\` |"
+            echo "| Backend (target_environment) | \`${{ inputs.target_environment }}\` |"
             echo "| Channel | \`${{ inputs.channel }}\` |"
             echo "| Workflow ref | \`${{ steps.metadata.outputs.workflow_ref }}\` |"
             echo "| Commit SHA | \`${{ steps.metadata.outputs.commit_sha }}\` |"

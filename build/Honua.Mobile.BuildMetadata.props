@@ -2,6 +2,18 @@
   <PropertyGroup>
     <HonuaMobileBuildEnvironment Condition="'$(HonuaMobileBuildEnvironment)' == '' and '$(Configuration)' == 'Debug'">dev-local</HonuaMobileBuildEnvironment>
     <HonuaMobileBuildEnvironment Condition="'$(HonuaMobileBuildEnvironment)' == ''">unspecified</HonuaMobileBuildEnvironment>
+
+    <!--
+      Demo customer-facing builds point at the Pro-licensed demo backend by
+      default. The base URL is public (only the URL is baked in; any license or
+      credentials are supplied by the demo backend / protected GitHub
+      Environment at run/build time, never from source). The 'demo', 'ios-demo',
+      and 'android-demo' environment names all resolve to demo.honua.io unless
+      an explicit HonuaMobileApiBaseUrl override is supplied at build time.
+      demo.honua.io is a non-production host, so Debug demo builds remain valid.
+    -->
+    <HonuaMobileDemoApiBaseUrl Condition="'$(HonuaMobileDemoApiBaseUrl)' == ''">https://demo.honua.io</HonuaMobileDemoApiBaseUrl>
+    <HonuaMobileApiBaseUrl Condition="'$(HonuaMobileApiBaseUrl)' == '' and ('$(HonuaMobileBuildEnvironment)' == 'demo' or '$(HonuaMobileBuildEnvironment)' == 'ios-demo' or '$(HonuaMobileBuildEnvironment)' == 'android-demo')">$(HonuaMobileDemoApiBaseUrl)</HonuaMobileApiBaseUrl>
     <HonuaMobileBuildRepository Condition="'$(HonuaMobileBuildRepository)' == '' and '$(GITHUB_REPOSITORY)' != ''">$(GITHUB_REPOSITORY)</HonuaMobileBuildRepository>
     <HonuaMobileBuildBranch Condition="'$(HonuaMobileBuildBranch)' == '' and '$(GITHUB_REF_NAME)' != ''">$(GITHUB_REF_NAME)</HonuaMobileBuildBranch>
     <HonuaMobileBuildSha Condition="'$(HonuaMobileBuildSha)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</HonuaMobileBuildSha>
