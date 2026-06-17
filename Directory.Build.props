@@ -15,7 +15,7 @@
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/actions/runs/26347851452</HonuaSdkDotNetTrainReleaseUrl>
     <HonuaSdkDotNetTrainReleaseCommit>6db17ed</HonuaSdkDotNetTrainReleaseCommit>
     <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-24T00:55:47Z</HonuaSdkDotNetTrainReleasePublishedAt>
-    <MauiVersion>10.0.70</MauiVersion>
+    <MauiVersion>10.0.71</MauiVersion>
 
     <!--
       geospatial-grpc conformance fixtures — pinned source of truth for the
