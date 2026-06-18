@@ -61,8 +61,12 @@ SemVer guarantees on their own.
   renames, namespace moves, and package splits.
 - Mobile must bump `HonuaSdkDotNetTrainVersion` per release; transitive
   refactors in mobile are expected and accepted.
-- The harmonization fixture records the exact `0.1.x-alpha.N` mobile is on at a
-  given moment.
+- The harmonization fixture records the SDK baseline mobile is on at a given
+  moment. Its `sdkBaseline` package versions use the literal token
+  `$(HonuaSdkDotNetTrainVersion)` and are derived from
+  [`Directory.Build.props`](../../Directory.Build.props) at test time, so a
+  routine train bump tracks automatically without hand-editing the fixture
+  (honua-mobile#294).
 - No deprecation window. No XML doc completeness guarantee. No back-compat
   promise.
 
@@ -149,8 +153,12 @@ That's **5** exit criteria for beta -> stable.
   [`honua-io/honua-sdk-dotnet`](https://github.com/honua-io/honua-sdk-dotnet).
 - Mobile picks up a bump by updating `<HonuaSdkDotNetTrainVersion>` (and the
   associated metadata properties) in
-  [`Directory.Build.props`](../../Directory.Build.props), then refreshing
-  `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`.
+  [`Directory.Build.props`](../../Directory.Build.props). The harmonization
+  fixture's `sdkBaseline` versions track that property automatically via the
+  `$(HonuaSdkDotNetTrainVersion)` token, so a dependabot-style train bump needs
+  no fixture edit; only the model-family/shape-invariant content of
+  `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json` is refreshed
+  when contracts themselves change.
 - Cadence target during alpha: roughly weekly bumps, driven by SDK feature
   work. Cadence target during beta: at most one minor per two weeks. Cadence
   target during stable: at most one minor per month, with patch releases as
