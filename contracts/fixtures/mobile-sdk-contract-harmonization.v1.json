@@ -15,31 +15,31 @@
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.Scenes",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "1.0.0"
+          "version": "1.2.0"
         },
         {
           "packageId": "Honua.Sdk.Field",
-          "version": "1.0.0"
+          "version": "1.2.0"
         }
       ]
     }
