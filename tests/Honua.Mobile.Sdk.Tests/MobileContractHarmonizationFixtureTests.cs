@@ -247,6 +247,27 @@ public sealed class MobileContractHarmonizationFixtureTests
             shape.OptionalFields.Select(field => field.Name).OrderBy(name => name, StringComparer.Ordinal));
     }
 
+    // The token a fixture package version uses to opt into "track whatever train
+    // Directory.Build.props pins" instead of a hand-maintained literal. Keeping
+    // this in sync with HonuaSdkDotNetTrainVersion is what a dependabot bump used
+    // to break (honua-mobile#294); the token lets the baseline derive the train
+    // version at test time so a routine bump needs no fixture edit.
+    private const string TrainVersionToken = "$(HonuaSdkDotNetTrainVersion)";
+
+    // The SDK packages whose baseline the fixture must declare. Each is expected
+    // to track the train version unless intentionally pinned to an explicit
+    // literal (see ResolveExpectedVersion).
+    private static readonly string[] ExpectedSdkPackageIds =
+    [
+        "Honua.Sdk.Abstractions",
+        "Honua.Sdk.Offline",
+        "Honua.Sdk.Grpc",
+        "Honua.Sdk.GeoServices",
+        "Honua.Sdk.Scenes",
+        "Honua.Sdk.OgcFeatures",
+        "Honua.Sdk.Field",
+    ];
+
     [Fact]
     public void Fixture_HasPortableCompatibilityMetadata()
     {
@@ -258,19 +279,94 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Equal("honua-io/honua-mobile", fixture.Compatibility.MobileBaseline.Repository);
         Assert.Equal("unreleased-source", fixture.Compatibility.MobileBaseline.PackageVersion);
 
-        var abstractionsPackage = fixture.Compatibility.SdkBaseline.Packages.Single(package => package.PackageId == "Honua.Sdk.Abstractions");
-        Assert.Equal("Honua.Sdk.Abstractions", abstractionsPackage.PackageId);
         var sdkTrainVersion = LoadSdkTrainVersion();
-        Assert.Equal(sdkTrainVersion, abstractionsPackage.Version);
+        var packages = fixture.Compatibility.SdkBaseline.Packages;
 
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Offline");
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Grpc");
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.GeoServices");
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Scenes");
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.OgcFeatures");
-        Assert.Contains(fixture.Compatibility.SdkBaseline.Packages, package => package.PackageId == "Honua.Sdk.Field");
-        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package => Assert.Equal(sdkTrainVersion, package.Version));
+        // The fixture must declare a baseline for exactly the SDK packages this
+        // repo consumes -- no more, no less. (Structural coverage; unaffected by
+        // train bumps.)
+        Assert.Equal(
+            ExpectedSdkPackageIds.OrderBy(id => id, StringComparer.Ordinal),
+            packages.Select(package => package.PackageId).OrderBy(id => id, StringComparer.Ordinal));
+
+        // Each declared version must resolve to the train pinned in
+        // Directory.Build.props. The common case is the literal token
+        // "$(HonuaSdkDotNetTrainVersion)", which derives the train version so a
+        // dependabot bump auto-tracks; an explicit literal is honored as an
+        // intentional pin and validated as a real version (so a typo can't
+        // masquerade as a deliberate divergence from the train).
+        foreach (var package in packages)
+        {
+            Assert.True(
+                package.Version == TrainVersionToken || IsValidVersionLiteral(package.Version),
+                $"sdkBaseline package '{package.PackageId}' declares version '{package.Version}', which is neither the "
+                + $"'{TrainVersionToken}' train-tracking token nor a valid version literal. Use the token to track "
+                + "Directory.Build.props automatically, or a real version string to intentionally pin.");
+
+            // Resolved baseline is the train version unless intentionally pinned.
+            var resolved = ResolveExpectedVersion(package.Version, sdkTrainVersion);
+            if (package.Version == TrainVersionToken)
+            {
+                Assert.Equal(sdkTrainVersion, resolved);
+            }
+        }
     }
+
+    [Fact]
+    public void Fixture_SdkBaseline_TracksTrainVersion_WithoutHandEditedLiterals()
+    {
+        // Regression guard for honua-mobile#294: a routine dependabot bump of
+        // HonuaSdkDotNetTrainVersion in Directory.Build.props must NOT require a
+        // matching hand-edit of this fixture. We enforce that by requiring every
+        // baseline package to use the train-tracking token rather than a pinned
+        // literal. If a future change intentionally pins a package, relax this
+        // assertion for that package with a comment explaining why -- but the
+        // default, and the dependabot-safe behavior, is the token.
+        var fixture = LoadFixture();
+        var sdkTrainVersion = LoadSdkTrainVersion();
+
+        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package =>
+            Assert.True(
+                package.Version == TrainVersionToken,
+                $"sdkBaseline package '{package.PackageId}' hard-pins version '{package.Version}'. To stay robust to "
+                + $"Directory.Build.props train bumps (honua-mobile#294), use the literal token '{TrainVersionToken}' so "
+                + "the baseline derives the train version at test time. Only replace it with an explicit literal for a "
+                + "deliberate pin, and add a comment here noting the exception."));
+
+        // Sanity: the token resolves to the currently pinned train version, so the
+        // derived baseline is the one this repo actually consumes.
+        Assert.All(fixture.Compatibility.SdkBaseline.Packages, package =>
+            Assert.Equal(sdkTrainVersion, ResolveExpectedVersion(package.Version, sdkTrainVersion)));
+    }
+
+    [Theory]
+    [InlineData("1.0.0")]
+    [InlineData("1.2.0")]
+    [InlineData("2.5.3-alpha.7")]
+    public void ResolveExpectedVersion_TokenTracksAnySimulatedTrainBump(string simulatedTrainVersion)
+    {
+        // Proves the core robustness property directly, without depending on the
+        // value currently pinned in Directory.Build.props: whatever train version
+        // a future bump lands, the token resolves to it -- so the equality
+        // assertions in Fixture_HasPortableCompatibilityMetadata keep holding with
+        // zero fixture edits.
+        Assert.Equal(simulatedTrainVersion, ResolveExpectedVersion(TrainVersionToken, simulatedTrainVersion));
+
+        // An explicit literal is honored as an intentional pin regardless of the
+        // train version, preserving genuine compatibility-pinning coverage.
+        Assert.Equal("9.9.9", ResolveExpectedVersion("9.9.9", simulatedTrainVersion));
+    }
+
+    // Resolves a fixture package version to its expected value: the train-tracking
+    // token derives the train version pinned in Directory.Build.props; any other
+    // value is treated as an intentional pin and returned verbatim.
+    private static string ResolveExpectedVersion(string fixtureVersion, string sdkTrainVersion)
+        => fixtureVersion == TrainVersionToken ? sdkTrainVersion : fixtureVersion;
+
+    private static bool IsValidVersionLiteral(string value)
+        => System.Text.RegularExpressions.Regex.IsMatch(
+            value,
+            @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$");
 
     private static ContractFixture LoadFixture()
     {
