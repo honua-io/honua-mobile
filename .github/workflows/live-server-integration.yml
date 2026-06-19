@@ -65,7 +65,7 @@ jobs:
       HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "postgis/postgis:17-3.5-alpine"
       HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Make the pinned versions this run gates against explicit in the log and
       # the job summary, so a reviewer can see exactly which honua-server image
