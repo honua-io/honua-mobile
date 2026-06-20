@@ -158,6 +158,7 @@ jobs:
         run: |
           dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
           dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
+          dotnet restore tools/Honua.Migrate.Maui.Cli/Honua.Migrate.Maui.Cli.csproj
           npm ci --prefix src/Honua.Embed
 
       - name: Build Core Libraries (warnings as errors)
@@ -170,6 +171,11 @@ jobs:
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
             --no-restore --configuration Release /p:TreatWarningsAsErrors=true
 
+          # Migration tooling (honua-migrate maui codemod) — platform-neutral,
+          # no MAUI workload required.
+          dotnet build tools/Honua.Migrate.Maui.Cli/Honua.Migrate.Maui.Cli.csproj \
+            --no-restore --configuration Release /p:TreatWarningsAsErrors=true
+
           npm run build --prefix src/Honua.Embed
 
       - name: Format Check
@@ -177,6 +183,10 @@ jobs:
           dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
           dotnet format src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format tools/Honua.Migrate.Maui/Honua.Migrate.Maui.csproj \
+            --no-restore --verify-no-changes --verbosity diagnostic
+          dotnet format tools/Honua.Migrate.Maui.Cli/Honua.Migrate.Maui.Cli.csproj \
             --no-restore --verify-no-changes --verbosity diagnostic
 
   test:
@@ -222,6 +232,7 @@ jobs:
           dotnet restore tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj
           dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
           dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
+          dotnet restore tests/Honua.Migrate.Maui.Tests/Honua.Migrate.Maui.Tests.csproj
           npm ci --prefix src/Honua.Embed
 
       - name: Create Test Results Directory
@@ -238,6 +249,8 @@ jobs:
           dotnet build tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj \
+            --no-restore --configuration Release
+          dotnet build tests/Honua.Migrate.Maui.Tests/Honua.Migrate.Maui.Tests.csproj \
             --no-restore --configuration Release
 
       - name: Run SDK Tests
@@ -281,6 +294,15 @@ jobs:
           dotnet test tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj \
             --no-build --no-restore --configuration Release \
             --logger "trx;LogFileName=maui-tests.trx" \
+            --logger "console;verbosity=minimal" \
+            --results-directory ./TestResults \
+            --collect:"XPlat Code Coverage"
+
+      - name: Run Migration Codemod Tests
+        run: |
+          dotnet test tests/Honua.Migrate.Maui.Tests/Honua.Migrate.Maui.Tests.csproj \
+            --no-build --no-restore --configuration Release \
+            --logger "trx;LogFileName=migrate-maui-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"

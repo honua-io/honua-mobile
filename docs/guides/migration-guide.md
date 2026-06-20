@@ -539,7 +539,34 @@ public async Task<JsonDocument> QueryFeaturesAsync()
 }
 ```
 
-#### 3. **Cost Analysis**
+#### 3. **Automated codemod: `honua-migrate maui`**
+
+MAUI app code is C# *source* (views, view-models, code-behind), so the
+high-frequency ArcGIS call sites can be rewritten automatically with a
+Roslyn-based codemod — the .NET MAUI member of the same `honua-migrate` family
+that ships for the JavaScript and Python SDKs. (This is distinct from compiled
+ArcObjects/GP `.dll` translation, which was scoped not-feasible in
+`honua-sdk-dotnet#182`; source-level MAUI rewriting *is* feasible.)
+
+```bash
+# Report what would change (dry run):
+dotnet run --project tools/Honua.Migrate.Maui.Cli -- ./MobileApp
+
+# Apply the rewrite in place:
+dotnet run --project tools/Honua.Migrate.Maui.Cli -- ./MobileApp --write --annotate-todos
+```
+
+It rewrites the high-frequency `MapView`/`Map`/`Basemap`/`FeatureLayer`/
+`GraphicsOverlay`/`Graphic`/symbol/geometry surface 1:1 to the Honua mobile SDK,
+fixes up the `using` directives, and emits `TODO(honua-migrate)` review markers
+for constructs that need a human decision (scenes, `ServiceFeatureTable`
+URL→service-id binding, `QueryParameters` property renames). The remaining long
+tail (portal items, renderers, tasks, widgets, XAML markup) is tracked as
+follow-up increments. See
+[`tools/Honua.Migrate.Maui/README.md`](../../tools/Honua.Migrate.Maui/README.md)
+for the full coverage matrix and CLI options.
+
+#### 4. **Cost Analysis**
 
 **10-developer team over 3 years:**
 - **ArcGIS Mobile SDK**: $45,000 (10 developers × $1,500/year × 3 years)

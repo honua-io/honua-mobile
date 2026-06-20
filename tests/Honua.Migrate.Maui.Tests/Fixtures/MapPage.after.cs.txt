@@ -1,0 +1,21 @@
+using Honua.Mobile.Maui.Controls;
+using Honua.Mobile.Maui.Mapping;
+using Honua.Mobile.Sdk.Geometry;
+
+namespace SampleApp;
+
+public class MapPage
+{
+    public object BuildMap()
+    {
+        var basemap = new HonuaBasemap();
+        var map = new HonuaMap();
+        var layer = new HonuaFeatureLayer();
+        var overlay = new HonuaGraphicsOverlay();
+        var point = new HonuaPoint(-117.182541, 34.055569);
+        var symbol = new HonuaMarkerSymbol();
+        var graphic = new HonuaGraphic();
+        var view = new HonuaMapView();
+        return view;
+    }
+}
