@@ -151,6 +151,60 @@ public sealed class DeltaDownloadEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadAsync_FirstRun_PassesCreatedServerGenToExtractChanges()
+    {
+        var store = CreateStore();
+        var replicaClient = new FakeReplicaSyncClient
+        {
+            CreateReplicaResponse = new CreateReplicaResult("replica-firstrun", 10),
+            ExtractChangesResponse = new ExtractChangesResult
+            {
+                ServerGen = 15,
+                LayerChanges = [],
+            },
+            SynchronizeResponse = new SynchronizeResult("replica-firstrun", 15),
+        };
+
+        var engine = new DeltaDownloadEngine(store, replicaClient);
+        await engine.DownloadAsync("assets");
+
+        // On first run the replica was just created at generation 10, which becomes the "since"
+        // bound for the immediate extractChanges call.
+        Assert.Equal("10", replicaClient.LastExtractSinceServerGen);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_SecondCall_PassesPersistedServerGenToExtractChanges()
+    {
+        var store = CreateStore();
+        var replicaClient = new FakeReplicaSyncClient
+        {
+            CreateReplicaResponse = new CreateReplicaResult("replica-delta", 10),
+            ExtractChangesResponse = new ExtractChangesResult
+            {
+                ServerGen = 20,
+                LayerChanges = [],
+            },
+            SynchronizeResponse = new SynchronizeResult("replica-delta", 20),
+        };
+
+        var engine = new DeltaDownloadEngine(store, replicaClient);
+
+        await engine.DownloadAsync("svc");
+        // First sync advanced the persisted cursor to the synchronize generation (20).
+        Assert.Equal("20", await store.GetSyncCursorAsync("servergen:svc"));
+
+        replicaClient.SynchronizeResponse = new SynchronizeResult("replica-delta", 30);
+
+        await engine.DownloadAsync("svc");
+
+        // Second sync must scope extractChanges to the persisted generation rather than
+        // re-downloading the full change set.
+        Assert.Equal("20", replicaClient.LastExtractSinceServerGen);
+        Assert.Equal("30", await store.GetSyncCursorAsync("servergen:svc"));
+    }
+
+    [Fact]
     public async Task DownloadAsync_EmptyChangeSet_ReturnsZeroCounts()
     {
         var store = CreateStore();
@@ -299,6 +353,9 @@ public sealed class DeltaDownloadEngineTests : IDisposable
 
         public int UnregisterCallCount { get; private set; }
 
+        /// <summary>The <c>sinceServerGen</c> argument captured on the most recent extractChanges call.</summary>
+        public string? LastExtractSinceServerGen { get; private set; }
+
         public Task<CreateReplicaResult> CreateReplicaAsync(string serviceId, string replicaName, IReadOnlyList<int>? layerIds = null, CancellationToken ct = default)
         {
             CreateReplicaCallCount++;
@@ -306,8 +363,12 @@ public sealed class DeltaDownloadEngineTests : IDisposable
         }
 
         public Task<ExtractChangesResult> ExtractChangesAsync(string serviceId, string replicaId, CancellationToken ct = default)
+            => ExtractChangesAsync(serviceId, replicaId, sinceServerGen: null, ct);
+
+        public Task<ExtractChangesResult> ExtractChangesAsync(string serviceId, string replicaId, string? sinceServerGen, CancellationToken ct = default)
         {
             ExtractChangesCallCount++;
+            LastExtractSinceServerGen = sinceServerGen;
             return Task.FromResult(ExtractChangesResponse);
         }
 

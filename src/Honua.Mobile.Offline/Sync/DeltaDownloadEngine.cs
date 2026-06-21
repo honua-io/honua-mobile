@@ -44,6 +44,7 @@ public sealed class DeltaDownloadEngine
         await _store.InitializeAsync(ct).ConfigureAwait(false);
 
         var replicaCursorKey = $"replica:{serviceId}";
+        var serverGenCursorKey = $"servergen:{serviceId}";
         var replicaId = await _store.GetSyncCursorAsync(replicaCursorKey, ct).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(replicaId))
@@ -53,10 +54,16 @@ public sealed class DeltaDownloadEngine
             replicaId = createResult.ReplicaId;
 
             await _store.SetSyncCursorAsync(replicaCursorKey, replicaId, ct).ConfigureAwait(false);
-            await _store.SetSyncCursorAsync($"servergen:{serviceId}", createResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+            await _store.SetSyncCursorAsync(serverGenCursorKey, createResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
         }
 
-        var extractResult = await _replicaClient.ExtractChangesAsync(serviceId, replicaId, ct).ConfigureAwait(false);
+        // Read back the persisted server generation so extractChanges is scoped to changes since the
+        // last sync. Without this the server re-extracts the entire change set every run, defeating
+        // delta sync. The cursor is null on the very first run for a pre-existing replica, in which
+        // case the SDK omits the "since" bound and the server returns the full set once.
+        var sinceServerGen = await _store.GetSyncCursorAsync(serverGenCursorKey, ct).ConfigureAwait(false);
+
+        var extractResult = await _replicaClient.ExtractChangesAsync(serviceId, replicaId, sinceServerGen, ct).ConfigureAwait(false);
 
         int totalAdds = 0;
         int totalUpdates = 0;
@@ -96,7 +103,7 @@ public sealed class DeltaDownloadEngine
 
         var syncResult = await _replicaClient.SynchronizeReplicaAsync(serviceId, replicaId, "download", ct).ConfigureAwait(false);
 
-        await _store.SetSyncCursorAsync($"servergen:{serviceId}", syncResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+        await _store.SetSyncCursorAsync(serverGenCursorKey, syncResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
 
         return new DeltaDownloadResult
         {
