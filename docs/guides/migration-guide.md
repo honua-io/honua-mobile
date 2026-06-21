@@ -411,6 +411,14 @@ public partial class MainPage : ContentPage
 
 ## 🗺️ From ArcGIS Mobile SDK to Honua
 
+> **Migrating a .NET MAUI / Xamarin app built on the ArcGIS Maps SDK for .NET?**
+> See the dedicated, API-idiom-by-idiom guide:
+> [Migrating from the ArcGIS Maps SDK for .NET (MAUI)](migration-arcgis-maps-sdk-maui.md).
+> App migration off compiled .NET is a **guided reimplement path plus adapters**,
+> not an automated codemod (decision per
+> [honua-sdk-dotnet#182](https://github.com/honua-io/honua-sdk-dotnet/issues/182)
+> and [honua-mobile#280](https://github.com/honua-io/honua-mobile/issues/280)).
+
 ArcGIS Mobile SDK costs $1,500/developer/year and requires extensive setup.
 
 ### Feature Comparison
