@@ -19,6 +19,15 @@ public class Feature
     public DateTime? ModifiedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public long Version { get; set; } = 1;
+
+    /// <summary>
+    /// The server <see cref="Version"/> this local row was last reconciled against
+    /// (the "base" the local edit, if any, was made on top of). When the local row
+    /// has uncommitted edits, <see cref="Version"/> is advanced past
+    /// <see cref="BaseVersion"/>; the difference is what marks the row dirty and is
+    /// used to detect genuine concurrent edits during pull.
+    /// </summary>
+    public long BaseVersion { get; set; }
     public string? CreatedBy { get; set; }
     public string? UpdatedBy { get; set; }
     public bool IsPendingSync { get; set; }

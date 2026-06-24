@@ -571,6 +571,11 @@ public sealed class FieldCollectionAttachmentServiceTests
         {
             return Task.FromResult(0L);
         }
+
+        public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FixedMetadataService : IFieldCollectionMetadataService

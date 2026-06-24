@@ -574,6 +574,42 @@ public class GeoPackageStorageService : IDisposable
             feature.Version = 1;
         }
 
+        // Determine the version/base-version pair that gets persisted.
+        //
+        // Remote applies (trackChange == false) write the server's authoritative
+        // version as both the row Version and its ServerVersion "base" — the row is
+        // clean and reconciled to that base.
+        //
+        // Local edits (trackChange == true) must advance Version PAST the row's base
+        // so the dirty row is distinguishable from the last-synced server version.
+        // Without this, a pulled-then-edited row keeps the exact version it last
+        // synced at and the pull-side conflict guard is structurally dead (#303).
+        long baseVersion;
+        if (trackChange)
+        {
+            var existing = await _connection.Table<LocalFeature>()
+                .FirstOrDefaultAsync(f => f.Id == feature.Id && f.LayerId == feature.LayerId);
+
+            // The base is the server version we last reconciled this row against.
+            // Fall back to the existing row Version (legacy rows without a recorded
+            // base) and finally the incoming Version for brand-new inserts.
+            baseVersion = existing?.ServerVersion ?? existing?.Version ?? feature.Version;
+            if (baseVersion <= 0)
+            {
+                baseVersion = 1;
+            }
+
+            var previousVersion = existing?.Version ?? feature.Version;
+            feature.Version = Math.Max(previousVersion, baseVersion) + 1;
+        }
+        else
+        {
+            // Server-authoritative write: row reconciled to the incoming version.
+            baseVersion = feature.Version;
+        }
+
+        feature.BaseVersion = baseVersion;
+
         var geometry = ConvertToNtsGeometry(feature.Geometry);
         var localFeature = new LocalFeature
         {
@@ -585,6 +621,7 @@ public class GeoPackageStorageService : IDisposable
             CreatedAt = feature.CreatedAt,
             ModifiedAt = feature.ModifiedAt.Value,
             Version = feature.Version,
+            ServerVersion = baseVersion,
             SyncStatus = syncStatus
         };
 
@@ -1887,6 +1924,7 @@ public class GeoPackageStorageService : IDisposable
             ModifiedAt = localFeature.ModifiedAt,
             UpdatedAt = localFeature.ModifiedAt,
             Version = localFeature.Version,
+            BaseVersion = localFeature.ServerVersion ?? localFeature.Version,
             IsPendingSync = localFeature.SyncStatus == StorageSyncStatus.PendingUpload
         };
     }

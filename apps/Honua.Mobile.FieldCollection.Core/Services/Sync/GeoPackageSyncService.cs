@@ -673,9 +673,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             // Check for conflicts
             var localFeature = await _storage.GetFeatureAsync(serverChange.FeatureId, serverChange.LayerId);
 
-            if (localFeature != null && localFeature.Version > serverChange.Version)
+            if (localFeature != null && HasConflict(localFeature, serverChange))
             {
-                // Conflict detected - local is newer
+                // Conflict detected - the local row carries an uncommitted edit that
+                // would be silently overwritten by this server change.
                 await CreateConflictRecordAsync(serverChange, localFeature, session);
                 session.ConflictsDetected++;
                 return false;
@@ -694,6 +695,29 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 serverChange.LayerId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Determines whether a pulled server change conflicts with an uncommitted local
+    /// edit. A conflict exists when the local row has a pending (un-pushed) edit and
+    /// the server has advanced beyond the base version that edit was made on top of —
+    /// applying the change would silently clobber the captured local edit (#303).
+    /// Also retains the legacy "local row is strictly newer" guard for callers/tests
+    /// that stage a higher local Version directly.
+    /// </summary>
+    private static bool HasConflict(Feature localFeature, ServerChange serverChange)
+    {
+        var hasPendingLocalEdit = localFeature.IsPendingSync &&
+            localFeature.Version > localFeature.BaseVersion;
+
+        if (hasPendingLocalEdit && serverChange.Version > localFeature.BaseVersion)
+        {
+            return true;
+        }
+
+        // Legacy guard: the local row's own version is strictly newer than the
+        // incoming server version (e.g. a manually staged conflict).
+        return localFeature.Version > serverChange.Version;
     }
 
     private async Task ApplyResolvedServerChangeAsync(ServerChange serverChange)

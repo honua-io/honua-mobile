@@ -384,6 +384,53 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PullChangesAsync_WhenCommittedLocalEditExistsAtSameBaseVersion_StoresConflictAndKeepsLocalEdit()
+    {
+        // Regression for #303: a pulled-then-edited feature keeps the version it last
+        // synced at, so the legacy local.Version > server.Version guard was structurally
+        // dead. The committed local edit must surface as a conflict, not be overwritten.
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        // Reconcile a feature to server base version 5, then make a committed local edit.
+        var serverBaseline = CreateFeature("asset-1", version: 5);
+        serverBaseline.Attributes["name"] = "server-v5";
+        await storage.ApplyRemoteFeatureAsync(serverBaseline);
+
+        var localEdit = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(localEdit);
+        localEdit.Attributes["name"] = "field-edit";
+        Assert.True(await storage.UpdateFeatureAsync(localEdit));
+
+        // Server advances to version 6 (another editor) for the same feature.
+        var serverChangeFeature = CreateFeature("asset-1", version: 6);
+        serverChangeFeature.Attributes["name"] = "server-v6";
+        var serverChange = new ServerChange
+        {
+            FeatureId = "asset-1",
+            LayerId = 1,
+            Operation = StorageChangeOperation.Update,
+            Version = 6,
+            Feature = serverChangeFeature
+        };
+        using var sync = CreateSyncService(storage, puller: new FixedPuller([serverChange]));
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.ChangesPulled);
+        var conflict = Assert.Single(await sync.GetConflictsAsync());
+        Assert.Equal("asset-1", conflict.FeatureId);
+
+        // The committed local edit must NOT have been clobbered by the server values.
+        var stored = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(stored);
+        Assert.Equal("field-edit", stored.Attributes["name"]?.ToString());
+        Assert.True(stored.IsPendingSync);
+    }
+
+    [Fact]
     public void IsRemoteSyncConfigured_ReflectsDynamicTransportConfiguration()
     {
         var databasePath = CreateDatabasePath();
@@ -884,6 +931,8 @@ public sealed class GeoPackageSyncServiceTests
             _changes = changes;
         }
 
+        public long? CommittedGeneration { get; private set; }
+
         public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
             long sinceGeneration,
             CancellationToken cancellationToken = default)
@@ -899,6 +948,12 @@ public sealed class GeoPackageSyncServiceTests
         public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0L);
+        }
+
+        public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+        {
+            CommittedGeneration = generation;
+            return Task.CompletedTask;
         }
     }
 
@@ -919,6 +974,11 @@ public sealed class GeoPackageSyncServiceTests
         public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0L);
+        }
+
+        public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 
