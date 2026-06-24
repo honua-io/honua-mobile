@@ -384,6 +384,173 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PullChangesAsync_WhenCommittedLocalEditExistsAtSameBaseVersion_StoresConflictAndKeepsLocalEdit()
+    {
+        // Regression for #303: a pulled-then-edited feature keeps the version it last
+        // synced at, so the legacy local.Version > server.Version guard was structurally
+        // dead. The committed local edit must surface as a conflict, not be overwritten.
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        // Reconcile a feature to server base version 5, then make a committed local edit.
+        var serverBaseline = CreateFeature("asset-1", version: 5);
+        serverBaseline.Attributes["name"] = "server-v5";
+        await storage.ApplyRemoteFeatureAsync(serverBaseline);
+
+        var localEdit = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(localEdit);
+        localEdit.Attributes["name"] = "field-edit";
+        Assert.True(await storage.UpdateFeatureAsync(localEdit));
+
+        // Server advances to version 6 (another editor) for the same feature.
+        var serverChangeFeature = CreateFeature("asset-1", version: 6);
+        serverChangeFeature.Attributes["name"] = "server-v6";
+        var serverChange = new ServerChange
+        {
+            FeatureId = "asset-1",
+            LayerId = 1,
+            Operation = StorageChangeOperation.Update,
+            Version = 6,
+            Feature = serverChangeFeature
+        };
+        using var sync = CreateSyncService(storage, puller: new FixedPuller([serverChange]));
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.ChangesPulled);
+        var conflict = Assert.Single(await sync.GetConflictsAsync());
+        Assert.Equal("asset-1", conflict.FeatureId);
+
+        // The committed local edit must NOT have been clobbered by the server values.
+        var stored = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(stored);
+        Assert.Equal("field-edit", stored.Attributes["name"]?.ToString());
+        Assert.True(stored.IsPendingSync);
+    }
+
+    [Fact]
+    public async Task PullChangesAsync_WhenEarlierChangeConflicts_DoesNotAdvanceCursorPastUnappliedChange()
+    {
+        // Regression for #304: the watermark must not advance to the max observed version
+        // when an earlier-version change was not applied, or that change is filtered out of
+        // the next pull and permanently skipped.
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        // Local committed edit on asset-1 reconciled to base version 9.
+        var baseline = CreateFeature("asset-1", version: 9);
+        await storage.ApplyRemoteFeatureAsync(baseline);
+        var localEdit = await storage.GetFeatureAsync("asset-1", 1);
+        localEdit!.Attributes["name"] = "field-edit";
+        await storage.UpdateFeatureAsync(localEdit);
+
+        // Batch: asset-1 (v10) conflicts/skips; asset-2 (v12) applies cleanly.
+        var conflicting = CreateFeature("asset-1", version: 10);
+        var applied = CreateFeature("asset-2", version: 12);
+        var puller = new FixedPuller(
+        [
+            new ServerChange
+            {
+                FeatureId = "asset-1", LayerId = 1, Operation = StorageChangeOperation.Update,
+                Version = 10, Feature = conflicting
+            },
+            new ServerChange
+            {
+                FeatureId = "asset-2", LayerId = 1, Operation = StorageChangeOperation.Update,
+                Version = 12, Feature = applied
+            }
+        ]);
+        using var sync = CreateSyncService(storage, puller: puller);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        // asset-2 applied, asset-1 conflicted.
+        Assert.Equal(1, result.ChangesPulled);
+        Assert.Single(await sync.GetConflictsAsync());
+        // Cursor must stop BELOW the unapplied v10 change so it is re-downloaded next pull,
+        // never jumping to the max observed v12.
+        Assert.NotNull(puller.CommittedGeneration);
+        Assert.True(
+            puller.CommittedGeneration < 10,
+            $"Cursor advanced to {puller.CommittedGeneration}, past the unapplied v10 change.");
+    }
+
+    [Fact]
+    public async Task PushChangesAsync_WhenInsertRetriedAfterLostAck_ReconcilesByGlobalIdWithoutDuplicate()
+    {
+        // Regression for #305: an Insert resent after a lost ack must not create a server
+        // duplicate. The retry queries by the durable GlobalID and reconciles to the
+        // already-created server feature instead of re-adding.
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+
+        // The GlobalID stamped at capture time is what the server echoes back.
+        var stored = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(stored);
+        var globalId = stored.Attributes["globalid"]?.ToString();
+        Assert.False(string.IsNullOrWhiteSpace(globalId));
+
+        var metadata = new FixedMetadataService([layer]);
+        var client = new RecordingFeatureSyncClient
+        {
+            // The prior attempt already created OBJECTID 77 on the server under this GlobalID.
+            QueryResponse = new FeatureQueryResult
+            {
+                ProviderName = "test",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = "77",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["objectid"] = JsonSerializer.SerializeToElement(77),
+                            ["globalid"] = JsonSerializer.SerializeToElement(globalId)
+                        }
+                    }
+                ]
+            }
+        };
+        using var sync = CreateSyncService(
+            storage,
+            uploader: new HonuaFieldCollectionChangeUploader(storage, metadata, client));
+
+        var result = await sync.PushChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(await storage.GetPendingChangesAsync());
+        // No Add was sent: the retry reconciled instead of re-creating.
+        Assert.Empty(client.EditRequests);
+        var reconciled = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(reconciled);
+        Assert.Equal("77", reconciled.Attributes["objectid"]?.ToString());
+    }
+
+    [Fact]
+    public async Task StoreFeatureAsync_StampsDurableGlobalIdOnInsert()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+
+        var stored = await storage.GetFeatureAsync("asset-1", 1);
+        Assert.NotNull(stored);
+        Assert.True(stored.Attributes.TryGetValue("globalid", out var globalId));
+        Assert.False(string.IsNullOrWhiteSpace(globalId?.ToString()));
+    }
+
+    [Fact]
     public void IsRemoteSyncConfigured_ReflectsDynamicTransportConfiguration()
     {
         var databasePath = CreateDatabasePath();
@@ -884,6 +1051,8 @@ public sealed class GeoPackageSyncServiceTests
             _changes = changes;
         }
 
+        public long? CommittedGeneration { get; private set; }
+
         public Task<IReadOnlyList<ServerChange>> GetChangesAsync(
             long sinceGeneration,
             CancellationToken cancellationToken = default)
@@ -899,6 +1068,12 @@ public sealed class GeoPackageSyncServiceTests
         public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0L);
+        }
+
+        public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+        {
+            CommittedGeneration = generation;
+            return Task.CompletedTask;
         }
     }
 
@@ -919,6 +1094,11 @@ public sealed class GeoPackageSyncServiceTests
         public Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(0L);
+        }
+
+        public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 

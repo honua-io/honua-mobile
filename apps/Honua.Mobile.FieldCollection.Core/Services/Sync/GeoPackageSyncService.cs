@@ -34,6 +34,15 @@ public interface IFieldCollectionChangePuller
     Task<IReadOnlyList<ServerChange>> GetChangesAsync(long sinceGeneration, CancellationToken cancellationToken = default);
     Task<long> GetLatestServerGenerationAsync(CancellationToken cancellationToken = default);
     Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Durably advances the pull watermark to <paramref name="generation"/>. The caller
+    /// passes only the highest generation whose change was actually applied so the cursor
+    /// never moves past an un-applied/conflicted change (otherwise that change would be
+    /// filtered out of the next pull and permanently skipped, #304). The cursor never
+    /// moves backwards.
+    /// </summary>
+    Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -359,17 +368,38 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 session.LocalGeneration,
                 cancellationToken);
 
-            foreach (var serverChange in changesSinceLastSync)
+            // Advance the durable cursor only to the highest generation whose change was
+            // actually applied, and never past a gap left by an un-applied/conflicted
+            // change. Processing in ascending generation order lets us stop advancing the
+            // watermark at the first generation that does NOT fully apply, so that change
+            // (and anything after it) is re-downloaded on the next pull (#304).
+            var startGeneration = session.LocalGeneration;
+            var safeGeneration = startGeneration;
+            var watermarkSealed = false;
+
+            foreach (var serverChange in changesSinceLastSync.OrderBy(change => change.Version))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (await ApplyServerChangeAsync(serverChange, session))
+                var applied = await ApplyServerChangeAsync(serverChange, session);
+                if (applied)
                 {
                     session.ChangesPulled++;
+                    if (!watermarkSealed)
+                    {
+                        safeGeneration = Math.Max(safeGeneration, serverChange.Version);
+                    }
+                }
+                else
+                {
+                    // An un-applied (conflicted/skipped) change seals the watermark: we
+                    // must not advance past it or it will be filtered out next pull.
+                    watermarkSealed = true;
                 }
             }
 
-            session.ServerGeneration = await _changePuller.GetLatestServerGenerationAsync(cancellationToken);
+            await _changePuller.CommitSyncedGenerationAsync(safeGeneration, cancellationToken);
+            session.ServerGeneration = safeGeneration;
             return true;
         }
         catch (OperationCanceledException)
@@ -673,9 +703,10 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             // Check for conflicts
             var localFeature = await _storage.GetFeatureAsync(serverChange.FeatureId, serverChange.LayerId);
 
-            if (localFeature != null && localFeature.Version > serverChange.Version)
+            if (localFeature != null && HasConflict(localFeature, serverChange))
             {
-                // Conflict detected - local is newer
+                // Conflict detected - the local row carries an uncommitted edit that
+                // would be silently overwritten by this server change.
                 await CreateConflictRecordAsync(serverChange, localFeature, session);
                 session.ConflictsDetected++;
                 return false;
@@ -694,6 +725,29 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 serverChange.LayerId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Determines whether a pulled server change conflicts with an uncommitted local
+    /// edit. A conflict exists when the local row has a pending (un-pushed) edit and
+    /// the server has advanced beyond the base version that edit was made on top of —
+    /// applying the change would silently clobber the captured local edit (#303).
+    /// Also retains the legacy "local row is strictly newer" guard for callers/tests
+    /// that stage a higher local Version directly.
+    /// </summary>
+    private static bool HasConflict(Feature localFeature, ServerChange serverChange)
+    {
+        var hasPendingLocalEdit = localFeature.IsPendingSync &&
+            localFeature.Version > localFeature.BaseVersion;
+
+        if (hasPendingLocalEdit && serverChange.Version > localFeature.BaseVersion)
+        {
+            return true;
+        }
+
+        // Legacy guard: the local row's own version is strictly newer than the
+        // incoming server version (e.g. a manually staged conflict).
+        return localFeature.Version > serverChange.Version;
     }
 
     private async Task ApplyResolvedServerChangeAsync(ServerChange serverChange)
@@ -1086,6 +1140,12 @@ internal sealed class UnconfiguredFieldCollectionChangePuller :
     {
         throw new InvalidOperationException(
             "Field collection local sync generation lookup is not configured.");
+    }
+
+    public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+    {
+        // Unconfigured pulls never apply changes, so there is nothing to commit.
+        return Task.CompletedTask;
     }
 }
 

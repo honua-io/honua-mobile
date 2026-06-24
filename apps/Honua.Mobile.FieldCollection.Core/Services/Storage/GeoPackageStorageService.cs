@@ -387,6 +387,10 @@ public class GeoPackageStorageService : IDisposable
         await _dbLock.WaitAsync();
         try
         {
+            // Stamp a durable client-generated GlobalID at capture time so a retried
+            // Insert (after a lost upload ack) can be deduped against the server feature
+            // instead of creating a duplicate (#305).
+            EnsureGlobalId(feature);
             return await SaveFeatureAsync(feature, StorageSyncStatus.PendingUpload, trackChange: true, ChangeOperation.Insert);
         }
         finally
@@ -549,6 +553,30 @@ public class GeoPackageStorageService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Attribute carrying the durable client-generated idempotency token used to dedupe
+    /// retried Inserts against server features (#305).
+    /// </summary>
+    internal const string GlobalIdAttribute = "globalid";
+
+    private static readonly string[] GlobalIdFieldCandidates =
+        ["globalid", "GlobalID", "GLOBALID", "global_id"];
+
+    private static void EnsureGlobalId(Feature feature)
+    {
+        foreach (var candidate in GlobalIdFieldCandidates)
+        {
+            if (feature.Attributes.TryGetValue(candidate, out var existing) &&
+                existing is not null &&
+                !string.IsNullOrWhiteSpace(existing.ToString()))
+            {
+                return;
+            }
+        }
+
+        feature.Attributes[GlobalIdAttribute] = Guid.NewGuid().ToString("N");
+    }
+
     private async Task<string> SaveFeatureAsync(
         Feature feature,
         StorageSyncStatus syncStatus,
@@ -574,6 +602,42 @@ public class GeoPackageStorageService : IDisposable
             feature.Version = 1;
         }
 
+        // Determine the version/base-version pair that gets persisted.
+        //
+        // Remote applies (trackChange == false) write the server's authoritative
+        // version as both the row Version and its ServerVersion "base" — the row is
+        // clean and reconciled to that base.
+        //
+        // Local edits (trackChange == true) must advance Version PAST the row's base
+        // so the dirty row is distinguishable from the last-synced server version.
+        // Without this, a pulled-then-edited row keeps the exact version it last
+        // synced at and the pull-side conflict guard is structurally dead (#303).
+        long baseVersion;
+        if (trackChange)
+        {
+            var existing = await _connection.Table<LocalFeature>()
+                .FirstOrDefaultAsync(f => f.Id == feature.Id && f.LayerId == feature.LayerId);
+
+            // The base is the server version we last reconciled this row against.
+            // Fall back to the existing row Version (legacy rows without a recorded
+            // base) and finally the incoming Version for brand-new inserts.
+            baseVersion = existing?.ServerVersion ?? existing?.Version ?? feature.Version;
+            if (baseVersion <= 0)
+            {
+                baseVersion = 1;
+            }
+
+            var previousVersion = existing?.Version ?? feature.Version;
+            feature.Version = Math.Max(previousVersion, baseVersion) + 1;
+        }
+        else
+        {
+            // Server-authoritative write: row reconciled to the incoming version.
+            baseVersion = feature.Version;
+        }
+
+        feature.BaseVersion = baseVersion;
+
         var geometry = ConvertToNtsGeometry(feature.Geometry);
         var localFeature = new LocalFeature
         {
@@ -585,6 +649,7 @@ public class GeoPackageStorageService : IDisposable
             CreatedAt = feature.CreatedAt,
             ModifiedAt = feature.ModifiedAt.Value,
             Version = feature.Version,
+            ServerVersion = baseVersion,
             SyncStatus = syncStatus
         };
 
@@ -1887,6 +1952,7 @@ public class GeoPackageStorageService : IDisposable
             ModifiedAt = localFeature.ModifiedAt,
             UpdatedAt = localFeature.ModifiedAt,
             Version = localFeature.Version,
+            BaseVersion = localFeature.ServerVersion ?? localFeature.Version,
             IsPendingSync = localFeature.SyncStatus == StorageSyncStatus.PendingUpload
         };
     }
