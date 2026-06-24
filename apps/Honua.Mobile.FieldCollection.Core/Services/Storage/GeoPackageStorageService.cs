@@ -387,6 +387,10 @@ public class GeoPackageStorageService : IDisposable
         await _dbLock.WaitAsync();
         try
         {
+            // Stamp a durable client-generated GlobalID at capture time so a retried
+            // Insert (after a lost upload ack) can be deduped against the server feature
+            // instead of creating a duplicate (#305).
+            EnsureGlobalId(feature);
             return await SaveFeatureAsync(feature, StorageSyncStatus.PendingUpload, trackChange: true, ChangeOperation.Insert);
         }
         finally
@@ -547,6 +551,30 @@ public class GeoPackageStorageService : IDisposable
         {
             _dbLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Attribute carrying the durable client-generated idempotency token used to dedupe
+    /// retried Inserts against server features (#305).
+    /// </summary>
+    internal const string GlobalIdAttribute = "globalid";
+
+    private static readonly string[] GlobalIdFieldCandidates =
+        ["globalid", "GlobalID", "GLOBALID", "global_id"];
+
+    private static void EnsureGlobalId(Feature feature)
+    {
+        foreach (var candidate in GlobalIdFieldCandidates)
+        {
+            if (feature.Attributes.TryGetValue(candidate, out var existing) &&
+                existing is not null &&
+                !string.IsNullOrWhiteSpace(existing.ToString()))
+            {
+                return;
+            }
+        }
+
+        feature.Attributes[GlobalIdAttribute] = Guid.NewGuid().ToString("N");
     }
 
     private async Task<string> SaveFeatureAsync(

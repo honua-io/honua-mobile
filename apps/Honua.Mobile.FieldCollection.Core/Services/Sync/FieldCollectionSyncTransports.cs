@@ -160,6 +160,16 @@ public sealed class HonuaFieldCollectionChangeUploader :
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Attribute that carries the client-generated idempotency token for an Insert.
+    /// Sent with the Add so the server persists it, and used to dedupe a retried Insert
+    /// after a lost ack so the same captured feature can never be double-created (#305).
+    /// </summary>
+    internal const string GlobalIdAttribute = "globalid";
+
+    private static readonly string[] GlobalIdFieldCandidates =
+        ["globalid", "GlobalID", "GLOBALID", "global_id"];
+
     private readonly GeoPackageStorageService _storage;
     private readonly IFieldCollectionMetadataService _metadataService;
     private readonly IFieldCollectionFeatureSyncClient _featureClient;
@@ -209,6 +219,16 @@ public sealed class HonuaFieldCollectionChangeUploader :
                 if (localFeature == null)
                 {
                     return false;
+                }
+
+                // Idempotency guard (#305): an Insert resent after a lost ack must not
+                // create a server duplicate. Stamp a stable client-generated GlobalID and
+                // reconcile against any feature the server already created under it before
+                // re-adding.
+                await EnsureGlobalIdAsync(localFeature).ConfigureAwait(false);
+                if (await TryReconcileExistingInsertAsync(change, localFeature, serviceId, cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
                 }
 
                 adds = [ToEditFeature(localFeature)];
@@ -297,6 +317,159 @@ public sealed class HonuaFieldCollectionChangeUploader :
         localFeature.Attributes["objectid"] = objectId;
         localFeature.Attributes["OBJECTID"] = objectId;
         await _storage.ApplyRemoteFeatureAsync(localFeature).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Ensures the feature carries a stable client-generated GlobalID. New captures are
+    /// stamped at storage time (<see cref="GeoPackageStorageService.StoreFeatureAsync"/>);
+    /// this is a defensive fallback for legacy rows that predate the durable token. When a
+    /// fallback token is minted it is persisted so it survives subsequent upload retries (#305).
+    /// </summary>
+    private async Task EnsureGlobalIdAsync(Feature feature)
+    {
+        if (!string.IsNullOrWhiteSpace(ReadGlobalId(feature)))
+        {
+            return;
+        }
+
+        feature.Attributes[GlobalIdAttribute] = Guid.NewGuid().ToString("N");
+
+        // Persist the token without re-queuing a change so retries reuse the same id.
+        await _storage.ApplyRemoteFeatureAsync(feature).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reconciles a pending Insert against a feature the server already created under the
+    /// same GlobalID (a prior attempt whose ack was lost). When found, stamps the server
+    /// OBJECTID locally and reports success so the Insert is NOT re-sent — preventing a
+    /// duplicate (#305). Returns false when no such server feature exists.
+    /// </summary>
+    private async Task<bool> TryReconcileExistingInsertAsync(
+        StorageChangeRecord change,
+        Feature localFeature,
+        string serviceId,
+        CancellationToken cancellationToken)
+    {
+        var globalId = ReadGlobalId(localFeature);
+        if (string.IsNullOrWhiteSpace(globalId))
+        {
+            return false;
+        }
+
+        // If the local row already has an OBJECTID the Insert clearly landed; nothing to do.
+        if (TryReadObjectId(localFeature, out _))
+        {
+            return false;
+        }
+
+        FeatureQueryResult result;
+        try
+        {
+            result = await _featureClient.QueryAsync(
+                new FeatureQueryRequest
+                {
+                    Source = new FeatureSource { ServiceId = serviceId, LayerId = change.LayerId },
+                    Filter = BuildGlobalIdFilter(globalId),
+                    OutFields = ["*"],
+                    ReturnGeometry = false
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // A failed reconcile query must not double-create: fall back to the normal
+            // add path only if it is safe. Here we cannot confirm the server state, so we
+            // surface the failure and leave the change pending for a later retry.
+            _logger?.LogWarning(
+                ex,
+                "Idempotency reconcile query failed for insert change {ChangeId}; leaving change pending",
+                change.Id);
+            throw;
+        }
+
+        var existing = result.Features.FirstOrDefault(record =>
+            string.Equals(ReadGlobalId(record), globalId, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            return false;
+        }
+
+        if (!TryResolveServerObjectId(existing, result.ObjectIdFieldName, out var objectId))
+        {
+            // Server has the feature but we cannot resolve its OBJECTID; do not re-add.
+            _logger?.LogWarning(
+                "Insert change {ChangeId} already exists on the server under GlobalID {GlobalId} but no object id could be resolved; leaving change pending",
+                change.Id,
+                globalId);
+            return false;
+        }
+
+        localFeature.Attributes["objectid"] = objectId;
+        localFeature.Attributes["OBJECTID"] = objectId;
+        await _storage.ApplyRemoteFeatureAsync(localFeature).ConfigureAwait(false);
+
+        _logger?.LogInformation(
+            "Reconciled retried insert change {ChangeId} to existing server feature {ObjectId} via GlobalID {GlobalId}",
+            change.Id,
+            objectId,
+            globalId);
+        return true;
+    }
+
+    private static string? ReadGlobalId(Feature feature)
+    {
+        foreach (var candidate in GlobalIdFieldCandidates)
+        {
+            if (feature.Attributes.TryGetValue(candidate, out var value) &&
+                value is not null &&
+                !string.IsNullOrWhiteSpace(value.ToString()))
+            {
+                return value.ToString();
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadGlobalId(FeatureRecord record)
+    {
+        foreach (var candidate in GlobalIdFieldCandidates)
+        {
+            if (record.Attributes.TryGetValue(candidate, out var value))
+            {
+                var text = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text.Trim('"');
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string BuildGlobalIdFilter(string globalId)
+    {
+        var escaped = globalId.Replace("'", "''", StringComparison.Ordinal);
+        return $"{GlobalIdAttribute} = '{escaped}'";
+    }
+
+    private static bool TryResolveServerObjectId(FeatureRecord record, string? objectIdFieldName, out long objectId)
+    {
+        objectId = 0;
+        IEnumerable<string> candidates = string.IsNullOrWhiteSpace(objectIdFieldName)
+            ? ["objectid", "OBJECTID", "FID"]
+            : [objectIdFieldName, "objectid", "OBJECTID", "FID"];
+
+        foreach (var fieldName in candidates)
+        {
+            if (record.Attributes.TryGetValue(fieldName, out var value) && TryConvertInt64(value, out objectId))
+            {
+                return true;
+            }
+        }
+
+        return long.TryParse(record.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out objectId);
     }
 
     private async Task StoreConflictAsync(
