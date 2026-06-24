@@ -176,10 +176,37 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Feature JSON strings for the specified layer and extent.</returns>
     Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, FeatureBoundingBox boundingBox, CancellationToken ct = default)
-        => GetFeaturesAsync(
+    {
+        ArgumentNullException.ThrowIfNull(boundingBox);
+
+        // The geographic BoundingBox overload is WGS84-only and rejects out-of-range
+        // longitudes, so only bridge to it when the feature bounding box is itself
+        // geographic. Projected reference systems (e.g. Web Mercator) require a store
+        // that implements this overload directly (see GeoPackageSyncStore).
+        if (!IsGeographicCrs(boundingBox.Crs))
+        {
+            throw new NotSupportedException(
+                "This GeoPackage sync store does not support spatial feature queries for non-geographic coordinate reference systems.");
+        }
+
+        return GetFeaturesAsync(
             layerKey,
             new BoundingBox(boundingBox.MinX, boundingBox.MinY, boundingBox.MaxX, boundingBox.MaxY),
             ct);
+    }
+
+    private static bool IsGeographicCrs(string? crs)
+    {
+        if (string.IsNullOrWhiteSpace(crs))
+        {
+            return true;
+        }
+
+        var trimmed = crs.Trim();
+        return trimmed.EndsWith("4326", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("CRS84", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith("CRS84", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Evicts expired cached features according to the configured per-layer TTL policy.
