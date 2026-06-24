@@ -573,7 +573,6 @@ public sealed class HonuaFieldCollectionChangePuller :
     private readonly IFieldCollectionFeatureSyncClient _featureClient;
     private readonly ISettingsService _settingsService;
     private readonly ILogger<HonuaFieldCollectionChangePuller>? _logger;
-    private long? _pendingObservedGeneration;
 
     public HonuaFieldCollectionChangePuller(
         IFieldCollectionMetadataService metadataService,
@@ -602,7 +601,6 @@ public sealed class HonuaFieldCollectionChangePuller :
 
         var layers = await _metadataService.GetLayersAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         var changes = new List<ServerChange>();
-        var maxGeneration = sinceGeneration;
 
         foreach (var layer in layers.Where(layer => layer.IsEditable))
         {
@@ -630,7 +628,6 @@ public sealed class HonuaFieldCollectionChangePuller :
                 feature.UpdatedAt = ResolveFeatureTimestamp(feature, record) ?? DateTime.UtcNow;
                 feature.ModifiedAt = feature.UpdatedAt;
 
-                maxGeneration = Math.Max(maxGeneration, feature.Version);
                 if (feature.Version <= sinceGeneration)
                 {
                     continue;
@@ -648,7 +645,6 @@ public sealed class HonuaFieldCollectionChangePuller :
             }
         }
 
-        _pendingObservedGeneration = Math.Max(_pendingObservedGeneration ?? sinceGeneration, maxGeneration);
         return changes;
     }
 
@@ -656,16 +652,22 @@ public sealed class HonuaFieldCollectionChangePuller :
     {
         cancellationToken.ThrowIfCancellationRequested();
         var cursorKey = await GetCursorKeyAsync(cancellationToken).ConfigureAwait(false);
-
-        if (_pendingObservedGeneration.HasValue)
-        {
-            var observed = _pendingObservedGeneration.Value;
-            await _settingsService.SetSettingAsync(cursorKey, observed).ConfigureAwait(false);
-            _pendingObservedGeneration = null;
-            return observed;
-        }
-
         return await _settingsService.GetSettingAsync<long>(cursorKey, 0L).ConfigureAwait(false);
+    }
+
+    public async Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var cursorKey = await GetCursorKeyAsync(cancellationToken).ConfigureAwait(false);
+
+        // The cursor must only ever move forward. Advancing to a generation that was
+        // actually applied (computed by the sync service) keeps un-applied/conflicted
+        // changes within the next pull window so they are re-downloaded (#304).
+        var current = await _settingsService.GetSettingAsync<long>(cursorKey, 0L).ConfigureAwait(false);
+        if (generation > current)
+        {
+            await _settingsService.SetSettingAsync(cursorKey, generation).ConfigureAwait(false);
+        }
     }
 
     public async Task<long> GetLastSyncedGenerationAsync(CancellationToken cancellationToken = default)
@@ -1408,5 +1410,12 @@ public sealed class LocalOnlyFieldCollectionChangePuller :
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(0L);
+    }
+
+    public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // Local-only pulls have no durable server cursor to advance.
+        return Task.CompletedTask;
     }
 }

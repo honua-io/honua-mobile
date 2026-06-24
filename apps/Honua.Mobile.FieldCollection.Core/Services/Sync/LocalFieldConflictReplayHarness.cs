@@ -71,6 +71,7 @@ public sealed class LocalReplayFieldSyncPeer :
     public bool RejectUploads { get; set; }
     public AttachmentSyncResult PushAttachmentResult { get; set; } = new();
     public AttachmentSyncResult PullAttachmentResult { get; set; } = new();
+    public long? CommittedGeneration { get; private set; }
 
     public Task<bool> UploadChangeAsync(
         StorageChangeRecord change,
@@ -99,6 +100,13 @@ public sealed class LocalReplayFieldSyncPeer :
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(0L);
+    }
+
+    public Task CommitSyncedGenerationAsync(long generation, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CommittedGeneration = generation;
+        return Task.CompletedTask;
     }
 
     public Task<AttachmentSyncResult> PushPendingAttachmentsAsync(CancellationToken cancellationToken = default)

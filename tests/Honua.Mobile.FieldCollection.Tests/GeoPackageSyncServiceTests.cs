@@ -431,6 +431,55 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task PullChangesAsync_WhenEarlierChangeConflicts_DoesNotAdvanceCursorPastUnappliedChange()
+    {
+        // Regression for #304: the watermark must not advance to the max observed version
+        // when an earlier-version change was not applied, or that change is filtered out of
+        // the next pull and permanently skipped.
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+
+        // Local committed edit on asset-1 reconciled to base version 9.
+        var baseline = CreateFeature("asset-1", version: 9);
+        await storage.ApplyRemoteFeatureAsync(baseline);
+        var localEdit = await storage.GetFeatureAsync("asset-1", 1);
+        localEdit!.Attributes["name"] = "field-edit";
+        await storage.UpdateFeatureAsync(localEdit);
+
+        // Batch: asset-1 (v10) conflicts/skips; asset-2 (v12) applies cleanly.
+        var conflicting = CreateFeature("asset-1", version: 10);
+        var applied = CreateFeature("asset-2", version: 12);
+        var puller = new FixedPuller(
+        [
+            new ServerChange
+            {
+                FeatureId = "asset-1", LayerId = 1, Operation = StorageChangeOperation.Update,
+                Version = 10, Feature = conflicting
+            },
+            new ServerChange
+            {
+                FeatureId = "asset-2", LayerId = 1, Operation = StorageChangeOperation.Update,
+                Version = 12, Feature = applied
+            }
+        ]);
+        using var sync = CreateSyncService(storage, puller: puller);
+
+        var result = await sync.PullChangesAsync();
+
+        Assert.True(result.IsSuccess);
+        // asset-2 applied, asset-1 conflicted.
+        Assert.Equal(1, result.ChangesPulled);
+        Assert.Single(await sync.GetConflictsAsync());
+        // Cursor must stop BELOW the unapplied v10 change so it is re-downloaded next pull,
+        // never jumping to the max observed v12.
+        Assert.NotNull(puller.CommittedGeneration);
+        Assert.True(
+            puller.CommittedGeneration < 10,
+            $"Cursor advanced to {puller.CommittedGeneration}, past the unapplied v10 change.");
+    }
+
+    [Fact]
     public void IsRemoteSyncConfigured_ReflectsDynamicTransportConfiguration()
     {
         var databasePath = CreateDatabasePath();
