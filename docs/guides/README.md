@@ -20,6 +20,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
 | [No-Cloud Field Parity Information Model](no-cloud-field-parity-information-model.md) | Local project package, form, lifecycle, assignment, media, conflict, and export model handoff for field parity without hosted services or new UI design |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
+| [Offline Field SDK Beta Graduation Criteria](offline-sdk-beta-graduation.md) | Acceptance bar, required evidence, performance/reliability targets, known-gaps exit list, and sign-off owners for graduating the MAUI SDK + offline sync from Beta |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
 | [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |
