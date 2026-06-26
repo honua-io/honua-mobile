@@ -147,7 +147,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Cache NuGet packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
@@ -218,7 +218,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Cache NuGet packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
@@ -780,7 +780,7 @@ jobs:
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Cache NuGet packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
