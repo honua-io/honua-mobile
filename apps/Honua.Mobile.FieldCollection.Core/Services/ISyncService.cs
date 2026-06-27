@@ -84,6 +84,7 @@ public class ConflictInfo
         ConflictType.UpdateUpdate => "Local and server versions were both updated.",
         ConflictType.UpdateDelete => "Local changes conflict with a server delete.",
         ConflictType.DeleteUpdate => "A local delete conflicts with server changes.",
+        ConflictType.DeleteDelete => "Local and server versions were both deleted.",
         ConflictType.GeometryOverlap => "Geometry overlaps with an existing feature.",
         _ => "Sync conflict requires review."
     };
@@ -94,6 +95,7 @@ public enum ConflictType
     UpdateUpdate,
     UpdateDelete,
     DeleteUpdate,
+    DeleteDelete,
     GeometryOverlap
 }
 
