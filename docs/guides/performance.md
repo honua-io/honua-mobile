@@ -21,21 +21,31 @@ Mobile performance is critical for field data collection applications. Users exp
 Use specific queries instead of loading all data:
 
 ```csharp
-// ❌ Bad: Load all features
-var allFeatures = await _client.QueryFeaturesAsync("service-id", 0, new FeatureQuery
+// ❌ Bad: Load every feature and field
+using var allFeatures = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
 {
-    Where = "1=1"
+    ServiceId = "service-id",
+    LayerId = 0,
+    Where = "1=1",
 });
 
-// ✅ Good: Load only what's needed
-var visibleFeatures = await _client.QueryFeaturesAsync("service-id", 0, new FeatureQuery
+// ✅ Good: Request only the rows and fields you need
+using var visibleFeatures = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
 {
+    ServiceId = "service-id",
+    LayerId = 0,
     Where = "status = 'pending'",
-    OutFields = "objectid,name,status", // Only needed fields
-    Geometry = currentViewExtent,        // Spatial filter
-    ResultRecordCount = 50              // Limit results
+    OutFields = new[] { "objectid", "name", "status" }, // only needed fields
+    ResultRecordCount = 50,                             // limit results
 });
 ```
+
+`QueryFeaturesAsync` takes a `QueryFeaturesRequest` (carrying `ServiceId`/`LayerId`)
+and returns a `JsonDocument` holding an Esri-style FeatureSet — read rows from
+`features[].attributes` / `features[].geometry` and dispose the document with
+`using`. The legacy query surface filters by `Where`, `ObjectIds`, and paging
+options; for provider-neutral or spatial queries use
+`QueryAsync(FeatureQueryRequest)`.
 
 ### Pagination Implementation
 
@@ -63,22 +73,26 @@ public class PaginatedDataLoader : ObservableObject
 
         try
         {
-            var query = new FeatureQuery
+            var request = new QueryFeaturesRequest
             {
+                ServiceId = "service-id",
+                LayerId = 0,
                 Where = "status = 'active'",
                 ResultOffset = _currentPage * PageSize,
                 ResultRecordCount = PageSize,
-                OutFields = "objectid,name,status,geometry"
+                OutFields = new[] { "objectid", "name", "status" },
+                ReturnGeometry = true,
             };
 
-            var result = await _client.QueryFeaturesAsync("service-id", 0, query);
+            using var response = await _client.QueryFeaturesAsync(request);
+            var page = response.RootElement.GetProperty("features");
 
-            foreach (var feature in result.Features)
+            foreach (var element in page.EnumerateArray())
             {
-                _features.Add(feature);
+                _features.Add(MapFeature(element)); // map the FeatureSet entry to your model
             }
 
-            _hasMoreData = result.Features.Count() == PageSize;
+            _hasMoreData = page.GetArrayLength() == PageSize;
             _currentPage++;
         }
         finally
@@ -94,28 +108,27 @@ public class PaginatedDataLoader : ObservableObject
 Use spatial queries for map-based applications:
 
 ```csharp
-public async Task<IEnumerable<Feature>> LoadVisibleFeaturesAsync(Envelope mapExtent)
+public async Task<List<JsonElement>> LoadVisibleFeaturesAsync(string extentWhereClause)
 {
-    var query = new FeatureQuery
+    using var response = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
     {
-        Geometry = mapExtent,
-        SpatialRelationship = SpatialRelationship.Intersects,
-        OutFields = "objectid,name,status",
+        ServiceId = "service-id",
+        LayerId = 0,
+        Where = extentWhereClause,
+        OutFields = new[] { "objectid", "name", "status" },
         ReturnGeometry = true,
-        MaxAllowableOffset = CalculateGeneralization(mapExtent) // Generalize geometry
-    };
+    });
 
-    return await _client.QueryFeaturesAsync("service-id", 0, query);
-}
-
-private double CalculateGeneralization(Envelope extent)
-{
-    var mapScale = CalculateMapScale(extent);
-
-    // More generalization at smaller scales (zoomed out)
-    return mapScale > 50000 ? 10.0 : mapScale > 10000 ? 1.0 : 0.0;
+    return response.RootElement.GetProperty("features").EnumerateArray()
+        .Select(feature => feature.Clone())
+        .ToList();
 }
 ```
+
+The legacy `QueryFeaturesRequest` surface filters by `Where`/`ObjectIds`;
+bounding-box/geometry filtering and geometry generalization are applied
+server-side. For client-driven spatial predicates use the provider-neutral
+`QueryAsync(FeatureQueryRequest)` contract instead.
 
 ## Memory Management
 
@@ -126,22 +139,29 @@ Always dispose of resources properly:
 ```csharp
 public class DataService : IDisposable
 {
-    private readonly IHonuaMobileClient _client;
+    private readonly HonuaMobileClient _client;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
-    public DataService(IHonuaMobileClient client)
+    public DataService(HonuaMobileClient client)
     {
         _client = client;
         _cancellationTokenSource = new CancellationTokenSource();
     }
 
-    public async Task<Feature> LoadFeatureAsync(int featureId)
+    public async Task<JsonElement?> LoadFeatureAsync(long objectId)
     {
-        using var stream = await _client.GetFeatureStreamAsync(featureId);
-        using var reader = new StreamReader(stream);
+        using var response = await _client.QueryFeaturesAsync(
+            new QueryFeaturesRequest
+            {
+                ServiceId = "service-id",
+                LayerId = 0,
+                ObjectIds = new[] { objectId },
+                OutFields = new[] { "*" },
+            },
+            _cancellationTokenSource.Token);
 
-        var json = await reader.ReadToEndAsync();
-        return JsonSerializer.Deserialize<Feature>(json);
+        var features = response.RootElement.GetProperty("features");
+        return features.GetArrayLength() > 0 ? features[0].Clone() : null;
     }
 
     public void Dispose()
@@ -341,29 +361,29 @@ public async Task ProcessMultipleFeaturesAsync(IEnumerable<Feature> features)
 Implement efficient background synchronization:
 
 ```csharp
+// In production prefer the registered BackgroundSyncOrchestrator (connectivity-aware,
+// timer + semaphore gated). This manual timer is shown only to illustrate WiFi gating;
+// it drives the same IOfflineSyncRunner.SyncAsync() drain cycle.
 public class BackgroundSyncService
 {
-    private readonly IHonuaMobileClient _client;
+    private readonly IOfflineSyncRunner _syncRunner;
     private readonly Timer _syncTimer;
 
-    public BackgroundSyncService(IHonuaMobileClient client)
+    public BackgroundSyncService(IOfflineSyncRunner syncRunner)
     {
-        _client = client;
+        _syncRunner = syncRunner;
         _syncTimer = new Timer(SyncCallback, null, TimeSpan.Zero, TimeSpan.FromMinutes(15));
     }
 
-    private async void SyncCallback(object state)
+    private async void SyncCallback(object? state)
     {
         if (!NetworkHelper.IsConnectedToWifi()) return; // Respect data usage
 
         try
         {
-            // Sync only changed data
-            var pendingChanges = await _client.GetPendingChangesAsync();
-            if (pendingChanges.Any())
-            {
-                await _client.SyncChangesAsync(pendingChanges);
-            }
+            // The offline sync engine drains queued edits and reports the run outcome.
+            var result = await _syncRunner.SyncAsync();
+            Debug.WriteLine($"Background sync: {result.Succeeded} succeeded, {result.Failed} failed.");
         }
         catch (Exception ex)
         {
@@ -381,25 +401,24 @@ public class BackgroundSyncService
 Batch multiple requests when possible:
 
 ```csharp
-public async Task<Dictionary<int, Feature>> LoadMultipleFeaturesAsync(IEnumerable<int> featureIds)
+public async Task<List<JsonElement>> LoadMultipleFeaturesAsync(IEnumerable<long> featureIds)
 {
-    // Batch IDs into reasonable chunks
-    var batches = featureIds.Chunk(50);
-    var results = new Dictionary<int, Feature>();
+    var results = new List<JsonElement>();
 
-    foreach (var batch in batches)
+    // Batch IDs into reasonable chunks using the objectId filter.
+    foreach (var batch in featureIds.Chunk(50))
     {
-        var query = new FeatureQuery
+        using var response = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
         {
-            Where = $"objectid IN ({string.Join(",", batch)})",
-            OutFields = "*"
-        };
+            ServiceId = "service-id",
+            LayerId = 0,
+            ObjectIds = batch,
+            OutFields = new[] { "*" },
+        });
 
-        var batchResults = await _client.QueryFeaturesAsync("service-id", 0, query);
-
-        foreach (var feature in batchResults.Features)
+        foreach (var feature in response.RootElement.GetProperty("features").EnumerateArray())
         {
-            results[feature.Id] = feature;
+            results.Add(feature.Clone());
         }
     }
 
@@ -615,20 +634,22 @@ Create performance benchmark tests:
 public async Task QueryPerformance_LargeDataset_CompletesWithinThreshold()
 {
     // Arrange
-    var query = new FeatureQuery
+    var request = new QueryFeaturesRequest
     {
+        ServiceId = "service-id",
+        LayerId = 0,
         Where = "1=1",
-        ResultRecordCount = 1000
+        ResultRecordCount = 1000,
     };
 
     // Act
     var stopwatch = Stopwatch.StartNew();
-    var result = await _client.QueryFeaturesAsync("service-id", 0, query);
+    using var result = await _client.QueryFeaturesAsync(request);
     stopwatch.Stop();
 
     // Assert
     Assert.Less(stopwatch.ElapsedMilliseconds, 5000, "Query should complete within 5 seconds");
-    Assert.AreEqual(1000, result.Features.Count());
+    Assert.AreEqual(1000, result.RootElement.GetProperty("features").GetArrayLength());
 }
 ```
 
