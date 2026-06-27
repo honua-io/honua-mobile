@@ -783,13 +783,25 @@ public sealed class HonuaFieldCollectionChangePuller :
                 continue;
             }
 
+            // Push the delta down to the server so the pull is O(changes) instead of
+            // scanning the whole layer every sync (#S2). When the layer schema exposes a
+            // version column we filter on it server-side; otherwise we fall back to the
+            // full scan and rely on the client-side guard below to discard already-seen
+            // rows. The client-side guard is also kept as defense-in-depth for layers whose
+            // version is derived from a timestamp (no comparable column to push down).
+            var deltaFilter = BuildDeltaFilter(layer, sinceGeneration, out var versionField);
+
             var result = await _featureClient.QueryAsync(
                 new FeatureQueryRequest
                 {
                     Source = new FeatureSource { ServiceId = serviceId, LayerId = layer.Id },
-                    Filter = "1=1",
+                    Filter = deltaFilter,
                     OutFields = ["*"],
-                    ReturnGeometry = true
+                    ReturnGeometry = true,
+                    // Oldest deltas first so the cursor advances monotonically if the
+                    // server caps the result set; only ordered when a real version
+                    // column was resolved.
+                    OrderBy = versionField is null ? null : $"{versionField} ASC"
                 },
                 cancellationToken).ConfigureAwait(false);
 
@@ -882,9 +894,15 @@ public sealed class HonuaFieldCollectionChangePuller :
         return Guid.NewGuid().ToString("N");
     }
 
+    // Integer version columns, in the precedence used to derive a feature's version.
+    // The delta filter pushed to the server must resolve to the same column so the
+    // server-side predicate matches the value compared client-side.
+    private static readonly string[] VersionFieldCandidates =
+        { "sync_version", "version", "server_version", "edit_version" };
+
     private static long ResolveFeatureVersion(Feature feature, FeatureRecord record)
     {
-        foreach (var fieldName in new[] { "sync_version", "version", "server_version", "edit_version" })
+        foreach (var fieldName in VersionFieldCandidates)
         {
             if (TryReadInt64(feature.Attributes, fieldName, out var version) ||
                 (record.Attributes.TryGetValue(fieldName, out var value) && TryReadInt64(value, out version)))
@@ -899,6 +917,58 @@ public sealed class HonuaFieldCollectionChangePuller :
         }
 
         return 1;
+    }
+
+    /// <summary>
+    /// Builds the server-side filter for an incremental pull. When the layer schema
+    /// exposes one of the <see cref="VersionFieldCandidates"/> columns, the delta is
+    /// pushed down as a <c>&gt; sinceGeneration</c> predicate so only changed rows are
+    /// returned. When no version column is known the filter falls back to <c>1=1</c>
+    /// (and <paramref name="versionField"/> is <see langword="null"/>), in which case the
+    /// caller's client-side guard still discards already-seen rows.
+    /// </summary>
+    /// <remarks>
+    /// Honua Server currently has no generic incremental-change query parameter on this
+    /// feature read path, so the delta is expressed as a WHERE predicate on the version
+    /// column. A dedicated server-side change-generation parameter (cross-repo:
+    /// honua-server) would let timestamp-versioned layers also pull O(delta).
+    /// </remarks>
+    private static string BuildDeltaFilter(LayerInfo layer, long sinceGeneration, out string? versionField)
+    {
+        versionField = ResolveVersionFieldName(layer);
+        if (versionField is null)
+        {
+            return "1=1";
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"{versionField} > {sinceGeneration}");
+    }
+
+    private static string? ResolveVersionFieldName(LayerInfo layer)
+    {
+        if (layer.Schema.Count == 0)
+        {
+            return null;
+        }
+
+        // Honour the same precedence as ResolveFeatureVersion and only emit a column
+        // name drawn from the known candidate list (acts as a whitelist for the filter).
+        foreach (var candidate in VersionFieldCandidates)
+        {
+            foreach (var field in layer.Schema)
+            {
+                var column = string.IsNullOrWhiteSpace(field.SourceFieldName)
+                    ? field.FieldId
+                    : field.SourceFieldName;
+
+                if (string.Equals(column, candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static DateTime? ResolveFeatureTimestamp(Feature feature, FeatureRecord record)
