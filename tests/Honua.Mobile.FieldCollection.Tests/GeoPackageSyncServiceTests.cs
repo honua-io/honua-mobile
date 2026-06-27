@@ -296,6 +296,12 @@ public sealed class GeoPackageSyncServiceTests
         Assert.Empty(request.Adds);
         Assert.Empty(request.Updates);
         Assert.Equal([42], request.DeleteObjectIds);
+
+        // The upload must carry a stable per-change idempotency key so a retry after a lost ack
+        // is deduped server-side (at-most-once, #2250).
+        var idempotencyKey = Assert.Single(client.EditIdempotencyKeys);
+        Assert.False(string.IsNullOrWhiteSpace(idempotencyKey));
+        Assert.StartsWith("fieldchange:", idempotencyKey);
     }
 
     [Fact]
@@ -1137,6 +1143,56 @@ public sealed class GeoPackageSyncServiceTests
         };
     }
 
+    [Fact]
+    public async Task QueryFeaturesAsync_WithBounds_ReturnsOnlyOverlappingFeaturesAndRespectsMaxResults()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+
+        // Point(latitude, longitude) -> NTS envelope X = longitude, Y = latitude.
+        await storage.StoreFeatureAsync(CreateFeature("near-a", version: 1, new Point(21.30, -157.80)));
+        await storage.StoreFeatureAsync(CreateFeature("near-b", version: 1, new Point(21.40, -157.70)));
+        await storage.StoreFeatureAsync(CreateFeature("far", version: 1, new Point(40.00, -100.00)));
+
+        var window = new Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialQuery
+        {
+            Bounds = Honua.Mobile.FieldCollection.Services.Storage.Models.BoundingBox.FromCoordinates(-158.0, 21.0, -157.5, 21.5),
+        };
+
+        var matches = await storage.QueryFeaturesAsync(layer.Id, window);
+
+        Assert.Equal(2, matches.Count);
+        Assert.DoesNotContain(matches, feature => feature.Id == "far");
+        Assert.Contains(matches, feature => feature.Id == "near-a");
+        Assert.Contains(matches, feature => feature.Id == "near-b");
+
+        window.MaxResults = 1;
+        var capped = await storage.QueryFeaturesAsync(layer.Id, window);
+        Assert.Single(capped);
+        Assert.NotEqual("far", capped[0].Id);
+    }
+
+    [Fact]
+    public async Task QueryFeaturesAsync_WithDisjointBounds_ReturnsEmpty()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+        await storage.CreateLayerAsync(layer);
+        await storage.StoreFeatureAsync(CreateFeature("hawaii", version: 1, new Point(21.30, -157.80)));
+
+        var window = new Honua.Mobile.FieldCollection.Services.Storage.Models.SpatialQuery
+        {
+            Bounds = Honua.Mobile.FieldCollection.Services.Storage.Models.BoundingBox.FromCoordinates(0.0, 0.0, 1.0, 1.0),
+        };
+
+        Assert.Empty(await storage.QueryFeaturesAsync(layer.Id, window));
+    }
+
     private static Feature CreateFeature(
         string id,
         long version,
@@ -1268,13 +1324,16 @@ public sealed class GeoPackageSyncServiceTests
         public FeatureEditResponse? EditResponse { get; set; }
         public FeatureQueryResult? QueryResponse { get; set; }
         public List<FeatureEditRequest> EditRequests { get; } = [];
+        public List<string?> EditIdempotencyKeys { get; } = [];
         public List<FeatureQueryRequest> QueryRequests { get; } = [];
 
         public Task<FeatureEditResponse> ApplyEditsAsync(
             FeatureEditRequest request,
+            string? idempotencyKey = null,
             CancellationToken cancellationToken = default)
         {
             EditRequests.Add(request);
+            EditIdempotencyKeys.Add(idempotencyKey);
             return Task.FromResult(EditResponse ?? new FeatureEditResponse
             {
                 ProviderName = "test",

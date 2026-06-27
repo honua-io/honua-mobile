@@ -13,12 +13,24 @@ public sealed partial class HonuaMobileClient
         string relativePath,
         IReadOnlyDictionary<string, string?>? query,
         HttpContent? content,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? idempotencyKey = null)
     {
         using var request = new HttpRequestMessage(method, BuildAbsoluteUri(relativePath, query));
         request.Content = content;
         request.Headers.UserAgent.Clear();
         request.Headers.UserAgent.Add(_userAgent);
+
+        // At-most-once edits: the server dedupes a retried mutating request keyed by
+        // (principal, service, layer, key) so a re-upload after a lost ack replays the
+        // original response instead of re-applying the edit (honua-server #2250). The key
+        // must be a stable, non-control string of at most 200 chars or the server rejects
+        // the request with 400.
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        }
+
         await ApplyHttpAuthenticationAsync(request, ct).ConfigureAwait(false);
 
         // Apply per-request timeout via a linked cancellation token so the caller's

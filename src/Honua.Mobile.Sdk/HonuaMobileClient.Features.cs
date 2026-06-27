@@ -82,7 +82,27 @@ public sealed partial class HonuaMobileClient
     /// <param name="request">SDK feature edit request.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A provider-neutral feature edit response.</returns>
-    public async Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken ct = default)
+    public Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken ct = default)
+        => ApplyEditsAsync(request, idempotencyKey: null, ct);
+
+    /// <summary>
+    /// Applies feature edits through the SDK provider-neutral feature contract, attaching a stable
+    /// <c>Idempotency-Key</c> so the server can dedupe a retried edit (at-most-once, honua-server #2250).
+    /// </summary>
+    /// <remarks>
+    /// When <paramref name="idempotencyKey"/> is supplied the FeatureServer edit is sent over REST even
+    /// if gRPC is preferred, because the gRPC edit contract does not yet carry the idempotency header;
+    /// routing over REST is what makes a post-crash re-upload safe. Callers that do not need at-most-once
+    /// semantics can pass <see langword="null"/> to keep the default (gRPC-preferred) transport selection.
+    /// </remarks>
+    /// <param name="request">SDK feature edit request.</param>
+    /// <param name="idempotencyKey">Stable client-generated key (≤200 chars, no control characters), or <see langword="null"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A provider-neutral feature edit response.</returns>
+    public async Task<FeatureEditResponse> ApplyEditsAsync(
+        FeatureEditRequest request,
+        string? idempotencyKey,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -93,7 +113,7 @@ public sealed partial class HonuaMobileClient
 
         if (HasFeatureServerSource(request.Source))
         {
-            return await ApplyFeatureServerSdkEditsAsync(request, ct).ConfigureAwait(false);
+            return await ApplyFeatureServerSdkEditsAsync(request, idempotencyKey, ct).ConfigureAwait(false);
         }
 
         return new FeatureEditResponse
@@ -195,11 +215,27 @@ public sealed partial class HonuaMobileClient
     /// <returns>A <see cref="JsonDocument"/> containing per-feature edit results.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public async Task<JsonDocument> ApplyEditsAsync(ApplyEditsRequest request, CancellationToken ct = default)
+    public Task<JsonDocument> ApplyEditsAsync(ApplyEditsRequest request, CancellationToken ct = default)
+        => ApplyEditsAsync(request, idempotencyKey: null, ct);
+
+    /// <summary>
+    /// Applies feature edits, attaching a stable <c>Idempotency-Key</c> so the server can dedupe a
+    /// retried edit (at-most-once, honua-server #2250). When <paramref name="idempotencyKey"/> is
+    /// supplied the edit is sent over REST even if gRPC is preferred, because the gRPC edit contract
+    /// does not yet carry the idempotency header.
+    /// </summary>
+    /// <param name="request">The edit payload including adds, updates, and deletes.</param>
+    /// <param name="idempotencyKey">Stable client-generated key (≤200 chars, no control characters), or <see langword="null"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A <see cref="JsonDocument"/> containing per-feature edit results.</returns>
+    public async Task<JsonDocument> ApplyEditsAsync(
+        ApplyEditsRequest request,
+        string? idempotencyKey,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (CanUseGrpcForEdits)
+        if (string.IsNullOrWhiteSpace(idempotencyKey) && CanUseGrpcForEdits)
         {
             try
             {
@@ -212,7 +248,7 @@ public sealed partial class HonuaMobileClient
             }
         }
 
-        return await ApplyEditsRestAsync(request, ct).ConfigureAwait(false);
+        return await ApplyEditsRestAsync(request, idempotencyKey, ct).ConfigureAwait(false);
     }
 
     private async Task<JsonDocument> QueryFeaturesGrpcAsync(QueryFeaturesRequest request, CancellationToken ct)
@@ -254,7 +290,7 @@ public sealed partial class HonuaMobileClient
             ct).ConfigureAwait(false);
     }
 
-    private async Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, CancellationToken ct)
+    private async Task<JsonDocument> ApplyEditsRestAsync(ApplyEditsRequest request, string? idempotencyKey, CancellationToken ct)
     {
         var path = $"/rest/services/{EscapePathSegments(request.ServiceId)}/FeatureServer/{request.LayerId}/applyEdits";
         return await SendJsonAsync(
@@ -262,7 +298,8 @@ public sealed partial class HonuaMobileClient
             path,
             query: null,
             new FormUrlEncodedContent(BuildFeatureServerEditFormParameters(request)),
-            ct).ConfigureAwait(false);
+            ct,
+            idempotencyKey).ConfigureAwait(false);
     }
 
     private async Task<FeatureQueryResult> QueryOgcFeaturesSdkAsync(FeatureQueryRequest request, CancellationToken ct)
@@ -399,9 +436,16 @@ public sealed partial class HonuaMobileClient
         }
     }
 
-    private async Task<FeatureEditResponse> ApplyFeatureServerSdkEditsAsync(FeatureEditRequest request, CancellationToken ct)
+    private async Task<FeatureEditResponse> ApplyFeatureServerSdkEditsAsync(
+        FeatureEditRequest request,
+        string? idempotencyKey,
+        CancellationToken ct)
     {
-        if (CanUseGrpcForEdits)
+        // gRPC cannot carry the Idempotency-Key header, so when an idempotency key is supplied we go
+        // straight to REST: that is the only transport that delivers the at-most-once guarantee the
+        // caller is asking for. Without a key, keep the default gRPC-preferred path (fallback to REST
+        // is still gated off by default for non-idempotent edits).
+        if (string.IsNullOrWhiteSpace(idempotencyKey) && CanUseGrpcForEdits)
         {
             try
             {
@@ -414,11 +458,14 @@ public sealed partial class HonuaMobileClient
             }
         }
 
-        using var raw = await ApplyFeatureServerSdkEditsRestAsync(request, ct).ConfigureAwait(false);
+        using var raw = await ApplyFeatureServerSdkEditsRestAsync(request, idempotencyKey, ct).ConfigureAwait(false);
         return ToFeatureServerFeatureEditResponse(raw.RootElement);
     }
 
-    private async Task<JsonDocument> ApplyFeatureServerSdkEditsRestAsync(FeatureEditRequest request, CancellationToken ct)
+    private async Task<JsonDocument> ApplyFeatureServerSdkEditsRestAsync(
+        FeatureEditRequest request,
+        string? idempotencyKey,
+        CancellationToken ct)
     {
         var source = request.Source;
         var serviceId = source.ServiceId
@@ -443,7 +490,8 @@ public sealed partial class HonuaMobileClient
             path,
             query: null,
             new FormUrlEncodedContent(FeatureServerRequestConverters.ToFeatureServerEditFormParameters(editRequest)),
-            ct).ConfigureAwait(false);
+            ct,
+            idempotencyKey).ConfigureAwait(false);
     }
 
     private static FeatureEditResponse ToFeatureServerFeatureEditResponse(JsonElement root)

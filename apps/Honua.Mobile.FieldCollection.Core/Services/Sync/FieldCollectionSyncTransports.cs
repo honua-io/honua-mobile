@@ -17,7 +17,16 @@ namespace Honua.Mobile.FieldCollection.Services.Sync;
 public interface IFieldCollectionFeatureSyncClient
 {
     bool IsConfigured { get; }
-    Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies feature edits, optionally attaching a stable <paramref name="idempotencyKey"/> so the
+    /// server dedupes a retried upload (at-most-once, honua-server #2250).
+    /// </summary>
+    Task<FeatureEditResponse> ApplyEditsAsync(
+        FeatureEditRequest request,
+        string? idempotencyKey = null,
+        CancellationToken cancellationToken = default);
+
     Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -60,10 +69,11 @@ public sealed class HonuaSdkFieldCollectionFeatureSyncClient :
 
     public async Task<FeatureEditResponse> ApplyEditsAsync(
         FeatureEditRequest request,
+        string? idempotencyKey = null,
         CancellationToken cancellationToken = default)
     {
         using var client = CreateClient();
-        return await client.ApplyEditsAsync(request, cancellationToken).ConfigureAwait(false);
+        return await client.ApplyEditsAsync(request, idempotencyKey, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<FeatureQueryResult> QueryAsync(
@@ -272,7 +282,12 @@ public sealed class HonuaFieldCollectionChangeUploader :
             ForceWrite = false
         };
 
-        var response = await _featureClient.ApplyEditsAsync(request, cancellationToken).ConfigureAwait(false);
+        // The change id is durable until the change is marked synced, so a re-upload after a lost
+        // ack carries the same key and the server replays the original result instead of applying
+        // the edit twice (at-most-once, #2250). This complements the insert GlobalID reconcile above
+        // and extends at-most-once to updates and deletes.
+        var idempotencyKey = $"fieldchange:{change.Id}";
+        var response = await _featureClient.ApplyEditsAsync(request, idempotencyKey, cancellationToken).ConfigureAwait(false);
         if (response.Succeeded)
         {
             await UpdateLocalFeatureAfterSuccessfulAddAsync(change, localFeature, response).ConfigureAwait(false);
