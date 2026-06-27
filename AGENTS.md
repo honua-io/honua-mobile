@@ -104,7 +104,6 @@ src/
   Honua.Mobile.Sdk/      Core mobile client: transport, auth, gRPC/REST, routing, scene adapter
   Honua.Mobile.Offline/  GeoPackage storage, sync queue, map-area download, conflict resolution
   Honua.Mobile.Maui/     MAUI DI registration, native display, location, scene anchoring
-  Honua.Mobile.IoT/      IoT sensor interfaces only — no implementation yet
   Honua.Embed/           @honua-io/embed web component package (TS/Vite); tests in tests/
 apps/
   Honua.Mobile.App/                 Reference MAUI application
@@ -139,10 +138,9 @@ NuGet.config             Package sources + source mapping (Honua.* -> github-hon
 - **Consume `Honua.Sdk.*` as versioned NuGet packages.** Do not copy SDK source
   or add long-lived `ProjectReference` links to `honua-sdk-dotnet`; temporary
   local references need an explicit removal issue.
-- `src/Honua.Mobile.IoT` is interface-only (no implementation yet).
 - CI builds core libraries with **warnings-as-errors** and enforces
   `dotnet format`; run format checks before pushing.
-- `Honua.Mobile.IoT`-style migration: files under `Honua.Mobile.Sdk` that are
+- SDK-migration candidates: files under `Honua.Mobile.Sdk` that are
   server API clients or plain models are migration input for the SDK, not new
   mobile-owned surface.
 - The `Live Server Integration` workflow is a hard gate on PRs and pushes to

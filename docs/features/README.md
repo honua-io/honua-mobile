@@ -10,7 +10,7 @@ This repository owns mobile SDK packages, MAUI integration, offline field workfl
 - `Honua.Mobile.Offline`: GeoPackage storage, sync queue, pull/push sync, conflicts, map area download, delta cursors, TTL/cache governance, and R-tree bbox lookup.
 - `Honua.Mobile.Maui`: DI registration, native display boundaries, map annotations, secure auth token storage, device location, background location, and geofencing contracts.
 - `@honua/embed`: framework-agnostic `<honua-map>` and `<honua-scene>` components with display adapters, scene package caching, snippets, and DOM behavior tests.
-- Reference MAUI applications, field collection example, embed example, scene example, AR utility visualization example, and field collector template.
+- Reference MAUI applications, field collection example, embed example, scene example, and field collector template.
 - Integration and smoke tests for loopback server paths, offline sync, no-cloud field-day acceptance, local package import/download, MAUI helpers, embed components, and optional live Honua query.
 
 ## Source Evidence
