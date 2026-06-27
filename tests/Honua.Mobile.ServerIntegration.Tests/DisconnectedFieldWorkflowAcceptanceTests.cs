@@ -96,7 +96,11 @@ public sealed class DisconnectedFieldWorkflowAcceptanceTests : IDisposable
         Assert.Equal(0, result.Evidence.FinalState.PendingOperationCount);
         Assert.True(result.Evidence.FinalState.LocalFeatureCount >= 1);
         Assert.Equal("replica-abc-123", result.Evidence.CursorState["replica:assets"]);
-        Assert.Equal("100", result.Evidence.CursorState["servergen:assets"]);
+        // The delta-sync "since" cursor advances to the generation changes were extracted at
+        // (extractChanges => 55), not the later synchronizeReplica response generation (100).
+        // Persisting the higher synchronize generation would permanently skip any changes the
+        // server commits between the extract and synchronize round-trips.
+        Assert.Equal("55", result.Evidence.CursorState["servergen:assets"]);
         Assert.Equal(
             [
                 "op-acceptance-add-001",

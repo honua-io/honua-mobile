@@ -191,17 +191,61 @@ public sealed class DeltaDownloadEngineTests : IDisposable
         var engine = new DeltaDownloadEngine(store, replicaClient);
 
         await engine.DownloadAsync("svc");
-        // First sync advanced the persisted cursor to the synchronize generation (20).
+        // First sync advanced the persisted cursor to the extracted generation (20).
         Assert.Equal("20", await store.GetSyncCursorAsync("servergen:svc"));
 
+        replicaClient.ExtractChangesResponse = new ExtractChangesResult
+        {
+            ServerGen = 30,
+            LayerChanges = [],
+        };
         replicaClient.SynchronizeResponse = new SynchronizeResult("replica-delta", 30);
 
         await engine.DownloadAsync("svc");
 
         // Second sync must scope extractChanges to the persisted generation rather than
-        // re-downloading the full change set.
+        // re-downloading the full change set, then advance the cursor to the extracted generation.
         Assert.Equal("20", replicaClient.LastExtractSinceServerGen);
         Assert.Equal("30", await store.GetSyncCursorAsync("servergen:svc"));
+    }
+
+    [Fact]
+    public async Task DownloadAsync_SynchronizeGenAheadOfExtractGen_PersistsExtractGen()
+    {
+        // Regression: synchronize runs after extract over a separate round-trip, so the server
+        // can commit edits in between and return a higher generation. The cursor must advance to
+        // the generation the applied changes were extracted at, otherwise the next extractChanges
+        // would skip the changes in (extractGen, synchronizeGen] permanently.
+        var store = CreateStore();
+        var replicaClient = new FakeReplicaSyncClient
+        {
+            CreateReplicaResponse = new CreateReplicaResult("replica-divergent", 10),
+            ExtractChangesResponse = new ExtractChangesResult
+            {
+                ServerGen = 20,
+                LayerChanges =
+                [
+                    new LayerChangeSet
+                    {
+                        LayerId = 0,
+                        AddFeaturesJson = ["""{"attributes":{"objectid":1,"name":"Feature A"}}"""],
+                    },
+                ],
+            },
+            // Server advanced to 35 between extract and synchronize.
+            SynchronizeResponse = new SynchronizeResult("replica-divergent", 35),
+        };
+
+        var engine = new DeltaDownloadEngine(store, replicaClient);
+        var result = await engine.DownloadAsync("assets");
+
+        Assert.Equal(20, result.ServerGen);
+        Assert.Equal("20", await store.GetSyncCursorAsync("servergen:assets"));
+
+        // The next run must re-request changes starting from the extracted generation (20),
+        // not the synchronize generation (35), so nothing in (20, 35] is missed.
+        await engine.DownloadAsync("assets");
+        Assert.Equal("20", replicaClient.LastExtractSinceServerGen);
     }
 
     [Fact]
