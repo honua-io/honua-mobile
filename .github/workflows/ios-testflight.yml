@@ -6,12 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       target_environment:
-        description: "Protected GitHub Environment that owns iOS signing and App Store Connect secrets."
+        description: "Protected GitHub Environment that owns iOS signing and App Store Connect secrets. 'ios-demo' bakes in the Pro demo backend (demo.honua.io) for external/customer demo builds."
         required: true
         default: "ios-testflight"
         type: choice
         options:
           - ios-testflight
+          - ios-demo
           - ios-production
       app_target:
         description: "MAUI app target to archive and upload."

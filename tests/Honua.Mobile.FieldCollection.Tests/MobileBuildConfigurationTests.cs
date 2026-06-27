@@ -10,6 +10,9 @@ public sealed class MobileBuildConfigurationTests
     [InlineData("production", MobileBuildEnvironmentKind.Production)]
     [InlineData("ios-production", MobileBuildEnvironmentKind.Production)]
     [InlineData("ios-testflight", MobileBuildEnvironmentKind.CustomNonProduction)]
+    [InlineData("demo", MobileBuildEnvironmentKind.Demo)]
+    [InlineData("ios-demo", MobileBuildEnvironmentKind.Demo)]
+    [InlineData("android-demo", MobileBuildEnvironmentKind.Demo)]
     public void EnvironmentKind_NormalizesWorkflowEnvironmentNames(
         string environment,
         MobileBuildEnvironmentKind expectedKind)
@@ -63,6 +66,39 @@ public sealed class MobileBuildConfigurationTests
         Assert.False(configuration.ServiceEndpoint.IsConfigured);
         Assert.Equal(MobileBuildEnvironmentKind.Development, configuration.ServiceEndpoint.EnvironmentKind);
         Assert.Equal("Development: no endpoint embedded", configuration.ServiceEndpoint.DisplayValue);
+    }
+
+    [Theory]
+    [InlineData("demo")]
+    [InlineData("ios-demo")]
+    [InlineData("android-demo")]
+    public void ServiceEndpoint_AcceptsDemoBackendForDemoEnvironment(string environment)
+    {
+        var endpoint = MobileServiceEndpointConfiguration.Create(
+            environment,
+            "https://demo.honua.io",
+            "Release");
+
+        Assert.True(endpoint.IsValid);
+        Assert.True(endpoint.IsConfigured);
+        Assert.False(endpoint.IsProduction);
+        Assert.Equal(MobileBuildEnvironmentKind.Demo, endpoint.EnvironmentKind);
+        Assert.Equal(new Uri("https://demo.honua.io"), endpoint.ApiBaseUrl);
+        Assert.Equal("Demo: https://demo.honua.io/", endpoint.DisplayValue);
+    }
+
+    [Fact]
+    public void ServiceEndpoint_AllowsDemoBackendForDebugBuild()
+    {
+        // demo.honua.io is a non-production host, so Debug demo builds (e.g. local
+        // smoke runs against the demo backend) must remain valid.
+        var endpoint = MobileServiceEndpointConfiguration.Create(
+            "demo",
+            "https://demo.honua.io",
+            "Debug");
+
+        Assert.True(endpoint.IsValid);
+        Assert.True(endpoint.IsConfigured);
     }
 
     [Fact]

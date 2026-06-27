@@ -230,6 +230,7 @@ public sealed class MobileServiceEndpointConfiguration
     {
         MobileBuildEnvironmentKind.Development => "Development",
         MobileBuildEnvironmentKind.Staging => "Staging",
+        MobileBuildEnvironmentKind.Demo => "Demo",
         MobileBuildEnvironmentKind.Production => "Production",
         MobileBuildEnvironmentKind.CustomNonProduction => string.IsNullOrWhiteSpace(Environment)
             ? "Custom non-production"
@@ -342,6 +343,7 @@ public enum MobileBuildEnvironmentKind
     Unspecified,
     Development,
     Staging,
+    Demo,
     Production,
     CustomNonProduction
 }
@@ -360,6 +362,7 @@ public static class MobileBuildEnvironmentKindExtensions
         {
             "dev" or "development" or "local" or "dev-local" => MobileBuildEnvironmentKind.Development,
             "stage" or "staging" => MobileBuildEnvironmentKind.Staging,
+            "demo" or "ios-demo" or "android-demo" => MobileBuildEnvironmentKind.Demo,
             "prod" or "production" or "ios-production" => MobileBuildEnvironmentKind.Production,
             "custom-nonprod" or "custom-non-production" or "nonprod" or "non-production" or "ios-testflight" => MobileBuildEnvironmentKind.CustomNonProduction,
             "unspecified" => MobileBuildEnvironmentKind.Unspecified,
