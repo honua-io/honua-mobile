@@ -201,7 +201,7 @@ public sealed class HonuaFieldCollectionChangeUploader :
         }
 
         var layer = await ResolveLayerAsync(change.LayerId, cancellationToken).ConfigureAwait(false);
-        var serviceId = ResolveServiceId(layer);
+        var serviceId = FieldCollectionSyncLayer.ResolveServiceId(layer);
         if (string.IsNullOrWhiteSpace(serviceId))
         {
             _logger?.LogWarning("Cannot upload change {ChangeId}; layer {LayerId} has no service id", change.Id, change.LayerId);
@@ -717,23 +717,6 @@ public sealed class HonuaFieldCollectionChangeUploader :
             return true;
         }
     }
-
-    private static string? ResolveServiceId(LayerInfo layer)
-    {
-        if (!string.IsNullOrWhiteSpace(layer.ServiceId))
-        {
-            return layer.ServiceId;
-        }
-
-        const string separator = "/FeatureServer/";
-        if (!string.IsNullOrWhiteSpace(layer.SourceId) &&
-            layer.SourceId.IndexOf(separator, StringComparison.OrdinalIgnoreCase) is var index and >= 0)
-        {
-            return layer.SourceId[..index];
-        }
-
-        return null;
-    }
 }
 
 public sealed class HonuaFieldCollectionChangePuller :
@@ -777,7 +760,7 @@ public sealed class HonuaFieldCollectionChangePuller :
 
         foreach (var layer in layers.Where(layer => layer.IsEditable))
         {
-            var serviceId = ResolveServiceId(layer);
+            var serviceId = FieldCollectionSyncLayer.ResolveServiceId(layer);
             if (string.IsNullOrWhiteSpace(serviceId))
             {
                 continue;
@@ -1038,23 +1021,6 @@ public sealed class HonuaFieldCollectionChangePuller :
             return true;
         }
     }
-
-    private static string? ResolveServiceId(LayerInfo layer)
-    {
-        if (!string.IsNullOrWhiteSpace(layer.ServiceId))
-        {
-            return layer.ServiceId;
-        }
-
-        const string separator = "/FeatureServer/";
-        if (!string.IsNullOrWhiteSpace(layer.SourceId) &&
-            layer.SourceId.IndexOf(separator, StringComparison.OrdinalIgnoreCase) is var index and >= 0)
-        {
-            return layer.SourceId[..index];
-        }
-
-        return null;
-    }
 }
 
 public sealed class HonuaFieldCollectionAttachmentSynchronizer :
@@ -1106,7 +1072,7 @@ public sealed class HonuaFieldCollectionAttachmentSynchronizer :
             }
 
             var layer = layers.FirstOrDefault(layer => layer.Id == attachment.LayerId);
-            var serviceId = layer == null ? null : ResolveServiceId(layer);
+            var serviceId = layer == null ? null : FieldCollectionSyncLayer.ResolveServiceId(layer);
             if (string.IsNullOrWhiteSpace(serviceId))
             {
                 await MarkAttachmentFailureAsync(
@@ -1183,7 +1149,7 @@ public sealed class HonuaFieldCollectionAttachmentSynchronizer :
         var layers = await _metadataService.GetLayersAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         foreach (var layer in layers.Where(layer => layer.IsEditable))
         {
-            var serviceId = ResolveServiceId(layer);
+            var serviceId = FieldCollectionSyncLayer.ResolveServiceId(layer);
             if (string.IsNullOrWhiteSpace(serviceId))
             {
                 continue;
@@ -1473,23 +1439,6 @@ public sealed class HonuaFieldCollectionAttachmentSynchronizer :
             ? fallback
             : response.Error.Message;
     }
-
-    private static string? ResolveServiceId(LayerInfo layer)
-    {
-        if (!string.IsNullOrWhiteSpace(layer.ServiceId))
-        {
-            return layer.ServiceId;
-        }
-
-        const string separator = "/FeatureServer/";
-        if (!string.IsNullOrWhiteSpace(layer.SourceId) &&
-            layer.SourceId.IndexOf(separator, StringComparison.OrdinalIgnoreCase) is var index and >= 0)
-        {
-            return layer.SourceId[..index];
-        }
-
-        return null;
-    }
 }
 
 public sealed class QueuedFieldCollectionChangeUploader :
@@ -1590,5 +1539,36 @@ public sealed class LocalOnlyFieldCollectionChangePuller :
         cancellationToken.ThrowIfCancellationRequested();
         // Local-only pulls have no durable server cursor to advance.
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Shared helpers for resolving sync routing information from a <see cref="LayerInfo"/>.
+/// </summary>
+internal static class FieldCollectionSyncLayer
+{
+    private const string FeatureServerSeparator = "/FeatureServer/";
+
+    /// <summary>
+    /// Resolves the feature service id a layer belongs to, preferring the explicit
+    /// <see cref="LayerInfo.ServiceId"/> and otherwise parsing it from the
+    /// <see cref="LayerInfo.SourceId"/> (the segment before <c>/FeatureServer/</c>).
+    /// This is the single source of truth used by upload, pull, and attachment sync so the
+    /// three transports cannot diverge on how routing is derived.
+    /// </summary>
+    public static string? ResolveServiceId(LayerInfo layer)
+    {
+        if (!string.IsNullOrWhiteSpace(layer.ServiceId))
+        {
+            return layer.ServiceId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(layer.SourceId) &&
+            layer.SourceId.IndexOf(FeatureServerSeparator, StringComparison.OrdinalIgnoreCase) is var index and >= 0)
+        {
+            return layer.SourceId[..index];
+        }
+
+        return null;
     }
 }

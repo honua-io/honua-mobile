@@ -143,12 +143,44 @@ public interface IGeoPackageSyncStore
     Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default);
 
     /// <summary>
+    /// Inserts or updates a batch of replicated features in the local cache within a single
+    /// transaction. Implementations should commit the whole batch atomically so that a delta
+    /// download pays one durable write instead of one per feature.
+    /// </summary>
+    /// <param name="layerKey">The layer identifier for the features.</param>
+    /// <param name="featureJsons">The full feature JSON payloads including attributes and geometry.</param>
+    /// <param name="ct">Cancellation token.</param>
+    async Task UpsertFeaturesAsync(string layerKey, IReadOnlyList<string> featureJsons, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(featureJsons);
+        foreach (var featureJson in featureJsons)
+        {
+            await UpsertFeatureAsync(layerKey, featureJson, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Deletes a replicated feature from the local cache.
     /// </summary>
     /// <param name="layerKey">The layer identifier for the feature.</param>
     /// <param name="objectId">The object ID of the feature to delete.</param>
     /// <param name="ct">Cancellation token.</param>
     Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a batch of replicated features from the local cache within a single transaction.
+    /// </summary>
+    /// <param name="layerKey">The layer identifier for the features.</param>
+    /// <param name="objectIds">The object IDs of the features to delete.</param>
+    /// <param name="ct">Cancellation token.</param>
+    async Task DeleteFeaturesAsync(string layerKey, IReadOnlyList<long> objectIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(objectIds);
+        foreach (var objectId in objectIds)
+        {
+            await DeleteFeatureAsync(layerKey, objectId, ct).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Retrieves all cached feature JSON payloads for a given layer, ordered by object ID.

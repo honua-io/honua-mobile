@@ -73,44 +73,51 @@ public sealed class DeltaDownloadEngine
         {
             var layerKey = layerChange.LayerId.ToString(CultureInfo.InvariantCulture);
 
-            if (layerChange.AddFeaturesJson is { Count: > 0 })
+            // Adds and updates are both upserts; apply them as a single batched transaction
+            // per layer so the store pays one durable write instead of one fsync per feature.
+            var upserts = new List<string>();
+            if (layerChange.AddFeaturesJson is { Count: > 0 } adds)
             {
-                foreach (var featureJson in layerChange.AddFeaturesJson)
-                {
-                    await _store.UpsertFeatureAsync(layerKey, featureJson, ct).ConfigureAwait(false);
-                    totalAdds++;
-                }
+                upserts.AddRange(adds);
+                totalAdds += adds.Count;
             }
 
-            if (layerChange.UpdateFeaturesJson is { Count: > 0 })
+            if (layerChange.UpdateFeaturesJson is { Count: > 0 } updates)
             {
-                foreach (var featureJson in layerChange.UpdateFeaturesJson)
-                {
-                    await _store.UpsertFeatureAsync(layerKey, featureJson, ct).ConfigureAwait(false);
-                    totalUpdates++;
-                }
+                upserts.AddRange(updates);
+                totalUpdates += updates.Count;
             }
 
-            if (layerChange.DeleteIds is { Count: > 0 })
+            if (upserts.Count > 0)
             {
-                foreach (var objectId in layerChange.DeleteIds)
-                {
-                    await _store.DeleteFeatureAsync(layerKey, objectId, ct).ConfigureAwait(false);
-                    totalDeletes++;
-                }
+                await _store.UpsertFeaturesAsync(layerKey, upserts, ct).ConfigureAwait(false);
+            }
+
+            if (layerChange.DeleteIds is { Count: > 0 } deletes)
+            {
+                await _store.DeleteFeaturesAsync(layerKey, deletes, ct).ConfigureAwait(false);
+                totalDeletes += deletes.Count;
             }
         }
 
-        var syncResult = await _replicaClient.SynchronizeReplicaAsync(serviceId, replicaId, "download", ct).ConfigureAwait(false);
+        // Acknowledge the replica server-side so it can reclaim change-tracking state. The
+        // synchronize response generation is intentionally not used as the cursor (see below).
+        await _replicaClient.SynchronizeReplicaAsync(serviceId, replicaId, "download", ct).ConfigureAwait(false);
 
-        await _store.SetSyncCursorAsync(serverGenCursorKey, syncResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+        // Advance the "since" cursor to the generation the applied changes were extracted at,
+        // NOT the synchronize response generation. Synchronize runs after extract over a
+        // separate round-trip, so the synchronize generation can be strictly greater than
+        // extractResult.ServerGen when the server commits edits between the two calls. Persisting
+        // the higher value would make the next extractChanges skip the changes in
+        // (extractResult.ServerGen, synchronizeGen] permanently.
+        await _store.SetSyncCursorAsync(serverGenCursorKey, extractResult.ServerGen.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
 
         return new DeltaDownloadResult
         {
             Adds = totalAdds,
             Updates = totalUpdates,
             Deletes = totalDeletes,
-            ServerGen = syncResult.ServerGen,
+            ServerGen = extractResult.ServerGen,
         };
     }
 }
