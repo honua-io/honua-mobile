@@ -373,6 +373,46 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task QueryFeaturesAsync_ExtentOnly_UsesRestEvenWhenGrpcPreferred()
+    {
+        Uri? capturedUri = null;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"extent":{"xmin":-1,"ymin":-2,"xmax":3,"ymax":4,"spatialReference":{"wkid":4326}}}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        // gRPC preferred with REST fallback disabled: if the extent-only query were (incorrectly)
+        // routed over gRPC it would attempt a gRPC call over the stub HttpClient and throw rather
+        // than reach the REST handler. The legacy gRPC-to-JSON converter has no extent branch and
+        // would otherwise silently yield {"features":[]}.
+        var client = CreateClient(handler, new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            PreferGrpcForFeatureQueries = true,
+            AllowRestFallbackOnGrpcFailure = false,
+        });
+
+        using var result = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+        {
+            ServiceId = "assets",
+            LayerId = 0,
+            ReturnExtentOnly = true,
+        });
+
+        Assert.NotNull(capturedUri);
+        Assert.Contains("/FeatureServer/0/query", capturedUri.PathAndQuery);
+        Assert.Contains("returnExtentOnly=true", capturedUri.PathAndQuery);
+        Assert.True(result.RootElement.TryGetProperty("extent", out _));
+    }
+
+    [Fact]
     public async Task GetOgcCollectionsAsync_Success_ReturnsCollections()
     {
         var responseJson = """
