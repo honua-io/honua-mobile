@@ -1,6 +1,7 @@
 // Copyright (c) Honua, Inc. and contributors.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
 
+using System.Data;
 using System.Globalization;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -2255,6 +2256,31 @@ LIMIT $limit;
             DataSource = _options.DatabasePath,
         };
 
-        return new SqliteConnection(builder.ToString());
+        var connection = new SqliteConnection(builder.ToString());
+
+        // Configure each connection as it opens. Without this the store runs in the default
+        // rollback-journal mode where a write transaction takes an exclusive lock that blocks
+        // concurrent readers, so a UI map query (GetFeaturesAsync) issued while background sync
+        // commits a large delta batch stalls until the command timeout instead of running
+        // concurrently. WAL lets readers proceed against the last committed snapshot during a
+        // write, busy_timeout makes lock contention deterministic, and synchronous=NORMAL is the
+        // recommended durability/throughput tradeoff under WAL. journal_mode=WAL persists in the
+        // database header, but applying it (and the per-connection PRAGMAs) on every open is cheap
+        // and idempotent and also covers databases created before this change.
+        connection.StateChange += ApplyConnectionPragmasOnOpen;
+        return connection;
+    }
+
+    private static void ApplyConnectionPragmasOnOpen(object? sender, StateChangeEventArgs e)
+    {
+        if (e.CurrentState != ConnectionState.Open || sender is not SqliteConnection connection)
+        {
+            return;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000; PRAGMA synchronous=NORMAL;";
+        command.ExecuteNonQuery();
     }
 }

@@ -880,13 +880,25 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
 
     private static string EscapeCsv(string value)
     {
-        return value.Contains('"', StringComparison.Ordinal) ||
-            value.Contains(',', StringComparison.Ordinal) ||
-            value.Contains('\n', StringComparison.Ordinal) ||
-            value.Contains('\r', StringComparison.Ordinal)
-            ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\""
-            : value;
+        // Neutralize spreadsheet formula/DDE injection before RFC-4180 quoting. Field-collected
+        // attribute values (operator input and server-synced records) are emitted verbatim, so a
+        // cell beginning with =, +, -, @, tab, or CR is evaluated as a formula when the export is
+        // opened in Excel/Sheets (e.g. =HYPERLINK exfil, DDE). RFC-4180 quoting does not mitigate
+        // this — the spreadsheet strips the surrounding quotes and still evaluates the leading
+        // trigger — so prefix a leading apostrophe per OWASP CSV-injection guidance. Applied to
+        // both attribute headers and data cells (the two EscapeCsv call sites).
+        var guarded = StartsWithFormulaTrigger(value) ? "'" + value : value;
+
+        return guarded.Contains('"', StringComparison.Ordinal) ||
+            guarded.Contains(',', StringComparison.Ordinal) ||
+            guarded.Contains('\n', StringComparison.Ordinal) ||
+            guarded.Contains('\r', StringComparison.Ordinal)
+            ? $"\"{guarded.Replace("\"", "\"\"", StringComparison.Ordinal)}\""
+            : guarded;
     }
+
+    private static bool StartsWithFormulaTrigger(string value)
+        => value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r';
 
     private static string FormatDateTime(DateTime? value)
     {

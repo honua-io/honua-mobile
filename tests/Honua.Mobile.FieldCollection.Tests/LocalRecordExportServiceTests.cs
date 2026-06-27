@@ -224,6 +224,53 @@ public sealed class LocalRecordExportServiceTests
         Assert.True(new FileInfo(result.EvidenceManifestPath).Length > 0);
     }
 
+    [Fact]
+    public async Task ExportLayerAsync_NeutralizesCsvFormulaInjectionInAttributeValues()
+    {
+        var databasePath = CreateDatabasePath();
+        var exportRoot = CreateExportRoot();
+        await using var cleanup = new FileCleanup(databasePath, exportRoot);
+        using var storage = new GeoPackageStorageService(databasePath);
+        var layer = CreateLayer();
+
+        var feature = new Feature
+        {
+            Id = "asset-injection",
+            LayerId = 1,
+            Version = 1,
+            Geometry = new Point(21.3, -157.8),
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+            ModifiedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Attributes = new Dictionary<string, object?>
+            {
+                ["name"] = "asset-injection",
+                ["status"] = "synced",
+                ["formula"] = "=HYPERLINK(\"http://evil.test\",\"click\")",
+                ["dde"] = "@SUM(1+1)",
+            },
+        };
+        await storage.ApplyRemoteFeatureAsync(feature);
+
+        var service = new LocalRecordExportService(storage, exportRoot);
+        var result = await service.ExportLayerAsync(layer);
+
+        var csv = await File.ReadAllTextAsync(result.CsvPath);
+
+        // Formula triggers are apostrophe-guarded so a spreadsheet treats them as text.
+        Assert.Contains("'=HYPERLINK", csv);
+        Assert.Contains("'@SUM", csv);
+
+        // No data cell starts with a bare formula trigger: it would only do so immediately after a
+        // delimiter/quote/line-start. The guard + RFC-4180 quoting prevents that.
+        foreach (var line in csv.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            Assert.DoesNotContain(",=HYPERLINK", line);
+            Assert.DoesNotContain(",@SUM", line);
+            Assert.False(line.StartsWith('='), "A CSV cell must not start with an unescaped formula trigger.");
+        }
+    }
+
     private static LayerInfo CreateLayer()
     {
         return new LayerInfo

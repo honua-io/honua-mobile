@@ -43,7 +43,9 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
     {
         _databasePath = databasePath;
         _connection = new SQLiteAsyncConnection(databasePath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
-        _wkbWriter = new WKBWriter();
+        // emitZ so 3D points/vertices survive the local round-trip; the default WKBWriter writes
+        // XY only and would silently drop the Z ordinate even when the geometry carries one.
+        _wkbWriter = new WKBWriter(ByteOrder.LittleEndian, handleSRID: false, emitZ: true);
         _wkbReader = new WKBReader();
         _initializationTask = new Lazy<Task>(InitializeDatabase);
     }
@@ -2299,12 +2301,14 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
     {
         return geometry switch
         {
-            CoreModels.Point point => new NetTopologySuite.Geometries.Point(point.Longitude, point.Latitude),
+            CoreModels.Point point => point.Altitude.HasValue
+                ? new NetTopologySuite.Geometries.Point(ToNtsCoordinate(point))
+                : new NetTopologySuite.Geometries.Point(point.Longitude, point.Latitude),
             CoreModels.LineString line => new NetTopologySuite.Geometries.GeometryFactory(
                     new NetTopologySuite.Geometries.PrecisionModel(),
                     line.SRID)
                 .CreateLineString(line.Coordinates
-                    .Select(point => new NetTopologySuite.Geometries.Coordinate(point.Longitude, point.Latitude))
+                    .Select(ToNtsCoordinate)
                     .ToArray()),
             CoreModels.Polygon polygon => CreateNtsPolygon(polygon),
             null => null,
@@ -2312,33 +2316,67 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         };
     }
 
+    // Carry the Z ordinate when an altitude is present so 3D captures are not silently flattened
+    // to 2D on the local-storage write path (the WKBWriter is configured with emitZ).
+    private static NetTopologySuite.Geometries.Coordinate ToNtsCoordinate(CoreModels.Point point)
+        => point.Altitude.HasValue
+            ? new NetTopologySuite.Geometries.CoordinateZ(point.Longitude, point.Latitude, point.Altitude.Value)
+            : new NetTopologySuite.Geometries.Coordinate(point.Longitude, point.Latitude);
+
+    private static CoreModels.Point ToCorePoint(NetTopologySuite.Geometries.Coordinate coordinate)
+        => new(coordinate.Y, coordinate.X, double.IsNaN(coordinate.Z) ? null : coordinate.Z);
+
     private static NetTopologySuite.Geometries.Polygon CreateNtsPolygon(CoreModels.Polygon polygon)
     {
         var factory = new NetTopologySuite.Geometries.GeometryFactory(
             new NetTopologySuite.Geometries.PrecisionModel(),
             polygon.SRID);
-        var shellCoordinates = polygon.Coordinates.FirstOrDefault() ?? [];
-        var coordinates = shellCoordinates
-            .Select(point => new NetTopologySuite.Geometries.Coordinate(point.Longitude, point.Latitude))
-            .ToList();
 
-        if (coordinates.Count > 0 && !coordinates[0].Equals2D(coordinates[^1]))
+        var shell = CreateNtsLinearRing(factory, polygon.Coordinates.FirstOrDefault() ?? []);
+        if (shell is null)
         {
-            coordinates.Add(coordinates[0]);
+            return factory.CreatePolygon();
         }
 
-        return factory.CreatePolygon(coordinates.ToArray());
+        // Preserve interior rings (holes) instead of keeping only the shell, matching the other two
+        // geometry serializers in this project (CoreModels.ToGeoJson and FieldCollectionSyncTransports).
+        var holes = polygon.Coordinates
+            .Skip(1)
+            .Select(ring => CreateNtsLinearRing(factory, ring))
+            .Where(ring => ring is not null)
+            .Cast<NetTopologySuite.Geometries.LinearRing>()
+            .ToArray();
+
+        return holes.Length > 0
+            ? factory.CreatePolygon(shell, holes)
+            : factory.CreatePolygon(shell);
+    }
+
+    private static NetTopologySuite.Geometries.LinearRing? CreateNtsLinearRing(
+        NetTopologySuite.Geometries.GeometryFactory factory,
+        IReadOnlyList<CoreModels.Point> ring)
+    {
+        var coordinates = ring.Select(ToNtsCoordinate).ToList();
+        if (coordinates.Count == 0)
+        {
+            return null;
+        }
+
+        if (!coordinates[0].Equals2D(coordinates[^1]))
+        {
+            coordinates.Add(coordinates[0].Copy());
+        }
+
+        return factory.CreateLinearRing(coordinates.ToArray());
     }
 
     private static CoreModels.Geometry? ConvertFromNtsGeometry(NtsGeometry ntsGeometry)
     {
         if (ntsGeometry is NetTopologySuite.Geometries.Point point)
         {
-            return new CoreModels.Point
-            {
-                Latitude = point.Y,
-                Longitude = point.X
-            };
+            return point.Coordinate is { } coordinate
+                ? ToCorePoint(coordinate)
+                : new CoreModels.Point { Latitude = point.Y, Longitude = point.X };
         }
 
         if (ntsGeometry is NetTopologySuite.Geometries.LineString line)
@@ -2346,22 +2384,24 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
             return new CoreModels.LineString
             {
                 Coordinates = line.Coordinates
-                    .Select(point => new CoreModels.Point(point.Y, point.X))
+                    .Select(ToCorePoint)
                     .ToList()
             };
         }
 
         if (ntsGeometry is NetTopologySuite.Geometries.Polygon polygon)
         {
-            return new CoreModels.Polygon
+            var rings = new List<List<CoreModels.Point>>
             {
-                Coordinates =
-                [
-                    polygon.ExteriorRing.Coordinates
-                        .Select(point => new CoreModels.Point(point.Y, point.X))
-                        .ToList()
-                ]
+                polygon.ExteriorRing.Coordinates.Select(ToCorePoint).ToList()
             };
+
+            foreach (var interiorRing in polygon.InteriorRings)
+            {
+                rings.Add(interiorRing.Coordinates.Select(ToCorePoint).ToList());
+            }
+
+            return new CoreModels.Polygon { Coordinates = rings };
         }
 
         throw new NotSupportedException($"Geometry type {ntsGeometry.GeometryType} not supported");
