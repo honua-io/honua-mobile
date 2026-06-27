@@ -1,0 +1,22 @@
+using Esri.ArcGISRuntime.Geometry;
+using Esri.ArcGISRuntime.Mapping;
+using Esri.ArcGISRuntime.Maui;
+using Esri.ArcGISRuntime.Symbology;
+
+namespace SampleApp;
+
+public class MapPage
+{
+    public object BuildMap()
+    {
+        var basemap = new Basemap();
+        var map = new Map();
+        var layer = new FeatureLayer();
+        var overlay = new GraphicsOverlay();
+        var point = new MapPoint(-117.182541, 34.055569);
+        var symbol = new SimpleMarkerSymbol();
+        var graphic = new Graphic();
+        var view = new MapView();
+        return view;
+    }
+}

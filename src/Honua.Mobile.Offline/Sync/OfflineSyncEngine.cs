@@ -168,6 +168,12 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         switch (strategy)
         {
             case SyncConflictStrategy.ServerWins:
+                // ServerWins is intentionally discard-only: the local pending edit is
+                // dropped (marked succeeded so it is no longer retried) and the server's
+                // existing value is left authoritative. This engine does not re-pull and
+                // overwrite the local feature here; callers that need the local store to
+                // reflect the server value must run a delta/replica download afterwards.
+                // See OfflineSyncEngineTests.SyncAsync_ServerWins_DiscardsLocalEditWithoutReUpload.
                 await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
                 return ConflictResolutionState.ResolvedState;
 

@@ -164,20 +164,19 @@ var terrainUrl = scene.TerrainUrl;
 ```
 src/
   Honua.Embed/                Embeddable map web component package
-    tests/                    Web component DOM behavior tests (17 tests)
+    tests/                    Web component DOM behavior tests
   Honua.Mobile.Sdk/           Core mobile client
   Honua.Mobile.Offline/       GeoPackage sync engine
   Honua.Mobile.Maui/          MAUI platform integration, native display, location, and scene anchoring
-  Honua.Mobile.IoT/           IoT sensor abstractions (interface-only, future)
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tests/
-  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes (80 tests)
-  Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics (10 tests)
+  Honua.Mobile.Sdk.Tests/     HTTP client, transport security, gRPC translation, routing, scenes
+  Honua.Mobile.FieldCollection.Tests/ FieldCollection auth, sync, storage, diagnostics
   Honua.Mobile.ServerIntegration.Tests/ Loopback and opt-in live Honua image integration surface
-  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage (65 tests)
-  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location, scene anchoring (40 tests)
-  Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query (7 tests)
+  Honua.Mobile.Offline.Tests/ Sync engine, conflicts, map download, GeoPackage
+  Honua.Mobile.Maui.Tests/    MAUI integration helpers, map annotations, native display, location, scene anchoring
+  Honua.Mobile.Smoke.Tests/   End-to-end smoke paths and optional live Honua query
 proto/
   honua/v1/                   gRPC protocol definitions
 ```
@@ -249,9 +248,6 @@ for scope, triggers, and the seed-SQL gap.
 Production-ready foundation for offline sync, forms, and gRPC transport.
 .NET test coverage across SDK, Field, FieldCollection, server integration,
 Offline, MAUI, and Smoke projects, plus DOM tests for the embeddable map package.
-
-The IoT module (`Honua.Mobile.IoT`) contains interface definitions only --
-no implementation yet.
 
 ## Documentation
 

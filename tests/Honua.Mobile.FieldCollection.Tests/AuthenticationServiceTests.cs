@@ -45,6 +45,28 @@ public sealed class AuthenticationServiceTests
     }
 
     [Fact]
+    public async Task ValidateConnection_WithApiKey_DoesNotFalselySucceedViaHealthEndpoint()
+    {
+        var requestedPaths = new List<string>();
+        using var http = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            requestedPaths.Add(request.RequestUri!.AbsolutePath);
+
+            // Authenticated endpoints are absent; only the unauthenticated health
+            // endpoint answers 200. A bogus key must not validate against it.
+            return request.RequestUri!.AbsolutePath == "/health"
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                : new HttpResponseMessage(HttpStatusCode.NotFound);
+        }));
+        var service = new AuthenticationService(http);
+
+        var isValid = await service.ValidateConnectionAsync("https://api.honua.test", "bogus-key");
+
+        Assert.False(isValid);
+        Assert.DoesNotContain("/health", requestedPaths);
+    }
+
+    [Fact]
     public async Task ValidateConnection_WithoutApiKey_AllowsPublicHealthEndpoint()
     {
         using var http = new HttpClient(new StubHttpMessageHandler(request =>

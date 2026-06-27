@@ -44,7 +44,7 @@ jobs:
       ISSUE_TITLE: "seed-drift: mobile-offline-demo-v1.sql"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Fetch upstream blob
         id: fetch

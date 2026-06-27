@@ -35,6 +35,16 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
     private readonly HttpClient _http;
     private readonly RefreshingAuthTokenProviderOptions _options;
 
+    // Serializes refreshes and cache updates so concurrent callers coalesce onto a
+    // single refresh instead of racing the token store (critical with rotating /
+    // single-use refresh tokens). Also guards the in-memory cache below.
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    // In-memory copy of the persisted token so the secure keystore is read once at
+    // startup and only on a cache miss or rotation, rather than on every request.
+    private HonuaAuthToken? _cached;
+    private bool _cacheLoaded;
+
     /// <summary>
     /// Initializes a new <see cref="RefreshingAuthTokenProvider"/>.
     /// </summary>
@@ -56,19 +66,38 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
     {
         try
         {
-            var token = await _store.ReadAsync(ct).ConfigureAwait(false);
-            if (token is null)
+            // Fast path: serve a still-valid cached token without touching the
+            // keystore or taking the lock.
+            var cached = Volatile.Read(ref _cached);
+            if (_cacheLoaded &&
+                cached is not null &&
+                !cached.ShouldRefresh(_options.TimeProvider.GetUtcNow(), _options.RefreshSkew))
             {
-                return null;
+                return cached;
             }
 
-            var now = _options.TimeProvider.GetUtcNow();
-            if (!token.ShouldRefresh(now, _options.RefreshSkew))
+            await _gate.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
-                return token;
-            }
+                var token = await LoadCachedTokenLockedAsync(ct).ConfigureAwait(false);
+                if (token is null)
+                {
+                    return null;
+                }
 
-            return await RefreshTokenAsync(ct).ConfigureAwait(false);
+                // Re-check under the lock: a concurrent caller may have refreshed
+                // while we waited, so we avoid a redundant network round-trip.
+                if (!token.ShouldRefresh(_options.TimeProvider.GetUtcNow(), _options.RefreshSkew))
+                {
+                    return token;
+                }
+
+                return await RefreshLockedAsync(ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _gate.Release();
+            }
         }
         catch (HonuaMobileAuthException)
         {
@@ -87,11 +116,27 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
     /// <inheritdoc />
     public async ValueTask<HonuaAuthToken?> RefreshTokenAsync(CancellationToken ct = default)
     {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await RefreshLockedAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Performs the refresh while holding <see cref="_gate"/>. Re-reads the current
+    // token from the cache/store inside the lock so a coalesced caller always
+    // refreshes with the latest (possibly already-rotated) refresh token.
+    private async ValueTask<HonuaAuthToken?> RefreshLockedAsync(CancellationToken ct)
+    {
         using var activity = MobileAuthTelemetry.ActivitySource.StartActivity("honua.mobile.auth.refresh", ActivityKind.Client);
 
         try
         {
-            var current = await _store.ReadAsync(ct).ConfigureAwait(false);
+            var current = await LoadCachedTokenLockedAsync(ct).ConfigureAwait(false);
             activity?.SetTag("auth.scheme", current?.Scheme.ToString().ToLowerInvariant() ?? "none");
 
             if (current is null ||
@@ -125,6 +170,8 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
                 ct).ConfigureAwait(false);
             var refreshed = ParseRefreshResponse(payload, current, _options.TimeProvider.GetUtcNow());
             await _store.WriteAsync(refreshed, ct).ConfigureAwait(false);
+            _cached = refreshed;
+            _cacheLoaded = true;
 
             MobileAuthTelemetry.RecordTokenRefresh("success");
             activity?.SetTag("auth.refresh.result", "success");
@@ -156,7 +203,17 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
 
         try
         {
-            await _store.WriteAsync(token, ct).ConfigureAwait(false);
+            await _gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await _store.WriteAsync(token, ct).ConfigureAwait(false);
+                _cached = token;
+                _cacheLoaded = true;
+            }
+            finally
+            {
+                _gate.Release();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -173,7 +230,17 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
     {
         try
         {
-            await _store.ClearAsync(ct).ConfigureAwait(false);
+            await _gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await _store.ClearAsync(ct).ConfigureAwait(false);
+                _cached = null;
+                _cacheLoaded = true;
+            }
+            finally
+            {
+                _gate.Release();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -183,6 +250,20 @@ public sealed class RefreshingAuthTokenProvider : IAuthTokenProvider
         {
             throw new HonuaMobileAuthException("Honua auth token clearing failed.", ex);
         }
+    }
+
+    // Returns the in-memory token, loading it from the secure store exactly once on
+    // first use. Must be called while holding <see cref="_gate"/>.
+    private async ValueTask<HonuaAuthToken?> LoadCachedTokenLockedAsync(CancellationToken ct)
+    {
+        if (_cacheLoaded)
+        {
+            return _cached;
+        }
+
+        _cached = await _store.ReadAsync(ct).ConfigureAwait(false);
+        _cacheLoaded = true;
+        return _cached;
     }
 
     private static HonuaAuthToken ParseRefreshResponse(

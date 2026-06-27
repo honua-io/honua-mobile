@@ -10,6 +10,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Disconnected Field Workflow Harness](disconnected-field-workflow-harness.md) | Acceptance runbook for online download, offline edits, reconnect sync, verification, and evidence artifacts |
 | [Embeddable Map](embeddable-map.md) | Framework-agnostic `<honua-map>` web component for ISV integrations |
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
+| [Migrating from the ArcGIS Maps SDK for .NET (MAUI)](migration-arcgis-maps-sdk-maui.md) | Guided reimplement path + adapters from the ArcGIS Maps SDK for .NET (MAUI/Xamarin) to Honua MAUI, with the codemod feasibility decision (#280) |
 | [Mobile DevOps Release Handoff](mobile-devops-release-handoff.md) | Issue #82 release-owner packet for workflow inventory, approvals, evidence, protected environments, and #85/#87 store prerequisite gates |
 | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) | Server, SDK, platform, offline, and edition dependencies for scene and AR work |
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
@@ -19,6 +20,7 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
 | [No-Cloud Field Parity Information Model](no-cloud-field-parity-information-model.md) | Local project package, form, lifecycle, assignment, media, conflict, and export model handoff for field parity without hosted services or new UI design |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
+| [Offline Field SDK Beta Graduation Criteria](offline-sdk-beta-graduation.md) | Acceptance bar, required evidence, performance/reliability targets, known-gaps exit list, and sign-off owners for graduating the MAUI SDK + offline sync from Beta |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
 | [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |

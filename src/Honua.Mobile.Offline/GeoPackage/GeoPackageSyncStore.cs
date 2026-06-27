@@ -872,29 +872,52 @@ ORDER BY object_id ASC;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, BoundingBox boundingBox, CancellationToken ct = default)
-        => await GetFeaturesByBoundingBoxCoreAsync(layerKey, boundingBox, DefaultCrsIdentifier, ct).ConfigureAwait(false);
+    {
+        ArgumentNullException.ThrowIfNull(boundingBox);
+
+        // The SDK <see cref="GeographicBoundingBox"/> overload is, by contract, WGS84 degrees.
+        return await GetFeaturesByBoundingBoxCoreAsync(
+            layerKey,
+            boundingBox.MinLongitude,
+            boundingBox.MinLatitude,
+            boundingBox.MaxLongitude,
+            boundingBox.MaxLatitude,
+            DefaultCrsIdentifier,
+            ct).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, FeatureBoundingBox boundingBox, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(boundingBox);
 
+        // FeatureBoundingBox carries its own CRS and may be in the layer's native
+        // projected reference (e.g. Web Mercator EPSG:3857), so its coordinates must
+        // NOT be funneled through the geographic-only GeographicBoundingBox type, whose
+        // validation rejects out-of-[-180,180] longitudes. The R-tree query runs in the
+        // layer CRS, so projected query coordinates are valid here.
         var queryCrs = NormalizeCrsIdentifier(boundingBox.Crs) ?? DefaultCrsIdentifier;
         return await GetFeaturesByBoundingBoxCoreAsync(
             layerKey,
-            new BoundingBox(boundingBox.MinX, boundingBox.MinY, boundingBox.MaxX, boundingBox.MaxY),
+            boundingBox.MinX,
+            boundingBox.MinY,
+            boundingBox.MaxX,
+            boundingBox.MaxY,
             queryCrs,
             ct).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<string>> GetFeaturesByBoundingBoxCoreAsync(
         string layerKey,
-        BoundingBox boundingBox,
+        double minX,
+        double minY,
+        double maxX,
+        double maxY,
         string queryCrs,
         CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
-        ValidateBoundingBox(boundingBox);
+        ValidateBoundingBox(minX, minY, maxX, maxY);
 
         using var activity = MobileStorageTelemetry.ActivitySource.StartActivity("honua.mobile.storage.feature.query_bbox", ActivityKind.Internal);
         activity?.SetTag("layer_key", layerKey);
@@ -933,10 +956,10 @@ ORDER BY f.object_id ASC;
 ";
         command.Parameters.AddWithValue("$layer_key", layerKey);
         command.Parameters.AddWithValue("$now_utc", _options.TimeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$min_x", boundingBox.MinLongitude);
-        command.Parameters.AddWithValue("$min_y", boundingBox.MinLatitude);
-        command.Parameters.AddWithValue("$max_x", boundingBox.MaxLongitude);
-        command.Parameters.AddWithValue("$max_y", boundingBox.MaxLatitude);
+        command.Parameters.AddWithValue("$min_x", minX);
+        command.Parameters.AddWithValue("$min_y", minY);
+        command.Parameters.AddWithValue("$max_x", maxX);
+        command.Parameters.AddWithValue("$max_y", maxY);
 
         var items = new List<string>();
         try
@@ -1589,23 +1612,22 @@ ORDER BY object_id ASC;
         return false;
     }
 
-    private static void ValidateBoundingBox(BoundingBox boundingBox)
+    private static void ValidateBoundingBox(double minX, double minY, double maxX, double maxY)
     {
-        ArgumentNullException.ThrowIfNull(boundingBox);
-        if (!double.IsFinite(boundingBox.MinLongitude) ||
-            !double.IsFinite(boundingBox.MinLatitude) ||
-            !double.IsFinite(boundingBox.MaxLongitude) ||
-            !double.IsFinite(boundingBox.MaxLatitude))
+        if (!double.IsFinite(minX) ||
+            !double.IsFinite(minY) ||
+            !double.IsFinite(maxX) ||
+            !double.IsFinite(maxY))
         {
             throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box coordinates must be finite.");
         }
 
-        if (boundingBox.MaxLongitude < boundingBox.MinLongitude)
+        if (maxX < minX)
         {
             throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box max X must be greater than or equal to min X.");
         }
 
-        if (boundingBox.MaxLatitude < boundingBox.MinLatitude)
+        if (maxY < minY)
         {
             throw GeoPackageStorageProblems.InvalidBoundingBox("Bounding box max Y must be greater than or equal to min Y.");
         }

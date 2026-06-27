@@ -11,35 +11,37 @@
     },
     "sdkBaseline": {
       "repository": "honua-io/honua-sdk-dotnet",
-      "ref": "trunk@6db17ed",
+      "ref": "the Honua.Sdk.* train pinned in Directory.Build.props (HonuaSdkDotNetTrainVersion)",
+      "versionPolicy": "track-train",
+      "versionPolicyNote": "Every package version is the literal token $(HonuaSdkDotNetTrainVersion) so this baseline tracks the train pinned in Directory.Build.props automatically. MobileContractHarmonizationFixtureTests resolves the token to the pinned train version; a dependabot bump to HonuaSdkDotNetTrainVersion needs no edit here. To intentionally pin a package to a different version, replace the token with an explicit version string and the test will assert that exact value.",
       "packages": [
         {
           "packageId": "Honua.Sdk.Abstractions",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.Offline",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.Grpc",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.GeoServices",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.Scenes",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.OgcFeatures",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         },
         {
           "packageId": "Honua.Sdk.Field",
-          "version": "1.2.0"
+          "version": "$(HonuaSdkDotNetTrainVersion)"
         }
       ]
     }

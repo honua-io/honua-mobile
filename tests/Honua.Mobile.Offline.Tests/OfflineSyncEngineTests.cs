@@ -151,6 +151,34 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAsync_ServerWins_DiscardsLocalEditWithoutReUpload()
+    {
+        // ServerWins is intentionally discard-only: the conflicting local edit is
+        // dropped (marked succeeded) and the server value stays authoritative. The
+        // engine must NOT issue a force-write re-upload, and there is no local
+        // re-pull/overwrite step here. This test pins that documented divergence so a
+        // future change to ServerWins semantics is a deliberate, reviewed decision.
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateOperation("server-wins-discard", "assets", OfflineOperationType.Update));
+
+        var uploader = new AlwaysConflictRecordingUploader();
+        var engine = new OfflineSyncEngine(
+            store,
+            uploader,
+            new OfflineSyncEngineOptions { ConflictStrategy = SyncConflictStrategy.ServerWins });
+
+        var result = await engine.SyncAsync();
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        // The local edit was discarded, not retried/forced.
+        Assert.Null(await ReadOperationStateAsync("server-wins-discard"));
+        Assert.Single(uploader.Calls);
+        Assert.DoesNotContain(uploader.Calls, call => call.ForceWrite);
+    }
+
+    [Fact]
     public async Task SyncAsync_WhenCanceled_RequeuesClaimedOperationsWithoutIncrementingAttempts()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });

@@ -76,7 +76,7 @@ jobs:
       packages: read
     steps:
       - name: Checkout selected ref
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -216,7 +216,7 @@ jobs:
         run: dotnet workload install maui-android
 
       - name: Cache NuGet packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}

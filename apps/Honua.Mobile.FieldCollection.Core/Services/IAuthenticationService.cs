@@ -179,11 +179,14 @@ public class AuthenticationService : IAuthenticationService
         "/api/health"
     };
 
+    // API-key validation probes only authenticated endpoints that reject a bad key
+    // with 401/403. The unauthenticated health endpoints are intentionally excluded:
+    // they return 200 regardless of the key, so treating that as success would let a
+    // bogus key falsely validate.
     private static readonly string[] AuthenticatedValidationPaths =
     {
         "/api/scenes?f=json",
-        "/rest/services?f=json",
-        "/health"
+        "/rest/services?f=json"
     };
 
     private static readonly string[] TokenEndpointPaths =
