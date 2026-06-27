@@ -23,6 +23,69 @@ public sealed class GeoPackageSyncServiceTests
     }
 
     [Fact]
+    public async Task MarkChangesAsSynced_MarksOnlyTheRequestedChanges()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        await storage.StoreFeatureAsync(CreateFeature("asset-2", version: 1));
+
+        var pending = await storage.GetPendingChangesAsync();
+        Assert.Equal(2, pending.Count);
+
+        await storage.MarkChangesAsSynced(new List<string> { pending[0].Id });
+
+        var remaining = await storage.GetPendingChangesAsync();
+        Assert.Single(remaining);
+        Assert.Equal(pending[1].Id, remaining[0].Id);
+    }
+
+    [Fact]
+    public async Task MarkChangesAsSynced_WithEmptyList_IsNoOp()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+
+        await storage.MarkChangesAsSynced(new List<string>());
+
+        Assert.Single(await storage.GetPendingChangesAsync());
+    }
+
+    [Fact]
+    public async Task GetPendingChangesCountAsync_CountsPendingUploads()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var cleanup = new DatabaseCleanup(databasePath);
+        using var storage = new GeoPackageStorageService(databasePath);
+        await storage.StoreFeatureAsync(CreateFeature("asset-1", version: 1));
+        await storage.StoreFeatureAsync(CreateFeature("asset-2", version: 1));
+
+        Assert.Equal(2, await storage.GetPendingChangesCountAsync());
+
+        var pending = await storage.GetPendingChangesAsync();
+        await storage.MarkChangesAsSynced(pending.Select(change => change.Id).ToList());
+
+        Assert.Equal(0, await storage.GetPendingChangesCountAsync());
+    }
+
+    [Theory]
+    [InlineData(StorageConflictType.UpdateUpdate, ConflictType.UpdateUpdate)]
+    [InlineData(StorageConflictType.UpdateDelete, ConflictType.UpdateDelete)]
+    [InlineData(StorageConflictType.DeleteUpdate, ConflictType.DeleteUpdate)]
+    [InlineData(StorageConflictType.DeleteDelete, ConflictType.DeleteDelete)]
+    public void MapConflictType_MapsEveryStorageCategoryExplicitly(
+        StorageConflictType storage,
+        ConflictType expected)
+    {
+        // DeleteDelete previously collapsed onto UpdateUpdate via a default arm; it must now
+        // map to its own category so a both-sides-deleted conflict is not mislabeled in the UI.
+        Assert.Equal(expected, GeoPackageSyncService.MapConflictType(storage));
+    }
+
+    [Fact]
     public async Task PushChangesAsync_WhenUploaderReturnsFalse_ReturnsFailureAndLeavesChangePending()
     {
         var databasePath = CreateDatabasePath();

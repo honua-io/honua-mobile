@@ -29,9 +29,24 @@ public sealed class HonuaMobileClientOptions
     public bool PreferGrpcForFeatureEdits { get; init; } = true;
 
     /// <summary>
-    /// When <see langword="true"/>, the client automatically falls back to REST when a gRPC call fails. Defaults to <see langword="true"/>.
+    /// When <see langword="true"/>, the client automatically falls back to REST when a gRPC
+    /// query call fails. Defaults to <see langword="true"/>. This governs read-only queries only;
+    /// mutating edits are governed separately by <see cref="AllowRestFallbackOnGrpcEditFailure"/>.
     /// </summary>
     public bool AllowRestFallbackOnGrpcFailure { get; init; } = true;
+
+    /// <summary>
+    /// When <see langword="true"/>, the client falls back to REST when a gRPC feature <em>edit</em>
+    /// (applyEdits) call fails. Defaults to <see langword="false"/>.
+    /// <para>
+    /// Edits are not idempotent, so a blanket REST retry after a gRPC failure can double-apply an
+    /// edit whose gRPC request actually reached the server (e.g. the failure occurred while reading
+    /// the response). Leaving this off means a failed gRPC edit surfaces as an error instead of
+    /// silently re-applying. Only enable it when the remote guarantees edit idempotency (e.g. via an
+    /// idempotency/edit token).
+    /// </para>
+    /// </summary>
+    public bool AllowRestFallbackOnGrpcEditFailure { get; init; }
 
     /// <summary>
     /// Optional API key sent via the <c>X-API-Key</c> header.

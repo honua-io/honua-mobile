@@ -25,7 +25,7 @@ namespace Honua.Mobile.FieldCollection.Services.Storage;
 /// OGC GeoPackage-compliant storage service for offline field data collection
 /// Implements SQLite-based spatial database with change tracking for delta sync
 /// </summary>
-public class GeoPackageStorageService : IDisposable
+public class GeoPackageStorageService : IDisposable, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions SchemaJsonOptions = new()
     {
@@ -806,16 +806,61 @@ public class GeoPackageStorageService : IDisposable
 
     public async Task MarkChangesAsSynced(List<string> changeIds)
     {
+        ArgumentNullException.ThrowIfNull(changeIds);
+        if (changeIds.Count == 0)
+        {
+            return;
+        }
+
         await EnsureInitializedAsync();
         await _dbLock.WaitAsync();
         try
         {
-            foreach (var changeId in changeIds)
+            // Mark every change in a single transaction so a mid-operation crash cannot leave
+            // part of the batch marked Synced while the rest stays PendingUpload. That split state
+            // would cause the un-marked changes to be re-uploaded on the next sync, double-applying
+            // them server-side. RunInTransactionAsync rolls back on failure, so the batch is
+            // all-or-nothing. Each chunk is one set-based UPDATE to stay within the SQLite
+            // bound-parameter limit.
+            await _connection.RunInTransactionAsync(connection =>
             {
-                await _connection.ExecuteAsync(
-                    "UPDATE change_records SET sync_status = ? WHERE id = ?",
-                    StorageSyncStatus.Synced, changeId);
-            }
+                const int chunkSize = 500;
+                for (var offset = 0; offset < changeIds.Count; offset += chunkSize)
+                {
+                    var chunk = changeIds.GetRange(offset, Math.Min(chunkSize, changeIds.Count - offset));
+                    var placeholders = string.Join(",", Enumerable.Repeat("?", chunk.Count));
+                    var args = new object[chunk.Count + 1];
+                    args[0] = StorageSyncStatus.Synced;
+                    for (var i = 0; i < chunk.Count; i++)
+                    {
+                        args[i + 1] = chunk[i];
+                    }
+
+                    connection.Execute(
+                        $"UPDATE change_records SET sync_status = ? WHERE id IN ({placeholders})",
+                        args);
+                }
+            });
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Returns the number of change records still queued for upload without materializing the
+    /// rows. Used by the pending-changes poll, which only needs the count.
+    /// </summary>
+    public async Task<int> GetPendingChangesCountAsync()
+    {
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            return await _connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM change_records WHERE sync_status = ?",
+                StorageSyncStatus.PendingUpload);
         }
         finally
         {
@@ -2434,9 +2479,24 @@ public class GeoPackageStorageService : IDisposable
 
     #region IDisposable
 
+    public async ValueTask DisposeAsync()
+    {
+        if (_connection is not null)
+        {
+            // Close the SQLite connection without blocking and without forcing continuations
+            // back onto the captured (UI) context.
+            await _connection.CloseAsync().ConfigureAwait(false);
+        }
+
+        _dbLock?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     public void Dispose()
     {
-        _connection?.CloseAsync().Wait();
+        // Prefer DisposeAsync. When a synchronous Dispose is unavoidable, close off the captured
+        // context so the connection close cannot deadlock against a UI-thread continuation.
+        _connection?.CloseAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         _dbLock?.Dispose();
         GC.SuppressFinalize(this);
     }

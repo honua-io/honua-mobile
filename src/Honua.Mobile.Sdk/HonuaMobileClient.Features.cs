@@ -186,7 +186,9 @@ public sealed partial class HonuaMobileClient
 
     /// <summary>
     /// Applies feature edits (adds, updates, deletes) to a feature service layer.
-    /// Prefers gRPC transport when available and falls back to REST on failure.
+    /// Prefers gRPC transport when available. Unlike queries, a failed gRPC edit does
+    /// <em>not</em> fall back to REST unless <see cref="HonuaMobileClientOptions.AllowRestFallbackOnGrpcEditFailure"/>
+    /// is enabled, because re-issuing a non-idempotent edit could double-apply it.
     /// </summary>
     /// <param name="request">The edit payload including adds, updates, and deletes.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -203,9 +205,10 @@ public sealed partial class HonuaMobileClient
             {
                 return await ApplyEditsGrpcAsync(request, ct).ConfigureAwait(false);
             }
-            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcEditFailure)
             {
-                // Fall through to REST transport.
+                // Fall through to REST transport. Disabled by default for edits:
+                // re-issuing a non-idempotent edit over REST could double-apply it.
             }
         }
 
@@ -217,7 +220,7 @@ public sealed partial class HonuaMobileClient
         var response = await GetGrpcClient()
             .QueryAsync(ToSdkFeatureQueryRequest(request), ct)
             .ConfigureAwait(false);
-        return ToLegacyFeatureQueryJsonDocument(response);
+        return ToLegacyFeatureQueryJsonDocument(response, request.ReturnCountOnly);
     }
 
     private async IAsyncEnumerable<JsonDocument> QueryFeaturesGrpcPagesAsync(
@@ -228,7 +231,7 @@ public sealed partial class HonuaMobileClient
             .QueryPagesAsync(ToSdkFeatureQueryRequest(request), ct)
             .ConfigureAwait(false))
         {
-            yield return ToLegacyFeatureQueryJsonDocument(page);
+            yield return ToLegacyFeatureQueryJsonDocument(page, request.ReturnCountOnly);
         }
     }
 
@@ -404,9 +407,10 @@ public sealed partial class HonuaMobileClient
             {
                 return await GetGrpcClient().ApplyEditsAsync(request, ct).ConfigureAwait(false);
             }
-            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcFailure)
+            catch (HonuaGrpcException) when (_options.AllowRestFallbackOnGrpcEditFailure)
             {
-                // Fall through to REST transport.
+                // Fall through to REST transport. Disabled by default for edits:
+                // re-issuing a non-idempotent edit over REST could double-apply it.
             }
         }
 
@@ -729,7 +733,19 @@ public sealed partial class HonuaMobileClient
         writer.WriteEndObject();
     }
 
-    private static JsonDocument ToLegacyFeatureQueryJsonDocument(FeatureQueryResult response)
+    /// <summary>
+    /// Projects a gRPC/SDK <see cref="FeatureQueryResult"/> into the legacy Esri-style query JSON.
+    /// </summary>
+    /// <remarks>
+    /// Transport-parity note: the gRPC <see cref="FeatureQueryResult"/> contract does not currently
+    /// carry <c>spatialReference</c>, <c>geometryType</c>, or the layer <c>fields</c> that the raw
+    /// REST FeatureServer response passes through. Callers that need the spatial reference or field
+    /// schema must read them from layer metadata when the gRPC transport is used. Closing this gap
+    /// fully requires the SDK/server feature-query contract to surface those values.
+    /// <paramref name="returnCountOnly"/> gates the top-level <c>count</c>: Esri reserves it for
+    /// <c>returnCountOnly</c> responses, so it is omitted for normal feature queries.
+    /// </remarks>
+    internal static JsonDocument ToLegacyFeatureQueryJsonDocument(FeatureQueryResult response, bool returnCountOnly)
         => CreateJsonDocument(writer =>
         {
             writer.WriteStartObject();
@@ -739,7 +755,7 @@ public sealed partial class HonuaMobileClient
                 writer.WriteString("objectIdFieldName", response.ObjectIdFieldName);
             }
 
-            if (response.NumberMatched is { } numberMatched)
+            if (returnCountOnly && response.NumberMatched is { } numberMatched)
             {
                 writer.WriteNumber("count", numberMatched);
             }

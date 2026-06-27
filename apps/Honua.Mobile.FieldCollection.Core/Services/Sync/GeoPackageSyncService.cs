@@ -143,9 +143,9 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         {
             try
             {
-                var changes = await _storage.GetPendingChangesAsync();
+                var pendingChanges = await _storage.GetPendingChangesCountAsync();
                 var pendingAttachments = await _storage.GetPendingAttachmentChangesCountAsync();
-                PendingChangesCount = changes.Count + pendingAttachments;
+                PendingChangesCount = pendingChanges + pendingAttachments;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -788,13 +788,19 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         return _storage.StoreConflictAsync(conflict);
     }
 
-    private static ConflictType MapConflictType(StorageConflictType conflictType)
+    // Maps the persisted storage conflict category to the UI/domain category. Every storage value
+    // is mapped explicitly: a previous default arm collapsed DeleteDelete onto UpdateUpdate, so a
+    // both-sides-deleted conflict was shown to the user mislabeled as an update/update conflict.
+    internal static ConflictType MapConflictType(StorageConflictType conflictType)
     {
         return conflictType switch
         {
+            StorageConflictType.UpdateUpdate => ConflictType.UpdateUpdate,
             StorageConflictType.UpdateDelete => ConflictType.UpdateDelete,
             StorageConflictType.DeleteUpdate => ConflictType.DeleteUpdate,
-            _ => ConflictType.UpdateUpdate
+            StorageConflictType.DeleteDelete => ConflictType.DeleteDelete,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(conflictType), conflictType, "Unmapped storage conflict type.")
         };
     }
 
