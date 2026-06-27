@@ -1,3 +1,6 @@
+// Copyright (c) Honua, Inc. and contributors.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
+
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Honua.Mobile.Offline.GeoPackage;

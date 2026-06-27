@@ -15,13 +15,16 @@ The current source-backed mobile feature map is in [docs/features/README.md](doc
 
 | Layer | Status | Run on | Coverage |
 | --- | --- | --- | --- |
-| Unit | ✅ | every PR | 294 tests across 5 .NET projects (SDK, Offline, Field, FieldCollection, MAUI) |
-| Integration (in-process loopback) | ✅ | every PR | 9 loopback tests in `Honua.Mobile.ServerIntegration.Tests` (`SdkServerIntegrationTests`, `OfflineServerIntegrationTests`, `FieldCollectionServerIntegrationTests`) against a real ASP.NET Core loopback server; the same project also hosts 4 `LiveHonuaServerFixtureOptionsTests` harness-config tests |
-| Smoke | ✅ | every PR | 18 tests in `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
+| Unit | ✅ | every PR | Across 5 .NET projects (SDK, Offline, Field, FieldCollection, MAUI) |
+| Integration (in-process loopback) | ✅ | every PR | `Honua.Mobile.ServerIntegration.Tests` (`SdkServerIntegrationTests`, `OfflineServerIntegrationTests`, `FieldCollectionServerIntegrationTests`) against a real ASP.NET Core loopback server; the same project also hosts the `LiveHonuaServerFixtureOptionsTests` harness-config tests |
+| Smoke | ✅ | every PR | `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
-| Live server (Docker image) | ✅ | every PR via `Live Server Integration` workflow (hard gate; vendored seed at `tests/seed/mobile-offline-demo-v1.sql`) | 11 tests in `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS, vendored seed loaded into postgres before the live server starts |
-| Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | 7 tests in `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
+| Live server (Docker image) | ✅ | every PR via `Live Server Integration` workflow (hard gate; vendored seed at `tests/seed/mobile-offline-demo-v1.sql`) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS, vendored seed loaded into postgres before the live server starts |
+| Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
 | Physical device | 🟡 | deferred to GA | AR/VR field workflow tracked under honua-mobile#23 (closed, follow-ups in `docs/guides/native-scene-anchoring-requirements.md`); emulator/simulator platform smoke covers part of the surface |
+
+Exact test counts are intentionally not pinned here (they drift every PR); the
+authoritative numbers are the per-project totals reported by each CI run.
 
 See [docs/guides/validation-strategy.md](docs/guides/validation-strategy.md) for
 the per-capability coverage matrix, known gaps, and which CI workflow runs

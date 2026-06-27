@@ -1,3 +1,6 @@
+// Copyright (c) Honua, Inc. and contributors.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
+
 using System.Net;
 using System.Net.Http.Headers;
 using Honua.Mobile.Sdk.Auth;
