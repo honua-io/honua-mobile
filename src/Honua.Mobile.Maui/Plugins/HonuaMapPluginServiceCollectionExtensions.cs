@@ -1,3 +1,6 @@
+// Copyright (c) Honua, Inc. and contributors.
+// Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
+
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

@@ -1,0 +1,44 @@
+name: Repository Hygiene
+
+# Pre-release hygiene gates (audit #316):
+#  - no-ai-attribution: enforces the AGENTS.md "no agent attribution" policy on
+#    the PR's commit messages and body (AI/agent co-author trailers,
+#    "Generated with ..." lines, 🤖 markers).
+#  - license-headers: enforces the single Apache-2.0 header policy on shipped
+#    library sources.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  no-ai-attribution:
+    name: No AI/agent attribution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages and PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bash scripts/check-no-ai-attribution.sh "${BASE_SHA}..${HEAD_SHA}"
+
+  license-headers:
+    name: License headers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check shipped-library license headers
+        run: |
+          bash scripts/check-license-headers.sh

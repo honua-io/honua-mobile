@@ -17,18 +17,18 @@ The repository validates the SDK in five concentric layers, from cheapest
 and most reliable inward to most expensive and most operationally gated:
 
 ```
-                       Physical device  (0 today, deferred to GA)
-                  Cloud acceptance      (7 tests, manual dispatch)
-              Live server (Docker)      (11 tests, hard-gated on every PR)
-          Server integration            (9 loopback tests + 4 fixture config)
-      Unit                              (294 tests across 5 projects)
+                       Physical device  (none today, deferred to GA)
+                  Cloud acceptance      (manual dispatch)
+              Live server (Docker)      (hard-gated on every PR)
+          Server integration            (loopback + fixture config)
+      Unit                              (5 .NET projects)
   Embed DOM                             (npm, src/Honua.Embed/tests/)
 ```
 
-- **Unit (294 .NET tests)** -- run on every PR via `.github/workflows/ci.yml`
+- **Unit (.NET)** -- run on every PR via `.github/workflows/ci.yml`
   `test` job. Cover SDK, Offline, Field, FieldCollection, and MAUI library
   surfaces with no network or platform dependencies.
-- **Server integration in-process (9 loopback tests + 4 fixture-config
+- **Server integration in-process (loopback tests + fixture-config
   tests)** -- a live ASP.NET Core loopback server
   (`HonuaIntegrationServer`) exercises SDK, Offline, FieldCollection,
   and exception-reporting HTTP paths via
@@ -38,7 +38,7 @@ and most reliable inward to most expensive and most operationally gated:
   fixture configuration (env wiring, Testcontainers options) without
   hitting the loopback server. Run on every PR via the same `test`
   job; no external infrastructure required.
-- **Live server (Docker, 11 tests)** -- `LiveHonuaServerInteractionTests`
+- **Live server (Docker)** -- `LiveHonuaServerInteractionTests`
   spin up the official Honua server image via Testcontainers (or attach to
   a pre-started Honua URL) when `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set.
   The `Live Server Integration` workflow
@@ -48,7 +48,7 @@ and most reliable inward to most expensive and most operationally gated:
   so the suite is now a hard gate on PRs -- a failing live test blocks the
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
-- **Cloud acceptance (7 tests)** -- `DisconnectedFieldWorkflowAcceptanceTests`
+- **Cloud acceptance** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
@@ -122,7 +122,7 @@ Known coverage gaps, with the owner ticket where one exists:
   3D/AR dependency matrix (`docs/guides/mobile-3d-ar-dependency-matrix.md`).
 - ~~**Live server (Docker) on every PR**~~ -- closed. The
   `Live Server Integration` workflow now runs
-  `LiveHonuaServerInteractionTests` (11 tests) on every PR with the
+  `LiveHonuaServerInteractionTests` on every PR with the
   vendored seed (`tests/seed/mobile-offline-demo-v1.sql`) loaded into the
   postgres container and the dotnet test step as a hard gate (no
   `continue-on-error`). Adding the workflow to branch-protection required
@@ -183,7 +183,7 @@ The relevant workflows under `.github/workflows/`:
   - `build` -- compiles `Honua.Mobile.Sdk` and `Honua.Mobile.Offline`
     with `TreatWarningsAsErrors`, plus
     `npm run build` for the embed package; runs `dotnet format` checks.
-  - `test` -- runs the 5 unit projects (294 tests) plus the
+  - `test` -- runs the 5 unit projects plus the
     `Honua.Mobile.ServerIntegration.Tests` project; the 11
     `LiveHonuaServerInteractionTests` report as **Skipped**
     (`Xunit.SkippableFact`) here because `HONUA_MOBILE_LIVE_SERVER_TESTS`
@@ -199,12 +199,12 @@ The relevant workflows under `.github/workflows/`:
     integration step.
   - `security` -- Trivy filesystem scan plus CodeQL on the three core
     library projects.
-  - `quality-gates` -- runs `Honua.Mobile.Smoke.Tests` (18 tests) and
+  - `quality-gates` -- runs `Honua.Mobile.Smoke.Tests` and
     validates assembly-size budgets against
     `quality/performance-budget.json`.
   - `ci-gate` -- aggregates the above; required for merge.
 - `cloud-acceptance.yml` -- `workflow_dispatch` only. Runs
-  `DisconnectedFieldWorkflowAcceptanceTests` (7 tests) against a cloud
+  `DisconnectedFieldWorkflowAcceptanceTests` against a cloud
   Honua URL provided as workflow inputs.
 - `seed-drift-check.yml` -- scheduled weekly (Monday 14:00 UTC, plus
   `workflow_dispatch`). Compares `tests/seed/mobile-offline-demo-v1.sql`
