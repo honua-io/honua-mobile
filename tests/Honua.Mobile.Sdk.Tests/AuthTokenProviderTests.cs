@@ -451,6 +451,85 @@ public sealed class AuthTokenProviderTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await provider.GetTokenAsync(cts.Token));
     }
 
+    [Fact]
+    public async Task GetTokenAsync_ConcurrentExpiredCallers_CoalesceToSingleRefresh()
+    {
+        var now = new DateTimeOffset(2026, 5, 6, 12, 0, 0, TimeSpan.Zero);
+        var refreshCalls = 0;
+        var store = new CountingAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(
+            HonuaAuthScheme.Bearer,
+            "expired-token",
+            "refresh-token",
+            now.AddMinutes(-5)));
+
+        var provider = new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(_ =>
+            {
+                Interlocked.Increment(ref refreshCalls);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                            "accessToken": "fresh-token",
+                            "refreshToken": "next-refresh-token",
+                            "expiresIn": 3600
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+            })),
+            new RefreshingAuthTokenProviderOptions
+            {
+                RefreshEndpoint = new Uri("https://auth.honua.test/token/refresh"),
+                TimeProvider = new FixedTimeProvider(now),
+            });
+
+        var tokens = await Task.WhenAll(
+            Enumerable.Range(0, 8).Select(_ => provider.GetTokenAsync().AsTask()));
+
+        Assert.Equal(1, refreshCalls);
+        Assert.All(tokens, token => Assert.Equal("fresh-token", token?.AccessToken));
+        // The rotating refresh token was persisted exactly once.
+        var stored = await store.ReadAsync();
+        Assert.Equal("next-refresh-token", stored?.RefreshToken);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_WithValidCachedToken_ReadsSecureStoreOnce()
+    {
+        var now = new DateTimeOffset(2026, 5, 6, 12, 0, 0, TimeSpan.Zero);
+        var store = new CountingAuthTokenStore();
+        await store.WriteAsync(new HonuaAuthToken(
+            HonuaAuthScheme.Bearer,
+            "valid-token",
+            "refresh-token",
+            now.AddHours(1)));
+
+        var provider = new RefreshingAuthTokenProvider(
+            store,
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+            new RefreshingAuthTokenProviderOptions
+            {
+                RefreshEndpoint = new Uri("https://auth.honua.test/token/refresh"),
+                TimeProvider = new FixedTimeProvider(now),
+            });
+
+        var readsBefore = store.ReadCount;
+        for (var i = 0; i < 5; i++)
+        {
+            var token = await provider.GetTokenAsync();
+            Assert.Equal("valid-token", token?.AccessToken);
+        }
+
+        // The keystore is read once on first use; subsequent requests are served
+        // from the in-memory cache.
+        Assert.Equal(readsBefore + 1, store.ReadCount);
+    }
+
     private static HonuaMobileClient CreateClient(
         Func<HttpRequestMessage, HttpResponseMessage> handler,
         IAuthTokenProvider provider,
@@ -495,5 +574,25 @@ public sealed class AuthTokenProviderTests
         }
 
         public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    private sealed class CountingAuthTokenStore : IAuthTokenStore
+    {
+        private readonly InMemoryAuthTokenStore _inner = new();
+        private int _readCount;
+
+        public int ReadCount => Volatile.Read(ref _readCount);
+
+        public ValueTask<HonuaAuthToken?> ReadAsync(CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _readCount);
+            return _inner.ReadAsync(ct);
+        }
+
+        public ValueTask WriteAsync(HonuaAuthToken token, CancellationToken ct = default)
+            => _inner.WriteAsync(token, ct);
+
+        public ValueTask ClearAsync(CancellationToken ct = default)
+            => _inner.ClearAsync(ct);
     }
 }

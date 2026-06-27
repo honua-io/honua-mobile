@@ -59,10 +59,25 @@ public static class KnownServerGaps
         Issue: "honua-server#1238",
         Summary: "FeatureServer/OGC JSONB-attribute projection (mobile_offline_demo layer 68910) emits bare SQL columns",
         Matches: drift =>
-            (drift.Contract == FeatureContractConformance.FeatureQueryContract
+            ((drift.Contract == FeatureContractConformance.FeatureQueryContract
                 && drift.IsTransportStatus(HttpStatusCode.BadRequest))
             || (drift.Contract == FeatureContractConformance.OgcItemsContract
-                && drift.IsTransportStatus(HttpStatusCode.InternalServerError)));
+                && drift.IsTransportStatus(HttpStatusCode.InternalServerError)))
+            // Only xfail when the server error body carries the #1238 JSONB-projection
+            // signature. Without this, the matcher swallowed *any* 400/500 on the core
+            // read paths, leaving the hard gate green while an unrelated regression broke
+            // the primary feature-read surface.
+            && drift.MentionsAny("42703", "column \"globalid\" does not exist"));
+
+    /// <summary>
+    /// Core live feature-read gaps whose xfail masks the primary read path (the
+    /// FeatureServer <c>/query</c> and OGC <c>/items</c> surfaces). Surfaced
+    /// separately so CI can report how many core-read gaps are actively xfailed.
+    /// </summary>
+    public static readonly IReadOnlyList<Gap> CoreReadGaps =
+    [
+        FeatureServerOgcJsonbProjection,
+    ];
 
     /// <summary>honua-server#1166 — temporal query/filter contract gap.</summary>
     public static readonly Gap TemporalQuery = new(

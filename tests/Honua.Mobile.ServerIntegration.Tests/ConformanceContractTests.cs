@@ -87,11 +87,13 @@ public sealed class ConformanceContractTests
     {
         var featureServer = new ContractDriftException(
             FeatureContractConformance.FeatureQueryContract,
-            "live request failed with HTTP 400",
+            "live request failed with HTTP 400 (BadRequest). Server detail: "
+            + "{\"error\":{\"code\":400,\"message\":\"42703: column \\\"globalid\\\" does not exist\"}}",
             transportStatus: HttpStatusCode.BadRequest);
         var ogc = new ContractDriftException(
             FeatureContractConformance.OgcItemsContract,
-            "live request failed with HTTP 500",
+            "live request failed with HTTP 500 (InternalServerError). Server detail: "
+            + "column \"globalid\" does not exist",
             transportStatus: HttpStatusCode.InternalServerError);
 
         Assert.Equal("honua-server#1238", KnownServerGaps.Match(featureServer)?.Issue);
@@ -121,7 +123,7 @@ public sealed class ConformanceContractTests
                 () => throw new HonuaMobileApiException(
                     HttpStatusCode.BadRequest,
                     "Bad Request",
-                    """{"error":{"code":400,"message":"Invalid query parameters"}}""")));
+                    """{"error":{"code":400,"message":"42703: column "globalid" does not exist"}}""")));
 
         Assert.Contains("KNOWN-EXPECTED-FAILING", skip.Message, StringComparison.Ordinal);
         Assert.Contains("honua-server#1238", skip.Message, StringComparison.Ordinal);
