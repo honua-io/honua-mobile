@@ -5,6 +5,7 @@ using Honua.Mobile.FieldCollection.Services.Sync;
 using Honua.Mobile.FieldCollection.Services.Storage;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Field.Forms;
 using Microsoft.Extensions.Logging.Abstractions;
 using SQLite;
 using System.Text.Json;
@@ -444,6 +445,102 @@ public sealed class GeoPackageSyncServiceTests
         var feature = await storage.GetFeatureAsync("42", 1);
         Assert.NotNull(feature);
         Assert.Equal("server", feature.Attributes["name"]?.ToString());
+    }
+
+    [Fact]
+    public async Task GetChangesAsync_WhenLayerExposesVersionColumn_PushesDeltaFilterToServer()
+    {
+        // Regression for the S2 full-table-scan finding: the pull must filter by the
+        // change/version column server-side (> sinceGeneration) instead of querying
+        // "1=1" and discarding rows client-side.
+        var layer = CreateLayer();
+        layer.Schema.Add(new FieldDefinition
+        {
+            FieldId = "sync_version",
+            SourceFieldName = "sync_version",
+            Label = "Sync Version",
+            Type = FormFieldType.Numeric
+        });
+        var metadata = new FixedMetadataService([layer]);
+        var settings = new InMemorySettingsService();
+        var client = new RecordingFeatureSyncClient
+        {
+            QueryResponse = new FeatureQueryResult
+            {
+                ProviderName = "test",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = "42",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["objectid"] = JsonSerializer.SerializeToElement(42),
+                            ["sync_version"] = JsonSerializer.SerializeToElement(7L)
+                        }
+                    }
+                ]
+            }
+        };
+        var puller = new HonuaFieldCollectionChangePuller(metadata, client, settings);
+
+        var changes = await puller.GetChangesAsync(sinceGeneration: 5);
+
+        var request = Assert.Single(client.QueryRequests);
+        Assert.Equal("sync_version > 5", request.Filter);
+        Assert.Equal("sync_version ASC", request.OrderBy);
+        var change = Assert.Single(changes);
+        Assert.Equal(7, change.Version);
+    }
+
+    [Fact]
+    public async Task GetChangesAsync_WhenLayerHasNoVersionColumn_FallsBackToFullScanAndClientSideGuard()
+    {
+        // Without a known version column there is no predicate to push down, so the pull
+        // falls back to a full scan and the client-side guard discards already-seen rows.
+        var layer = CreateLayer();
+        var metadata = new FixedMetadataService([layer]);
+        var settings = new InMemorySettingsService();
+        var client = new RecordingFeatureSyncClient
+        {
+            QueryResponse = new FeatureQueryResult
+            {
+                ProviderName = "test",
+                ObjectIdFieldName = "objectid",
+                Features =
+                [
+                    new FeatureRecord
+                    {
+                        Id = "1",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["objectid"] = JsonSerializer.SerializeToElement(1),
+                            ["sync_version"] = JsonSerializer.SerializeToElement(3L)
+                        }
+                    },
+                    new FeatureRecord
+                    {
+                        Id = "2",
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["objectid"] = JsonSerializer.SerializeToElement(2),
+                            ["sync_version"] = JsonSerializer.SerializeToElement(9L)
+                        }
+                    }
+                ]
+            }
+        };
+        var puller = new HonuaFieldCollectionChangePuller(metadata, client, settings);
+
+        var changes = await puller.GetChangesAsync(sinceGeneration: 5);
+
+        var request = Assert.Single(client.QueryRequests);
+        Assert.Equal("1=1", request.Filter);
+        Assert.Null(request.OrderBy);
+        // Client-side guard keeps only the row newer than the cursor (version 9 > 5).
+        var change = Assert.Single(changes);
+        Assert.Equal(9, change.Version);
     }
 
     [Fact]
