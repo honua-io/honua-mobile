@@ -327,6 +327,89 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         }, forceWrite: false, cts.Token));
     }
 
+    [Fact]
+    public async Task UploadAsync_FeatureServerPerFeatureUpdateConflictCode_ReturnsConflict()
+    {
+        // Honua Server returns HTTP 200 with a per-feature error carrying the stable update-update
+        // conflict code (1004); it must be routed through conflict resolution, not dropped as fatal.
+        var uploader = CreateUploader((request, _) =>
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"objectIdField":"objectid"}""", Encoding.UTF8, "application/json"),
+                };
+            }
+
+            var body = "{\"addResults\":[],\"updateResults\":[{\"success\":false,\"error\":{\"code\":1004,\"description\":\"version mismatch\"}}],\"deleteResults\":[]}";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "objectid": 1, "asset_id": "A-1" } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Conflict, result.Outcome);
+    }
+
+    [Fact]
+    public async Task UploadAsync_FeatureServer_SendsStableIdempotencyKeyAcrossRetries()
+    {
+        var capturedKeys = new List<string?>();
+        var uploader = CreateUploader((request, _) =>
+        {
+            capturedKeys.Add(request.Headers.TryGetValues("Idempotency-Key", out var values)
+                ? values.FirstOrDefault()
+                : null);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"addResults\":[{\"success\":true,\"objectId\":1}],\"updateResults\":[],\"deleteResults\":[]}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+
+        var operation = new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "asset_id": "A-1" } }
+            }
+            """,
+        };
+
+        // Simulate the same queued operation being uploaded twice (e.g. a lost ack on the first try).
+        await uploader.UploadAsync(operation, forceWrite: false);
+        await uploader.UploadAsync(operation, forceWrite: false);
+
+        Assert.Equal(2, capturedKeys.Count);
+        Assert.All(capturedKeys, key => Assert.False(string.IsNullOrWhiteSpace(key)));
+        Assert.Equal(capturedKeys[0], capturedKeys[1]);
+        Assert.Contains(operation.OperationId, capturedKeys[0]!, StringComparison.Ordinal);
+    }
+
     private static HonuaApiOfflineOperationUploader CreateUploader(Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)
     {
         var client = new HonuaMobileClient(

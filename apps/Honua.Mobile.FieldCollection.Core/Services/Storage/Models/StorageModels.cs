@@ -26,6 +26,21 @@ public class LocalFeature
     [Column("geometry")]
     public byte[]? Geometry { get; set; }
 
+    // Cached geometry envelope (WGS84) used as a cheap spatial pre-filter so a bounded query can
+    // skip rows whose bounding box cannot overlap the query window without decoding every WKB blob.
+    // Null when the row has no geometry.
+    [Column("min_x")]
+    public double? MinX { get; set; }
+
+    [Column("min_y")]
+    public double? MinY { get; set; }
+
+    [Column("max_x")]
+    public double? MaxX { get; set; }
+
+    [Column("max_y")]
+    public double? MaxY { get; set; }
+
     [Column("attributes")]
     public string? Attributes { get; set; }
 

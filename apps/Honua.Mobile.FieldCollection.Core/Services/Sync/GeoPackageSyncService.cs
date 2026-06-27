@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
@@ -211,7 +212,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
                 // Phase 2: Push local changes
                 Status = SyncStatus.PushingChanges;
                 SyncMessage = "Uploading changes to server...";
-                await PushChangesInternalAsync(session, _syncCancellation.Token);
+                await PushChangesInternalAsync(session, pendingChanges: null, _syncCancellation.Token);
                 pushedAttachments = await PushAttachmentsInternalAsync(_syncCancellation.Token);
 
                 SyncProgress = 0.8;
@@ -458,7 +459,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
             IsSyncing = true;
             Status = SyncStatus.PushingChanges;
 
-            await PushChangesInternalAsync(session, _syncCancellation.Token);
+            await PushChangesInternalAsync(session, pendingChanges, _syncCancellation.Token);
             var pushedAttachments = await PushAttachmentsInternalAsync(_syncCancellation.Token);
             await CompleteSyncSessionAsync(session, StorageSyncSessionStatus.Completed);
 
@@ -501,53 +502,76 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         }
     }
 
-    private async Task<bool> PushChangesInternalAsync(StorageSyncSession session, CancellationToken cancellationToken)
+    // Upload fan-out cap. Bounds concurrent applyEdits round-trips so a large queue is not pushed
+    // one blocking request at a time (the N+1 latency cliff) without overwhelming the device/server.
+    private const int MaxConcurrentChangeUploads = 4;
+
+    private async Task<bool> PushChangesInternalAsync(
+        StorageSyncSession session,
+        IReadOnlyList<StorageChangeRecord>? pendingChanges,
+        CancellationToken cancellationToken)
     {
-        try
+        // Reuse the list the caller already fetched instead of re-querying the change log.
+        pendingChanges ??= await _storage.GetPendingChangesAsync();
+        if (pendingChanges.Count == 0)
         {
-            var pendingChanges = await _storage.GetPendingChangesAsync();
-            var successfulChanges = new List<string>();
-            var failedChanges = new List<string>();
-
-            foreach (var change in pendingChanges)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var success = await _changeUploader.UploadChangeAsync(change, cancellationToken);
-
-                if (success)
-                {
-                    successfulChanges.Add(change.Id);
-                    session.ChangesPushed++;
-                }
-                else
-                {
-                    failedChanges.Add(change.Id);
-                }
-            }
-
-            // Mark successful changes as synced
-            if (successfulChanges.Any())
-            {
-                await _storage.MarkChangesAsSynced(successfulChanges);
-            }
-
-            if (failedChanges.Count > 0)
-            {
-                throw new InvalidOperationException(
-                    $"{failedChanges.Count} pending change(s) failed to upload and remain unsynced.");
-            }
-
             return true;
         }
-        catch (OperationCanceledException)
+
+        var successfulChanges = new ConcurrentQueue<string>();
+        var failedChanges = new ConcurrentQueue<string>();
+
+        // Group by feature so edits to the same feature stay strictly ordered (an insert must land
+        // before its later update/delete). GroupBy preserves source order within each group, and the
+        // pending list is already ordered by timestamp. Distinct features upload concurrently, capped
+        // by the semaphore, which removes the per-change sequential round-trip pattern.
+        using var concurrency = new SemaphoreSlim(MaxConcurrentChangeUploads, MaxConcurrentChangeUploads);
+        var featureGroups = pendingChanges.GroupBy(change => (change.LayerId, change.FeatureId));
+
+        var uploads = featureGroups.Select(async group =>
         {
-            throw;
-        }
-        catch (Exception)
+            await concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                foreach (var change in group)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (await _changeUploader.UploadChangeAsync(change, cancellationToken).ConfigureAwait(false))
+                    {
+                        successfulChanges.Enqueue(change.Id);
+                    }
+                    else
+                    {
+                        // Stop this feature's chain on first failure so a dependent edit is not
+                        // applied on top of an edit that never landed; it stays pending for retry.
+                        failedChanges.Enqueue(change.Id);
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                concurrency.Release();
+            }
+        });
+
+        await Task.WhenAll(uploads).ConfigureAwait(false);
+
+        session.ChangesPushed += successfulChanges.Count;
+
+        if (!successfulChanges.IsEmpty)
         {
-            throw;
+            await _storage.MarkChangesAsSynced(successfulChanges.ToList());
         }
+
+        if (!failedChanges.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                $"{failedChanges.Count} pending change(s) failed to upload and remain unsynced.");
+        }
+
+        return true;
     }
 
     private async Task<AttachmentSyncResult> PushAttachmentsInternalAsync(CancellationToken cancellationToken)

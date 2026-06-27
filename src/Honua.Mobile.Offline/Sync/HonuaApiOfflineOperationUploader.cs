@@ -124,9 +124,18 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
             ForceWrite = forceWrite,
         };
 
-        var response = await _client.ApplyEditsAsync(request, ct).ConfigureAwait(false);
+        // Stable across retries of this queued operation: a re-upload after a lost ack carries the
+        // same key so the server replays the original result instead of re-applying the edit (#2250).
+        var response = await _client.ApplyEditsAsync(request, BuildIdempotencyKey(operation), ct).ConfigureAwait(false);
         return ToUploadResult(response);
     }
+
+    /// <summary>
+    /// Derives the at-most-once idempotency key for a queued operation from its durable
+    /// <see cref="OfflineEditOperation.OperationId"/>, which is stable across upload retries.
+    /// </summary>
+    private static string BuildIdempotencyKey(OfflineEditOperation operation)
+        => $"offline-op:{operation.OperationId}";
 
     private async Task<UploadResult> UploadOgcAsync(
         OfflineEditOperation operation,

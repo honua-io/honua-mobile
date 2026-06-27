@@ -154,10 +154,71 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
             await MigrateLocalFeaturesTableAsync();
         }
 
+        await EnsureLocalFeaturesBboxColumnsAsync();
+
         await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_id_layer_id ON local_features(id, layer_id)");
         await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_layer_id ON local_features(layer_id)");
         await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_modified_at ON local_features(modified_at)");
         await _connection.ExecuteAsync("CREATE INDEX IF NOT EXISTS idx_local_features_sync_status ON local_features(sync_status)");
+        // Supports the bounded-query bbox pre-filter (layer-scoped envelope range scan).
+        await _connection.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS idx_local_features_layer_bbox ON local_features(layer_id, min_x, max_x, min_y, max_y)");
+    }
+
+    /// <summary>
+    /// Adds the cached geometry-envelope columns (<c>min_x</c>/<c>min_y</c>/<c>max_x</c>/<c>max_y</c>)
+    /// to a pre-existing <c>local_features</c> table and backfills them from stored geometry. New
+    /// databases get the columns from <see cref="CreateLocalFeaturesTableAsync"/>; this only runs the
+    /// one-time migration for tables created before the spatial pre-filter existed.
+    /// </summary>
+    private async Task EnsureLocalFeaturesBboxColumnsAsync()
+    {
+        var columns = await _connection.QueryAsync<TableColumnInfo>("PRAGMA table_info(local_features)");
+        var columnNames = columns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var bboxColumn in new[] { "min_x", "min_y", "max_x", "max_y" })
+        {
+            if (!columnNames.Contains(bboxColumn))
+            {
+                await _connection.ExecuteAsync($"ALTER TABLE local_features ADD COLUMN {bboxColumn} REAL");
+            }
+        }
+
+        // Backfill any geometry rows missing a cached envelope. This covers both freshly added
+        // columns and rows copied in by a schema migration (which recreates the table with the
+        // bbox columns already present, so the ALTER above is a no-op for them). The guard keeps
+        // normal startups from rescanning once every row is populated.
+        var pendingBackfill = await _connection.ExecuteScalarAsync<int>(
+            "SELECT EXISTS(SELECT 1 FROM local_features WHERE geometry IS NOT NULL AND min_x IS NULL)");
+        if (pendingBackfill != 0)
+        {
+            await BackfillLocalFeaturesBboxAsync();
+        }
+    }
+
+    /// <summary>
+    /// Computes and persists the envelope columns for rows that have geometry but no cached bbox
+    /// (legacy rows after the column migration). Decodes each WKB once.
+    /// </summary>
+    private async Task BackfillLocalFeaturesBboxAsync()
+    {
+        var rows = await _connection.QueryAsync<LocalFeature>(
+            "SELECT * FROM local_features WHERE geometry IS NOT NULL AND min_x IS NULL");
+
+        foreach (var row in rows)
+        {
+            if (row.Geometry is null)
+            {
+                continue;
+            }
+
+            var envelope = _wkbReader.Read(row.Geometry).EnvelopeInternal;
+            await _connection.ExecuteAsync(
+                "UPDATE local_features SET min_x = ?, min_y = ?, max_x = ?, max_y = ? WHERE storage_key = ?",
+                envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY, row.StorageKey);
+        }
     }
 
     private async Task<bool> LocalFeaturesTableUsesStorageKeyAsync()
@@ -362,6 +423,10 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
                 id TEXT NOT NULL,
                 layer_id INTEGER NOT NULL,
                 geometry BLOB,
+                min_x REAL,
+                min_y REAL,
+                max_x REAL,
+                max_y REAL,
                 attributes TEXT,
                 created_at DATETIME NOT NULL,
                 modified_at DATETIME NOT NULL,
@@ -422,23 +487,52 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         await _dbLock.WaitAsync();
         try
         {
-            var localFeatures = await _connection.Table<LocalFeature>()
-                .Where(f => f.LayerId == layerId)
-                .ToListAsync();
-
-            if (spatialQuery != null)
+            if (spatialQuery is null)
             {
-                localFeatures = localFeatures
-                    .Where(feature => MatchesSpatialQuery(feature, spatialQuery))
-                    .ToList();
+                var all = await _connection.Table<LocalFeature>()
+                    .Where(f => f.LayerId == layerId)
+                    .ToListAsync();
+                return all.Select(ConvertToFeature).ToList();
+            }
 
-                if (spatialQuery.MaxResults.HasValue)
+            if (!spatialQuery.Bounds.IsValid)
+            {
+                // Preserves prior behaviour: an invalid query window matches nothing.
+                return [];
+            }
+
+            // Pre-filter to rows whose cached envelope overlaps the query window using an indexed
+            // range scan, so we only decode WKB and run the exact NTS predicate on real candidates
+            // instead of materialising and testing the whole layer. Inclusive comparisons keep this
+            // a correct superset for every supported relationship (including Touches on a shared edge).
+            var bounds = spatialQuery.Bounds;
+            var candidates = await _connection.QueryAsync<LocalFeature>(
+                @"SELECT * FROM local_features
+                  WHERE layer_id = ?
+                    AND min_x IS NOT NULL
+                    AND max_x >= ? AND min_x <= ?
+                    AND max_y >= ? AND min_y <= ?",
+                layerId, bounds.MinX, bounds.MaxX, bounds.MinY, bounds.MaxY);
+
+            var matches = new List<Feature>();
+            foreach (var candidate in candidates)
+            {
+                if (!MatchesSpatialQuery(candidate, spatialQuery))
                 {
-                    localFeatures = localFeatures.Take(spatialQuery.MaxResults.Value).ToList();
+                    continue;
+                }
+
+                matches.Add(ConvertToFeature(candidate));
+
+                // MaxResults is applied after the exact predicate (the bbox candidate set is a
+                // superset, so it cannot be capped earlier without dropping valid matches).
+                if (spatialQuery.MaxResults is { } max && matches.Count >= max)
+                {
+                    break;
                 }
             }
 
-            return localFeatures.Select(ConvertToFeature).ToList();
+            return matches;
         }
         finally
         {
@@ -639,12 +733,17 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         feature.BaseVersion = baseVersion;
 
         var geometry = ConvertToNtsGeometry(feature.Geometry);
+        var envelope = geometry?.EnvelopeInternal;
         var localFeature = new LocalFeature
         {
             StorageKey = BuildStorageKey(feature.LayerId, feature.Id),
             Id = feature.Id,
             LayerId = feature.LayerId,
             Geometry = geometry != null ? _wkbWriter.Write(geometry) : null,
+            MinX = envelope?.MinX,
+            MinY = envelope?.MinY,
+            MaxX = envelope?.MaxX,
+            MaxY = envelope?.MaxY,
             Attributes = JsonSerializer.Serialize(feature.Attributes),
             CreatedAt = feature.CreatedAt,
             ModifiedAt = feature.ModifiedAt.Value,

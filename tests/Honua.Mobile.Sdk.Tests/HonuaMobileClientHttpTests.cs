@@ -92,6 +92,111 @@ public sealed class HonuaMobileClientHttpTests
     }
 
     [Fact]
+    public async Task ApplyEditsAsync_WithIdempotencyKey_SendsHeader()
+    {
+        string? capturedKey = null;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedKey = request.Headers.TryGetValues("Idempotency-Key", out var values)
+                ? values.FirstOrDefault()
+                : null;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"addResults":[{"objectId":42,"success":true}],"updateResults":[],"deleteResults":[]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.ApplyEditsAsync(
+            new ApplyEditsRequest
+            {
+                ServiceId = "default",
+                LayerId = 0,
+                AddsJson = """[{"attributes":{"name":"Test"}}]""",
+            },
+            idempotencyKey: "field-change-42");
+
+        Assert.Equal("field-change-42", capturedKey);
+    }
+
+    [Fact]
+    public async Task ApplyEditsAsync_WithoutIdempotencyKey_OmitsHeader()
+    {
+        var hadHeader = true;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            hadHeader = request.Headers.Contains("Idempotency-Key");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"addResults":[{"objectId":42,"success":true}],"updateResults":[],"deleteResults":[]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        var client = CreateClient(handler);
+        using var result = await client.ApplyEditsAsync(new ApplyEditsRequest
+        {
+            ServiceId = "default",
+            LayerId = 0,
+            AddsJson = """[{"attributes":{"name":"Test"}}]""",
+        });
+
+        Assert.False(hadHeader);
+    }
+
+    [Fact]
+    public async Task ApplyEditsAsync_SdkRequestWithIdempotencyKey_SendsHeaderOverRest()
+    {
+        string? capturedKey = null;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedKey = request.Headers.TryGetValues("Idempotency-Key", out var values)
+                ? values.FirstOrDefault()
+                : null;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"addResults":[{"objectId":42,"success":true}],"updateResults":[],"deleteResults":[]}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        // gRPC is preferred here, but supplying an idempotency key must force the REST transport
+        // (the only one that carries the header).
+        var client = CreateClient(handler, new HonuaMobileClientOptions
+        {
+            BaseUri = new Uri("https://api.honua.test"),
+            PreferGrpcForFeatureEdits = true,
+        });
+
+        var result = await client.ApplyEditsAsync(
+            new FeatureEditRequest
+            {
+                Source = new FeatureSource { ServiceId = "default", LayerId = 0 },
+                Adds =
+                [
+                    new FeatureEditFeature
+                    {
+                        Attributes = new Dictionary<string, JsonElement>
+                        {
+                            ["name"] = JsonSerializer.SerializeToElement("Test"),
+                        },
+                    },
+                ],
+            },
+            idempotencyKey: "offline-op:abc123");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("offline-op:abc123", capturedKey);
+    }
+
+    [Fact]
     public async Task FeatureServerRestAsync_WithFolderedServiceId_PreservesFolderPath()
     {
         var capturedPaths = new List<string>();
