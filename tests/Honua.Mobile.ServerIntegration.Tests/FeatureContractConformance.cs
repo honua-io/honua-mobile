@@ -41,6 +41,9 @@ public sealed class ContractDriftException : Exception
     /// <summary>True when the drift was an underlying transport failure with the given status.</summary>
     public bool IsTransportStatus(HttpStatusCode status) => TransportStatus == status;
 
+    /// <summary>True when the drift carries any underlying transport failure status.</summary>
+    public bool HasTransportFailure => TransportStatus is not null;
+
     /// <summary>True when the contract or detail text mentions any of the given (case-insensitive) tokens.</summary>
     public bool MentionsAny(params string[] tokens)
     {
@@ -48,6 +51,25 @@ public sealed class ContractDriftException : Exception
         {
             if (Contract.Contains(token, StringComparison.OrdinalIgnoreCase)
                 || Detail.Contains(token, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when the <b>contract name</b> (the named workflow/surface) mentions any of
+    /// the given (case-insensitive) tokens. Unlike <see cref="MentionsAny"/> this does
+    /// <b>not</b> inspect the free-text <see cref="Detail"/>, so a structural mismatch in
+    /// an unrelated contract whose detail happens to contain a keyword is not matched.
+    /// </summary>
+    public bool ContractMentionsAny(params string[] tokens)
+    {
+        foreach (var token in tokens)
+        {
+            if (Contract.Contains(token, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

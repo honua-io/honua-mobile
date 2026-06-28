@@ -79,23 +79,52 @@ public static class KnownServerGaps
         FeatureServerOgcJsonbProjection,
     ];
 
-    /// <summary>honua-server#1166 — temporal query/filter contract gap.</summary>
+    /// <summary>
+    /// honua-server#1166 — temporal query/filter contract gap.
+    /// <para>
+    /// Hardened like <see cref="FeatureServerOgcJsonbProjection"/> (#1238): a tracked
+    /// server gap manifests as a hard <b>transport failure</b> on the named temporal
+    /// contract surface, not as a structural mismatch in an otherwise-200 body, and the
+    /// keyword is matched against the <b>contract name</b> only (not the free-text
+    /// detail). Without this gating the matcher swallowed any drift whose detail merely
+    /// mentioned "temporal"/"time filter"/"timeextent" — e.g. an unrelated feature-query
+    /// or OGC structural regression — leaving the live gate green while a real
+    /// regression broke a different surface.
+    /// </para>
+    /// </summary>
     public static readonly Gap TemporalQuery = new(
         Issue: "honua-server#1166",
         Summary: "Temporal query/filter contract",
-        Matches: drift => drift.MentionsAny("temporal", "time filter", "timeextent"));
+        Matches: drift => drift.HasTransportFailure
+            && drift.ContractMentionsAny("temporal", "time filter", "timeextent"));
 
-    /// <summary>honua-server#1167 — replica sync contract gap.</summary>
+    /// <summary>
+    /// honua-server#1167 — replica sync contract gap.
+    /// <para>
+    /// Hardened like #1238: requires a transport failure on a contract whose name
+    /// references the replica surface, so a non-replica structural drift that merely
+    /// mentions "replica" in its detail text is not silently xfailed.
+    /// </para>
+    /// </summary>
     public static readonly Gap ReplicaSync = new(
         Issue: "honua-server#1167",
         Summary: "Replica sync contract",
-        Matches: drift => drift.MentionsAny("replica"));
+        Matches: drift => drift.HasTransportFailure
+            && drift.ContractMentionsAny("replica"));
 
-    /// <summary>honua-server#1237 — analysis list/estimate contract gap.</summary>
+    /// <summary>
+    /// honua-server#1237 — analysis list/estimate contract gap.
+    /// <para>
+    /// Hardened like #1238: requires a transport failure on a contract whose name
+    /// references the analysis surface, so an unrelated structural drift that merely
+    /// mentions "analysis"/"estimate" in its detail text is not silently xfailed.
+    /// </para>
+    /// </summary>
     public static readonly Gap AnalysisListEstimate = new(
         Issue: "honua-server#1237",
         Summary: "Analysis list/estimate contract",
-        Matches: drift => drift.MentionsAny("analysis", "estimate"));
+        Matches: drift => drift.HasTransportFailure
+            && drift.ContractMentionsAny("analysis", "estimate"));
 
     /// <summary>All registered gaps.</summary>
     public static readonly IReadOnlyList<Gap> All =
