@@ -112,6 +112,62 @@ public sealed class ConformanceContractTests
         Assert.Null(KnownServerGaps.Match(structuralDrift));
     }
 
+    [Theory]
+    [InlineData("FeatureService.QueryFeatures temporal filter response", "honua-server#1166")]
+    [InlineData("ReplicaService.CreateReplica response", "honua-server#1167")]
+    [InlineData("AnalysisService.ListAnalyses response", "honua-server#1237")]
+    public void KnownGaps_match_tracked_transport_gap_by_contract_surface(string contract, string expectedIssue)
+    {
+        // A genuine tracked server gap manifests as a hard transport failure on the
+        // named contract surface — these must still xfail (the harness stays wired
+        // until the server fix lands).
+        var drift = new ContractDriftException(
+            contract,
+            "live request failed with HTTP 500 before a conforming response body could be validated",
+            transportStatus: HttpStatusCode.InternalServerError);
+
+        Assert.Equal(expectedIssue, KnownServerGaps.Match(drift)?.Issue);
+    }
+
+    [Theory]
+    [InlineData("temporal")]
+    [InlineData("time filter")]
+    [InlineData("timeextent")]
+    [InlineData("replica")]
+    [InlineData("analysis")]
+    [InlineData("estimate")]
+    public void KnownGaps_do_not_mask_structural_drift_mentioning_gap_keyword_in_detail(string keyword)
+    {
+        // Regression guard: a structural mismatch in an otherwise-200 FeatureQuery body
+        // whose DETAIL text merely mentions a gap keyword (e.g. an attribute named
+        // "estimate" or a message referencing a "temporal" field) must NOT be silently
+        // xfailed. Before hardening, the broad MentionsAny matchers swallowed any such
+        // drift because they inspected the detail text and ignored the transport status.
+        var structuralDrift = new ContractDriftException(
+            FeatureContractConformance.FeatureQueryContract,
+            $"`features[0].attributes.{keyword}` must be an object per the canonical contract");
+
+        Assert.Null(KnownServerGaps.Match(structuralDrift));
+    }
+
+    [Theory]
+    [InlineData("temporal")]
+    [InlineData("replica")]
+    [InlineData("analysis")]
+    public void KnownGaps_do_not_match_transport_failure_on_unrelated_contract_mentioning_keyword_in_detail(string keyword)
+    {
+        // Even a hard transport failure must not be xfailed unless it is on the gap's
+        // named contract surface. A 500 on the core FeatureQuery contract whose detail
+        // happens to mention a gap keyword is an UNTRACKED core-read regression, not the
+        // temporal/replica/analysis gap.
+        var drift = new ContractDriftException(
+            FeatureContractConformance.FeatureQueryContract,
+            $"live request failed with HTTP 500. Server detail: {keyword} subsystem error",
+            transportStatus: HttpStatusCode.InternalServerError);
+
+        Assert.Null(KnownServerGaps.Match(drift));
+    }
+
     [Fact]
     public void Runner_xfails_tracked_transport_failure_with_attribution()
     {
