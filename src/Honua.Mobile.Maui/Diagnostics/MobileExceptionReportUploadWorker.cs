@@ -55,14 +55,21 @@ public sealed class MobileExceptionReportUploadWorker : IMobileExceptionReportUp
         }
 
         var attempted = 0;
+        var seenQueueIds = new HashSet<string>(StringComparer.Ordinal);
         await foreach (var queued in _queue.ReadPendingAsync(cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Track every still-pending queue id so stale retry state can be pruned
+            // below. We keep enumerating past the upload batch cap (only skipping the
+            // upload) so the seen-set reflects the full pending queue, not just the
+            // batch we attempted this pass.
+            seenQueueIds.Add(queued.QueueId);
+
             if (attempted >= _options.MaxUploadBatchSize)
             {
-                break;
+                continue;
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
 
             var now = _timeProvider.GetUtcNow();
             if (!IsDue(queued.QueueId, now))
@@ -95,6 +102,13 @@ public sealed class MobileExceptionReportUploadWorker : IMobileExceptionReportUp
 
             ScheduleRetry(queued.QueueId, now);
         }
+
+        // Drop retry state for reports that are no longer on disk. Queue files can be
+        // removed out-of-band (e.g. FileMobileExceptionReportQueue.TrimQueue deleting
+        // excess reports when MaxQueuedReports is exceeded) without routing through the
+        // worker's success/delete path, which would otherwise leak one stale entry per
+        // trimmed-while-failing report and grow _retryStates without bound.
+        PruneRetryStates(seenQueueIds);
     }
 
     private bool IsDue(string queueId, DateTimeOffset now)
@@ -121,6 +135,36 @@ public sealed class MobileExceptionReportUploadWorker : IMobileExceptionReportUp
         lock (_retryGate)
         {
             _retryStates.Remove(queueId);
+        }
+    }
+
+    private void PruneRetryStates(HashSet<string> pendingQueueIds)
+    {
+        lock (_retryGate)
+        {
+            if (_retryStates.Count == 0)
+            {
+                return;
+            }
+
+            List<string>? stale = null;
+            foreach (var queueId in _retryStates.Keys)
+            {
+                if (!pendingQueueIds.Contains(queueId))
+                {
+                    (stale ??= new List<string>()).Add(queueId);
+                }
+            }
+
+            if (stale is null)
+            {
+                return;
+            }
+
+            foreach (var queueId in stale)
+            {
+                _retryStates.Remove(queueId);
+            }
         }
     }
 

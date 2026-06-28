@@ -43,6 +43,20 @@ public sealed class HonuaMobileApiException : Exception
     }
 
     /// <summary>
+    /// Initializes a new <see cref="HonuaMobileApiException"/> with status code, message, optional response body, and inner exception.
+    /// </summary>
+    /// <param name="statusCode">The HTTP status code (or transport-appropriate status) attributed to the failure.</param>
+    /// <param name="message">A human-readable description of the failure.</param>
+    /// <param name="responseBody">The raw response body, if available.</param>
+    /// <param name="innerException">The exception that caused the API failure.</param>
+    public HonuaMobileApiException(HttpStatusCode statusCode, string message, string? responseBody, Exception? innerException)
+        : base(message, innerException)
+    {
+        StatusCode = statusCode;
+        ResponseBody = responseBody;
+    }
+
+    /// <summary>
     /// The HTTP status code returned by the server.
     /// </summary>
     public HttpStatusCode StatusCode { get; }
