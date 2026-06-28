@@ -310,7 +310,8 @@ Implement intelligent partial synchronization:
 ```csharp
 public class PartialSyncManager
 {
-    private readonly IHonuaMobileClient _client;
+    private readonly HonuaMobileClient _client;
+    private readonly IOfflineSyncRunner _syncRunner;
 
     public async Task SyncPriorityDataAsync(SyncPriority priority)
     {
@@ -326,51 +327,58 @@ public class PartialSyncManager
         await syncStrategy.ExecuteAsync(_client);
     }
 
-    public async Task SyncByAreaOfInterestAsync(Envelope areaOfInterest)
+    // Pull the subset you care about with a server-side WHERE filter (the legacy query
+    // surface filters by Where/ObjectIds; for true spatial predicates use the
+    // provider-neutral QueryAsync(FeatureQueryRequest)), then drain any queued local
+    // edits through the offline sync engine.
+    public async Task<List<JsonElement>> SyncByAreaOfInterestAsync(string areaWhereClause)
     {
-        // Sync only features within the specified area
-        var query = new FeatureQuery
+        using var response = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
         {
-            Geometry = areaOfInterest,
-            SpatialRelationship = SpatialRelationship.Intersects
-        };
+            ServiceId = "service-id",
+            LayerId = 0,
+            Where = areaWhereClause,
+        });
 
-        var features = await _client.QueryFeaturesAsync("service-id", 0, query);
+        await _syncRunner.SyncAsync();
 
-        foreach (var feature in features.Features)
-        {
-            await _client.SyncFeatureAsync(feature.Id);
-        }
+        return response.RootElement.GetProperty("features").EnumerateArray()
+            .Select(feature => feature.Clone())
+            .ToList();
     }
 
-    public async Task SyncByTemporalWindow(DateTime startTime, DateTime endTime)
+    public async Task<List<JsonElement>> SyncByTemporalWindow(DateTime startTime, DateTime endTime)
     {
-        var query = new FeatureQuery
+        using var response = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
         {
-            Where = $"last_modified >= '{startTime:yyyy-MM-dd}' AND last_modified <= '{endTime:yyyy-MM-dd}'"
-        };
+            ServiceId = "service-id",
+            LayerId = 0,
+            Where = $"last_modified >= '{startTime:yyyy-MM-dd}' AND last_modified <= '{endTime:yyyy-MM-dd}'",
+            OrderBy = "last_modified DESC",
+        });
 
-        var features = await _client.QueryFeaturesAsync("service-id", 0, query);
+        await _syncRunner.SyncAsync();
 
-        foreach (var feature in features.Features)
-        {
-            await _client.SyncFeatureAsync(feature.Id);
-        }
+        return response.RootElement.GetProperty("features").EnumerateArray()
+            .Select(feature => feature.Clone())
+            .ToList();
     }
 }
 
 public class CriticalDataSyncStrategy : ISyncStrategy
 {
-    public async Task ExecuteAsync(IHonuaMobileClient client)
+    public async Task ExecuteAsync(HonuaMobileClient client)
     {
-        // Sync only critical safety or operational data
-        var criticalQuery = new FeatureQuery
+        // Pull only critical safety or operational records.
+        using var response = await client.QueryFeaturesAsync(new QueryFeaturesRequest
         {
+            ServiceId = "service-id",
+            LayerId = 0,
             Where = "priority = 'critical' OR status = 'emergency'",
-            OrderByFields = "last_modified DESC"
-        };
+            OrderBy = "last_modified DESC",
+        });
 
-        await client.SyncQueryAsync(criticalQuery);
+        // ... hand the results to your local store / UI ...
     }
 }
 ```
@@ -485,7 +493,7 @@ Implement predictive data loading:
 ```csharp
 public class PredictivePrefetchService
 {
-    private readonly IHonuaMobileClient _client;
+    private readonly HonuaMobileClient _client;
     private readonly ILocationService _locationService;
     private readonly UserBehaviorTracker _behaviorTracker;
 
@@ -507,18 +515,19 @@ public class PredictivePrefetchService
     {
         try
         {
-            var query = new FeatureQuery
+            var request = new QueryFeaturesRequest
             {
-                Geometry = area.Boundary,
-                SpatialRelationship = SpatialRelationship.Intersects,
-                OutFields = GetEssentialFields(), // Only essential fields for prefetch
-                ReturnGeometry = true
+                ServiceId = "service-id",
+                LayerId = 0,
+                Where = area.WhereClause,        // server-side filter for the predicted area
+                OutFields = GetEssentialFields(), // only essential fields for prefetch
+                ReturnGeometry = true,
             };
 
-            await _client.QueryFeaturesAsync("service-id", 0, query);
+            using var response = await _client.QueryFeaturesAsync(request);
 
-            // Cache the query for future use
-            await CacheQueryResultAsync(area.Id, query);
+            // Cache the result for future use
+            await CacheQueryResultAsync(area.Id, response);
         }
         catch (Exception ex)
         {
@@ -754,7 +763,7 @@ Integrate with external data sources:
 ```csharp
 public class CustomDataSourceIntegration
 {
-    private readonly IHonuaMobileClient _honuaClient;
+    private readonly HonuaMobileClient _honuaClient;
     private readonly IExternalDataClient _externalClient;
 
     public async Task<List<Feature>> MergeExternalDataAsync(

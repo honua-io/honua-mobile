@@ -183,17 +183,20 @@ public async Task ProcessLargeImageAsync(FileResult imageFile)
 
 2. **Implement pagination for large datasets**:
 ```csharp
-public async Task<List<Feature>> LoadFeaturesPagedAsync(int page, int pageSize = 50)
+public async Task<List<JsonElement>> LoadFeaturesPagedAsync(int page, int pageSize = 50)
 {
-    var query = new FeatureQuery
+    using var response = await _client.QueryFeaturesAsync(new QueryFeaturesRequest
     {
+        ServiceId = "service-id",
+        LayerId = 0,
         Where = "1=1",
         ResultOffset = page * pageSize,
-        ResultRecordCount = pageSize
-    };
+        ResultRecordCount = pageSize,
+    });
 
-    var result = await _client.QueryFeaturesAsync("service-id", 0, query);
-    return result.Features.ToList();
+    return response.RootElement.GetProperty("features").EnumerateArray()
+        .Select(feature => feature.Clone())
+        .ToList();
 }
 ```
 
