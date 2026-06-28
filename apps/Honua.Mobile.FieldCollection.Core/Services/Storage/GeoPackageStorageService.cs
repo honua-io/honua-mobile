@@ -466,6 +466,50 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Inserts many features in a single immediate transaction under one lock acquisition,
+    /// instead of one transaction (and one fsync) per feature. Returns the stored feature ids.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> StoreFeaturesAsync(IReadOnlyCollection<Feature> features)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+
+        if (features.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var ids = new List<string>(features.Count);
+            await ExecuteInImmediateTransactionAsync(async () =>
+            {
+                ids.Clear();
+                foreach (var feature in features)
+                {
+                    // Stamp a durable client-generated GlobalID at capture time so a retried
+                    // Insert (after a lost upload ack) can be deduped against the server feature
+                    // instead of creating a duplicate (#305).
+                    EnsureGlobalId(feature);
+                    ids.Add(await SaveFeatureAsync(
+                        feature,
+                        StorageSyncStatus.PendingUpload,
+                        trackChange: true,
+                        ChangeOperation.Insert,
+                        useTransaction: false));
+                }
+            });
+
+            return ids;
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
     public async Task<Feature?> GetFeatureAsync(string featureId, int layerId)
     {
         await EnsureInitializedAsync();
@@ -677,7 +721,8 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         Feature feature,
         StorageSyncStatus syncStatus,
         bool trackChange,
-        ChangeOperation operation)
+        ChangeOperation operation,
+        bool useTransaction = true)
     {
         if (string.IsNullOrWhiteSpace(feature.Id))
         {
@@ -757,11 +802,20 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
         if (trackChange)
         {
             var changeData = CreateChangeData(feature, operation);
-            await ExecuteInImmediateTransactionAsync(async () =>
+            if (useTransaction)
             {
+                await ExecuteInImmediateTransactionAsync(async () =>
+                {
+                    await _connection.InsertOrReplaceAsync(localFeature);
+                    await RecordChange(feature.Id, feature.LayerId, operation, changeData);
+                });
+            }
+            else
+            {
+                // Caller owns the surrounding transaction (batch insert).
                 await _connection.InsertOrReplaceAsync(localFeature);
                 await RecordChange(feature.Id, feature.LayerId, operation, changeData);
-            });
+            }
         }
         else
         {
@@ -1061,6 +1115,52 @@ public class GeoPackageStorageService : IDisposable, IAsyncDisposable
                 .OrderBy(row => row.CreatedAt)
                 .Select(ToAttachmentInfo)
                 .ToList();
+        }
+        finally
+        {
+            _dbLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Loads attachments for many features in a single query and groups them by feature id.
+    /// Avoids the O(features) per-feature, lock-serialized round-trips of calling
+    /// <see cref="GetAttachmentsForFeatureAsync"/> in a loop on interactive query paths.
+    /// </summary>
+    public async Task<Dictionary<string, List<AttachmentInfo>>> GetAttachmentsForFeaturesAsync(
+        IReadOnlyCollection<string> featureIds,
+        int? layerId = null,
+        bool includeDeleted = false)
+    {
+        if (featureIds is null || featureIds.Count == 0)
+        {
+            return new Dictionary<string, List<AttachmentInfo>>(StringComparer.Ordinal);
+        }
+
+        var idSet = featureIds as HashSet<string> ?? new HashSet<string>(featureIds, StringComparer.Ordinal);
+
+        await EnsureInitializedAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var query = _connection.Table<LocalAttachment>()
+                .Where(row => idSet.Contains(row.FeatureId));
+
+            if (layerId.HasValue)
+            {
+                query = query.Where(row => row.LayerId == layerId.Value);
+            }
+
+            var rows = await query.ToListAsync();
+
+            return rows
+                .Where(row => includeDeleted || !row.IsDeleted)
+                .OrderBy(row => row.CreatedAt)
+                .GroupBy(row => row.FeatureId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(ToAttachmentInfo).ToList(),
+                    StringComparer.Ordinal);
         }
         finally
         {
