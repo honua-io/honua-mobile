@@ -32,7 +32,7 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationPublisher>Honua</ApplicationPublisher>
     <ApplicationPublisherDisplayName>Honua</ApplicationPublisherDisplayName>
-    <Description>Revolutionary field data collection with AR visualization and IoT integration</Description>
+    <Description>Honua field data collection example: offline-first GeoPackage capture, dynamic forms, and sync.</Description>
     <Copyright>Copyright © Honua 2024. Licensed under Apache 2.0.</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>

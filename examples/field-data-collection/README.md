@@ -1,8 +1,17 @@
-# Honua Field Collector - Revolutionary Mobile Data Collection
+# Honua Field Collector (aspirational reference example)
 
-**The world's first open-source field data collection platform with AR visualization and IoT integration**
+> **Status: illustrative scaffold — does not build as-is.** This example sketches a
+> target field-collection experience. Some sections below (augmented-reality
+> visualization, IoT/Bluetooth sensor integration) describe planned capabilities
+> that are **not part of the shipped Honua Mobile SDK**: the corresponding
+> services (`IIoTIntegrationService`, `IARVisualizationService`, `ISensorDataService`,
+> `IUtilityVisualizationService`) are not implemented, the project is not part of
+> `Honua.Mobile.sln`, and it is not compiled by CI. Treat the AR/IoT material as a
+> design sketch, not documentation of working features. The shipped, verified
+> capabilities are offline-first GeoPackage capture, dynamic forms, multi-media
+> capture, and sync.
 
-Transform how field workers, inspectors, and data collectors interact with real-world environments using cutting-edge mobile technology, augmented reality, and automated sensor integration.
+Transform how field workers, inspectors, and data collectors interact with real-world environments using offline-first mobile data collection.
 
 ## 🚀 Revolutionary Features
 
