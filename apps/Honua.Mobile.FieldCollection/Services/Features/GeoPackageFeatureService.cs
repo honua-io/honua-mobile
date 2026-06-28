@@ -152,9 +152,27 @@ public class GeoPackageFeatureService : IFeatureService
 
     private async Task PopulateAttachmentsAsync(IEnumerable<Feature> features)
     {
-        foreach (var feature in features)
+        var featureList = features as IReadOnlyList<Feature> ?? features.ToList();
+        if (featureList.Count == 0)
         {
-            feature.Attachments = await _storage.GetAttachmentsForFeatureAsync(feature.Id, feature.LayerId);
+            return;
+        }
+
+        // Single IN-query for the whole result set instead of one lock-serialized
+        // round-trip per feature (avoids an O(features) query storm on the interactive
+        // map/query path).
+        var ids = featureList
+            .Select(f => f.Id)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var attachmentsByFeature = await _storage.GetAttachmentsForFeaturesAsync(ids);
+
+        foreach (var feature in featureList)
+        {
+            feature.Attachments = attachmentsByFeature.TryGetValue(feature.Id, out var attachments)
+                ? attachments
+                : new List<AttachmentInfo>();
         }
     }
 
@@ -164,19 +182,7 @@ public class GeoPackageFeatureService : IFeatureService
     {
         try
         {
-            feature.LayerId = layerId;
-
-            // Ensure feature has an ID
-            if (string.IsNullOrEmpty(feature.Id))
-            {
-                feature.Id = Guid.NewGuid().ToString();
-            }
-
-            // Set creation metadata
-            feature.CreatedAt = DateTime.UtcNow;
-            feature.ModifiedAt = DateTime.UtcNow;
-            feature.UpdatedAt = feature.ModifiedAt;
-            feature.Version = 1;
+            StampForCreate(feature, layerId);
 
             await _storage.StoreFeatureAsync(feature);
             return feature;
@@ -185,6 +191,24 @@ public class GeoPackageFeatureService : IFeatureService
         {
             throw new InvalidOperationException($"Failed to create feature: {feature.Id}", ex);
         }
+    }
+
+    private static void StampForCreate(Feature feature, int layerId)
+    {
+        feature.LayerId = layerId;
+
+        // Ensure feature has an ID
+        if (string.IsNullOrEmpty(feature.Id))
+        {
+            feature.Id = Guid.NewGuid().ToString();
+        }
+
+        // Set creation metadata
+        var now = DateTime.UtcNow;
+        feature.CreatedAt = now;
+        feature.ModifiedAt = now;
+        feature.UpdatedAt = feature.ModifiedAt;
+        feature.Version = 1;
     }
 
     public async Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
@@ -233,30 +257,42 @@ public class GeoPackageFeatureService : IFeatureService
     public async Task<BatchResult> CreateFeaturesAsync(List<Feature> features)
     {
         var result = new BatchResult();
-        var successful = new List<string>();
-        var failed = new List<(string Id, string Error)>();
 
-        foreach (var feature in features)
+        if (features.Count == 0)
         {
-            try
-            {
-                var created = await CreateFeatureAsync(feature.LayerId, feature);
-                successful.Add(created.Id);
-                result.SuccessCount++;
-            }
-            catch (Exception ex)
-            {
-                failed.Add((feature.Id, ex.Message));
-                result.ErrorCount++;
-            }
+            result.SuccessfulIds = new List<string>();
+            result.FailedItems = new List<BatchError>();
+            return result;
         }
 
-        result.SuccessfulIds = successful;
-        result.FailedItems = failed.Select(f => new BatchError
+        // Stamp creation metadata up front, then persist the whole batch in a single
+        // immediate transaction (one lock acquisition / one fsync) instead of one
+        // transaction per feature.
+        foreach (var feature in features)
         {
-            Id = f.Id,
-            ErrorMessage = f.Error
-        }).ToList();
+            StampForCreate(feature, feature.LayerId);
+        }
+
+        try
+        {
+            var storedIds = await _storage.StoreFeaturesAsync(features);
+
+            result.SuccessfulIds = storedIds.ToList();
+            result.SuccessCount = storedIds.Count;
+            result.FailedItems = new List<BatchError>();
+        }
+        catch (Exception ex)
+        {
+            // The batch is atomic: a failure rolls back the whole transaction, so no
+            // feature was stored. Report every item as failed.
+            _logger?.LogWarning(ex, "Failed to create {Count} features in batch", features.Count);
+            result.SuccessfulIds = new List<string>();
+            result.SuccessCount = 0;
+            result.ErrorCount = features.Count;
+            result.FailedItems = features
+                .Select(f => new BatchError { Id = f.Id, ErrorMessage = ex.Message })
+                .ToList();
+        }
 
         return result;
     }
