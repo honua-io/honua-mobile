@@ -181,6 +181,56 @@ public sealed class MobileExceptionReportUploadWorkerTests
     }
 
     [Fact]
+    public async Task FlushPendingAsync_PrunesRetryStateForReportsTrimmedOutOfBand()
+    {
+        // A permanently-failing report accumulates retry state, then is removed from the
+        // queue out-of-band (e.g. TrimQueue dropping excess reports) without routing
+        // through the worker's success/delete path. The worker must prune that stale
+        // retry state so _retryStates does not leak one entry per trimmed-while-failing
+        // report. We observe the prune by re-enqueuing a report under the same QueueId:
+        // if the stale backoff state survived, it would still be suppressed; after the
+        // prune it is treated as fresh and uploaded on the next flush.
+        var timeProvider = new MutableTimeProvider(DateTimeOffset.Parse("2026-05-05T00:00:00Z", CultureInfo.InvariantCulture));
+        var queue = new InMemoryExceptionReportQueue();
+        const string trimmedQueueId = "trimmed-queue-id";
+        queue.Reports.Add(new QueuedMobileExceptionReport(trimmedQueueId, CreateReport()));
+        // Uploads: 1st (trimmed report) fails, all subsequent succeed.
+        var uploader = new SequenceUploader([false, true, true]);
+        var worker = new MobileExceptionReportUploadWorker(
+            queue,
+            uploader,
+            new MobileExceptionReportingOptions
+            {
+                Mode = MobileExceptionReportingMode.ServerUpload,
+                UploadEndpoint = new Uri("https://api.honua.test/mobile/exception-reports"),
+                UploadInitialBackoff = TimeSpan.FromMinutes(10),
+                UploadMaxBackoff = TimeSpan.FromMinutes(30),
+            },
+            timeProvider);
+
+        // First flush fails and schedules a long backoff for the trimmed queue id.
+        await worker.FlushPendingAsync();
+        Assert.Equal(1, uploader.Attempts);
+
+        // The failing report is trimmed off disk out-of-band (not via DeleteAsync) and
+        // a different report takes its place. The trimmed id is no longer pending, so its
+        // stale retry state must be pruned rather than leaked.
+        queue.Reports.Clear();
+        queue.Reports.Add(new QueuedMobileExceptionReport("other-queue-id", CreateReport()));
+        await worker.FlushPendingAsync();
+        Assert.Empty(queue.Reports);
+
+        // A new report later reuses the trimmed id. Because the stale backoff state was
+        // pruned (not retained), it is treated as fresh and uploaded immediately rather
+        // than being suppressed by the long backoff that would otherwise have leaked.
+        queue.Reports.Add(new QueuedMobileExceptionReport(trimmedQueueId, CreateReport()));
+        await worker.FlushPendingAsync();
+
+        Assert.Empty(queue.Reports);
+        Assert.Equal(3, uploader.Attempts);
+    }
+
+    [Fact]
     public async Task FlushPendingAsync_SerializesConcurrentFlushes()
     {
         var queue = new InMemoryExceptionReportQueue();

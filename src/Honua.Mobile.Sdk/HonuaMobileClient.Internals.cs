@@ -86,7 +86,16 @@ public sealed partial class HonuaMobileClient
                     return JsonDocument.Parse("{}");
                 }
 
-                throw new HonuaMobileApiException("Honua mobile request returned invalid JSON.", ex);
+                // A success response whose body is malformed/truncated JSON is a
+                // transport-level garble (a bad upstream/proxy response), not a client
+                // error. Attribute it a 502 so downstream classification treats it as a
+                // retryable transport failure instead of a meaningless Code 0 /
+                // non-retryable InvalidOperation (StatusCode would otherwise default to 0).
+                throw new HonuaMobileApiException(
+                    HttpStatusCode.BadGateway,
+                    "Honua mobile request returned invalid JSON.",
+                    responseBody: null,
+                    innerException: ex);
             }
         }
         finally

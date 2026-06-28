@@ -36,4 +36,17 @@
     <HonuaConformanceFixturesVersion>0.1.0-alpha.1</HonuaConformanceFixturesVersion>
     <HonuaConformanceFixturesRepository>honua-io/geospatial-grpc</HonuaConformanceFixturesRepository>
   </PropertyGroup>
+
+  <!--
+    NuGet audit suppression for GHSA-2m69-gcr7-jv3q (NU1903) against the native
+    SQLitePCLRaw e_sqlite3 library (2.1.x). The advisory is fixed in the 3.x
+    SQLitePCLRaw line, but SQLitePCLRaw.bundle_green has no 3.x release yet, so
+    there is no compatible upgrade path on the current line. The bundled native
+    library is shipped with the app rather than dynamically loaded. Remove this
+    suppression once a 3.x bundle_green (or patched 2.1.x lib.e_sqlite3) is
+    available and pinned.
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
 </Project>

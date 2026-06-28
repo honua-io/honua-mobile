@@ -1,4 +1,6 @@
+using System.Net;
 using Honua.Mobile.Offline.Sync;
+using Honua.Mobile.Sdk;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -46,5 +48,36 @@ public sealed class MobileSyncProblemHelperTests
         Assert.False(problem.Retryable);
         Assert.Equal(MobileSyncProblemCategory.InvalidOperation, problem.Category);
         Assert.Equal(UploadOutcome.FatalFailure, MobileSyncProblemHelper.ToUploadResult(problem).Outcome);
+    }
+
+    [Fact]
+    public void FromException_InvalidJsonApiException_IsTransportAndRetryable()
+    {
+        // A success response with malformed/truncated JSON now carries a 502
+        // (transport garble) rather than the default StatusCode 0. It must classify
+        // as a retryable Transport problem, not a non-retryable InvalidOperation /
+        // meaningless Code 0.
+        var ex = new HonuaMobileApiException(
+            HttpStatusCode.BadGateway,
+            "Honua mobile request returned invalid JSON.",
+            responseBody: null,
+            innerException: new InvalidOperationException("boom"));
+
+        var problem = MobileSyncProblemHelper.FromException(ex);
+
+        Assert.Equal(MobileSyncProblemCategory.Transport, problem.Category);
+        Assert.True(problem.Retryable);
+        Assert.Equal(UploadOutcome.RetryableFailure, MobileSyncProblemHelper.ToUploadResult(ex).Outcome);
+    }
+
+    [Fact]
+    public void FromStatusCode_ClientError_RemainsNonRetryableInvalidOperation()
+    {
+        // Genuine client errors (4xx other than conflict/timeout/429) stay fatal so the
+        // 502 transport treatment above is scoped to the garbled-body case only.
+        var problem = MobileSyncProblemHelper.FromStatusCode(HttpStatusCode.BadRequest, "bad");
+
+        Assert.Equal(MobileSyncProblemCategory.InvalidOperation, problem.Category);
+        Assert.False(problem.Retryable);
     }
 }
