@@ -111,6 +111,11 @@ public sealed partial class HonuaMobileClient
 
         if (HasOgcSource(request.Source))
         {
+            // OGC sources delegate to the SDK OGC client, which has no idempotency-header surface,
+            // so the key cannot be honored on this path. OGC update (PATCH/PUT by id) and delete
+            // (by id) are naturally idempotent; for an at-most-once OGC create use
+            // CreateOgcItemAsync(request, idempotencyKey, ct), which carries the Idempotency-Key
+            // header on the POST.
             return await ApplyOgcSdkEditsAsync(request, ct).ConfigureAwait(false);
         }
 

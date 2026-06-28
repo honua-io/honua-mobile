@@ -161,23 +161,27 @@ public sealed class HonuaApiOfflineOperationUploaderTests
     }
 
     [Fact]
-    public async Task UploadAsync_OgcAdd_UsesSdkFeatureEditRequest()
+    public async Task UploadAsync_OgcAdd_PostsGeoJsonItemWithIdempotencyKey()
     {
         string? capturedPath = null;
         string? capturedMediaType = null;
         string? capturedBody = null;
+        string? capturedIdempotencyKey = null;
         var uploader = CreateUploader((request, _) =>
         {
             capturedPath = request.RequestUri!.PathAndQuery;
             capturedMediaType = request.Content?.Headers.ContentType?.MediaType;
             capturedBody = request.Content is null ? null : request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            capturedIdempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var values)
+                ? values.FirstOrDefault()
+                : null;
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"type":"Feature","id":"building-1"}""", Encoding.UTF8, "application/json"),
             };
         });
 
-        var result = await uploader.UploadAsync(new OfflineEditOperation
+        var operation = new OfflineEditOperation
         {
             LayerKey = "buildings",
             TargetCollection = "buildings",
@@ -193,12 +197,21 @@ public sealed class HonuaApiOfflineOperationUploaderTests
               }
             }
             """,
-        }, forceWrite: false);
+        };
+
+        var result = await uploader.UploadAsync(operation, forceWrite: false);
 
         Assert.Equal(UploadOutcome.Success, result.Outcome);
         Assert.Contains("/ogc/features/collections/buildings/items", capturedPath);
         Assert.Equal("application/geo+json", capturedMediaType);
-        Assert.Contains("\"name\":\"HQ\"", capturedBody);
+        // The stored GeoJSON feature is forwarded verbatim (no lossy normalization), so assert the
+        // attribute is present rather than a specific compact serialization.
+        Assert.Contains("\"name\"", capturedBody);
+        Assert.Contains("\"HQ\"", capturedBody);
+        // An OGC create is a non-idempotent POST, so it must carry the stable per-operation
+        // Idempotency-Key for at-most-once retries (parity with the FeatureServer path).
+        Assert.False(string.IsNullOrWhiteSpace(capturedIdempotencyKey));
+        Assert.Contains(operation.OperationId, capturedIdempotencyKey!, StringComparison.Ordinal);
     }
 
     [Fact]

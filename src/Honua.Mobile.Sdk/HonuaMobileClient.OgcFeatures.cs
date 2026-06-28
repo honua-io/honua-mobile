@@ -55,7 +55,31 @@ public sealed partial class HonuaMobileClient
     /// <returns>A <see cref="JsonDocument"/> containing the server response for the created item.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
     /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
-    public async Task<JsonDocument> CreateOgcItemAsync(OgcCreateItemRequest request, CancellationToken ct = default)
+    public Task<JsonDocument> CreateOgcItemAsync(OgcCreateItemRequest request, CancellationToken ct = default)
+        => CreateOgcItemAsync(request, idempotencyKey: null, ct);
+
+    /// <summary>
+    /// Creates a new feature item in an OGC Features API collection, attaching a stable
+    /// <c>Idempotency-Key</c> so the server can dedupe a retried create (at-most-once,
+    /// honua-server #2250).
+    /// </summary>
+    /// <remarks>
+    /// An OGC create is a server-assigned-id POST and so is not naturally idempotent: a network
+    /// failure after the server commits but before the client reads the ack would, on retry,
+    /// create a duplicate feature. Supplying a stable key lets the server replay the original
+    /// response instead. OGC update (PATCH/PUT by id) and delete (by id) are naturally idempotent
+    /// and do not need a key.
+    /// </remarks>
+    /// <param name="request">The collection ID and GeoJSON feature to create.</param>
+    /// <param name="idempotencyKey">Stable client-generated key (≤200 chars, no control characters), or <see langword="null"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A <see cref="JsonDocument"/> containing the server response for the created item.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="HonuaMobileApiException">Thrown when the server returns a non-success HTTP status code.</exception>
+    public async Task<JsonDocument> CreateOgcItemAsync(
+        OgcCreateItemRequest request,
+        string? idempotencyKey,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -65,7 +89,8 @@ public sealed partial class HonuaMobileClient
             path,
             query: null,
             CreateJsonContent(request.Feature, "application/geo+json"),
-            ct).ConfigureAwait(false);
+            ct,
+            idempotencyKey).ConfigureAwait(false);
     }
 
     /// <summary>

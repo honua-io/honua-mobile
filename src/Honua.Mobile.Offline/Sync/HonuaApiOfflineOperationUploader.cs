@@ -158,13 +158,21 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             case OfflineOperationType.Add:
                 {
-                    var response = await _client.ApplyEditsAsync(new FeatureEditRequest
+                    // An OGC create is a server-assigned-id POST and is not naturally idempotent, so a
+                    // re-upload after a lost ack would double-create the feature. Route the create through
+                    // CreateOgcItemAsync with the durable per-operation idempotency key (matching the
+                    // FeatureServer at-most-once path) so the server replays the original result instead.
+                    // The generic FeatureEditRequest/ApplyEditsAsync OGC path cannot carry the key because
+                    // it delegates to the SDK OGC client, which has no idempotency-header surface.
+                    using var response = await _client.CreateOgcItemAsync(new OgcCreateItemRequest
                     {
-                        Source = new FeatureSource { CollectionId = payload.CollectionId },
-                        Adds = [ToOgcFeatureEditFeature(payload.Feature, null, "Add operation requires feature payload.")],
-                        RollbackOnFailure = false,
-                    }, ct).ConfigureAwait(false);
-                    return ToUploadResult(response);
+                        CollectionId = payload.CollectionId,
+                        Feature = payload.Feature ?? throw new InvalidOperationException("Add operation requires feature payload."),
+                    }, BuildIdempotencyKey(operation), ct).ConfigureAwait(false);
+
+                    return TryReadError(response.RootElement, out var code, out var message)
+                        ? FromErrorCode(code, message)
+                        : new UploadResult { Outcome = UploadOutcome.Success };
                 }
 
             case OfflineOperationType.Update:
