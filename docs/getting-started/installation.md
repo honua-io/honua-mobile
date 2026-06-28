@@ -171,12 +171,6 @@ public static class MauiProgram
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
-    <!-- IoT sensor permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-
     <!-- Network permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -184,7 +178,6 @@ public static class MauiProgram
     <!-- Feature declarations -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application android:allowBackup="true" android:icon="@mipmap/appicon" android:supportsRtl="true">
         <!-- Additional configuration -->
@@ -210,13 +203,6 @@ public static class MauiProgram
     <!-- Camera permissions -->
     <key>NSCameraUsageDescription</key>
     <string>This app needs camera access for photo capture and documentation.</string>
-
-    <!-- Bluetooth permissions -->
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>This app needs Bluetooth access for IoT sensor connectivity.</string>
-
-    <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>This app needs Bluetooth access for sensor communication.</string>
 
     <!-- Photo library -->
     <key>NSPhotoLibraryUsageDescription</key>
@@ -258,8 +244,6 @@ public static class MauiProgram
     <Capability Name="internetClient" />
     <DeviceCapability Name="location" />
     <DeviceCapability Name="webcam" />
-    <DeviceCapability Name="bluetooth" />
-    <DeviceCapability Name="bluetoothLEDevice" />
   </Capabilities>
 
 </Package>
@@ -267,7 +251,11 @@ public static class MauiProgram
 
 ### 3. Application Configuration
 
-Create `appsettings.json` in your project root:
+The SDK is configured in code through `HonuaMobileClientOptions` (passed to
+`AddHonuaMobileSdk`), not by binding an `appsettings.json` section. The snippet
+below is an **illustrative** example of how you might keep your own settings in
+`appsettings.json` and read them when constructing the options — the keys are
+your application's, not a schema the SDK binds automatically.
 
 ```json
 {
@@ -281,24 +269,6 @@ Create `appsettings.json` in your project root:
       "AutoSync": true,
       "SyncInterval": "00:05:00"
     },
-    "IoT": {
-      "Enabled": true,
-      "BluetoothLE": {
-        "ScanTimeout": "00:00:30",
-        "ConnectionTimeout": "00:00:15",
-        "AutoReconnect": true
-      },
-      "WiFi": {
-        "DiscoveryPort": 8080,
-        "Timeout": "00:00:10"
-      }
-    },
-    "Camera": {
-      "DefaultQuality": "High",
-      "EnablePrivacyBlur": true,
-      "IncludeLocation": true,
-      "CompressionLevel": 0.8
-    },
     "Logging": {
       "LogLevel": {
         "Default": "Information",
@@ -308,6 +278,11 @@ Create `appsettings.json` in your project root:
   }
 }
 ```
+
+> The IoT/Bluetooth and camera-pipeline settings that previously appeared here
+> were removed: the SDK exposes no Bluetooth/IoT integration and binds no such
+> configuration. See `HonuaMobileClientOptions` for the options the SDK actually
+> reads.
 
 ## Verification
 
@@ -425,7 +400,7 @@ Solution: Add runtime permission request
 If you encounter issues:
 
 1. **Check the documentation**: Browse our [troubleshooting guide](../guides/troubleshooting.md)
-2. **Search existing issues**: [GitHub Issues](https://github.com/honua/honua-mobile-sdk/issues)
+2. **Search existing issues**: [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
 3. **Community support**: [Discord Channel](https://discord.gg/honua)
 4. **Professional support**: [Enterprise Support](https://enterprise.honua.com)
 
