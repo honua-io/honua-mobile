@@ -80,4 +80,29 @@ public sealed class MobileSyncProblemHelperTests
         Assert.Equal(MobileSyncProblemCategory.InvalidOperation, problem.Category);
         Assert.False(problem.Retryable);
     }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)] // token expired between proactive refreshes
+    [InlineData((HttpStatusCode)425)]          // Too Early
+    public void FromStatusCode_TransientAuthFailures_AreRetryable(HttpStatusCode statusCode)
+    {
+        // A 401 caused by a token that lapsed between the auth provider's proactive
+        // refreshes is recoverable: the queued offline edit must retry after the token
+        // refreshes, not be dropped as a FatalFailure (which would discard the field edit).
+        var problem = MobileSyncProblemHelper.FromStatusCode(statusCode, message: null);
+
+        Assert.Equal(MobileSyncProblemCategory.Transport, problem.Category);
+        Assert.True(problem.Retryable);
+        Assert.Equal(UploadOutcome.RetryableFailure, MobileSyncProblemHelper.ToUploadResult(problem).Outcome);
+    }
+
+    [Fact]
+    public void FromStatusCode_Forbidden_StaysFatal()
+    {
+        // 403 is a genuine authorization denial that will not succeed on a blind retry.
+        var problem = MobileSyncProblemHelper.FromStatusCode(HttpStatusCode.Forbidden, message: null);
+
+        Assert.False(problem.Retryable);
+        Assert.Equal(UploadOutcome.FatalFailure, MobileSyncProblemHelper.ToUploadResult(problem).Outcome);
+    }
 }
