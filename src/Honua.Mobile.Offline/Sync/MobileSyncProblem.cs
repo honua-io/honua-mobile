@@ -252,6 +252,21 @@ public static class MobileSyncProblemHelper
                 Retryable: true);
         }
 
+        // 401 Unauthorized (and 425 Too Early) are recoverable: a token can expire between the
+        // auth provider's proactive refreshes, or a refresh can briefly fail, producing a 401
+        // for a queued offline edit that would otherwise be marked FatalFailure and permanently
+        // dropped. Treat these as retryable Transport so the upload re-runs after the auth
+        // provider refreshes the token. 403 Forbidden is a genuine authorization denial and
+        // stays fatal (it will not succeed on a blind retry).
+        if (statusCode == HttpStatusCode.Unauthorized ||
+            (int)statusCode == 425)
+        {
+            return new MobileSyncProblem(
+                MobileSyncProblemCategory.Transport,
+                string.IsNullOrWhiteSpace(message) ? TransportRetryMessage : message,
+                Retryable: true);
+        }
+
         return new MobileSyncProblem(
             MobileSyncProblemCategory.InvalidOperation,
             string.IsNullOrWhiteSpace(message) ? "Sync request was rejected." : message,

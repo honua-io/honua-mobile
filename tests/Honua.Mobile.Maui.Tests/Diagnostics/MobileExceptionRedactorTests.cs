@@ -25,6 +25,36 @@ public sealed class MobileExceptionRedactorTests
         Assert.Contains(MobileExceptionRedactor.RedactedValue, redacted);
     }
 
+    [Theory]
+    [InlineData("captured at lat=21.3, lon=-157.8")]
+    [InlineData("captured at lat=21.306, lon=-157.858")]
+    [InlineData("captured at lat=21.30691, lon=-157.85830")]
+    public void RedactText_RedactsCoordinatesRegardlessOfDecimalPrecision(string text)
+    {
+        var redacted = MobileExceptionRedactor.RedactText(text, new MobileExceptionReportingOptions());
+
+        Assert.NotNull(redacted);
+        // The fractional, precision-carrying digits must not survive in cleartext.
+        Assert.DoesNotContain(".3", redacted);
+        Assert.DoesNotContain(".8", redacted);
+        Assert.DoesNotContain("306", redacted);
+        Assert.DoesNotContain("858", redacted);
+        Assert.DoesNotContain("30691", redacted);
+        Assert.DoesNotContain("85830", redacted);
+        Assert.Contains(MobileExceptionRedactor.RedactedValue, redacted);
+    }
+
+    [Fact]
+    public void RedactText_KeepsPreciseCoordinatesWhenPreciseLocationEnabled()
+    {
+        var options = new MobileExceptionReportingOptions { IncludePreciseLocation = true };
+
+        var redacted = MobileExceptionRedactor.RedactText("captured at lat=21.306, lon=-157.858", options);
+
+        Assert.Contains("21.306", redacted);
+        Assert.Contains("-157.858", redacted);
+    }
+
     [Fact]
     public void RedactProperties_DropsSensitiveLocationFormAndAttachmentValuesByDefault()
     {

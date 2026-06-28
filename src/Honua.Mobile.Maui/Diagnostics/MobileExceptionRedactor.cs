@@ -188,6 +188,6 @@ public static partial class MobileExceptionRedactor
     [GeneratedRegex(@"(?<prefix>[?&;](?:access[_-]?token|refresh[_-]?token|token|x[_-]?api[_-]?key|api[_-]?key|apikey|access[_-]?key|accesskey|password|secret|client[_-]?secret|sig|signature|code|key)=)[^&#\s]+", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
     private static partial Regex SensitiveQueryStringRegex();
 
-    [GeneratedRegex(@"\b(?<key>lat(?:itude)?|lon(?:gitude)?|lng)\s*[:=]\s*-?\d{1,3}(?:\.\d{4,})?\b", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
+    [GeneratedRegex(@"\b(?<key>lat(?:itude)?|lon(?:gitude)?|lng)\s*[:=]\s*-?\d{1,3}(?:\.\d+)?\b", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 250)]
     private static partial Regex PreciseLocationTextRegex();
 }
