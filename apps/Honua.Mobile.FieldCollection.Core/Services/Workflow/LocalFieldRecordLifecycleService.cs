@@ -17,9 +17,9 @@ public sealed class LocalFieldRecordLifecycleService
     public const string LifecycleActorRoleAttribute = "honua_lifecycle_actor_role";
     public const string LifecycleNoteAttribute = "honua_lifecycle_note";
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
 
-    public LocalFieldRecordLifecycleService(GeoPackageStorageService storage)
+    public LocalFieldRecordLifecycleService(IGeoPackageStorageService storage)
     {
         _storage = storage;
     }

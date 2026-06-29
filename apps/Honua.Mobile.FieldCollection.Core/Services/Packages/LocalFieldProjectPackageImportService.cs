@@ -11,11 +11,11 @@ public sealed class LocalFieldProjectPackageImportService
 {
     private const string InstalledManifestFileName = "field-project-package.json";
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly ILogger<LocalFieldProjectPackageImportService>? _logger;
 
     public LocalFieldProjectPackageImportService(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         ILogger<LocalFieldProjectPackageImportService>? logger = null)
     {
         _storage = storage;

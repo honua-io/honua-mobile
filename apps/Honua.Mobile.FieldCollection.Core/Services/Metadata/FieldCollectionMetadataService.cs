@@ -15,14 +15,14 @@ public sealed class FieldCollectionMetadataService : IFieldCollectionMetadataSer
 
     private readonly IAuthenticationService _authenticationService;
     private readonly ISettingsService _settingsService;
-    private readonly GeoPackageStorageService _storageService;
+    private readonly IGeoPackageStorageService _storageService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FieldCollectionMetadataService>? _logger;
 
     public FieldCollectionMetadataService(
         IAuthenticationService authenticationService,
         ISettingsService settingsService,
-        GeoPackageStorageService storageService,
+        IGeoPackageStorageService storageService,
         HttpClient httpClient,
         ILogger<FieldCollectionMetadataService>? logger = null)
     {
