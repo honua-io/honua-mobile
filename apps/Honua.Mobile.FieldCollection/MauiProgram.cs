@@ -61,8 +61,8 @@ public static class MauiProgram
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<GeoPackageStorageService>(provider =>
             provider.GetRequiredService<DatabaseService>().GetStorageService());
-
-        services.AddSingleton<IStorageService, StorageService>();
+        services.AddSingleton<IGeoPackageStorageService>(provider =>
+            provider.GetRequiredService<GeoPackageStorageService>());
 
         // Register sync service factory
         services.AddHttpClient("HonuaFieldSync");

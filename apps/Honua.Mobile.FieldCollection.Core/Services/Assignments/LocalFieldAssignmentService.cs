@@ -18,9 +18,9 @@ public interface ILocalFieldAssignmentService
 
 public sealed class LocalFieldAssignmentService : ILocalFieldAssignmentService
 {
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
 
-    public LocalFieldAssignmentService(GeoPackageStorageService storage)
+    public LocalFieldAssignmentService(IGeoPackageStorageService storage)
     {
         _storage = storage;
     }

@@ -60,12 +60,12 @@ public sealed class LocalRecordExportService : ILocalRecordExportService
         "pending_attachment_count"
     ];
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly string? _defaultExportRootDirectory;
     private readonly ILogger<LocalRecordExportService>? _logger;
 
     public LocalRecordExportService(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         string? defaultExportRootDirectory = null,
         ILogger<LocalRecordExportService>? logger = null)
     {

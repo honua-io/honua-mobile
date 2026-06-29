@@ -24,12 +24,12 @@ public class GeoPackageFeatureService : IFeatureService
         @"^\s*(?<field>[A-Za-z_][A-Za-z0-9_]*)\s*(?<op>==|!=|<>|>=|<=|=|>|<)\s*(?<value>.+?)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly ISyncService _syncService;
     private readonly ILogger<GeoPackageFeatureService>? _logger;
 
     public GeoPackageFeatureService(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         ISyncService syncService,
         ILogger<GeoPackageFeatureService>? logger = null)
     {

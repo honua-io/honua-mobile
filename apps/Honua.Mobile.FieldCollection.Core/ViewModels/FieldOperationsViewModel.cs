@@ -12,7 +12,7 @@ namespace Honua.Mobile.FieldCollection.ViewModels;
 
 public partial class FieldOperationsViewModel : BaseViewModel
 {
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly ILocalFieldAssignmentService _assignmentService;
     private readonly LocalFieldProjectPackageImportService _packageImportService;
     private readonly LocalFieldProjectPackageDownloadService _packageDownloadService;
@@ -71,7 +71,7 @@ public partial class FieldOperationsViewModel : BaseViewModel
 
     public FieldOperationsViewModel(
         INavigationService navigationService,
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         ILocalFieldAssignmentService assignmentService,
         LocalFieldProjectPackageImportService packageImportService,
         LocalFieldProjectPackageDownloadService packageDownloadService,

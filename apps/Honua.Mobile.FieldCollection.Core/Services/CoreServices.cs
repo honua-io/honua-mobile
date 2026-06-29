@@ -33,14 +33,6 @@ public interface IHighAccuracyLocationMetadataProvider
         CancellationToken cancellationToken = default);
 }
 
-public interface IStorageService
-{
-    Task<T?> GetAsync<T>(string key);
-    Task SetAsync<T>(string key, T value);
-    Task RemoveAsync(string key);
-    Task<bool> ExistsAsync(string key);
-}
-
 public interface IFeatureService
 {
     Task<IReadOnlyList<LayerInfo>> GetLayersAsync();
@@ -226,71 +218,6 @@ public class LocationService : ILocationService
     }
 }
 
-public class StorageService : IStorageService
-{
-    private readonly Dictionary<string, object> _storage = new();
-
-    public async Task<T?> GetAsync<T>(string key)
-    {
-        await Task.CompletedTask;
-        return _storage.TryGetValue(key, out var value) && value is T ? (T)value : default;
-    }
-
-    public async Task SetAsync<T>(string key, T value)
-    {
-        await Task.CompletedTask;
-        if (value != null)
-            _storage[key] = value;
-        else
-            _storage.Remove(key);
-    }
-
-    public async Task RemoveAsync(string key)
-    {
-        await Task.CompletedTask;
-        _storage.Remove(key);
-    }
-
-    public async Task<bool> ExistsAsync(string key)
-    {
-        await Task.CompletedTask;
-        return _storage.ContainsKey(key);
-    }
-}
-
-public class FeatureService : IFeatureService
-{
-    public Task<IReadOnlyList<LayerInfo>> GetLayersAsync()
-    {
-        return Task.FromResult<IReadOnlyList<LayerInfo>>(Array.Empty<LayerInfo>());
-    }
-
-    public Task<IEnumerable<Feature>> GetFeaturesAsync(int layerId, Polygon? spatialFilter = null)
-    {
-        return Task.FromResult<IEnumerable<Feature>>(Array.Empty<Feature>());
-    }
-
-    public Task<Feature?> GetFeatureAsync(int layerId, string featureId)
-    {
-        return Task.FromResult<Feature?>(null);
-    }
-
-    public Task<Feature> CreateFeatureAsync(int layerId, Feature feature)
-    {
-        throw new InvalidOperationException("Feature storage is not configured.");
-    }
-
-    public Task<Feature> UpdateFeatureAsync(int layerId, Feature feature)
-    {
-        throw new InvalidOperationException("Feature storage is not configured.");
-    }
-
-    public Task DeleteFeatureAsync(int layerId, string featureId)
-    {
-        throw new InvalidOperationException("Feature storage is not configured.");
-    }
-}
-
 public class FormService : IFormService
 {
     private readonly IFieldCollectionMetadataService? _metadataService;
@@ -461,7 +388,7 @@ public class AttachmentService : IAttachmentService
 {
     private const long DefaultQuotaBytes = 250L * 1024L * 1024L;
 
-    private readonly GeoPackageStorageService? _storage;
+    private readonly IGeoPackageStorageService? _storage;
     private readonly string _rootDirectory;
     private readonly long _quotaBytes;
     private readonly ILogger<AttachmentService>? _logger;
@@ -472,7 +399,7 @@ public class AttachmentService : IAttachmentService
     }
 
     public AttachmentService(
-        GeoPackageStorageService? storage,
+        IGeoPackageStorageService? storage,
         string? rootDirectory = null,
         long quotaBytes = DefaultQuotaBytes,
         ILogger<AttachmentService>? logger = null)
@@ -692,7 +619,7 @@ public class AttachmentService : IAttachmentService
             File.Exists(attachment.LocalPath);
     }
 
-    private GeoPackageStorageService EnsureStorageConfigured()
+    private IGeoPackageStorageService EnsureStorageConfigured()
     {
         return _storage ?? throw new InvalidOperationException("Attachment storage is not configured.");
     }

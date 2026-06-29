@@ -131,12 +131,12 @@ public sealed class LocalFieldConflictReplayHarness
         WriteIndented = true
     };
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly ISyncService _syncService;
     private readonly string? _defaultEvidenceDirectory;
 
     public LocalFieldConflictReplayHarness(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         ISyncService syncService,
         string? defaultEvidenceDirectory = null)
     {

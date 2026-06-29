@@ -80,7 +80,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
 {
     private static readonly JsonSerializerOptions ConflictJsonOptions = CreateConflictJsonOptions();
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly IAuthenticationService _authService;
     private readonly IConnectivityService _connectivityService;
     private readonly IFieldCollectionChangeUploader _changeUploader;
@@ -117,7 +117,7 @@ public partial class GeoPackageSyncService : ObservableObject, ISyncService, IDi
         IsConfiguredRemoteTransport(_changePuller);
 
     public GeoPackageSyncService(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         IAuthenticationService authService,
         IConnectivityService connectivityService,
         IFieldCollectionChangeUploader? changeUploader = null,

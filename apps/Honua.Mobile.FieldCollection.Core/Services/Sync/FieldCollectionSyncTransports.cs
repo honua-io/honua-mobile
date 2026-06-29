@@ -180,13 +180,13 @@ public sealed class HonuaFieldCollectionChangeUploader :
     private static readonly string[] GlobalIdFieldCandidates =
         ["globalid", "GlobalID", "GLOBALID", "global_id"];
 
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly IFieldCollectionMetadataService _metadataService;
     private readonly IFieldCollectionFeatureSyncClient _featureClient;
     private readonly ILogger<HonuaFieldCollectionChangeUploader>? _logger;
 
     public HonuaFieldCollectionChangeUploader(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         IFieldCollectionMetadataService metadataService,
         IFieldCollectionFeatureSyncClient featureClient,
         ILogger<HonuaFieldCollectionChangeUploader>? logger = null)
@@ -1112,14 +1112,14 @@ public sealed class HonuaFieldCollectionAttachmentSynchronizer :
     IFieldCollectionAttachmentSynchronizer,
     IFieldCollectionRemoteSyncCapability
 {
-    private readonly GeoPackageStorageService _storage;
+    private readonly IGeoPackageStorageService _storage;
     private readonly IAttachmentService _attachmentService;
     private readonly IFieldCollectionMetadataService _metadataService;
     private readonly IFieldCollectionAttachmentSyncClient _attachmentClient;
     private readonly ILogger<HonuaFieldCollectionAttachmentSynchronizer>? _logger;
 
     public HonuaFieldCollectionAttachmentSynchronizer(
-        GeoPackageStorageService storage,
+        IGeoPackageStorageService storage,
         IAttachmentService attachmentService,
         IFieldCollectionMetadataService metadataService,
         IFieldCollectionAttachmentSyncClient attachmentClient,

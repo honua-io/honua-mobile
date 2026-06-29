@@ -25,7 +25,7 @@ namespace Honua.Mobile.FieldCollection.Services.Storage;
 /// OGC GeoPackage-compliant storage service for offline field data collection
 /// Implements SQLite-based spatial database with change tracking for delta sync
 /// </summary>
-public class GeoPackageStorageService : IDisposable, IAsyncDisposable
+public class GeoPackageStorageService : IGeoPackageStorageService
 {
     private static readonly JsonSerializerOptions SchemaJsonOptions = new()
     {
