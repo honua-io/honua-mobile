@@ -385,9 +385,20 @@ public class CriticalDataSyncStrategy : ISyncStrategy
 
 ### Conflict Resolution Strategies
 
-Advanced conflict resolution for complex scenarios:
+> **Status: roadmap — not shipped.** The advanced, conflict-type-aware resolver
+> sketched below (`AdvancedConflictResolver`, `ConflictContext`, per-field
+> resolution rules) is a **planned P2 capability**, not part of the current SDK.
+> Today the SDK ships **basic** conflict resolution only — the generation/
+> timestamp-based ClientWins/ServerWins/ManualReview strategies described in the
+> offline-sync guide. See `docs/phase-0/PARITY_SPEC.md` (Conflict Resolution is
+> marked "Basic" today; "Advanced conflict resolution" is listed as future P2
+> work). Treat the code below as a design sketch, not a working API.
+
+The intended shape of advanced, conflict-type-aware resolution for complex
+scenarios is:
 
 ```csharp
+// Roadmap sketch — not part of the shipped SDK (planned P2).
 public class AdvancedConflictResolver : IConflictResolver
 {
     public async Task<Feature> ResolveConflictAsync(

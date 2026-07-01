@@ -430,24 +430,28 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 
 ### **Revolutionary Advantages**
 
+> Note: AR visualization and IoT sensor integration are **forward-looking
+> concepts, not shipped** (see the status banner at the top). They are listed
+> below as intended directions, not as capabilities you get today.
+
 **🆚 vs. Fulcrum (ArcGIS):**
 - ✅ **Fully open source** - No vendor lock-in
-- ✅ **AR visualization** - See underground infrastructure
-- ✅ **IoT integration** - Automated sensor data collection
+- 🔭 **AR visualization** (concept — not shipped) - See underground infrastructure
+- 🔭 **IoT integration** (concept — not shipped) - Automated sensor data collection
 - ✅ **Better offline** - True offline-first architecture
 - ✅ **Modern tech stack** - .NET MAUI cross-platform
 
 **🆚 vs. Survey123:**
 - ✅ **Advanced mapping** - Native platform integration
-- ✅ **AR capabilities** - 3D visualization and measurement
-- ✅ **IoT automation** - Hands-free data collection
+- 🔭 **AR capabilities** (concept — not shipped) - 3D visualization and measurement
+- 🔭 **IoT automation** (concept — not shipped) - Hands-free data collection
 - ✅ **Real-time sync** - gRPC streaming protocols
 - ✅ **Enterprise ready** - Role-based security and audit trails
 
 **🆚 vs. KoBo Toolbox:**
 - ✅ **Professional grade** - Enterprise security and performance
 - ✅ **Native mobile** - Full platform integration
-- ✅ **AR and IoT** - Next-generation data collection
+- 🔭 **AR and IoT** (concept — not shipped) - Next-generation data collection
 - ✅ **Scalable architecture** - Handle millions of records
 - ✅ **Commercial support** - Professional services available
 
@@ -475,7 +479,11 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 
 ## 🎯 Ready to Transform Your Field Operations?
 
-**Honua Field Collector represents the future of mobile data collection** - where augmented reality, IoT automation, and intelligent synchronization combine to create the most powerful field data platform available.
+**This example sketches a target field-collection experience** built on shipped
+offline-first capabilities — GeoPackage capture, dynamic forms, multi-media
+capture, and sync. The augmented-reality and IoT-automation directions described
+above are **forward-looking concepts, not shipped** (see the status banner at the
+top), not capabilities available today.
 
 **Key Benefits:**
 - ✅ **10x faster** data collection vs traditional methods

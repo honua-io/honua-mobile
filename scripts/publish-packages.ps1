@@ -214,8 +214,7 @@ function Generate-ReleaseNotes {
 - 💰 **$0 cost** vs \$1,200+/year for Fulcrum/Survey123
 - 🔓 **Open source** vs vendor lock-in
 - 🚀 **Native performance** vs web wrappers
-- 🤖 **IoT integration** that no competitor offers
-- 🥽 **AR capabilities** (first open source implementation)
+- 📴 **Offline-first** GeoPackage capture, dynamic forms, and sync
 
 ## 🔧 Installation
 
