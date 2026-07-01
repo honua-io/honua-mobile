@@ -168,8 +168,11 @@ Field Worker → Mobile App → Local Storage → Background Sync → Honua Serv
 - **📊 Dashboard**: Project overview and quick actions
 - **📝 Collect**: Form-based data collection interface
 - **🗺️ Map**: Advanced mapping and spatial analysis
-- **🥽 AR View**: Augmented reality visualization
-- **📡 Sensors**: IoT sensor management and monitoring
+
+> AR visualization and IoT sensor integration are **forward-looking concepts,
+> not shipped**. No `HonuaARView` control or IoT integration service exists in
+> this repository today. The proposed shape of those features is sketched below
+> for discussion only.
 
 ### **Key Features Walkthrough**
 
@@ -189,31 +192,19 @@ var form = await formService.GetFormAsync("utility-inspection");
 - Barcode/QR scanning
 ```
 
-#### **2. AR Utility Visualization**
-```csharp
-// AR view automatically loads utilities based on GPS location
-var arView = new HonuaARView();
-await arView.LoadUtilitiesAsync(currentLocation, radiusMeters: 50);
+#### **2. AR Utility Visualization (concept — not implemented)**
 
-// Interactive features
-- Tap utilities for detailed information
-- Measure distances using AR depth sensing
-- Capture photos with AR overlays
-- Real-time utility status from IoT sensors
-```
+There is no `HonuaARView` control today. The intended shape is an AR view that
+loads nearby utilities by GPS and supports tap-to-inspect, AR-depth measurement,
+and photo capture with overlays. See
+[`examples/ar-utility-visualization`](../ar-utility-visualization/README.md) for
+the concept write-up and open accuracy questions.
 
-#### **3. IoT Sensor Integration**
-```csharp
-// Automatic sensor discovery and data collection
-var iotService = App.GetService<IIoTIntegrationService>();
-await iotService.DiscoverSensorsAsync();
+#### **3. IoT Sensor Integration (concept — not implemented)**
 
-// Supported sensor types
-- Environmental (temperature, humidity, pressure)
-- Air quality (PM2.5, PM10, CO2, VOCs)
-- Equipment monitoring (vibration, current, voltage)
-- Custom sensors via Bluetooth LE
-```
+There is no IoT integration service today (`src/Honua.Mobile.IoT` is not part of
+this repository). The intended shape is automatic sensor discovery over
+Bluetooth LE for environmental, air-quality, and equipment-monitoring sensors.
 
 ### **Offline Operation**
 The app is designed for reliable field work without constant connectivity:

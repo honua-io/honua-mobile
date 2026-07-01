@@ -215,24 +215,22 @@ public class FulcrumMigrationService
 Add capabilities that Fulcrum doesn't offer:
 
 ```xml
-<!-- Enhanced data collection with IoT and AR -->
+<!-- Enhanced data collection -->
 <honua:HonuaFeatureForm FormId="site_inspection">
     <!-- Regular form fields (same as Fulcrum) -->
 </honua:HonuaFeatureForm>
 
-<!-- IoT sensor integration (not available in Fulcrum) -->
-<honua:HonuaSensorList AutoDiscovery="true"
-                       SensorTypes="Environmental,AirQuality" />
-
-<!-- AR visualization (not available in Fulcrum) -->
-<honua:HonuaARViewer EnableUtilityVisualization="true"
-                     EnableInfrastructureOverlay="true" />
-
-<!-- Advanced mapping (better than Fulcrum) -->
+<!-- Advanced mapping -->
 <honua:HonuaMapView ShowToolbar="true"
                     EnableSpatialQuery="true"
                     ShowGPSAccuracy="true" />
 ```
+
+> **Not shipped yet:** `HonuaSensorList` (IoT sensor integration) and
+> `HonuaARViewer` (AR visualization) are forward-looking concepts, not
+> implemented controls — do not plan a migration around them. See
+> [`examples/ar-utility-visualization`](../../examples/ar-utility-visualization/README.md)
+> for the AR concept and its open accuracy questions.
 
 ### **Cost Savings Calculator**
 
