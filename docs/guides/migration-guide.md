@@ -716,25 +716,6 @@ console.log(calculateROI('survey123', 100, 3));
 
 ---
 
-## 🏆 Success Stories
-
-### Environmental Consulting Firm
-> *"Migrated 50 field workers from Fulcrum in 2 weeks. Saved $60,000/year and gained IoT sensor integration that wasn't available before. The offline capabilities are incredible!"*
->
-> **— Sarah Johnson, IT Director**
-
-### Utility Company
-> *"Replaced ArcGIS Mobile SDK development with Honua. Reduced development time from 6 months to 2 weeks and eliminated $45,000 in licensing costs. The AR utility visualization is a game-changer."*
->
-> **— Mike Chen, Senior Developer**
-
-### NGO Field Operations
-> *"Migrated from KoBo Toolbox and gained professional-grade capabilities. The IoT integration helps us monitor environmental conditions automatically. Best decision we made this year!"*
->
-> **— Dr. Maria Rodriguez, Field Operations Manager**
-
----
-
 ## 🆘 Migration Support
 
 ### Self-Service Resources

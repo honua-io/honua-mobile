@@ -83,7 +83,7 @@ Transform how field workers, inspectors, and data collectors interact with real-
 ### **Quick Start**
 ```bash
 # Clone the repository
-git clone https://github.com/honua-org/honua-server.git
+git clone https://github.com/honua-io/honua-server.git
 cd examples/mobile/field-data-collection
 
 # Restore packages
@@ -454,14 +454,14 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 ## 🤝 Contributing & Community
 
 ### **Open Source Development**
-- **GitHub**: [honua-org/honua-server](https://github.com/honua-org/honua-server)
+- **GitHub**: [honua-io/honua-server](https://github.com/honua-io/honua-server)
 - **License**: Apache 2.0 - Fully open source
 - **Contributing**: Welcome! See CONTRIBUTING.md for guidelines
 - **Issues**: Bug reports and feature requests welcome
 
 ### **Community Resources**
-- **Documentation**: [docs.honua.com](https://docs.honua.com)
-- **Community Forum**: [community.honua.com](https://community.honua.com)
+- **Documentation**: [honua-mobile docs](https://github.com/honua-io/honua-mobile/tree/trunk/docs)
+- **Community Forum**: [Discord](https://discord.gg/honua)
 - **Discord**: Real-time developer chat
 - **YouTube**: Tutorial videos and demos
 
@@ -484,6 +484,6 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 - ✅ **Zero vendor lock-in** with open source licensing
 - ✅ **Enterprise security** with government-grade encryption
 
-[📚 Documentation](https://docs.honua.com/field-collector) • [💬 Community](https://community.honua.com) • [🎯 Schedule Demo](https://honua.com/demo)
+[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted mobile demo exists -->
 
 **Start collecting revolutionary field data today.**

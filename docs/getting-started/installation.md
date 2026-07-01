@@ -402,7 +402,7 @@ If you encounter issues:
 1. **Check the documentation**: Browse our [troubleshooting guide](../guides/troubleshooting.md)
 2. **Search existing issues**: [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
 3. **Community support**: [Discord Channel](https://discord.gg/honua)
-4. **Professional support**: [Enterprise Support](https://enterprise.honua.com)
+4. **Professional support**: Enterprise Support <!-- TODO: add canonical Enterprise Support URL once published (placeholder enterprise.honua.com is not live) -->
 
 ## Next Steps
 

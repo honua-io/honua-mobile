@@ -227,19 +227,18 @@ For large datasets:
 ## 📚 Resources
 
 ### Documentation
-- [Honua Mobile SDK Docs](https://docs.honua.com/mobile)
-- [Getting Started Guide](https://docs.honua.com/mobile/getting-started)
-- [API Reference](https://docs.honua.com/mobile/api)
+- [Honua Mobile SDK Docs](https://github.com/honua-io/honua-mobile/tree/trunk/docs)
+- [Getting Started Guide](https://github.com/honua-io/honua-mobile/tree/trunk/docs/getting-started)
+- [API Reference](https://github.com/honua-io/honua-mobile/tree/trunk/docs/api)
 
 ### Community
 - [Discord Community](https://discord.gg/honua)
-- [GitHub Issues](https://github.com/honua/honua-mobile-sdk/issues)
+- [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
 - [YouTube Tutorials](https://youtube.com/honuaproject)
 
 ### Enterprise
-- [Professional Support](https://enterprise.honua.com)
-- [Custom Development](https://enterprise.honua.com/custom)
-- [Training Services](https://enterprise.honua.com/training)
+<!-- TODO: replace with canonical enterprise/support links once published (placeholder enterprise.honua.com is not live) -->
+- Professional Support, Custom Development, and Training Services — contact via the repository maintainers
 
 ## 📄 License
 
@@ -250,18 +249,6 @@ This template and generated code is licensed under the **Apache License 2.0**.
 - ✅ Patent use permitted
 - ✅ Private use permitted
 
-## 🎉 Success Stories
+**Built something with this template? Share it with [@honuaproject](https://twitter.com/honuaproject)!**
 
-> "Replaced Fulcrum with this template and saved $15,000/year for our 50-person field team. The offline capabilities are incredible!"
->
-> — Environmental Consulting Firm
-
-> "Built our utility inspection app in 2 days using this template. The AR features gave us a huge competitive advantage."
->
-> — Infrastructure Company
-
----
-
-**Built something awesome with this template? Share it with [@honuaproject](https://twitter.com/honuaproject)!**
-
-**[🚀 Deploy to Production](https://docs.honua.com/deployment) • [🎨 Advanced Customization](https://docs.honua.com/customization) • [💬 Join Community](https://discord.gg/honua)**
+**[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Join Community](https://discord.gg/honua)**

@@ -474,6 +474,6 @@ dotnet new honua-fieldcollector
 - ✅ **Professional grade** with enterprise security
 - ✅ **Community support** with commercial options
 
-[📚 Full Documentation](https://docs.honua.com/components) • [💬 Community](https://community.honua.com) • [🎯 Live Demo](https://demo.honua.com/components)
+[📚 Full Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted components demo exists -->
 
 **Start building the future of mobile data collection today.**
