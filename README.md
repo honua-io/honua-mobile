@@ -3,6 +3,7 @@
 [![CI](https://github.com/honua-io/honua-mobile/actions/workflows/ci.yml/badge.svg?branch=trunk)](https://github.com/honua-io/honua-mobile/actions/workflows/ci.yml)
 [![Live Server Integration](https://github.com/honua-io/honua-mobile/actions/workflows/live-server-integration.yml/badge.svg?branch=trunk)](https://github.com/honua-io/honua-mobile/actions/workflows/live-server-integration.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/honua-io/honua-mobile/badge)](https://scorecard.dev/viewer/?uri=github.com/honua-io/honua-mobile)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 .NET MAUI mobile SDK for [Honua Server](https://github.com/honua-io/honua-server),
 the multi-protocol cloud-native geospatial server. It gives .NET mobile developers
