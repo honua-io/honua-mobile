@@ -33,7 +33,7 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter | NuGet on [GitHub Packages](https://github.com/orgs/honua-io/packages?repo_name=honua-mobile), from signed `mobile-dotnet-v*` release tags |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | same |
 | **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration | same |
-| **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | npm on GitHub Packages, from `mobile-embed-v*` release tags |
+| **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | npm on GitHub Packages, via the embed publish workflow (`mobile-embed-v*` release tags or manual dispatch) |
 
 The library packages target `net10.0` and build on any platform without the MAUI
 workload. The reference apps and templates are .NET MAUI (`net10.0-android`,
