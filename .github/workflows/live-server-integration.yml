@@ -119,7 +119,7 @@ jobs:
           pull_with_retry "${HONUA_POSTGIS_IMAGE}"
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
