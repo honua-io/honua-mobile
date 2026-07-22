@@ -263,13 +263,19 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ### Verify Sync
 
 ```bash
-# Check your server dashboard at:
-# https://api.honua.io/dashboard
+# Install the supported Honua command-line client once.
+npm install --global @honua/sdk-js
 
-# Or query via API:
-curl -H "X-API-Key: your-api-key" \
-     "https://api.honua.io/rest/services/mobile_offline_demo/FeatureServer/68910/query?where=1%3D1&outFields=*&f=json"
+# Point it at your deployment and use the same API key as the app.
+export HONUA_BASE_URL=https://api.honua.io
+export HONUA_API_KEY=your-api-key
+
+# Verify that synchronized records are queryable.
+honua query mobile_offline_demo/68910 --where "1=1" --limit 25 --format geojson
 ```
+
+You can also inspect the synchronized layer in the server dashboard at
+<https://api.honua.io/dashboard>.
 
 ## Compare to Competition
 

@@ -40,23 +40,15 @@ deterministic and a fixture set unambiguously corresponds to one
 1. **Fetch (CI / local).** `tests/conformance/fetch-fixtures.sh --version
    <X.Y.Z> [--dest DIR]` downloads the release asset
    `conformance-fixtures-<version>.tar.gz` (+ `.sha256`) from the `v<version>`
-   GitHub Release of `honua-io/geospatial-grpc` (via `gh release download` when
-   available, else `curl`/`wget`), verifies the tarball SHA-256, extracts it,
+   GitHub Release of `honua-io/geospatial-grpc` (preferring the authenticated
+   GitHub CLI and using the helper's portable fallback otherwise), verifies the tarball SHA-256, extracts it,
    re-verifies every file against the in-tarball `SHA256SUMS`, and asserts the
    embedded `VERSION` equals the requested pin. It leaves `fixtures/`
    (+ `manifest.txt`), `golden/`, `run.sh`, and `VERSION` in `--dest`
    (default `./conformance-fixtures-<version>/`).
 
-   Equivalent raw pull (no helper):
-
-   ```bash
-   v=0.1.0-alpha.1
-   base="https://github.com/honua-io/geospatial-grpc/releases/download/v${v}"
-   curl -fsSLO "${base}/conformance-fixtures-${v}.tar.gz"
-   curl -fsSLO "${base}/conformance-fixtures-${v}.tar.gz.sha256"
-   sha256sum -c "conformance-fixtures-${v}.tar.gz.sha256"
-   tar -xzf "conformance-fixtures-${v}.tar.gz"
-   ```
+   Use the helper rather than reconstructing the release download by hand; it
+   verifies both the release checksum and the manifest inside the archive.
 
 2. **Locate (tests).** `LiveHonuaServerInteractionTests` discovers the fetched
    fixture directory via the `HONUA_MOBILE_CONFORMANCE_FIXTURES_DIR` environment

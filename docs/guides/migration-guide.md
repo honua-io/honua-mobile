@@ -54,16 +54,13 @@ Fulcrum is a popular field data collection platform charging $99-299/month per u
 
 #### 1. **Export Your Fulcrum Data** (30 minutes)
 
-```bash
-# Using Fulcrum API to export your data
-curl -H "X-ApiToken: YOUR_FULCRUM_TOKEN" \
-     "https://api.fulcrumapp.com/api/v2/forms.json" \
-     > fulcrum_forms.json
+Use Fulcrum's supported export workflow to download the form definition and
+records as `fulcrum_forms.json` and `fulcrum_records.json`. Keep attachments in
+the export directory so the later import can preserve their relative paths.
 
-curl -H "X-ApiToken: YOUR_FULCRUM_TOKEN" \
-     "https://api.fulcrumapp.com/api/v2/records.json" \
-     > fulcrum_records.json
-```
+`honua-migrate` does not currently claim a Fulcrum source adapter. Do not send
+Fulcrum tokens through hand-written raw HTTP commands; use Fulcrum's product
+export or an approved Fulcrum SDK until that adapter is available.
 
 #### 2. **Create Honua App** (5 minutes)
 
