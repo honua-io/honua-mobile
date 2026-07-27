@@ -13,11 +13,13 @@ the SDK to meet before it advances along that track.
 
 honua-mobile pins the SDK release train as a single property:
 
-- Pinned version: `0.1.17-alpha.1`
-- Pin location: [`Directory.Build.props`](../../Directory.Build.props) line 11
+- Pinned version: `1.3.0` (train packages published from `honua-sdk-dotnet`
+  trunk to GitHub Packages; see `<HonuaSdkDotNetTrainReleaseUrl>` /
+  `<HonuaSdkDotNetTrainReleasePublishedAt>` for the exact release run)
+- Pin location: [`Directory.Build.props`](../../Directory.Build.props)
   (`<HonuaSdkDotNetTrainVersion>`)
-- Release tag template: `dotnet-sdk-v$(HonuaSdkDotNetTrainVersion)` (line 12)
-- Upstream repo: `honua-io/honua-sdk-dotnet` (line 13)
+- Release channel: `<HonuaSdkDotNetTrainTag>` (currently `trunk`)
+- Upstream repo: `honua-io/honua-sdk-dotnet` (`<HonuaSdkDotNetTrainRepository>`)
 - Cross-repo handshake fixture:
   [`contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`](../../contracts/fixtures/mobile-sdk-contract-harmonization.v1.json)
 
@@ -25,10 +27,14 @@ Mobile pins the **train tag**: a single `HonuaSdkDotNetTrainVersion` property
 moves the whole package set together. There is no per-package floating range in
 the mobile repo today, and we intend to keep that invariant.
 
-The SDK has cycled through 17+ alpha bumps over the past month
-(`0.1.1-alpha.1` through `0.1.17-alpha.1`). PR #187 consumed `0.1.17-alpha.1` and
-subsequent PRs (e.g. #190) continued that pin. Each alpha bump has historically
-required a mobile-side refactor PR.
+During the alpha phase the SDK cycled through 17+ alpha bumps in a month
+(`0.1.1-alpha.1` through `0.1.17-alpha.1`; PR #187 consumed `0.1.17-alpha.1`
+and subsequent PRs, e.g. #190, continued that pin), and each alpha bump
+historically required a mobile-side refactor PR. The train has since moved to
+`1.x` version numbers (currently `1.3.0`). Note that a `1.x` version number
+alone does not mean the "stable" bar below has been met: mobile has not yet
+re-graded the train against the beta/stable exit criteria in this doc, and the
+packages still ship only to GitHub Packages (no public nuget.org release).
 
 ## Package surface
 
@@ -55,7 +61,7 @@ These definitions are what honua-mobile treats as the contract; they are
 intentionally stricter than raw SemVer because alpha versions don't carry
 SemVer guarantees on their own.
 
-### alpha (`0.1.x-alpha.N`) — today
+### alpha (`0.1.x-alpha.N`)
 
 - Public API may change in any release, including signature changes, type
   renames, namespace moves, and package splits.
