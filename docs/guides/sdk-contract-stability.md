@@ -14,8 +14,12 @@ the SDK to meet before it advances along that track.
 honua-mobile pins the SDK release train as a single property:
 
 - Pinned version: `1.3.0` (train packages published from `honua-sdk-dotnet`
-  trunk to GitHub Packages; see `<HonuaSdkDotNetTrainReleaseUrl>` /
-  `<HonuaSdkDotNetTrainReleasePublishedAt>` for the exact release run)
+  trunk to GitHub Packages). Note: the `<HonuaSdkDotNetTrainReleaseUrl>` /
+  `<HonuaSdkDotNetTrainReleaseCommit>` / `<HonuaSdkDotNetTrainReleasePublishedAt>`
+  provenance properties record the last manual refresh (currently the `1.0.0`
+  train run) and are not updated on routine version bumps — the authoritative
+  record for the pinned version is the GitHub Packages feed entry for
+  `<HonuaSdkDotNetTrainVersion>` itself.
 - Pin location: [`Directory.Build.props`](../../Directory.Build.props)
   (`<HonuaSdkDotNetTrainVersion>`)
 - Release channel: `<HonuaSdkDotNetTrainTag>` (currently `trunk`)
