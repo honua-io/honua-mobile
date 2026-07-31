@@ -15,13 +15,13 @@
       (honua-io/honua-mobile#301). This consumes the matching honua-sdk-dotnet change and is
       blocked on the 1.3.0 SDK package being published from honua-sdk-dotnet trunk.
     -->
-    <HonuaSdkDotNetTrainVersion>1.3.0</HonuaSdkDotNetTrainVersion>
+    <HonuaSdkDotNetTrainVersion>1.5.0</HonuaSdkDotNetTrainVersion>
     <HonuaSdkDotNetTrainTag>trunk</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/actions/runs/26347851452</HonuaSdkDotNetTrainReleaseUrl>
     <HonuaSdkDotNetTrainReleaseCommit>6db17ed</HonuaSdkDotNetTrainReleaseCommit>
     <HonuaSdkDotNetTrainReleasePublishedAt>2026-05-24T00:55:47Z</HonuaSdkDotNetTrainReleasePublishedAt>
-    <MauiVersion>10.0.80</MauiVersion>
+    <MauiVersion>10.0.90</MauiVersion>
 
     <!--
       geospatial-grpc conformance fixtures — pinned source of truth for the
