@@ -119,22 +119,28 @@ Production-ready, cross-platform components that enable developers to build powe
 - ✅ **Speed and heading** for mobile tracking
 - ✅ **Location history** with breadcrumb trail
 
-### 🥽 **HonuaARViewer** - Augmented Reality Integration
-**Revolutionary AR visualization for field work**
+### 🥽 HonuaARViewer - Augmented Reality Integration (concept — not shipped)
+
+> **Status: forward-looking concept — not implemented.** There is no
+> `HonuaARViewer` control in this repository and no AR rendering surface behind
+> the snippet below. It is a design sketch only; do not cite it as an available
+> component. See [`examples/ar-utility-visualization`](../ar-utility-visualization/README.md)
+> and the native scene-anchoring backlog for the current AR direction.
 
 ```xml
+<!-- Proposed API, not implemented -->
 <ar:HonuaARViewer EnableUtilityVisualization="true"
                   MaxRenderDistance="100"
                   UtilitySelected="OnUtilitySelected" />
 ```
 
-**Features:**
-- ✅ **Underground utility visualization** with depth indication
-- ✅ **Real-time infrastructure overlay** on camera feed
-- ✅ **Interactive utility information** with tap-to-select
-- ✅ **AR measurement tools** using device sensors
-- ✅ **Photo capture** with AR overlays
-- ✅ **Multi-platform AR** (ARKit, ARCore)
+**Proposed features (none implemented yet):**
+- Underground utility visualization with depth indication
+- Real-time infrastructure overlay on camera feed
+- Interactive utility information with tap-to-select
+- AR measurement tools using device sensors
+- Photo capture with AR overlays
+- Multi-platform AR (ARKit, ARCore)
 
 ## 🏗️ Architecture & Integration
 
@@ -247,10 +253,12 @@ public static MauiApp CreateMauiApp()
                            ShowUtilityLayers="true" />
     </TabViewItem>
 
-    <!-- AR View -->
+    <!-- AR View (concept only — HonuaARViewer is not implemented) -->
+    <!--
     <TabViewItem Text="AR">
         <honua:HonuaARViewer EnableUtilityVisualization="true" />
     </TabViewItem>
+    -->
 
     <!-- Data Form -->
     <TabViewItem Text="Inspect">
@@ -466,6 +474,6 @@ dotnet new honua-fieldcollector
 - ✅ **Professional grade** with enterprise security
 - ✅ **Community support** with commercial options
 
-[📚 Full Documentation](https://docs.honua.com/components) • [💬 Community](https://community.honua.com) • [🎯 Live Demo](https://demo.honua.com/components)
+[📚 Full Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted components demo exists -->
 
 **Start building the future of mobile data collection today.**

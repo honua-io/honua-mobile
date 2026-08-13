@@ -206,16 +206,15 @@ function Generate-ReleaseNotes {
 - **Honua.Mobile.Templates** v$Version - Visual Studio project templates
 
 ## 📚 Documentation
-- [Getting Started Guide](https://docs.honua.com/mobile/getting-started)
-- [API Reference](https://docs.honua.com/mobile/api)
-- [Sample Applications](https://github.com/honua/honua-mobile-sdk/tree/main/examples)
+- [Getting Started Guide](https://github.com/honua-io/honua-mobile/tree/trunk/docs/getting-started)
+- [API Reference](https://github.com/honua-io/honua-mobile/tree/trunk/docs/api)
+- [Sample Applications](https://github.com/honua-io/honua-mobile/tree/trunk/examples)
 
 ## 🆚 Competitive Advantages
 - 💰 **$0 cost** vs \$1,200+/year for Fulcrum/Survey123
 - 🔓 **Open source** vs vendor lock-in
 - 🚀 **Native performance** vs web wrappers
-- 🤖 **IoT integration** that no competitor offers
-- 🥽 **AR capabilities** (first open source implementation)
+- 📴 **Offline-first** GeoPackage capture, dynamic forms, and sync
 
 ## 🔧 Installation
 
@@ -234,9 +233,9 @@ dotnet add package Honua.Mobile.Maui --version $Version
 ```
 
 ## 🐛 Bug Reports & Support
-- [GitHub Issues](https://github.com/honua/honua-mobile-sdk/issues)
+- [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
 - [Discord Community](https://discord.gg/honua)
-- [Enterprise Support](https://enterprise.honua.com)
+<!-- TODO: add Enterprise Support link once a canonical URL is published (placeholder enterprise.honua.com is not live) -->
 
 ---
 
@@ -311,7 +310,7 @@ function Main {
         Write-Host "1. Test packages: dotnet new install Honua.Mobile.Templates --version $Version" -ForegroundColor White
         Write-Host "2. Create sample app: dotnet new honua-fieldcollector -n TestApp" -ForegroundColor White
         Write-Host "3. Share the news: https://twitter.com/honuaproject" -ForegroundColor White
-        Write-Host "4. Update documentation: https://docs.honua.com" -ForegroundColor White
+        Write-Host "4. Update documentation: https://github.com/honua-io/honua-mobile/tree/trunk/docs" -ForegroundColor White
     }
 }
 

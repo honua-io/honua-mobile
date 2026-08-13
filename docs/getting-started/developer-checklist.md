@@ -98,14 +98,15 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
 ### ✅ Step 6: Set Up Your Own Server
 
 **Option A: Use Honua Cloud (Recommended)**
-- [ ] Sign up at [cloud.honua.com](https://cloud.honua.com)
+<!-- TODO: confirm whether a hosted "Honua Cloud" signup exists and add the canonical URL; placeholder cloud.honua.com is not live -->
+- [ ] Sign up for Honua Cloud
 - [ ] Create new project
 - [ ] Copy API endpoint and key
 - [ ] Update `MauiProgram.cs` with your credentials
 
 **Option B: Self-Hosted Server**
 - [ ] Clone Honua Server repository
-- [ ] Follow [server setup guide](https://docs.honua.com/server/setup)
+- [ ] Follow [server setup guide](https://github.com/honua-io/honua-server)
 - [ ] Configure PostgreSQL database
 - [ ] Generate API key
 - [ ] Update mobile app configuration
@@ -325,13 +326,14 @@ dotnet build
 
 **Community Support:**
 - [ ] [Discord Community](https://discord.gg/honua) - Real-time help
-- [ ] [GitHub Discussions](https://github.com/honua/honua-mobile-sdk/discussions)
+- [ ] [GitHub Discussions](https://github.com/honua-io/honua-mobile/discussions)
 - [ ] [Stack Overflow](https://stackoverflow.com/questions/tagged/honua-mobile)
 
 **Professional Support:**
-- [ ] [Enterprise Support](https://enterprise.honua.com)
-- [ ] [Training Services](https://enterprise.honua.com/training)
-- [ ] [Custom Development](https://enterprise.honua.com/custom)
+<!-- TODO: add canonical Enterprise Support / Training / Custom Development URLs once published (placeholder enterprise.honua.com is not live) -->
+- [ ] Enterprise Support
+- [ ] Training Services
+- [ ] Custom Development
 
 ---
 

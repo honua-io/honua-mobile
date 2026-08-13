@@ -342,13 +342,13 @@ dotnet build
 ### Get Help
 - 💬 **[Discord Community](https://discord.gg/honua)** - Real-time help
 - 📖 **[Documentation](../README.md)** - Comprehensive guides
-- 🐛 **[GitHub Issues](https://github.com/honua/honua-mobile-sdk/issues)** - Bug reports
+- 🐛 **[GitHub Issues](https://github.com/honua-io/honua-mobile/issues)** - Bug reports
 - 📧 **[Email Support](mailto:support@honua.com)** - Direct assistance
 
 ### Share Your Success
 - 🐦 **[Twitter](https://twitter.com/honuaproject)** - Tag @honuaproject
 - 🎬 **[YouTube](https://youtube.com/honuaproject)** - Featured apps
-- 📰 **[Blog](https://blog.honua.com)** - User success stories
+- 📰 **Blog** - User success stories <!-- TODO: add canonical blog URL once published (placeholder blog.honua.com is not live) -->
 
 ---
 

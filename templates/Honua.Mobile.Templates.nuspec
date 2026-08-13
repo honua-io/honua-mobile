@@ -25,11 +25,11 @@
     </releaseNotes>
     <summary>.NET templates for creating geospatial mobile apps with the Honua Mobile SDK.</summary>
     <language>en-US</language>
-    <projectUrl>https://github.com/honua/honua-mobile-sdk</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/honua/honua-mobile-sdk/main/assets/icon-128.png</iconUrl>
+    <projectUrl>https://github.com/honua-io/honua-mobile</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/honua-io/honua-mobile/trunk/assets/icon-128.png</iconUrl>
     <icon>icon-128.png</icon>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <licenseUrl>https://github.com/honua/honua-mobile-sdk/blob/main/LICENSE</licenseUrl>
+    <licenseUrl>https://github.com/honua-io/honua-mobile/blob/trunk/LICENSE</licenseUrl>
     <copyright>(c) 2026 Honua Project. Licensed under Apache 2.0.</copyright>
     <dependencies>
       <group targetFramework="net10.0">

@@ -111,7 +111,7 @@ public static class MauiProgram
         builder.Services.AddHttpClient();
         builder.Services.AddHttpClient("HonuaApi", client =>
         {
-            var baseUrl = builder.Configuration["Honua:ServerUrl"] ?? "https://api.honua.com";
+            var baseUrl = builder.Configuration["Honua:ServerUrl"] ?? "https://api.honua.io";
             client.BaseAddress = new Uri(baseUrl);
             client.DefaultRequestHeaders.Add("User-Agent", $"HonuaFieldCollector/{AppInfo.VersionString}");
         });
@@ -198,7 +198,7 @@ public static class MauiProgram
         // gRPC client services
         builder.Services.AddGrpcClient<Proto.FeatureService.FeatureServiceClient>(options =>
         {
-            var serverUrl = builder.Configuration["Honua:GrpcUrl"] ?? "https://grpc.honua.com";
+            var serverUrl = builder.Configuration["Honua:GrpcUrl"] ?? "https://grpc.honua.io";
             options.Address = new Uri(serverUrl);
         });
 

@@ -83,7 +83,7 @@ Transform how field workers, inspectors, and data collectors interact with real-
 ### **Quick Start**
 ```bash
 # Clone the repository
-git clone https://github.com/honua-org/honua-server.git
+git clone https://github.com/honua-io/honua-server.git
 cd examples/mobile/field-data-collection
 
 # Restore packages
@@ -168,8 +168,11 @@ Field Worker → Mobile App → Local Storage → Background Sync → Honua Serv
 - **📊 Dashboard**: Project overview and quick actions
 - **📝 Collect**: Form-based data collection interface
 - **🗺️ Map**: Advanced mapping and spatial analysis
-- **🥽 AR View**: Augmented reality visualization
-- **📡 Sensors**: IoT sensor management and monitoring
+
+> AR visualization and IoT sensor integration are **forward-looking concepts,
+> not shipped**. No `HonuaARView` control or IoT integration service exists in
+> this repository today. The proposed shape of those features is sketched below
+> for discussion only.
 
 ### **Key Features Walkthrough**
 
@@ -189,31 +192,19 @@ var form = await formService.GetFormAsync("utility-inspection");
 - Barcode/QR scanning
 ```
 
-#### **2. AR Utility Visualization**
-```csharp
-// AR view automatically loads utilities based on GPS location
-var arView = new HonuaARView();
-await arView.LoadUtilitiesAsync(currentLocation, radiusMeters: 50);
+#### **2. AR Utility Visualization (concept — not implemented)**
 
-// Interactive features
-- Tap utilities for detailed information
-- Measure distances using AR depth sensing
-- Capture photos with AR overlays
-- Real-time utility status from IoT sensors
-```
+There is no `HonuaARView` control today. The intended shape is an AR view that
+loads nearby utilities by GPS and supports tap-to-inspect, AR-depth measurement,
+and photo capture with overlays. See
+[`examples/ar-utility-visualization`](../ar-utility-visualization/README.md) for
+the concept write-up and open accuracy questions.
 
-#### **3. IoT Sensor Integration**
-```csharp
-// Automatic sensor discovery and data collection
-var iotService = App.GetService<IIoTIntegrationService>();
-await iotService.DiscoverSensorsAsync();
+#### **3. IoT Sensor Integration (concept — not implemented)**
 
-// Supported sensor types
-- Environmental (temperature, humidity, pressure)
-- Air quality (PM2.5, PM10, CO2, VOCs)
-- Equipment monitoring (vibration, current, voltage)
-- Custom sensors via Bluetooth LE
-```
+There is no IoT integration service today (`src/Honua.Mobile.IoT` is not part of
+this repository). The intended shape is automatic sensor discovery over
+Bluetooth LE for environmental, air-quality, and equipment-monitoring sensors.
 
 ### **Offline Operation**
 The app is designed for reliable field work without constant connectivity:
@@ -439,38 +430,42 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 
 ### **Revolutionary Advantages**
 
+> Note: AR visualization and IoT sensor integration are **forward-looking
+> concepts, not shipped** (see the status banner at the top). They are listed
+> below as intended directions, not as capabilities you get today.
+
 **🆚 vs. Fulcrum (ArcGIS):**
 - ✅ **Fully open source** - No vendor lock-in
-- ✅ **AR visualization** - See underground infrastructure
-- ✅ **IoT integration** - Automated sensor data collection
+- 🔭 **AR visualization** (concept — not shipped) - See underground infrastructure
+- 🔭 **IoT integration** (concept — not shipped) - Automated sensor data collection
 - ✅ **Better offline** - True offline-first architecture
 - ✅ **Modern tech stack** - .NET MAUI cross-platform
 
 **🆚 vs. Survey123:**
 - ✅ **Advanced mapping** - Native platform integration
-- ✅ **AR capabilities** - 3D visualization and measurement
-- ✅ **IoT automation** - Hands-free data collection
+- 🔭 **AR capabilities** (concept — not shipped) - 3D visualization and measurement
+- 🔭 **IoT automation** (concept — not shipped) - Hands-free data collection
 - ✅ **Real-time sync** - gRPC streaming protocols
 - ✅ **Enterprise ready** - Role-based security and audit trails
 
 **🆚 vs. KoBo Toolbox:**
 - ✅ **Professional grade** - Enterprise security and performance
 - ✅ **Native mobile** - Full platform integration
-- ✅ **AR and IoT** - Next-generation data collection
+- 🔭 **AR and IoT** (concept — not shipped) - Next-generation data collection
 - ✅ **Scalable architecture** - Handle millions of records
 - ✅ **Commercial support** - Professional services available
 
 ## 🤝 Contributing & Community
 
 ### **Open Source Development**
-- **GitHub**: [honua-org/honua-server](https://github.com/honua-org/honua-server)
+- **GitHub**: [honua-io/honua-server](https://github.com/honua-io/honua-server)
 - **License**: Apache 2.0 - Fully open source
 - **Contributing**: Welcome! See CONTRIBUTING.md for guidelines
 - **Issues**: Bug reports and feature requests welcome
 
 ### **Community Resources**
-- **Documentation**: [docs.honua.com](https://docs.honua.com)
-- **Community Forum**: [community.honua.com](https://community.honua.com)
+- **Documentation**: [honua-mobile docs](https://github.com/honua-io/honua-mobile/tree/trunk/docs)
+- **Community Forum**: [Discord](https://discord.gg/honua)
 - **Discord**: Real-time developer chat
 - **YouTube**: Tutorial videos and demos
 
@@ -484,7 +479,11 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 
 ## 🎯 Ready to Transform Your Field Operations?
 
-**Honua Field Collector represents the future of mobile data collection** - where augmented reality, IoT automation, and intelligent synchronization combine to create the most powerful field data platform available.
+**This example sketches a target field-collection experience** built on shipped
+offline-first capabilities — GeoPackage capture, dynamic forms, multi-media
+capture, and sync. The augmented-reality and IoT-automation directions described
+above are **forward-looking concepts, not shipped** (see the status banner at the
+top), not capabilities available today.
 
 **Key Benefits:**
 - ✅ **10x faster** data collection vs traditional methods
@@ -493,6 +492,6 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 - ✅ **Zero vendor lock-in** with open source licensing
 - ✅ **Enterprise security** with government-grade encryption
 
-[📚 Documentation](https://docs.honua.com/field-collector) • [💬 Community](https://community.honua.com) • [🎯 Schedule Demo](https://honua.com/demo)
+[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted mobile demo exists -->
 
 **Start collecting revolutionary field data today.**

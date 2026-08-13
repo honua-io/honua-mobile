@@ -215,24 +215,22 @@ public class FulcrumMigrationService
 Add capabilities that Fulcrum doesn't offer:
 
 ```xml
-<!-- Enhanced data collection with IoT and AR -->
+<!-- Enhanced data collection -->
 <honua:HonuaFeatureForm FormId="site_inspection">
     <!-- Regular form fields (same as Fulcrum) -->
 </honua:HonuaFeatureForm>
 
-<!-- IoT sensor integration (not available in Fulcrum) -->
-<honua:HonuaSensorList AutoDiscovery="true"
-                       SensorTypes="Environmental,AirQuality" />
-
-<!-- AR visualization (not available in Fulcrum) -->
-<honua:HonuaARViewer EnableUtilityVisualization="true"
-                     EnableInfrastructureOverlay="true" />
-
-<!-- Advanced mapping (better than Fulcrum) -->
+<!-- Advanced mapping -->
 <honua:HonuaMapView ShowToolbar="true"
                     EnableSpatialQuery="true"
                     ShowGPSAccuracy="true" />
 ```
+
+> **Not shipped yet:** `HonuaSensorList` (IoT sensor integration) and
+> `HonuaARViewer` (AR visualization) are forward-looking concepts, not
+> implemented controls — do not plan a migration around them. See
+> [`examples/ar-utility-visualization`](../../examples/ar-utility-visualization/README.md)
+> for the AR concept and its open accuracy questions.
 
 ### **Cost Savings Calculator**
 
@@ -715,25 +713,6 @@ console.log(calculateROI('fulcrum', 50, 3));
 console.log(calculateROI('survey123', 100, 3));
 // Result: $360,000 savings over 3 years
 ```
-
----
-
-## 🏆 Success Stories
-
-### Environmental Consulting Firm
-> *"Migrated 50 field workers from Fulcrum in 2 weeks. Saved $60,000/year and gained IoT sensor integration that wasn't available before. The offline capabilities are incredible!"*
->
-> **— Sarah Johnson, IT Director**
-
-### Utility Company
-> *"Replaced ArcGIS Mobile SDK development with Honua. Reduced development time from 6 months to 2 weeks and eliminated $45,000 in licensing costs. The AR utility visualization is a game-changer."*
->
-> **— Mike Chen, Senior Developer**
-
-### NGO Field Operations
-> *"Migrated from KoBo Toolbox and gained professional-grade capabilities. The IoT integration helps us monitor environmental conditions automatically. Best decision we made this year!"*
->
-> **— Dr. Maria Rodriguez, Field Operations Manager**
 
 ---
 

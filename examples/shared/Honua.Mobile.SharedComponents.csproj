@@ -17,8 +17,8 @@
     <Description>Shared UI components for building revolutionary mobile geospatial applications with Honua</Description>
     <Copyright>Copyright © Honua 2024. Licensed under Apache 2.0.</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/honua-org/honua-server</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/honua-org/honua-server</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/honua-io/honua-server</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/honua-io/honua-server</RepositoryUrl>
     <PackageTags>honua;mobile;geospatial;ui;components;maui;forms;mapping;ar;camera</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
