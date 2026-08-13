@@ -42,6 +42,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Enforce maintained documentation command policy
+        run: |
+          if git grep -n -i -w curl -- '*.md' '*.mdx' '*.rst' '*.txt'; then
+            echo "::error::Maintained documentation must use supported SDK, CLI, or API-reference workflows."
+            exit 1
+          fi
+
       - name: Check for source changes
         id: filter
         env:
