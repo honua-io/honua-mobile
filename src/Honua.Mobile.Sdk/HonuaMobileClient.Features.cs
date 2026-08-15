@@ -163,13 +163,22 @@ public sealed partial class HonuaMobileClient
     }
 
     /// <summary>
-    /// gRPC eligibility for the legacy Esri-JSON query surface. <c>returnExtentOnly</c> is forced
-    /// onto REST because the gRPC-to-legacy converter (<see cref="ToLegacyFeatureQueryJsonDocument"/>)
-    /// has no extent branch and would otherwise silently return <c>{"features":[]}</c> instead of an
-    /// extent envelope; REST honors <c>returnExtentOnly</c>.
+    /// gRPC eligibility for the legacy Esri-JSON query surface. The metadata-only response
+    /// modes are forced onto REST because the gRPC-to-legacy converter
+    /// (<see cref="ToLegacyFeatureQueryJsonDocument"/>) always emits a <c>features</c> array,
+    /// which is non-conformant for these modes:
+    /// <list type="bullet">
+    /// <item><c>returnExtentOnly</c> must return an extent envelope, not features.</item>
+    /// <item><c>returnIdsOnly</c> must return <c>objectIdFieldName</c> + <c>objectIds</c> and omit features.</item>
+    /// <item><c>returnCountOnly</c> must return only a <c>count</c>.</item>
+    /// </list>
+    /// REST honors all three.
     /// </summary>
     private bool CanUseGrpcForLegacyQuery(QueryFeaturesRequest request)
-        => CanUseGrpcForQueries && !request.ReturnExtentOnly;
+        => CanUseGrpcForQueries
+            && !request.ReturnExtentOnly
+            && !request.ReturnIdsOnly
+            && !request.ReturnCountOnly;
 
     /// <summary>
     /// Streams feature query results as multiple pages via gRPC server streaming, falling back to a single REST page on failure.

@@ -405,6 +405,37 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         Assert.Equal("crs-mismatch", exception.Problem?.Code);
     }
 
+    [Theory]
+    [InlineData("CRS84")]
+    [InlineData("OGC:CRS84")]
+    [InlineData("urn:ogc:def:crs:OGC:1.3:CRS84")]
+    [InlineData("http://www.opengis.net/def/crs/OGC/1.3/CRS84")]
+    public async Task GetFeaturesAsync_WithCrs84BoundingBox_TreatedAsEpsg4326(string crs84)
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        // No spatialReference => layer is cached as EPSG:4326.
+        await store.UpsertFeatureAsync(
+            "parks",
+            """{"attributes":{"OBJECTID":1,"name":"Inside"},"geometry":{"x":-157.8,"y":21.3}}""");
+
+        // A CRS84 query must canonicalize to EPSG:4326 and not raise crs-mismatch.
+        var hits = await store.GetFeaturesAsync(
+            "parks",
+            new FeatureBoundingBox
+            {
+                MinX = -157.9,
+                MinY = 21.2,
+                MaxX = -157.7,
+                MaxY = 21.4,
+                Crs = crs84,
+            });
+
+        Assert.Single(hits);
+        Assert.Contains("Inside", hits[0], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task UpsertFeatureAsync_InvalidFeatureJson_MapsStorageProblem()
     {

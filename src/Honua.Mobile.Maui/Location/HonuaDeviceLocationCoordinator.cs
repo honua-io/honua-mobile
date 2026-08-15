@@ -1,28 +1,35 @@
 // Copyright (c) Honua, Inc. and contributors.
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Honua.Mobile.Maui.Location;
 
 /// <summary>
 /// Coordinates permission checks with foreground, background, and geofence location adapters.
 /// </summary>
-public sealed class HonuaDeviceLocationCoordinator
+public sealed class HonuaDeviceLocationCoordinator : IDisposable
 {
     private readonly IHonuaDeviceLocationPermissionService _permissions;
     private readonly IHonuaDeviceLocationProvider _locationProvider;
     private readonly IHonuaBackgroundLocationProvider? _backgroundProvider;
     private readonly IHonuaGeofenceMonitor? _geofenceMonitor;
+    private readonly ILogger<HonuaDeviceLocationCoordinator> _logger;
+    private bool _disposed;
 
     public HonuaDeviceLocationCoordinator(
         IHonuaDeviceLocationPermissionService permissions,
         IHonuaDeviceLocationProvider locationProvider,
         IHonuaBackgroundLocationProvider? backgroundProvider = null,
-        IHonuaGeofenceMonitor? geofenceMonitor = null)
+        IHonuaGeofenceMonitor? geofenceMonitor = null,
+        ILogger<HonuaDeviceLocationCoordinator>? logger = null)
     {
         _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
         _locationProvider = locationProvider ?? throw new ArgumentNullException(nameof(locationProvider));
         _backgroundProvider = backgroundProvider;
         _geofenceMonitor = geofenceMonitor;
+        _logger = logger ?? NullLogger<HonuaDeviceLocationCoordinator>.Instance;
 
         if (_geofenceMonitor is not null)
         {
@@ -144,8 +151,33 @@ public sealed class HonuaDeviceLocationCoordinator
 
     private void OnGeofenceTransitioned(object? sender, HonuaGeofenceTransition transition)
     {
-        transition.Validate();
-        GeofenceTransitioned?.Invoke(this, transition);
+        // Native geofence callbacks run on a background OS thread; an unhandled
+        // exception here (e.g. invalid transition data) would crash the process.
+        try
+        {
+            transition.Validate();
+            GeofenceTransitioned?.Invoke(this, transition);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to re-emit native geofence transition for region {RegionId}.", transition?.RegionId);
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        if (_geofenceMonitor is not null)
+        {
+            _geofenceMonitor.Transitioned -= OnGeofenceTransitioned;
+        }
     }
 
     private async ValueTask EnsurePermissionAsync(HonuaLocationAccess access, CancellationToken ct)

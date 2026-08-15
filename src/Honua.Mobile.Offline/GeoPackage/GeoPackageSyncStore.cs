@@ -1760,6 +1760,14 @@ ORDER BY object_id ASC;
         }
 
         var trimmed = crs.Trim();
+
+        // OGC:CRS84 (and its URN/URI forms) is axis-flipped WGS84 but identifies the
+        // same geographic CRS as EPSG:4326; canonicalize so the two never collide.
+        if (IsCrs84Identifier(trimmed))
+        {
+            return "EPSG:4326";
+        }
+
         const string epsgPrefix = "EPSG:";
         var epsgIndex = trimmed.LastIndexOf(epsgPrefix, StringComparison.OrdinalIgnoreCase);
         if (epsgIndex >= 0 &&
@@ -1777,6 +1785,16 @@ ORDER BY object_id ASC;
 
         return trimmed.ToUpperInvariant();
     }
+
+    /// <summary>
+    /// Recognizes the OGC CRS84 identifier in its short, URN, and OGC URI forms
+    /// (e.g. "CRS84", "OGC:CRS84", "urn:ogc:def:crs:OGC:1.3:CRS84",
+    /// "http://www.opengis.net/def/crs/OGC/1.3/CRS84").
+    /// </summary>
+    private static bool IsCrs84Identifier(string value)
+        => value.Equals("CRS84", StringComparison.OrdinalIgnoreCase)
+            || value.EndsWith(":CRS84", StringComparison.OrdinalIgnoreCase)
+            || value.EndsWith("/CRS84", StringComparison.OrdinalIgnoreCase);
 
     private static async Task UpsertFeatureIndexAsync(
         SqliteConnection connection,

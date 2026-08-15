@@ -402,6 +402,17 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
         }
 
         var trimmed = crs.Trim();
+
+        // OGC:CRS84 (and its URN/URI forms) identifies the same geographic CRS as
+        // EPSG:4326; treat it as wkid 4326 so cached layers don't get a missing/unknown SR.
+        if (trimmed.Equals("CRS84", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith(":CRS84", StringComparison.OrdinalIgnoreCase)
+            || trimmed.EndsWith("/CRS84", StringComparison.OrdinalIgnoreCase))
+        {
+            epsgCode = 4326;
+            return true;
+        }
+
         const string epsgPrefix = "EPSG:";
         var epsgIndex = trimmed.LastIndexOf(epsgPrefix, StringComparison.OrdinalIgnoreCase);
         if (epsgIndex >= 0 &&
