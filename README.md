@@ -30,10 +30,16 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 
 | Package | Purpose | Published |
 |---------|---------|-----------|
-| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter | NuGet on [GitHub Packages](https://github.com/orgs/honua-io/packages?repo_name=honua-mobile), from signed `mobile-dotnet-v*` release tags |
-| **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | same |
-| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration | same |
-| **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | npm on GitHub Packages, via the embed publish workflow (`mobile-embed-v*` release tags or manual dispatch) |
+| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
+| **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline) |
+| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
+| **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | Public release target: [npmjs.com](https://www.npmjs.com/package/@honua-io/embed), from signed `mobile-embed-v*` tags |
+
+Registry links are release evidence, not promises: use a version only when it
+appears at the linked public registry. The release workflows fail closed until
+that exact version installs anonymously, and then create a checksum-bearing
+GitHub Release. See [RELEASING.md](RELEASING.md) for the gates and one-time
+credential setup.
 
 The library packages target `net10.0` and build on any platform without the MAUI
 workload. The reference apps and templates are .NET MAUI (`net10.0-android`,

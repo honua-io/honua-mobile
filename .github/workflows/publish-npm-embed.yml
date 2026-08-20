@@ -24,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      package-version: ${{ steps.version.outputs.package_version }}
+      package-name: ${{ steps.pack.outputs.package_name }}
     defaults:
       run:
         working-directory: src/Honua.Embed
@@ -35,15 +40,17 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: "https://npm.pkg.github.com"
+          registry-url: "https://registry.npmjs.org"
           scope: "@honua-io"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Validate package version
+        id: version
         shell: bash
         run: |
+          set -euo pipefail
           package_version="$(node -p "require('./package.json').version")"
 
           if [[ -z "${package_version}" ]]; then
@@ -60,6 +67,31 @@ jobs:
           fi
 
           echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
+          echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify signed release tag
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          tag_object="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}")"
+          if [[ "$(git cat-file -t "${tag_object}")" != "tag" ]]; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} must be annotated and signed."
+            exit 1
+          fi
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" --jq '.verification.verified')" != "true" ]]; then
+            echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
+      - name: Block manual publishing outside signed releases
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "::error::@honua-io/embed publishes only from signed mobile-embed-v* release tags. Use dry_run=true for manual validation."
+          exit 1
 
       - name: Typecheck
         run: npm run typecheck
@@ -68,10 +100,22 @@ jobs:
         run: npm test
 
       - name: Pack npm package
+        id: pack
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "${GITHUB_WORKSPACE}/npm-packages"
           npm pack --pack-destination "${GITHUB_WORKSPACE}/npm-packages"
+          package="$(find "${GITHUB_WORKSPACE}/npm-packages" -maxdepth 1 -type f -name '*.tgz' -printf '%f\n' | sort | head -n 1)"
+          if [[ -z "${package}" ]]; then
+            echo "::error::npm pack did not produce a tarball."
+            exit 1
+          fi
+          (
+            cd "${GITHUB_WORKSPACE}/npm-packages"
+            sha256sum "${package}" > SHA256SUMS
+          )
+          echo "package_name=${package}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify packed package import
         shell: bash
@@ -93,9 +137,17 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
-          path: npm-packages/*.tgz
+          path: |
+            npm-packages/*.tgz
+            npm-packages/SHA256SUMS
           if-no-files-found: error
           retention-days: 90
+
+      - name: Attest npm tarball provenance
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: npm-packages/*.tgz
 
       - name: Upload CDN dist artifact
         uses: actions/upload-artifact@v7
@@ -116,13 +168,14 @@ jobs:
           echo "${GITHUB_WORKSPACE}/src/Honua.Embed/dist/cdn-manifest.json" >> "${GITHUB_STEP_SUMMARY}"
 
   publish:
-    name: Publish to GitHub Packages
+    name: Publish to npmjs.com
     needs: package-smoke
-    if: ${{ !(github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      id-token: write
+    environment: public-npm
     steps:
       - name: Download package artifacts
         uses: actions/download-artifact@v8
@@ -134,14 +187,35 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: "https://npm.pkg.github.com"
+          registry-url: "https://registry.npmjs.org"
           scope: "@honua-io"
 
-      - name: Publish to GitHub Packages
+      - name: Refuse an existing public version
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://registry.npmjs.org/@honua-io%2fembed/${PACKAGE_VERSION}")"
+          if [[ "${status}" == "200" ]]; then
+            echo "::error::@honua-io/embed ${PACKAGE_VERSION} already exists on npmjs.com; release versions are immutable."
+            exit 1
+          fi
+          if [[ "${status}" != "404" ]]; then
+            echo "::error::Could not prove @honua-io/embed ${PACKAGE_VERSION} is absent on npmjs.com (HTTP ${status})."
+            exit 1
+          fi
+
+      - name: Publish immutable package to npmjs.com
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "::error::The public-npm environment is missing NPM_TOKEN."
+            exit 1
+          fi
           package="$(find "${GITHUB_WORKSPACE}/npm-packages" -maxdepth 1 -type f -name '*.tgz' | sort | head -n 1)"
 
           if [[ -z "${package}" ]]; then
@@ -149,4 +223,99 @@ jobs:
             exit 1
           fi
 
-          npm publish "${package}" --registry "https://npm.pkg.github.com"
+          npm publish "${package}" \
+            --registry "https://registry.npmjs.org" \
+            --access public \
+            --provenance
+
+  verify-public:
+    name: Verify anonymous npm install
+    needs: [package-smoke, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download expected package bytes
+        uses: actions/download-artifact@v8
+        with:
+          name: honua-mobile-embed-${{ github.run_id }}-packages
+          path: expected
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install and import without credentials
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+          PACKAGE_NAME: ${{ needs.package-smoke.outputs.package-name }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "${smoke_dir}"' EXIT
+          for attempt in $(seq 1 30); do
+            if npm view "@honua-io/embed@${PACKAGE_VERSION}" version \
+              --registry "https://registry.npmjs.org" >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "${attempt}" == "30" ]]; then
+              echo "::error::npmjs.com did not serve @honua-io/embed ${PACKAGE_VERSION} anonymously."
+              exit 1
+            fi
+            sleep 10
+          done
+          (
+            cd expected
+            sha256sum --check SHA256SUMS
+          )
+          mkdir public-package
+          npm pack "@honua-io/embed@${PACKAGE_VERSION}" \
+            --pack-destination public-package \
+            --registry "https://registry.npmjs.org" >/dev/null
+          if ! cmp --silent "expected/${PACKAGE_NAME}" "public-package/${PACKAGE_NAME}"; then
+            echo "::error::npmjs.com did not return the byte-identical tarball built and attested by this run."
+            exit 1
+          fi
+          npm install "@honua-io/embed@${PACKAGE_VERSION}" \
+            --prefix "${smoke_dir}" \
+            --registry "https://registry.npmjs.org" \
+            --ignore-scripts
+          cd "${smoke_dir}"
+          node --input-type=module <<'NODE'
+          const embed = await import('@honua-io/embed');
+          if (typeof embed.defineHonuaMapElement !== 'function' ||
+              typeof embed.defineHonuaSceneElement !== 'function') {
+            throw new Error('Public @honua-io/embed package does not expose expected entrypoints.');
+          }
+          NODE
+
+  release:
+    name: Create package release
+    needs: [package-smoke, verify-public]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: honua-mobile-embed-${{ github.run_id }}-packages
+          path: release-assets
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Release ${GITHUB_REF_NAME} already exists; release versions are immutable."
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" release-assets/*.tgz release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "@honua-io/embed ${PACKAGE_VERSION}" \
+            --notes "The tarball was installed and imported anonymously from npmjs.com before this release was created. Its SHA-256 is attached in SHA256SUMS."

@@ -12,7 +12,9 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org"
   },
   "exports": {
     ".": {
@@ -84,14 +86,14 @@
     }
   },
   "devDependencies": {
-    "@angular/compiler": "^22.1.0",
-    "@angular/compiler-cli": "^22.1.0",
-    "@angular/core": "^22.1.0",
+    "@angular/compiler": "^21.2.21",
+    "@angular/compiler-cli": "^21.2.21",
+    "@angular/core": "^21.2.21",
     "@types/react": "^19.2.18",
     "happy-dom": "^20.11.1",
     "react": "^19.2.8",
     "rxjs": "^7.8.2",
-    "typescript": "^7.0.2",
+    "typescript": "~6.0.3",
     "vite": "^8.2.0",
     "vitest": "^4.1.10",
     "vue": "^3.5.40",
