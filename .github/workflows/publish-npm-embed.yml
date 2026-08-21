@@ -34,10 +34,10 @@ jobs:
         working-directory: src/Honua.Embed
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
@@ -134,7 +134,7 @@ jobs:
           NODE
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
           path: |
@@ -145,12 +145,12 @@ jobs:
 
       - name: Attest npm tarball provenance
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: npm-packages/*.tgz
 
       - name: Upload CDN dist artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-embed-${{ github.run_id }}-cdn-dist
           path: src/Honua.Embed/dist/
@@ -178,13 +178,13 @@ jobs:
     environment: public-npm
     steps:
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
           path: npm-packages
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
@@ -236,13 +236,13 @@ jobs:
       contents: read
     steps:
       - name: Download expected package bytes
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
           path: expected
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
@@ -278,9 +278,8 @@ jobs:
             echo "::error::npmjs.com did not return the byte-identical tarball built and attested by this run."
             exit 1
           fi
-          npm install "@honua-io/embed@${PACKAGE_VERSION}" \
+          npm install "${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}" \
             --prefix "${smoke_dir}" \
-            --registry "https://registry.npmjs.org" \
             --ignore-scripts
           cd "${smoke_dir}"
           node --input-type=module <<'NODE'
@@ -299,7 +298,7 @@ jobs:
       contents: write
     steps:
       - name: Download package artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-embed-${{ github.run_id }}-packages
           path: release-assets

@@ -37,10 +37,10 @@ jobs:
       package-version: ${{ steps.version.outputs.package_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -296,7 +296,7 @@ jobs:
           popd >/dev/null
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs/*.nupkg
@@ -304,7 +304,7 @@ jobs:
           retention-days: 90
 
       - name: Upload package checksums
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-checksums
           path: nupkgs/SHA256SUMS
@@ -313,7 +313,7 @@ jobs:
 
       - name: Attest NuGet package provenance
         if: ${{ github.event_name == 'push' }}
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: nupkgs/*.nupkg
 
@@ -334,13 +334,13 @@ jobs:
     environment: public-nuget
     steps:
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -395,7 +395,7 @@ jobs:
       contents: read
     steps:
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -447,13 +447,13 @@ jobs:
       contents: write
     steps:
       - name: Download packages
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: release-assets
 
       - name: Download checksums
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-checksums
           path: release-assets

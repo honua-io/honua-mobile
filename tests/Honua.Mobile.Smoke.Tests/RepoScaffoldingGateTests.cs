@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace Honua.Mobile.Smoke.Tests;
@@ -33,6 +34,7 @@ public sealed class RepoScaffoldingGateTests
         Assert.DoesNotContain("packages: read", workflow);
         Assert.DoesNotContain("dotnet nuget push nupkgs/*.nupkg", workflow);
         Assert.DoesNotContain("--skip-duplicate", workflow);
+        AssertActionsArePinned(workflow);
 
         foreach (var projectPath in MobilePackageProjects)
         {
@@ -56,8 +58,11 @@ public sealed class RepoScaffoldingGateTests
         Assert.Contains("--provenance", workflow);
         Assert.Contains("Verify anonymous npm install", workflow);
         Assert.Contains("cmp --silent", workflow);
+        Assert.Contains("npm install \"${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}\"", workflow);
+        Assert.DoesNotContain("npm install \"@honua-io/embed@${PACKAGE_VERSION}\"", workflow);
         Assert.Contains("Attest npm tarball provenance", workflow);
         Assert.DoesNotContain("npm.pkg.github.com", workflow);
+        AssertActionsArePinned(workflow);
         Assert.Contains("\"registry\": \"https://registry.npmjs.org\"", packageJson);
         Assert.Contains("\"access\": \"public\"", packageJson);
         Assert.Contains("\"provenance\": true", packageJson);
@@ -192,6 +197,14 @@ public sealed class RepoScaffoldingGateTests
             .Descendants(propertyName)
             .Select(element => element.Value)
             .FirstOrDefault() ?? string.Empty;
+    }
+
+    private static void AssertActionsArePinned(string workflow)
+    {
+        foreach (var line in workflow.Split('\n').Where(line => line.Contains("uses:", StringComparison.Ordinal)))
+        {
+            Assert.Matches(@"uses:\s+\S+@[0-9a-f]{40}\s+#\s+v\S+\s*$", line);
+        }
     }
 
     private static string FindRepositoryRoot()
