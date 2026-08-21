@@ -31,30 +31,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      id-token: write
+      attestations: write
+    outputs:
+      package-version: ${{ steps.version.outputs.package_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ github.repository }}-${{ runner.os }}-nuget-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Configure GitHub Packages
-        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
-
-      - name: Resolve package version
+      - name: Create anonymous public NuGet configuration
         shell: bash
         run: |
+          set -euo pipefail
+          public_config="${RUNNER_TEMP}/honua-mobile-public-nuget.config"
+          cat > "${public_config}" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+            </packageSources>
+          </configuration>
+          EOF
+          echo "PUBLIC_NUGET_CONFIG=${public_config}" >> "${GITHUB_ENV}"
+          echo "NUGET_PACKAGES=${RUNNER_TEMP}/honua-mobile-public-nuget/packages" >> "${GITHUB_ENV}"
+          echo "NUGET_HTTP_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/http-cache" >> "${GITHUB_ENV}"
+          echo "NUGET_PLUGINS_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/plugin-cache" >> "${GITHUB_ENV}"
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             package_version="${GITHUB_REF_NAME#mobile-dotnet-v}"
           else
@@ -67,13 +80,49 @@ jobs:
           fi
 
           echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
+          echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Require checked-in package versions to match the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "${PACKAGE_VERSION}" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          expected = sys.argv[1]
+          projects = (
+              Path("src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"),
+              Path("src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"),
+              Path("src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"),
+          )
+          failures = []
+          for project in projects:
+              version = ET.parse(project).findtext(".//PackageVersion", default="").strip()
+              if version != expected:
+                  failures.append(f"{project}: {version!r} != {expected!r}")
+          if failures:
+              raise SystemExit("Release version mismatch:\n" + "\n".join(failures))
+          PY
 
       - name: Verify signed release tag
         if: ${{ github.event_name == 'push' }}
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          git verify-tag "${GITHUB_REF_NAME}"
+          tag_object="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}")"
+          if [[ "$(git cat-file -t "${tag_object}")" != "tag" ]]; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} must be annotated and signed."
+            exit 1
+          fi
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" --jq '.verification.verified')" != "true" ]]; then
+            echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
+            exit 1
+          fi
 
       - name: Block manual publishing outside signed releases
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
@@ -92,8 +141,12 @@ jobs:
           )
 
           for project in "${projects[@]}"; do
+            dotnet restore "${project}" \
+              --configfile "${PUBLIC_NUGET_CONFIG}" \
+              --no-cache
             dotnet build "${project}" \
               --configuration Release \
+              --no-restore \
               /p:TreatWarningsAsErrors=true
           done
 
@@ -108,8 +161,12 @@ jobs:
           )
 
           for project in "${tests[@]}"; do
+            dotnet restore "${project}" \
+              --configfile "${PUBLIC_NUGET_CONFIG}" \
+              --no-cache
             dotnet test "${project}" \
               --configuration Release \
+              --no-restore \
               /p:TreatWarningsAsErrors=true
           done
 
@@ -132,6 +189,11 @@ jobs:
               -p:Version="${PACKAGE_VERSION}"
           done
 
+          (
+            cd nupkgs
+            sha256sum *.nupkg > SHA256SUMS
+          )
+
       - name: Package install smoke
         shell: bash
         run: |
@@ -149,22 +211,10 @@ jobs:
               <clear />
               <add key="local-mobile" value="${GITHUB_WORKSPACE}/nupkgs" />
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-              <add key="github-honua" value="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" />
             </packageSources>
-            <packageSourceCredentials>
-              <github-honua>
-                <add key="Username" value="${{ github.actor }}" />
-                <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
-              </github-honua>
-            </packageSourceCredentials>
             <packageSourceMapping>
               <packageSource key="local-mobile">
                 <package pattern="Honua.Mobile.*" />
-              </packageSource>
-              <packageSource key="github-honua">
-                <package pattern="Geospatial.Grpc" />
-                <package pattern="Honua.Core" />
-                <package pattern="Honua.Sdk.*" />
               </packageSource>
               <packageSource key="nuget.org">
                 <package pattern="*" />
@@ -246,12 +296,26 @@ jobs:
           popd >/dev/null
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs/*.nupkg
           if-no-files-found: error
           retention-days: 90
+
+      - name: Upload package checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-checksums
+          path: nupkgs/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attest NuGet package provenance
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: nupkgs/*.nupkg
 
       - name: Dry-run summary
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
@@ -261,28 +325,151 @@ jobs:
           ls -1 nupkgs/*.nupkg >> "${GITHUB_STEP_SUMMARY}"
 
   publish:
-    name: Publish to GitHub Packages
+    name: Publish package set to nuget.org
     needs: package-smoke
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    environment: public-nuget
     steps:
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Publish to GitHub Packages
+      - name: Refuse an existing public version
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
         run: |
-          dotnet nuget push nupkgs/*.nupkg \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
-            --api-key "${{ secrets.GITHUB_TOKEN }}" \
-            --skip-duplicate
+          set -euo pipefail
+          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          lower_version="$(printf '%s' "${PACKAGE_VERSION}" | tr '[:upper:]' '[:lower:]')"
+          for package_id in "${package_ids[@]}"; do
+            lower_id="$(printf '%s' "${package_id}" | tr '[:upper:]' '[:lower:]')"
+            url="https://api.nuget.org/v3-flatcontainer/${lower_id}/${lower_version}/${lower_id}.${lower_version}.nupkg"
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "${url}")"
+            if [[ "${status}" == "200" ]]; then
+              echo "::error::${package_id} ${PACKAGE_VERSION} already exists on nuget.org; release versions are immutable."
+              exit 1
+            fi
+            if [[ "${status}" != "404" ]]; then
+              echo "::error::Could not prove ${package_id} ${PACKAGE_VERSION} is absent on nuget.org (HTTP ${status})."
+              exit 1
+            fi
+          done
+
+      - name: Publish immutable packages to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NUGET_API_KEY}" ]]; then
+            echo "::error::The public-nuget environment is missing NUGET_API_KEY."
+            exit 1
+          fi
+          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          for package_id in "${package_ids[@]}"; do
+            package="$(find nupkgs -maxdepth 1 -type f -iname "${package_id}.${PACKAGE_VERSION}.nupkg" -print -quit)"
+            if [[ -z "${package}" ]]; then
+              echo "::error::Package artifact for ${package_id} was not found."
+              exit 1
+            fi
+            dotnet nuget push "${package}" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "${NUGET_API_KEY}"
+          done
+
+  verify-public:
+    name: Verify anonymous nuget.org restore
+    needs: [package-smoke, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore all packages without credentials
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "${smoke_dir}"' EXIT
+          cd "${smoke_dir}"
+          cat > NuGet.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+            </packageSources>
+          </configuration>
+          EOF
+          cat > PublicRestore.csproj <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Honua.Mobile.Sdk" Version="${PACKAGE_VERSION}" />
+              <PackageReference Include="Honua.Mobile.Offline" Version="${PACKAGE_VERSION}" />
+              <PackageReference Include="Honua.Mobile.Maui" Version="${PACKAGE_VERSION}" />
+            </ItemGroup>
+          </Project>
+          EOF
+          for attempt in $(seq 1 30); do
+            rm -rf obj
+            if dotnet restore PublicRestore.csproj --configfile NuGet.config --no-cache; then
+              dotnet build PublicRestore.csproj --no-restore --configuration Release
+              exit 0
+            fi
+            if [[ "${attempt}" == "30" ]]; then
+              echo "::error::nuget.org did not serve the complete ${PACKAGE_VERSION} package set anonymously."
+              exit 1
+            fi
+            sleep 10
+          done
+
+  release:
+    name: Create package release
+    needs: [package-smoke, verify-public]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-packages
+          path: release-assets
+
+      - name: Download checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-checksums
+          path: release-assets
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Release ${GITHUB_REF_NAME} already exists; release versions are immutable."
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" release-assets/*.nupkg release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "Honua Mobile .NET ${PACKAGE_VERSION}" \
+            --notes "The three Honua Mobile packages were restored anonymously from nuget.org before this release was created. SHA-256 values are attached in SHA256SUMS."

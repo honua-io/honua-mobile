@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace Honua.Mobile.Smoke.Tests;
@@ -12,23 +13,62 @@ public sealed class RepoScaffoldingGateTests
     ];
 
     [Fact]
-    public void PublishWorkflow_IsLimitedToSignedMobilePackageReleaseTags()
+    public void DotNetPublishWorkflow_IsSignedTagOnlyAndPublicRestoreGated()
     {
         var root = FindRepositoryRoot();
         var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "publish-dotnet-mobile.yml"));
 
         Assert.Contains("- \"mobile-dotnet-v*\"", workflow);
-        Assert.Contains("git verify-tag \"${GITHUB_REF_NAME}\"", workflow);
+        Assert.Contains(".verification.verified", workflow);
         Assert.Contains("Block manual publishing outside signed releases", workflow);
         Assert.Contains("github.event.inputs.dry_run != 'true'", workflow);
         Assert.Contains("Mobile .NET packages publish only from signed mobile-dotnet-v* release tags", workflow);
         Assert.Contains("if: ${{ github.event_name == 'push' }}", workflow);
-        Assert.Contains("dotnet nuget push nupkgs/*.nupkg", workflow);
+        Assert.Contains("environment: public-nuget", workflow);
+        Assert.Contains("NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}", workflow);
+        Assert.Contains("https://api.nuget.org/v3/index.json", workflow);
+        Assert.Contains("Create anonymous public NuGet configuration", workflow);
+        Assert.Contains("Verify anonymous nuget.org restore", workflow);
+        Assert.Contains("Attest NuGet package provenance", workflow);
+        Assert.DoesNotContain("github-honua", workflow);
+        Assert.DoesNotContain("packages: read", workflow);
+        Assert.DoesNotContain("dotnet nuget push nupkgs/*.nupkg", workflow);
+        Assert.DoesNotContain("--skip-duplicate", workflow);
+        AssertActionsArePinned(workflow);
 
         foreach (var projectPath in MobilePackageProjects)
         {
             Assert.Contains(projectPath, workflow);
         }
+    }
+
+    [Fact]
+    public void EmbedPublishWorkflow_IsSignedTagOnlyAndAnonymousInstallGated()
+    {
+        var root = FindRepositoryRoot();
+        var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "publish-npm-embed.yml"));
+        var packageJson = File.ReadAllText(Path.Combine(root, "src", "Honua.Embed", "package.json"));
+
+        Assert.Contains("- \"mobile-embed-v*\"", workflow);
+        Assert.Contains(".verification.verified", workflow);
+        Assert.Contains("environment: public-npm", workflow);
+        Assert.Contains("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}", workflow);
+        Assert.Contains("https://registry.npmjs.org", workflow);
+        Assert.Contains("--access public", workflow);
+        Assert.Contains("--provenance", workflow);
+        Assert.Contains("Verify anonymous npm package", workflow);
+        Assert.Contains("cmp --silent", workflow);
+        Assert.Contains("npm ci --ignore-scripts", workflow);
+        Assert.Contains("tar --extract", workflow);
+        Assert.Contains("--strip-components 1", workflow);
+        Assert.DoesNotContain("npm install \"@honua-io/embed@${PACKAGE_VERSION}\"", workflow);
+        Assert.DoesNotContain("npm install \"${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}\"", workflow);
+        Assert.Contains("Attest npm tarball provenance", workflow);
+        Assert.DoesNotContain("npm.pkg.github.com", workflow);
+        AssertActionsArePinned(workflow);
+        Assert.Contains("\"registry\": \"https://registry.npmjs.org\"", packageJson);
+        Assert.Contains("\"access\": \"public\"", packageJson);
+        Assert.Contains("\"provenance\": true", packageJson);
     }
 
     [Fact]
@@ -90,8 +130,8 @@ public sealed class RepoScaffoldingGateTests
         var guideIndex = File.ReadAllText(Path.Combine(root, "docs", "guides", "README.md"));
         var runbook = File.ReadAllText(Path.Combine(root, "docs", "guides", "repo-scaffolding-gates.md"));
 
-        Assert.Contains("https://github.com/honua-io/honua-server/issues/811", readme);
-        Assert.Contains("mobile SDK roadmap", readme);
+        Assert.Contains("[RELEASING.md](RELEASING.md)", readme);
+        Assert.Contains("honua-server", readme);
         Assert.Contains("[Repo Scaffolding Gates](repo-scaffolding-gates.md)", guideIndex);
         Assert.Contains("honua-server #826", runbook);
         Assert.Contains("dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj --filter RepoScaffolding", runbook);
@@ -160,6 +200,14 @@ public sealed class RepoScaffoldingGateTests
             .Descendants(propertyName)
             .Select(element => element.Value)
             .FirstOrDefault() ?? string.Empty;
+    }
+
+    private static void AssertActionsArePinned(string workflow)
+    {
+        foreach (var line in workflow.Split('\n').Where(line => line.Contains("uses:", StringComparison.Ordinal)))
+        {
+            Assert.Matches(@"uses:\s+\S+@[0-9a-f]{40}\s+#\s+v\S+\s*$", line);
+        }
     }
 
     private static string FindRepositoryRoot()
