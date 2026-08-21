@@ -229,12 +229,15 @@ jobs:
             --provenance
 
   verify-public:
-    name: Verify anonymous npm install
+    name: Verify anonymous npm package
     needs: [package-smoke, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - name: Checkout locked dependency graph
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Download expected package bytes
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -247,14 +250,16 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install and import without credentials
+      - name: Restore the pinned runtime dependency graph
+        working-directory: src/Honua.Embed
+        run: npm ci --ignore-scripts
+
+      - name: Fetch and import without credentials
         env:
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
           PACKAGE_NAME: ${{ needs.package-smoke.outputs.package-name }}
         run: |
           set -euo pipefail
-          smoke_dir="$(mktemp -d)"
-          trap 'rm -rf "${smoke_dir}"' EXIT
           for attempt in $(seq 1 30); do
             if npm view "@honua-io/embed@${PACKAGE_VERSION}" version \
               --registry "https://registry.npmjs.org" >/dev/null 2>&1; then
@@ -278,10 +283,15 @@ jobs:
             echo "::error::npmjs.com did not return the byte-identical tarball built and attested by this run."
             exit 1
           fi
-          npm install "${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}" \
-            --prefix "${smoke_dir}" \
-            --ignore-scripts
-          cd "${smoke_dir}"
+          package_dir="${GITHUB_WORKSPACE}/src/Honua.Embed/node_modules/@honua-io/embed"
+          rm -rf "${package_dir}"
+          mkdir -p "${package_dir}"
+          tar --extract \
+            --gzip \
+            --file "public-package/${PACKAGE_NAME}" \
+            --directory "${package_dir}" \
+            --strip-components 1
+          cd "${GITHUB_WORKSPACE}/src/Honua.Embed"
           node --input-type=module <<'NODE'
           const embed = await import('@honua-io/embed');
           if (typeof embed.defineHonuaMapElement !== 'function' ||

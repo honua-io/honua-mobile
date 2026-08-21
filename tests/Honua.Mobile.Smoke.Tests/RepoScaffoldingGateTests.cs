@@ -56,10 +56,13 @@ public sealed class RepoScaffoldingGateTests
         Assert.Contains("https://registry.npmjs.org", workflow);
         Assert.Contains("--access public", workflow);
         Assert.Contains("--provenance", workflow);
-        Assert.Contains("Verify anonymous npm install", workflow);
+        Assert.Contains("Verify anonymous npm package", workflow);
         Assert.Contains("cmp --silent", workflow);
-        Assert.Contains("npm install \"${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}\"", workflow);
+        Assert.Contains("npm ci --ignore-scripts", workflow);
+        Assert.Contains("tar --extract", workflow);
+        Assert.Contains("--strip-components 1", workflow);
         Assert.DoesNotContain("npm install \"@honua-io/embed@${PACKAGE_VERSION}\"", workflow);
+        Assert.DoesNotContain("npm install \"${GITHUB_WORKSPACE}/public-package/${PACKAGE_NAME}\"", workflow);
         Assert.Contains("Attest npm tarball provenance", workflow);
         Assert.DoesNotContain("npm.pkg.github.com", workflow);
         AssertActionsArePinned(workflow);
