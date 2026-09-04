@@ -734,12 +734,12 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.9
         with:
           sarif_file: trivy-results.sarif
 
       - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@v4.37.3
+        uses: github/codeql-action/init@v4.37.9
         with:
           languages: csharp
 
@@ -761,7 +761,7 @@ jobs:
           dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.3
+        uses: github/codeql-action/analyze@v4.37.9
 
   quality-gates:
     name: Quality Gates
