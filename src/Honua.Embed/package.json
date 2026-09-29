@@ -102,6 +102,6 @@
     "@deck.gl/layers": "^9.3.7",
     "@deck.gl/mapbox": "^9.3.7",
     "cesium": "^1.143.0",
-    "maplibre-gl": "^6.1.0"
+    "maplibre-gl": "^6.4.1"
   }
 }
