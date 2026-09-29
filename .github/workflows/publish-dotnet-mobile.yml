@@ -245,7 +245,7 @@ jobs:
           using Honua.Mobile.Offline.GeoPackage;
           using Honua.Mobile.Offline.Sync;
           using Honua.Mobile.Sdk;
-          using Honua.Mobile.Sdk.Models;
+          using Honua.Sdk.Abstractions.Features;
           using Microsoft.Extensions.DependencyInjection;
 
           var services = new ServiceCollection();
