@@ -89,21 +89,21 @@
     "@angular/compiler": "^21.2.21",
     "@angular/compiler-cli": "^21.2.21",
     "@angular/core": "^21.2.21",
-    "@types/react": "^19.2.18",
-    "happy-dom": "^20.11.1",
-    "react": "^19.2.8",
+    "@types/react": "^19.3.0",
+    "happy-dom": "^20.14.5",
+    "react": "^19.3.0",
     "rxjs": "^7.8.2",
     "typescript": "~6.0.3",
-    "vite": "^8.2.0",
-    "vitest": "^4.1.11",
-    "vue": "^3.5.40",
-    "zone.js": "^0.16.2"
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2",
+    "vue": "^3.5.43",
+    "zone.js": "^0.16.3"
   },
   "dependencies": {
-    "@deck.gl/core": "^9.3.7",
-    "@deck.gl/layers": "^9.3.7",
-    "@deck.gl/mapbox": "^9.3.7",
-    "cesium": "^1.143.0",
-    "maplibre-gl": "^6.4.1"
+    "@deck.gl/core": "^9.4.0",
+    "@deck.gl/layers": "^9.4.0",
+    "@deck.gl/mapbox": "^9.4.0",
+    "cesium": "^1.145.0",
+    "maplibre-gl": "^6.11.2"
   }
 }
