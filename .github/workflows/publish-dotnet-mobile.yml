@@ -234,7 +234,7 @@ jobs:
           </configuration>
           EOF
 
-          dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
+          dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.7
           dotnet add package Honua.Mobile.Sdk --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Offline --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Maui --version "${PACKAGE_VERSION}"
