@@ -35,6 +35,7 @@ jobs:
       attestations: write
     outputs:
       package-version: ${{ steps.version.outputs.package_version }}
+      tag-object: ${{ steps.verify-tag.outputs.tag_object }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -107,6 +108,7 @@ jobs:
           PY
 
       - name: Verify signed release tag
+        id: verify-tag
         if: ${{ github.event_name == 'push' }}
         shell: bash
         env:
@@ -123,6 +125,15 @@ jobs:
             echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
             exit 1
           fi
+          # Bind the verified tag to the commit this run checked out and built:
+          # a tag moved after the push event must not lend its signature to
+          # artifacts built from a different commit.
+          tag_commit="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Verified tag ${GITHUB_REF_NAME} points at ${tag_commit}, but this run built ${GITHUB_SHA}."
+            exit 1
+          fi
+          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
 
       - name: Block manual publishing outside signed releases
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
@@ -425,27 +436,55 @@ jobs:
             </packageSources>
           </configuration>
           EOF
-          cat > PublicRestore.csproj <<EOF
+          # Restore each package as the only top-level reference so the
+          # dependency/version binding encoded in each nuspec is exercised
+          # (a consumer of Honua.Mobile.Maui gets Sdk/Offline transitively).
+          for package_id in Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui; do
+            project_dir="${smoke_dir}/${package_id}"
+            mkdir -p "${project_dir}"
+            cat > "${project_dir}/PublicRestore.csproj" <<EOF
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
             <ItemGroup>
-              <PackageReference Include="Honua.Mobile.Sdk" Version="${PACKAGE_VERSION}" />
-              <PackageReference Include="Honua.Mobile.Offline" Version="${PACKAGE_VERSION}" />
-              <PackageReference Include="Honua.Mobile.Maui" Version="${PACKAGE_VERSION}" />
+              <PackageReference Include="${package_id}" Version="${PACKAGE_VERSION}" />
             </ItemGroup>
           </Project>
           EOF
-          for attempt in $(seq 1 30); do
-            rm -rf obj
-            if dotnet restore PublicRestore.csproj --configfile NuGet.config --no-cache; then
-              dotnet build PublicRestore.csproj --no-restore --configuration Release
-              exit 0
-            fi
-            if [[ "${attempt}" == "30" ]]; then
-              echo "::error::nuget.org did not serve the complete ${PACKAGE_VERSION} package set anonymously."
+            restored=false
+            for attempt in $(seq 1 30); do
+              rm -rf "${project_dir}/obj"
+              if dotnet restore "${project_dir}/PublicRestore.csproj" --configfile NuGet.config --no-cache; then
+                restored=true
+                break
+              fi
+              sleep 10
+            done
+            if [[ "${restored}" != "true" ]]; then
+              echo "::error::nuget.org did not serve ${package_id} ${PACKAGE_VERSION} and its dependency graph anonymously."
               exit 1
             fi
-            sleep 10
+            python3 - "${project_dir}/obj/project.assets.json" "${package_id}" "${PACKAGE_VERSION}" <<'PY'
+          import json
+          import sys
+
+          assets_path, top_level, expected = sys.argv[1:4]
+          with open(assets_path, encoding="utf-8") as handle:
+              libraries = json.load(handle)["libraries"]
+          mobile = {}
+          for key, library in libraries.items():
+              if library.get("type") != "package":
+                  continue
+              name, version = key.split("/", 1)
+              if name.lower().startswith("honua.mobile."):
+                  mobile[name] = version
+          if top_level not in mobile:
+              raise SystemExit(f"{top_level} was not restored")
+          mixed = {name: version for name, version in mobile.items() if version.lower() != expected.lower()}
+          if mixed:
+              raise SystemExit(f"{top_level} {expected} resolved a mixed Honua.Mobile train: {mixed}")
+          print(f"{top_level} {expected} restored with Honua.Mobile graph {sorted(mobile.items())}")
+          PY
+            dotnet build "${project_dir}/PublicRestore.csproj" --no-restore --configuration Release
           done
 
   release:
@@ -471,8 +510,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+          TAG_OBJECT: ${{ needs.package-smoke.outputs.tag-object }}
         run: |
           set -euo pipefail
+          current_tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ -z "${TAG_OBJECT}" || "${current_tag_object}" != "${TAG_OBJECT}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} no longer names the signed tag object verified by this run."
+            exit 1
+          fi
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "::error::Release ${GITHUB_REF_NAME} already exists; release versions are immutable."
             exit 1

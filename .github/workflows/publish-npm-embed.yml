@@ -28,6 +28,7 @@ jobs:
       attestations: write
     outputs:
       package-version: ${{ steps.version.outputs.package_version }}
+      tag-object: ${{ steps.verify-tag.outputs.tag_object }}
       package-name: ${{ steps.pack.outputs.package_name }}
     defaults:
       run:
@@ -70,6 +71,7 @@ jobs:
           echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify signed release tag
+        id: verify-tag
         if: ${{ github.event_name == 'push' }}
         shell: bash
         env:
@@ -86,6 +88,15 @@ jobs:
             echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
             exit 1
           fi
+          # Bind the verified tag to the commit this run checked out and built:
+          # a tag moved after the push event must not lend its signature to
+          # artifacts built from a different commit.
+          tag_commit="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Verified tag ${GITHUB_REF_NAME} points at ${tag_commit}, but this run built ${GITHUB_SHA}."
+            exit 1
+          fi
+          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
 
       - name: Block manual publishing outside signed releases
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
@@ -284,27 +295,30 @@ jobs:
           PACKAGE_NAME: ${{ needs.package-smoke.outputs.package-name }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            if npm view "@honua-io/embed@${PACKAGE_VERSION}" version \
-              --registry "https://registry.npmjs.org" >/dev/null 2>&1; then
-              break
-            fi
-            if [[ "${attempt}" == "30" ]]; then
-              echo "::error::npmjs.com did not serve @honua-io/embed ${PACKAGE_VERSION} anonymously."
-              exit 1
-            fi
-            sleep 10
-          done
           (
             cd expected
             sha256sum --check SHA256SUMS
           )
-          mkdir public-package
-          npm pack "@honua-io/embed@${PACKAGE_VERSION}" \
-            --pack-destination public-package \
-            --registry "https://registry.npmjs.org" >/dev/null
-          if ! cmp --silent "expected/${PACKAGE_NAME}" "public-package/${PACKAGE_NAME}"; then
-            echo "::error::npmjs.com did not return the byte-identical tarball built and attested by this run."
+          # Retry the actual tarball fetch and byte comparison, not only the
+          # metadata lookup: registry metadata can become visible before the
+          # tarball is served, and a failure here happens after the immutable
+          # version is already published.
+          matched=false
+          for attempt in $(seq 1 30); do
+            rm -rf public-package
+            mkdir public-package
+            if npm pack "@honua-io/embed@${PACKAGE_VERSION}" --pack-destination public-package --registry "https://registry.npmjs.org" >/dev/null 2>&1 && [[ -f "public-package/${PACKAGE_NAME}" ]]; then
+              if cmp --silent "expected/${PACKAGE_NAME}" "public-package/${PACKAGE_NAME}"; then
+                matched=true
+                break
+              fi
+              echo "::error::npmjs.com did not return the byte-identical tarball built and attested by this run."
+              exit 1
+            fi
+            sleep 10
+          done
+          if [[ "${matched}" != "true" ]]; then
+            echo "::error::npmjs.com did not serve the @honua-io/embed ${PACKAGE_VERSION} tarball anonymously."
             exit 1
           fi
           package_dir="${GITHUB_WORKSPACE}/src/Honua.Embed/node_modules/@honua-io/embed"
@@ -341,8 +355,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+          TAG_OBJECT: ${{ needs.package-smoke.outputs.tag-object }}
         run: |
           set -euo pipefail
+          current_tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ -z "${TAG_OBJECT}" || "${current_tag_object}" != "${TAG_OBJECT}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} no longer names the signed tag object verified by this run."
+            exit 1
+          fi
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "::error::Release ${GITHUB_REF_NAME} already exists; release versions are immutable."
             exit 1
