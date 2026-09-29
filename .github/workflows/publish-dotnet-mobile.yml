@@ -246,6 +246,7 @@ jobs:
           using Honua.Mobile.Offline.Sync;
           using Honua.Mobile.Sdk;
           using Honua.Sdk.Abstractions.Features;
+          using Honua.Sdk.Offline.Abstractions;
           using Microsoft.Extensions.DependencyInjection;
 
           var services = new ServiceCollection();
@@ -259,15 +260,30 @@ jobs:
               })
               .AddHonuaMobileFieldCollection()
               .AddHonuaApiOfflineUploader()
-              .AddHonuaGeoPackageOfflineSync(
+              .AddHonuaSdkGeoPackageOfflineSync(
                   new GeoPackageSyncStoreOptions
                   {
                       DatabasePath = Path.Combine(Path.GetTempPath(), "honua-mobile-package-smoke.gpkg")
                   },
-                  new OfflineSyncEngineOptions
+                  new OfflinePackageManifest
                   {
-                      BatchSize = 1,
-                      ConflictStrategy = SyncConflictStrategy.ManualReview
+                      PackageId = "honua-mobile-package-smoke",
+                      Sources =
+                      [
+                          new OfflineSourceDescriptor
+                          {
+                              SourceId = "field/FeatureServer/0",
+                              Source = new SourceDescriptor
+                              {
+                                  Id = "field-sites",
+                                  Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                  Locator = new SourceLocator { ServiceId = "field", LayerId = 0 },
+                              },
+                              Where = "1=1",
+                              ReturnGeometry = true,
+                              PageSize = 1,
+                          },
+                      ],
                   });
 
           _ = new QueryFeaturesRequest
