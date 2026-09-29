@@ -13,8 +13,9 @@ the SDK to meet before it advances along that track.
 
 honua-mobile pins the SDK release train as a single property:
 
-- Pinned version: `1.3.0` (train packages published from `honua-sdk-dotnet`
-  trunk to GitHub Packages). Note: the `<HonuaSdkDotNetTrainReleaseUrl>` /
+- Pinned version: `1.10.0` (train packages published from `honua-sdk-dotnet`
+  to nuget.org, restorable anonymously, and mirrored to GitHub Packages;
+  `NuGet.config` resolves `Honua.Sdk.*` and `Geospatial.Grpc` from nuget.org). Note: the `<HonuaSdkDotNetTrainReleaseUrl>` /
   `<HonuaSdkDotNetTrainReleaseCommit>` / `<HonuaSdkDotNetTrainReleasePublishedAt>`
   provenance properties record the last manual refresh (currently the `1.0.0`
   train run) and are not updated on routine version bumps — the authoritative

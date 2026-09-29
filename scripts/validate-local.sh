@@ -107,10 +107,7 @@ make_nuget_config() {
       <package pattern="*" />
     </packageSource>
     <packageSource key="github-honua">
-      <package pattern="Geospatial.Grpc" />
-      <package pattern="Honua.Core" />
       <package pattern="Honua.Mobile.*" />
-      <package pattern="Honua.Sdk.*" />
     </packageSource>
   </packageSourceMapping>
 </configuration>
