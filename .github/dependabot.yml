@@ -26,6 +26,11 @@ updates:
       # ngc (build:angular) depends on. Stay on TS 6 until Angular supports 7.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # The Angular wrapper declares a peer range of ">=17 <22", so it must
+      # not be compiled with an Angular major outside that range. Widen the
+      # peer range deliberately before moving the compiler to Angular 22+.
+      - dependency-name: "@angular/*"
+        update-types: ["version-update:semver-major"]
     groups:
       embed:
         patterns:

@@ -28,6 +28,12 @@ This guide will help you install and configure the Honua Mobile SDK for .NET dev
 
 ## Installation Methods
 
+The package commands below apply to versions visible on nuget.org. Honua's
+release gate restores the complete package set and its `Honua.Sdk.*`
+dependencies anonymously before declaring a mobile release complete. Do not
+add the private GitHub Packages feed to work around a version that is absent
+from nuget.org; use a source checkout until that public cut completes.
+
 ### Method 1: Project Templates (Recommended)
 
 The fastest way to get started is using our project templates:

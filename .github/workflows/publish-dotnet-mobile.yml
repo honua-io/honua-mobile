@@ -31,30 +31,44 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      id-token: write
+      attestations: write
+    outputs:
+      package-version: ${{ steps.version.outputs.package_version }}
+      tag-object: ${{ steps.verify-tag.outputs.tag_object }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ github.repository }}-${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ github.repository }}-${{ runner.os }}-nuget-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Configure GitHub Packages
-        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
-
-      - name: Resolve package version
+      - name: Create anonymous public NuGet configuration
         shell: bash
         run: |
+          set -euo pipefail
+          public_config="${RUNNER_TEMP}/honua-mobile-public-nuget.config"
+          cat > "${public_config}" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+            </packageSources>
+          </configuration>
+          EOF
+          echo "PUBLIC_NUGET_CONFIG=${public_config}" >> "${GITHUB_ENV}"
+          echo "NUGET_PACKAGES=${RUNNER_TEMP}/honua-mobile-public-nuget/packages" >> "${GITHUB_ENV}"
+          echo "NUGET_HTTP_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/http-cache" >> "${GITHUB_ENV}"
+          echo "NUGET_PLUGINS_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/plugin-cache" >> "${GITHUB_ENV}"
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             package_version="${GITHUB_REF_NAME#mobile-dotnet-v}"
           else
@@ -67,13 +81,59 @@ jobs:
           fi
 
           echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
+          echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Verify signed release tag
-        if: ${{ github.event_name == 'push' }}
+      - name: Require checked-in package versions to match the release
         shell: bash
         run: |
+          set -euo pipefail
+          python - "${PACKAGE_VERSION}" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          expected = sys.argv[1]
+          projects = (
+              Path("src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"),
+              Path("src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"),
+              Path("src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"),
+          )
+          failures = []
+          for project in projects:
+              version = ET.parse(project).findtext(".//PackageVersion", default="").strip()
+              if version != expected:
+                  failures.append(f"{project}: {version!r} != {expected!r}")
+          if failures:
+              raise SystemExit("Release version mismatch:\n" + "\n".join(failures))
+          PY
+
+      - name: Verify signed release tag
+        id: verify-tag
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          git verify-tag "${GITHUB_REF_NAME}"
+          tag_object="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}")"
+          if [[ "$(git cat-file -t "${tag_object}")" != "tag" ]]; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} must be annotated and signed."
+            exit 1
+          fi
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" --jq '.verification.verified')" != "true" ]]; then
+            echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+          # Bind the verified tag to the commit this run checked out and built:
+          # a tag moved after the push event must not lend its signature to
+          # artifacts built from a different commit.
+          tag_commit="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")"
+          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Verified tag ${GITHUB_REF_NAME} points at ${tag_commit}, but this run built ${GITHUB_SHA}."
+            exit 1
+          fi
+          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
 
       - name: Block manual publishing outside signed releases
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
@@ -92,8 +152,12 @@ jobs:
           )
 
           for project in "${projects[@]}"; do
+            dotnet restore "${project}" \
+              --configfile "${PUBLIC_NUGET_CONFIG}" \
+              --no-cache
             dotnet build "${project}" \
               --configuration Release \
+              --no-restore \
               /p:TreatWarningsAsErrors=true
           done
 
@@ -108,8 +172,12 @@ jobs:
           )
 
           for project in "${tests[@]}"; do
+            dotnet restore "${project}" \
+              --configfile "${PUBLIC_NUGET_CONFIG}" \
+              --no-cache
             dotnet test "${project}" \
               --configuration Release \
+              --no-restore \
               /p:TreatWarningsAsErrors=true
           done
 
@@ -132,6 +200,11 @@ jobs:
               -p:Version="${PACKAGE_VERSION}"
           done
 
+          (
+            cd nupkgs
+            sha256sum *.nupkg > SHA256SUMS
+          )
+
       - name: Package install smoke
         shell: bash
         run: |
@@ -149,22 +222,10 @@ jobs:
               <clear />
               <add key="local-mobile" value="${GITHUB_WORKSPACE}/nupkgs" />
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-              <add key="github-honua" value="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" />
             </packageSources>
-            <packageSourceCredentials>
-              <github-honua>
-                <add key="Username" value="${{ github.actor }}" />
-                <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
-              </github-honua>
-            </packageSourceCredentials>
             <packageSourceMapping>
               <packageSource key="local-mobile">
                 <package pattern="Honua.Mobile.*" />
-              </packageSource>
-              <packageSource key="github-honua">
-                <package pattern="Geospatial.Grpc" />
-                <package pattern="Honua.Core" />
-                <package pattern="Honua.Sdk.*" />
               </packageSource>
               <packageSource key="nuget.org">
                 <package pattern="*" />
@@ -173,7 +234,7 @@ jobs:
           </configuration>
           EOF
 
-          dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.0
+          dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.7
           dotnet add package Honua.Mobile.Sdk --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Offline --version "${PACKAGE_VERSION}"
           dotnet add package Honua.Mobile.Maui --version "${PACKAGE_VERSION}"
@@ -184,7 +245,8 @@ jobs:
           using Honua.Mobile.Offline.GeoPackage;
           using Honua.Mobile.Offline.Sync;
           using Honua.Mobile.Sdk;
-          using Honua.Mobile.Sdk.Models;
+          using Honua.Sdk.Abstractions.Features;
+          using Honua.Sdk.Offline.Abstractions;
           using Microsoft.Extensions.DependencyInjection;
 
           var services = new ServiceCollection();
@@ -198,15 +260,30 @@ jobs:
               })
               .AddHonuaMobileFieldCollection()
               .AddHonuaApiOfflineUploader()
-              .AddHonuaGeoPackageOfflineSync(
+              .AddHonuaSdkGeoPackageOfflineSync(
                   new GeoPackageSyncStoreOptions
                   {
                       DatabasePath = Path.Combine(Path.GetTempPath(), "honua-mobile-package-smoke.gpkg")
                   },
-                  new OfflineSyncEngineOptions
+                  new OfflinePackageManifest
                   {
-                      BatchSize = 1,
-                      ConflictStrategy = SyncConflictStrategy.ManualReview
+                      PackageId = "honua-mobile-package-smoke",
+                      Sources =
+                      [
+                          new OfflineSourceDescriptor
+                          {
+                              SourceId = "field/FeatureServer/0",
+                              Source = new SourceDescriptor
+                              {
+                                  Id = "field-sites",
+                                  Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                                  Locator = new SourceLocator { ServiceId = "field", LayerId = 0 },
+                              },
+                              Where = "1=1",
+                              ReturnGeometry = true,
+                              PageSize = 1,
+                          },
+                      ],
                   });
 
           _ = new QueryFeaturesRequest
@@ -246,12 +323,26 @@ jobs:
           popd >/dev/null
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs/*.nupkg
           if-no-files-found: error
           retention-days: 90
+
+      - name: Upload package checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-checksums
+          path: nupkgs/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attest NuGet package provenance
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: nupkgs/*.nupkg
 
       - name: Dry-run summary
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
@@ -261,28 +352,194 @@ jobs:
           ls -1 nupkgs/*.nupkg >> "${GITHUB_STEP_SUMMARY}"
 
   publish:
-    name: Publish to GitHub Packages
+    name: Publish package set to nuget.org
     needs: package-smoke
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      # nuget.org Trusted Publishing exchanges this job's OIDC identity for a
+      # short-lived API key; no long-lived NUGET_API_KEY secret exists.
+      id-token: write
+    environment: public-nuget
     steps:
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: honua-mobile-dotnet-${{ github.run_id }}-packages
           path: nupkgs
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Publish to GitHub Packages
+      - name: Refuse an existing public version
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
         run: |
-          dotnet nuget push nupkgs/*.nupkg \
-            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
-            --api-key "${{ secrets.GITHUB_TOKEN }}" \
-            --skip-duplicate
+          set -euo pipefail
+          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          lower_version="$(printf '%s' "${PACKAGE_VERSION}" | tr '[:upper:]' '[:lower:]')"
+          for package_id in "${package_ids[@]}"; do
+            lower_id="$(printf '%s' "${package_id}" | tr '[:upper:]' '[:lower:]')"
+            url="https://api.nuget.org/v3-flatcontainer/${lower_id}/${lower_version}/${lower_id}.${lower_version}.nupkg"
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "${url}")"
+            if [[ "${status}" == "200" ]]; then
+              echo "::error::${package_id} ${PACKAGE_VERSION} already exists on nuget.org; release versions are immutable."
+              exit 1
+            fi
+            if [[ "${status}" != "404" ]]; then
+              echo "::error::Could not prove ${package_id} ${PACKAGE_VERSION} is absent on nuget.org (HTTP ${status})."
+              exit 1
+            fi
+          done
+
+      - name: Exchange OIDC for a short-lived NuGet key (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: makanikai
+
+      - name: Publish immutable packages to nuget.org
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NUGET_API_KEY}" ]]; then
+            echo "::error::Trusted Publishing exchange produced no nuget.org key; refusing a partial release."
+            exit 1
+          fi
+          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          for package_id in "${package_ids[@]}"; do
+            package="$(find nupkgs -maxdepth 1 -type f -iname "${package_id}.${PACKAGE_VERSION}.nupkg" -print -quit)"
+            if [[ -z "${package}" ]]; then
+              echo "::error::Package artifact for ${package_id} was not found."
+              exit 1
+            fi
+            dotnet nuget push "${package}" \
+              --source "https://api.nuget.org/v3/index.json" \
+              --api-key "${NUGET_API_KEY}"
+          done
+
+  verify-public:
+    name: Verify anonymous nuget.org restore
+    needs: [package-smoke, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore all packages without credentials
+        env:
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "${smoke_dir}"' EXIT
+          cd "${smoke_dir}"
+          cat > NuGet.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+            </packageSources>
+          </configuration>
+          EOF
+          # Restore each package as the only top-level reference so the
+          # dependency/version binding encoded in each nuspec is exercised
+          # (a consumer of Honua.Mobile.Maui gets Sdk/Offline transitively).
+          for package_id in Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui; do
+            project_dir="${smoke_dir}/${package_id}"
+            mkdir -p "${project_dir}"
+            cat > "${project_dir}/PublicRestore.csproj" <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="${package_id}" Version="${PACKAGE_VERSION}" />
+            </ItemGroup>
+          </Project>
+          EOF
+            restored=false
+            for attempt in $(seq 1 30); do
+              rm -rf "${project_dir}/obj"
+              if dotnet restore "${project_dir}/PublicRestore.csproj" --configfile NuGet.config --no-cache; then
+                restored=true
+                break
+              fi
+              sleep 10
+            done
+            if [[ "${restored}" != "true" ]]; then
+              echo "::error::nuget.org did not serve ${package_id} ${PACKAGE_VERSION} and its dependency graph anonymously."
+              exit 1
+            fi
+            python3 - "${project_dir}/obj/project.assets.json" "${package_id}" "${PACKAGE_VERSION}" <<'PY'
+          import json
+          import sys
+
+          assets_path, top_level, expected = sys.argv[1:4]
+          with open(assets_path, encoding="utf-8") as handle:
+              libraries = json.load(handle)["libraries"]
+          mobile = {}
+          for key, library in libraries.items():
+              if library.get("type") != "package":
+                  continue
+              name, version = key.split("/", 1)
+              if name.lower().startswith("honua.mobile."):
+                  mobile[name] = version
+          if top_level not in mobile:
+              raise SystemExit(f"{top_level} was not restored")
+          mixed = {name: version for name, version in mobile.items() if version.lower() != expected.lower()}
+          if mixed:
+              raise SystemExit(f"{top_level} {expected} resolved a mixed Honua.Mobile train: {mixed}")
+          print(f"{top_level} {expected} restored with Honua.Mobile graph {sorted(mobile.items())}")
+          PY
+            dotnet build "${project_dir}/PublicRestore.csproj" --no-restore --configuration Release
+          done
+
+  release:
+    name: Create package release
+    needs: [package-smoke, verify-public]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-packages
+          path: release-assets
+
+      - name: Download checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: honua-mobile-dotnet-${{ github.run_id }}-checksums
+          path: release-assets
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+          TAG_OBJECT: ${{ needs.package-smoke.outputs.tag-object }}
+        run: |
+          set -euo pipefail
+          current_tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ -z "${TAG_OBJECT}" || "${current_tag_object}" != "${TAG_OBJECT}" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} no longer names the signed tag object verified by this run."
+            exit 1
+          fi
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "::error::Release ${GITHUB_REF_NAME} already exists; release versions are immutable."
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" release-assets/*.nupkg release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "Honua Mobile .NET ${PACKAGE_VERSION}" \
+            --notes "The three Honua Mobile packages were restored anonymously from nuget.org before this release was created. SHA-256 values are attached in SHA256SUMS."

@@ -1,5 +1,10 @@
 # @honua-io/embed
 
+Published versions install anonymously from npmjs.com. The release workflow
+does not consider a version shipped until a clean, credential-free install and
+import pass; if the requested version is not present in the public registry,
+build the package from this checkout rather than configuring a private feed.
+
 Framework-agnostic web components for embedding Honua map and 3D scene views in SaaS and ISV applications.
 
 ## Install
