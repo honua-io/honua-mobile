@@ -21,6 +21,11 @@ updates:
     directory: "/src/Honua.Embed"
     schedule:
       interval: "weekly"
+    ignore:
+      # TypeScript 7 (native port) drops the JS compiler API that Angular's
+      # ngc (build:angular) depends on. Stay on TS 6 until Angular supports 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       embed:
         patterns:

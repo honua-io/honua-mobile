@@ -90,8 +90,9 @@ public sealed class RepoScaffoldingGateTests
         var guideIndex = File.ReadAllText(Path.Combine(root, "docs", "guides", "README.md"));
         var runbook = File.ReadAllText(Path.Combine(root, "docs", "guides", "repo-scaffolding-gates.md"));
 
-        Assert.Contains("https://github.com/honua-io/honua-server/issues/811", readme);
-        Assert.Contains("mobile SDK roadmap", readme);
+        Assert.Contains("https://github.com/honua-io/honua-server)", readme);
+        Assert.Contains("[SDK Contract Stability Roadmap](docs/guides/sdk-contract-stability.md)", readme);
+        Assert.Contains("[Repo Scaffolding Gates](docs/guides/repo-scaffolding-gates.md)", readme);
         Assert.Contains("[Repo Scaffolding Gates](repo-scaffolding-gates.md)", guideIndex);
         Assert.Contains("honua-server #826", runbook);
         Assert.Contains("dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj --filter RepoScaffolding", runbook);
