@@ -7,13 +7,13 @@
   <ItemGroup>
     <PackageReference Include="Honua.Sdk.Abstractions" Version="$(HonuaSdkDotNetTrainVersion)" />
     <PackageReference Include="Honua.Sdk.Offline" Version="$(HonuaSdkDotNetTrainVersion)" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <!--
       Microsoft.Data.Sqlite 10.0.x resolves SQLitePCLRaw.lib.e_sqlite3 2.1.11,
       which carries GHSA-2m69-gcr7-jv3q (vulnerable <= 2.1.11). Lift the native
       library to the patched 2.1.x line so package consumers do not inherit it.
     -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
