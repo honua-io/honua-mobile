@@ -90,7 +90,7 @@
     "@angular/compiler-cli": "^21.2.21",
     "@angular/core": "^21.2.21",
     "@types/react": "^19.3.0",
-    "happy-dom": "^20.14.5",
+    "happy-dom": "^21.0.4",
     "react": "^19.3.0",
     "rxjs": "^7.8.2",
     "typescript": "~6.0.3",
