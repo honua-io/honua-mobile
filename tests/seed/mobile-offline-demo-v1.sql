@@ -1,5 +1,5 @@
 -- Copyright (c) Honua. All rights reserved.
--- Licensed under the Elastic License 2.0. See LICENSE in the project root.
+-- Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
 --
 -- Deterministic SDK-backed mobile offline field operations fixture.
 -- Safe to re-run: this seed removes only the fixture-owned service, scene,
