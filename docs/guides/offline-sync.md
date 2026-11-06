@@ -250,8 +250,9 @@ validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 | `HONUA_MOBILE_LIVE_SERVER_TESTS` | Yes | Set to `1` or `true` to enable live image tests. |
 | `HONUA_MOBILE_LIVE_SERVER_BASE_URL` | No | Existing Honua base URL. If omitted, Testcontainers starts the image. |
 | `HONUA_MOBILE_LIVE_SERVER_IMAGE` | No | Honua Server image. Defaults to `honuaio/honua-server:latest`. |
-| `HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE` | No | PostGIS image for Testcontainers. Defaults to `postgis/postgis:17-3.5-alpine`. |
-| `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` | No | SQL fixture applied to the Testcontainers PostGIS database before tests run. Use the `honua-server#895` mobile fixture seed when available. |
+| `HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE` | No | PostGIS and pgRouting image for Testcontainers. Defaults to `pgrouting/pgrouting:17-3.5-3.7.3@sha256:5e6767abbd1fd9ead84c9988aa31bac71ca292ef8a1fc2e4a5ee2b613ac6a7bb`. |
+| `HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL` | No | SQL fixture applied after Honua creates its database schema. Use the vendored `tests/seed/mobile-offline-demo-v1.sql`. |
+| `HONUA_MOBILE_LIVE_SERVER_ROUTING_SQL` | No | Road graph applied after the main fixture. Use `tests/seed/mobile-routing.v1.sql` for the live routing tests. |
 | `HONUA_MOBILE_LIVE_SERVER_READY_PATH` | No | Readiness path. Defaults to `/healthz/ready`. |
 | `HONUA_MOBILE_LIVE_SERVER_SERVICE_ID` | No | FeatureServer service id. Defaults to `mobile_offline_demo`. |
 | `HONUA_MOBILE_LIVE_SERVER_LAYER_ID` | No | Editable FeatureServer layer id. Defaults to `68910`. |
@@ -265,11 +266,12 @@ validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 | `HONUA_MOBILE_LIVE_SERVER_OAUTH_REFRESH_PATH` | No | OAuth refresh path. Defaults to `/oauth/token`. |
 | `HONUA_MOBILE_LIVE_SERVER_EXCEPTION_UPLOAD_PATH` | No | Mobile exception ingestion path. Defaults to `/api/mobile/exceptions`. |
 
-Example using a local `honua-server` checkout fixture seed:
+Example using the fixtures from this repository root:
 
 ```bash
 HONUA_MOBILE_LIVE_SERVER_TESTS=1 \
-HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=/home/makani/honua-server/tests/seed/mobile-offline-demo-v1.sql \
+HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL="$PWD/tests/seed/mobile-offline-demo-v1.sql" \
+HONUA_MOBILE_LIVE_SERVER_ROUTING_SQL="$PWD/tests/seed/mobile-routing.v1.sql" \
 dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
 ```
 

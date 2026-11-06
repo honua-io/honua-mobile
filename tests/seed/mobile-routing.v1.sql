@@ -3,6 +3,7 @@
 
 BEGIN;
 
+-- Match the live routing stops with one connected, bidirectional road chain.
 INSERT INTO public.ways_vertices_pgr (id, the_geom)
 SELECT id, ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
 FROM (VALUES

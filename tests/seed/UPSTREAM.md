@@ -8,9 +8,12 @@ seed SQL that lives upstream in
 It is consumed by the `Live Server Integration` GitHub Actions workflow
 (`.github/workflows/live-server-integration.yml`) and by local runs of
 `LiveHonuaServerInteractionTests` -- the fixture loads it into the
-PostGIS container before the live Honua server starts, so the
-`mobile_offline_demo` service, layers, scene, and routing assets are
-registered before any test runs.
+database after Honua Server starts and runs its schema migrations, registering
+the `mobile_offline_demo` service, layers, and scene before tests run.
+The fixture declares attachment support through the admin metadata API.
+
+`mobile-routing.v1.sql` is a locally owned road graph, loaded through
+`HONUA_MOBILE_LIVE_SERVER_ROUTING_SQL`. The upstream sync script does not modify it.
 
 ## Why vendor it?
 
