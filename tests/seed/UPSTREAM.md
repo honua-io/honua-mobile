@@ -27,10 +27,10 @@ section below.
 | --- | --- |
 | Upstream path | `tests/seed/mobile-offline-demo-v1.sql` |
 | Upstream repo | `honua-io/honua-server` |
-| Upstream blob SHA | `3420275023fa3cee45b1a4517ee1ac5cc74e9a55` |
-| Upstream `trunk` commit at fetch time | `5c179776929e4b62fdce11a5bc2e1e0369897466` |
-| Vendored on | 2026-06-20 |
-| Bytes | 14684 |
+| Upstream blob SHA | `8f684186c6e564b6ebbfdb4d2138dbb4d3429e2c` |
+| Upstream `trunk` commit at fetch time | `e81bc76bf7249d6e4813d7197da228ca16c3e238` |
+| Vendored on | 2026-11-06 |
+| Bytes | 15546 |
 
 When updating, refresh every row above (the blob SHA in particular --
 that's what the sync script checks against to detect drift).

@@ -8,13 +8,10 @@ name: Live Server Integration
 # painful, gate inside the job (`if:` on changed-paths output) rather than at
 # the workflow trigger so the required check still reports success.
 #
-# Seed SQL: the live tests load `tests/seed/mobile-offline-demo-v1.sql`
-# (vendored from honua-io/honua-server -- see tests/seed/UPSTREAM.md and
-# tools/sync-mobile-offline-seed.sh) into the postgres container before the
-# Honua server starts. Because the seed is vendored, every PR-trigger run
-# is a fully-seeded run -- the dotnet test step is a hard gate, not a
-# soft-fail. `workflow_dispatch` still accepts `fixture_sql_ref` to override
-# the vendored seed with a fresh upstream snapshot for ad-hoc validation.
+# The vendored seed (tests/seed/UPSTREAM.md) is applied after schema creation.
+# The fixture seeds pgRouting and declares attachment support through the admin API.
+# workflow_dispatch can override the vendored seed for upstream validation.
+
 on:
   pull_request:
   push:
@@ -47,7 +44,7 @@ env:
   # version the Compatibility-Train conformance checks run against. Recorded
   # explicitly here and echoed in the run (see "Record pinned versions").
   HONUA_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
-  HONUA_POSTGIS_IMAGE: "postgis/postgis:17-3.5-alpine"
+  HONUA_POSTGIS_IMAGE: "pgrouting/pgrouting:17-3.5-3.7.3@sha256:5e6767abbd1fd9ead84c9988aa31bac71ca292ef8a1fc2e4a5ee2b613ac6a7bb"
   # Pinned geospatial-grpc conformance fixtures version (Compatibility Train,
   # epic geospatial-grpc#18). Mirror of <HonuaConformanceFixturesVersion> in
   # Directory.Build.props; provenance recorded in tests/conformance/UPSTREAM.md.
@@ -62,7 +59,8 @@ jobs:
     env:
       HONUA_MOBILE_LIVE_SERVER_TESTS: "1"
       HONUA_MOBILE_LIVE_SERVER_IMAGE: ${{ inputs.honua_server_image || 'honuaio/honua-server:nightly' }}
-      HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "postgis/postgis:17-3.5-alpine"
+      HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE: "pgrouting/pgrouting:17-3.5-3.7.3@sha256:5e6767abbd1fd9ead84c9988aa31bac71ca292ef8a1fc2e4a5ee2b613ac6a7bb"
+      HONUA_MOBILE_LIVE_SERVER_ROUTING_SQL: ${{ github.workspace }}/tests/seed/mobile-routing.v1.sql
       HONUA_MOBILE_ACCEPTANCE_EVIDENCE_DIR: ${{ github.workspace }}/CloudAcceptanceEvidence
     steps:
       - uses: actions/checkout@v7

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
@@ -109,6 +110,10 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         _honua = new ContainerBuilder(Options.Image)
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+            .WithEnvironment("Licensing__DevGrantEdition", "Enterprise")
+            .WithEnvironment("Capabilities__Experimental__scene.catalog__Enabled", "true")
+            .WithEnvironment("Capabilities__Experimental__serve.3d-tiles-scene__Enabled", "true")
+            .WithEnvironment("Capabilities__Experimental__sync.offline__Enabled", "true")
             .WithEnvironment("Kestrel__Endpoints__Http__Url", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
             .WithEnvironment("Kestrel__Endpoints__Http__Protocols", "Http1")
             .WithEnvironment("Kestrel__Endpoints__Grpc__Url", $"http://+:{HonuaGrpcPort.ToString(CultureInfo.InvariantCulture)}")
@@ -129,7 +134,18 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
         Options = Options.WithTestcontainersGrpcEndpoint(
             new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
-        await ApplyFixtureSeedAsync();
+        await ApplyFixtureSeedAsync(Options.FixtureSqlPath);
+        await ApplyFixtureSeedAsync(Options.RoutingSqlPath);
+        using var admin = new HttpClient { BaseAddress = BaseUri };
+        admin.DefaultRequestHeaders.Add("X-API-Key", DefaultAdminPassword);
+        using var response = await admin.PutAsJsonAsync(
+            $"api/v1/admin/services/{Options.ServiceId}/layers/{Options.LayerId}/metadata",
+            new { editing = new { supportsAttachments = true } });
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Live fixture attachment initialization failed ({response.StatusCode}): {await response.Content.ReadAsStringAsync()}");
+        }
     }
 
     private async Task WaitForPostgresReadyAsync()
@@ -176,18 +192,18 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
     private static string BuildPostgresConnectionString()
         => $"Host={PostgresAlias};Database={PostgresDatabase};Username={PostgresUser};Password={PostgresPassword}";
 
-    private async Task ApplyFixtureSeedAsync()
+    private async Task ApplyFixtureSeedAsync(string? fixtureSqlPath)
     {
-        if (_postgres is null || string.IsNullOrWhiteSpace(Options.FixtureSqlPath))
+        if (_postgres is null || string.IsNullOrWhiteSpace(fixtureSqlPath))
         {
             return;
         }
 
-        var seedFile = new FileInfo(Options.FixtureSqlPath);
+        var seedFile = new FileInfo(fixtureSqlPath);
         if (!seedFile.Exists)
         {
             throw new InvalidOperationException(
-                $"HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL points to a missing file: {seedFile.FullName}");
+                $"Live fixture SQL file is missing: {seedFile.FullName}");
         }
 
         const string containerSeedDirectory = "/tmp/honua-mobile-live-fixture";
@@ -261,9 +277,11 @@ public sealed record LiveHonuaServerOptions
 
     public string Image { get; init; } = "honuaio/honua-server:latest";
 
-    public string PostgresImage { get; init; } = "postgis/postgis:17-3.5-alpine";
+    public string PostgresImage { get; init; } = "pgrouting/pgrouting:17-3.5-3.7.3@sha256:5e6767abbd1fd9ead84c9988aa31bac71ca292ef8a1fc2e4a5ee2b613ac6a7bb";
 
     public string? FixtureSqlPath { get; init; }
+
+    public string? RoutingSqlPath { get; init; }
 
     public string ReadyPath { get; init; } = "/healthz/ready";
 
@@ -309,8 +327,9 @@ public sealed record LiveHonuaServerOptions
             Enabled = enabled,
             BaseUri = baseUri,
             Image = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_IMAGE", "honuaio/honua-server:latest"),
-            PostgresImage = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE", "postgis/postgis:17-3.5-alpine"),
+            PostgresImage = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_POSTGRES_IMAGE", Disabled.PostgresImage),
             FixtureSqlPath = EmptyToNull(readVariable("HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL")),
+            RoutingSqlPath = EmptyToNull(readVariable("HONUA_MOBILE_LIVE_SERVER_ROUTING_SQL")),
             ReadyPath = ReadPath(readVariable, "HONUA_MOBILE_LIVE_SERVER_READY_PATH", "/healthz/ready"),
             ServiceId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_SERVICE_ID", "mobile_offline_demo"),
             LayerId = layerId,
