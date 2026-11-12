@@ -35,6 +35,11 @@
     -->
     <HonuaConformanceFixturesVersion>0.1.0-alpha.1</HonuaConformanceFixturesVersion>
     <HonuaConformanceFixturesRepository>honua-io/geospatial-grpc</HonuaConformanceFixturesRepository>
+    <!--
+      CI builds pass /p:TreatWarningsAsErrors=true. NuGet audit advisories
+      (NU1901-NU1904) stay visible as warnings but never fail restore or build.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
   <!--

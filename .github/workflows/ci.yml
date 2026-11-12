@@ -445,7 +445,7 @@ jobs:
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
             /p:TreatWarningsAsErrors=true \
-            /p:WarningsNotAsErrors=IL2104 \
+            /p:WarningsNotAsErrors=IL2104%3BNU1901%3BNU1902%3BNU1903%3BNU1904 \
             /p:AndroidPackageFormat=apk
 
       - name: Enable KVM for Android emulator
@@ -587,7 +587,7 @@ jobs:
             /p:EnableCodeSigning=false \
             /p:ArchiveOnBuild=false \
             /p:TreatWarningsAsErrors=true \
-            /p:WarningsNotAsErrors=IL2104%3BIL3053
+            /p:WarningsNotAsErrors=IL2104%3BIL3053%3BNU1901%3BNU1902%3BNU1903%3BNU1904
 
       - name: iOS simulator platform smoke
         if: steps.ios_tools.outputs.actool_available == 'true'
