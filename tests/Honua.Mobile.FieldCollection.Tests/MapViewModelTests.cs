@@ -1,6 +1,7 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
 using Honua.Mobile.FieldCollection.ViewModels;
+using Honua.Mobile.Maui.Location;
 using Microsoft.Maui.Devices.Sensors;
 using FieldPoint = Honua.Mobile.FieldCollection.Models.Point;
 

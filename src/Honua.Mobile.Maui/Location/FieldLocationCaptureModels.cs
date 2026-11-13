@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Honua.Sdk.Field.Records;
-using Microsoft.Maui.Devices.Sensors;
+using MauiLocation = Microsoft.Maui.Devices.Sensors.Location;
 
-namespace Honua.Mobile.FieldCollection.Models;
+namespace Honua.Mobile.Maui.Location;
 
 public enum FieldLocationSourceKind
 {
@@ -144,7 +144,7 @@ public sealed record FieldLocationCaptureEvidence
 
 public sealed record FieldLocationFix
 {
-    public required Location Location { get; init; }
+    public required MauiLocation Location { get; init; }
 
     public FieldLocationSourceKind SourceKind { get; init; } = FieldLocationSourceKind.Unknown;
 
@@ -191,7 +191,7 @@ public static class FieldLocationMetadataMapper
     };
 
     public static FieldLocationFix FromMauiLocation(
-        Location location,
+        MauiLocation location,
         FieldLocationCaptureMetadata? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(location);
@@ -414,7 +414,7 @@ public static class FieldLocationMetadataMapper
     }
 
     private static FieldLocationSourceKind ResolveSourceKind(
-        Location location,
+        MauiLocation location,
         FieldLocationCaptureMetadata? metadata)
     {
         if (metadata?.SourceKind is { } sourceKind && sourceKind != FieldLocationSourceKind.Unknown)
