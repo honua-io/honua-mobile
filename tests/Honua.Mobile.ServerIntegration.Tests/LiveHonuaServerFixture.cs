@@ -119,7 +119,7 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         await _network.CreateAsync();
 
         await StartPostgresAsync();
-        ConfigureHonuaContainer();
+        _honua = ConfigureHonuaContainer();
         await _honua.StartAsync();
 
         await ApplyFixtureSeedAsync();
@@ -151,9 +151,9 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         await WaitForPostgresReadyAsync();
     }
 
-    private void ConfigureHonuaContainer()
+    private IContainer ConfigureHonuaContainer()
     {
-        _honua = new ContainerBuilder(Options.Image)
+        return new ContainerBuilder(Options.Image)
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
             // Development-only grant exercises licensed endpoints without an external license.
