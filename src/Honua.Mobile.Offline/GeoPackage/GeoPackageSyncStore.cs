@@ -232,7 +232,11 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false);
+    }
 
+    private static async Task EnqueueCoreAsync(SqliteConnection connection, OfflineEditOperation operation, CancellationToken ct)
+    {
         await using var command = connection.CreateCommand();
         command.CommandText = @"
 INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, claimed_at_utc, attempt_count, status)
@@ -709,7 +713,17 @@ LIMIT 1;
     }
 
     /// <inheritdoc />
-    public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+    public Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+        => UpsertFeatureCoreAsync(layerKey, featureJson, operation: null, ct);
+
+    /// <inheritdoc />
+    public Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        return UpsertFeatureCoreAsync(operation.LayerKey, featureJson, operation, ct);
+    }
+
+    private async Task UpsertFeatureCoreAsync(string layerKey, string featureJson, OfflineEditOperation? operation, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(featureJson);
@@ -727,6 +741,11 @@ LIMIT 1;
         try
         {
             await WriteFeatureCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
+            if (operation is not null)
+            {
+                await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false);
+            }
+
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
         }
         catch (SqliteException ex)
