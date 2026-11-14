@@ -1,5 +1,10 @@
 # No-Cloud Field Parity Information Model
 
+> Historical coverage: references to duplicate field app services and tests below
+> describe the retired implementation. See [M1 consolidation](field-sdk-consolidation.md)
+> for current SDK ownership and remaining Collect acceptance.
+
+
 Last reviewed: 2026-05-24.
 
 This handoff describes the information model needed to design Honua field

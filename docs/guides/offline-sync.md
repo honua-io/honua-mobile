@@ -242,7 +242,7 @@ running Honua environment instead.
 The live suite covers health, FeatureServer REST query/edit, FeatureServer gRPC
 query/edit, OGC Features CRUD, attachments, replica sync, offline queued upload
 through the background orchestrator path, map area downloads, scene package
-asset downloads, scene metadata/resolve, routing, FieldCollection API-key
+asset downloads, scene metadata/resolve, routing, API-key
 validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 
 | Variable | Required | Purpose |
@@ -395,7 +395,6 @@ telemetry counters listed in
 
 For end-to-end offline test patterns see
 [`tests/Honua.Mobile.Offline.Tests`](../../tests/Honua.Mobile.Offline.Tests) and
-[`tests/Honua.Mobile.FieldCollection.Tests`](../../tests/Honua.Mobile.FieldCollection.Tests),
 which exercise the real `OfflineSyncEngine`, queue claim/lease semantics, and
 conflict policy rules.
 

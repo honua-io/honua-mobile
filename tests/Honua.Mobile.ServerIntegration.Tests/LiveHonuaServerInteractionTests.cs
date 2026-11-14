@@ -1,10 +1,7 @@
-using System.ComponentModel;
 using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using FieldServices = Honua.Mobile.FieldCollection.Services;
-using Honua.Mobile.FieldCollection.Services.Diagnostics;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
@@ -660,8 +657,6 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
         using var authHttp = CreateHttpClient();
-        var authService = new FieldServices.AuthenticationService(authHttp);
-        Assert.True(await authService.ValidateConnectionAsync(_server.BaseUri.ToString(), _server.Options.ApiKey));
 
         var store = new InMemoryAuthTokenStore();
         await store.WriteAsync(new HonuaAuthToken(
@@ -682,7 +677,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.NotNull(token);
         Assert.Equal(HonuaAuthScheme.Bearer, token.Scheme);
 
-        await UploadAppExceptionReportAsync();
+        await UploadSdkExceptionReportAsync();
         await UploadMauiExceptionReportAsync();
     }
 
@@ -1081,9 +1076,8 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Required = true,
         };
 
-    private async Task UploadAppExceptionReportAsync()
+    private async Task UploadSdkExceptionReportAsync()
     {
-        var auth = new FakeAuthenticationService(_server.BaseUri.ToString(), _server.Options.ApiKey);
         var options = new MobileExceptionReportingOptions
         {
             Mode = MobileExceptionReportingMode.ServerUpload,
@@ -1094,11 +1088,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         };
         var queue = new FileMobileExceptionReportQueue(options);
         var reporter = new LocalMobileExceptionReporter(queue, options);
-        using var http = CreateUnauthenticatedHttpClient();
+        using var http = CreateHttpClient();
         var uploader = new HttpMobileExceptionReportUploader(
             http,
-            options,
-            [new FieldCollectionExceptionReportAuthHeader(auth)]);
+            options);
         var worker = new MobileExceptionReportUploadWorker(queue, uploader, options);
 
         await reporter.ReportAsync(
@@ -1149,58 +1142,5 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     private sealed class AlwaysOnlineConnectivity : IConnectivityStateProvider
     {
         public bool IsOnline => true;
-    }
-
-    private sealed class FakeAuthenticationService : FieldServices.IAuthenticationService
-    {
-        public FakeAuthenticationService(string serverUrl, string apiKey)
-        {
-            ServerUrl = serverUrl;
-            ApiKey = apiKey;
-        }
-
-        public bool IsAuthenticated => true;
-
-        public bool RequiresReauthentication => false;
-
-        public string? SessionStatusMessage => "Session active";
-
-        public DateTimeOffset? ExpiresAtUtc => null;
-
-        public HonuaAuthScheme? AuthScheme => HonuaAuthScheme.ApiKey;
-
-        public string? CurrentUserId => "live-image";
-
-        public string? CurrentUserName => "Live Image";
-
-        public string? ApiKey { get; }
-
-        public string? ServerUrl { get; }
-
-        public event PropertyChangedEventHandler? PropertyChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public Task<FieldServices.AuthenticationResult> AuthenticateAsync(string serverUrl, string apiKey)
-            => Task.FromResult(FieldServices.AuthenticationResult.Success("live-image", "Live Image", apiKey));
-
-        public Task<FieldServices.AuthenticationResult> AuthenticateWithCredentialsAsync(
-            string serverUrl,
-            string username,
-            string password)
-            => Task.FromResult(FieldServices.AuthenticationResult.Failure("Credentials are not used in live image tests."));
-
-        public Task<bool> RefreshTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public Task<bool> EnsureValidSessionAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public ValueTask<HonuaAuthToken?> GetAuthTokenAsync(CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<HonuaAuthToken?>(new HonuaAuthToken(HonuaAuthScheme.ApiKey, ApiKey!));
-
-        public Task LogoutAsync() => Task.CompletedTask;
-
-        public Task<bool> ValidateConnectionAsync(string serverUrl, string? apiKey = null) => Task.FromResult(true);
     }
 }

@@ -196,7 +196,7 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 
 | Layer | Status | Run on | Coverage |
 | --- | --- | --- | --- |
-| Unit | ✅ | every PR | Across the SDK, Offline, FieldCollection, and MAUI .NET projects |
+| Unit | ✅ | every PR | Across the SDK, Offline, and MAUI .NET projects |
 | Integration (in-process loopback) | ✅ | every PR | `Honua.Mobile.ServerIntegration.Tests` against a real ASP.NET Core loopback server |
 | Smoke | ✅ | every PR | `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
@@ -222,12 +222,11 @@ src/
   Honua.Embed/                @honua-io/embed web component package (tests/ inside)
 apps/
   Honua.Mobile.App/           Reference MAUI application
-  Honua.Mobile.FieldCollection*/  Field collection reference app + core library
 tools/
   Honua.Migrate.Maui*/        ArcGIS Maps SDK -> Honua migration codemod + CLI
 templates/                    honua-fieldcollector project template
 examples/                     Field collection, embed, scene, and AR samples
-tests/                        Sdk / Offline / FieldCollection / Maui / ServerIntegration /
+tests/                        Sdk / Offline / Maui / ServerIntegration /
                               Smoke / PlatformSmoke test projects; tests/seed has the vendored seed SQL
 contracts/                    Cross-repo SDK contract harmonization fixtures
 docs/                         Getting started, guides, feature map, API reference
@@ -274,7 +273,7 @@ targets require macOS with Xcode. The library projects target `net10.0` and
 build on any platform without the MAUI workload.
 
 The server integration project starts a real ASP.NET Core loopback server and
-exercises the SDK, offline, FieldCollection auth, and mobile exception-reporting
+exercises the SDK, offline, and mobile exception-reporting
 HTTP paths without external infrastructure. Opt-in live Honua image tests run
 when `HONUA_MOBILE_LIVE_SERVER_TESTS=1` is set (Testcontainers or a pre-started
 Honua URL; see [docs/guides/offline-sync.md](docs/guides/offline-sync.md)). The

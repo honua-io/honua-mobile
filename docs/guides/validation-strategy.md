@@ -26,14 +26,14 @@ and most reliable inward to most expensive and most operationally gated:
 ```
 
 - **Unit (.NET)** -- run on every PR via `.github/workflows/ci.yml`
-  `test` job. Cover SDK, Offline, Field, FieldCollection, and MAUI library
+  `test` job. Cover SDK, Offline, and MAUI library
   surfaces with no network or platform dependencies.
 - **Server integration in-process (loopback tests + fixture-config
   tests)** -- a live ASP.NET Core loopback server
-  (`HonuaIntegrationServer`) exercises SDK, Offline, FieldCollection,
+  (`HonuaIntegrationServer`) exercises SDK, Offline,
   and exception-reporting HTTP paths via
   `SdkServerIntegrationTests` (3), `OfflineServerIntegrationTests` (3),
-  and `FieldCollectionServerIntegrationTests` (3). The same project also
+  and `MobileDiagnosticsServerIntegrationTests` (2). The same project also
   hosts `LiveHonuaServerFixtureOptionsTests` (4), which validate live
   fixture configuration (env wiring, Testcontainers options) without
   hitting the loopback server. Run on every PR via the same `test`
@@ -70,15 +70,14 @@ honest gaps; the parenthesised reason indicates why.
 
 | Capability | Unit | Integration (loopback) | Live (Docker, gated) | Cloud (staging, gated) | Physical device | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Auth (API key, bearer, token provider) | `AuthTokenProviderTests.cs` (12), `MauiAuthRegistrationTests.cs` (4), `AuthenticationServiceTests.cs` (4) | `SdkServerIntegrationTests.cs` (3), `FieldCollectionServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` (11, env-gated) | N/A (manual) | N/A (deferred) | covered |
+| Auth (API key, bearer, token provider) | `AuthTokenProviderTests.cs` (12), `MauiAuthRegistrationTests.cs` (4) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` (11, env-gated) | N/A (manual) | N/A (deferred) | covered |
 | GeoPackage storage | `GeoPackageSyncStoreTests.cs` (17), `GeoPackageSdkOfflineStoreAdapterTests.cs` (6) | `OfflineServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | exercised in `DisconnectedFieldWorkflowAcceptanceTests.cs` (7) | N/A (deferred) | covered |
 | Sync engine (queue, claim/lease, retry) | `OfflineSyncEngineTests.cs` (7), `HonuaApiOfflineOperationUploaderTests.cs` (10) | `OfflineServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | FeatureServer REST | `HonuaMobileClientHttpTests.cs` (17), `HonuaMobileSdkFeatureClientTests.cs` (5) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | OGC Features | `HonuaMobileClientHttpTests.cs` (subset of 17) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | covered |
 | gRPC transport | `HonuaMobileClientHttpTests.cs` (subset), `HonuaMobileClientTransportSecurityTests.cs` (7), `grpc-validation` job in `ci.yml` | N/A (loopback uses REST) | `LiveHonuaServerInteractionTests.LiveImage_GrpcFeatureQueryAndEdit_RoundTrip` (unary RPC + ApplyEdits add) and `LiveImage_GrpcFeatureQueryStream_RoundTrip` (server-streaming RPC), both wired against the testcontainers gRPC endpoint (port 8081 / `HONUA_MOBILE_LIVE_SERVER_GRPC_URL`) with `allowRestFallbackOnGrpcFailure: false` | N/A (manual) | N/A (deferred) | unit + live |
 | Replica sync (delta, cursors) | `ReplicaSyncClientTests.cs` (12), `DeltaDownloadEngineTests.cs` (7) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
-| Offline diagnostics / cache governance | `BackgroundPrefetchSchedulerTests.cs` (1), `GeoPackageSyncServiceTests.cs` (15) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
-| Field collection workflow | `FormValidatorTests.cs` (8), `RecordWorkflowTests.cs` (3), `FieldWorkflowOfflineAdapterTests.cs` (1), `FieldCollectionSdkContractMigrationTests.cs` (5) | `FieldCollectionServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by `DisconnectedFieldWorkflowAcceptanceTests.cs` | N/A (deferred) | covered |
+| Offline diagnostics / cache governance | `BackgroundPrefetchSchedulerTests.cs` (1), `GeoPackageSyncStoreTests.cs` | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Map annotations | `HonuaAnnotationLayerTests.cs` (13) | N/A (UI surface) | N/A (UI surface) | N/A (manual) | N/A (deferred) | unit-only |
 | Scene metadata | `HonuaSceneClientAdapterTests.cs` (15) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
 | Scene packages | `HonuaScenePackageManifestTests.cs` (10), `ScenePackageDownloaderTests.cs` (11) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
@@ -86,7 +85,7 @@ honest gaps; the parenthesised reason indicates why.
 | Sync conflict resolution | `OfflineSyncEngineTests.cs` (subset of 7) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | Background sync orchestration | `BackgroundSyncOrchestratorTests.cs` (4), `BackgroundPrefetchSchedulerTests.cs` (1) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Connectivity-aware sync | `BackgroundSyncOrchestratorTests.cs` (4, `ToggleConnectivityProvider`) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
-| Telemetry redaction | `MobileExceptionRedactorTests.cs` (3), `LocalMobileExceptionReporterTests.cs` (8), `MobileExceptionReportUploadWorkerTests.cs` (7), `MobileExceptionReporterTests.cs` (10), `DiagnosticRedactorTests.cs` (2) | `FieldCollectionServerIntegrationTests.cs` (3) | N/A (future) | N/A (manual) | N/A (deferred) | covered |
+| Telemetry redaction | `MobileExceptionRedactorTests.cs` (3), `LocalMobileExceptionReporterTests.cs` (8), `MobileExceptionReportUploadWorkerTests.cs` (7) | `MobileDiagnosticsServerIntegrationTests.cs` (2) | N/A (future) | N/A (manual) | N/A (deferred) | covered |
 | Embed builder / API-key validation | `src/Honua.Embed/tests/honua-builder.test.ts` (npm, multi-suite) | N/A (DOM-only) | N/A (DOM-only) | N/A (manual) | N/A (deferred) | unit-only (npm) |
 
 Other notable test files contributing to the totals but not listed as a
@@ -94,7 +93,7 @@ single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
 (5) validates `contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`
 (including `Fixture_ShapeInvariants_PinKeyWireShapes`, which enforces
 sdk-contract-stability.md exit criterion #4);
-`MobileBuildConfigurationTests.cs` (7) and `LiveHonuaServerFixtureOptionsTests.cs`
+`LiveHonuaServerFixtureOptionsTests.cs`
 (4) validate harness configuration; `HonuaRoutingClientTests.cs` (9)
 covers routing; `HonuaNativeDisplayTests.cs` (4) and
 `HonuaDeviceLocationTests.cs` (12) cover native display and device
@@ -106,11 +105,9 @@ cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 
 ### Count of N/A cells in the capability matrix
 
-There are 18 capability rows by 5 coverage columns (90 cells). Of those,
-**55 cells are N/A** (manual, future, deferred, or platform-only), 35
-cells carry a concrete test file reference. AR scene anchoring is the
-single capability whose deferred status is explicitly tied to a closed
-GA-tracking issue (#23).
+Cells marked N/A remain unverified at that level. The retired duplicate app
+unit suite is no longer part of the evidence; Collect owns app workflow and
+physical-device acceptance.
 
 ## 3. Gap Registry
 
@@ -215,7 +212,7 @@ The relevant workflows under `.github/workflows/`:
   `tools/sync-mobile-offline-seed.sh --write`.
 - `pr-validation.yml` -- non-test PR hygiene checks (title, body,
   metadata).
-- `android-debug-apk.yml`, `android-internal-distribution.yml`,
+- `android-internal-distribution.yml`,
   `ios-testflight.yml`, `mobile-production-promotion.yml`,
   `publish-dotnet-mobile.yml`, `publish-npm-embed.yml` -- distribution
   and release workflows, not test gates.
