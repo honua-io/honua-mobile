@@ -2,9 +2,11 @@
 
 `Honua.Mobile.Offline` uses `Microsoft.Data.Sqlite.Core`. The application must
 supply exactly one native SQLite provider. For unencrypted storage, reference
-`Microsoft.Data.Sqlite` and the repository's native-library version pin. For
-SQLCipher storage, reference `SQLitePCLRaw.bundle_e_sqlcipher` instead; do not
-also reference a plaintext SQLite bundle. This follows the
+`Microsoft.Data.Sqlite` 10.0.10 with the repository's native-library version pin. For
+SQLCipher storage, reference `SQLitePCLRaw.bundle_e_sqlcipher` 2.1.11 instead; do not
+also reference a plaintext SQLite bundle. The [installation guide](../getting-started/installation.md#select-one-sqlite-provider)
+shows the tested SQLCipher package commands; that provider supports unencrypted
+stores too. This follows the
 [Microsoft.Data.Sqlite encryption configuration](https://learn.microsoft.com/dotnet/standard/data/sqlite/encryption).
 
 Obtain a stable key from the platform's secure key store before creating the
