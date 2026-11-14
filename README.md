@@ -8,7 +8,7 @@
 .NET MAUI mobile SDK for [Honua Server](https://github.com/honua-io/honua-server),
 the multi-protocol cloud-native geospatial server. It gives .NET mobile developers
 an offline-first foundation for field apps: GeoPackage storage, gRPC-first
-transport with REST fallback, dynamic field-collection forms, routing, 3D scene
+transport with REST fallback, dynamic field-collection forms, 3D scene
 metadata, and connectivity-aware background sync. It also ships
 [`@honua-io/embed`](src/Honua.Embed/), a framework-agnostic web component package
 for embedding Honua maps and scenes.
@@ -30,7 +30,7 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 
 | Package | Purpose | Published |
 |---------|---------|-----------|
-| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
+| **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline) |
 | **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
 | **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | Public release target: [npmjs.com](https://www.npmjs.com/package/@honua-io/embed), from signed `mobile-embed-v*` tags |
@@ -199,7 +199,7 @@ for the live-server workflow's scope and triggers.
 
 ```
 src/
-  Honua.Mobile.Sdk/           Core mobile client: transport, auth, gRPC/REST, routing, scenes
+  Honua.Mobile.Sdk/           Core mobile client: transport, auth, gRPC/REST, scenes
   Honua.Mobile.Offline/       GeoPackage storage, sync engine, conflicts, map download
   Honua.Mobile.Maui/          MAUI platform integration, native display and location
   Honua.Embed/                @honua-io/embed web component package (tests/ inside)
