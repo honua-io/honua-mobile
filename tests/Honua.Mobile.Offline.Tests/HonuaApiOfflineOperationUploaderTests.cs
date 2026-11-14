@@ -8,6 +8,34 @@ namespace Honua.Mobile.Offline.Tests;
 
 public sealed class HonuaApiOfflineOperationUploaderTests
 {
+    [Theory]
+    [InlineData("""{"type":"Feature","id":""}""")]
+    [InlineData("""{"type":"Feature","id":"   "}""")]
+    public async Task UploadAsync_OgcCreateWithBlankId_ReturnsNoServerIds(string responseBody)
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "buildings",
+            TargetCollection = "buildings",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "ogcfeatures",
+              "collectionId": "buildings",
+              "feature": { "type": "Feature", "properties": {}, "geometry": { "type": "Point", "coordinates": [0, 0] } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Empty(result.ServerFeatureIds);
+    }
+
     [Fact]
     public async Task UploadAsync_FeatureServerAdd_ReturnsSuccess()
     {
@@ -38,6 +66,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         }, forceWrite: false);
 
         Assert.True(result.Outcome == UploadOutcome.Success, result.Message);
+        Assert.Equal(["1"], result.ServerFeatureIds);
         Assert.Contains("adds=", postedBody, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -160,6 +189,28 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         Assert.Equal(UploadOutcome.RetryableFailure, result.Outcome);
     }
 
+    [Theory]
+    [InlineData("42", "42")]
+    [InlineData("\"record-42\"", "record-42")]
+    public async Task UploadAsync_OgcAdd_RetainsNumericOrStringServerId(string jsonId, string expectedId)
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.Created)
+        {
+            Content = new StringContent("{\"type\":\"Feature\",\"id\":" + jsonId + "}", Encoding.UTF8, "application/geo+json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """{"protocol":"ogcfeatures","collectionId":"assets","feature":{"type":"Feature","properties":{}}}""",
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Equal([expectedId], result.ServerFeatureIds);
+    }
+
     [Fact]
     public async Task UploadAsync_OgcAdd_PostsGeoJsonItemWithIdempotencyKey()
     {
@@ -202,6 +253,7 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         var result = await uploader.UploadAsync(operation, forceWrite: false);
 
         Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Equal(["building-1"], result.ServerFeatureIds);
         Assert.Contains("/ogc/features/collections/buildings/items", capturedPath);
         Assert.Equal("application/geo+json", capturedMediaType);
         // The stored GeoJSON feature is forwarded verbatim (no lossy normalization), so assert the

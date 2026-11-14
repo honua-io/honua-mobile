@@ -22,7 +22,7 @@ namespace Honua.Mobile.Offline.GeoPackage;
 /// offline edit operations, sync cursors, map area metadata, and replicated features
 /// in a GeoPackage-compliant database.
 /// </summary>
-public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
+public sealed partial class GeoPackageSyncStore : IGeoPackageSyncStore
 {
     private const int DefaultSrsId = 4326;
     private const string DefaultCrsIdentifier = "EPSG:4326";
@@ -215,6 +215,8 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         command.CommandText = sql;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
+        await InitializeUploadResultsAsync(connection, ct).ConfigureAwait(false);
+
         await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
         await EnsureColumnExistsAsync(
             connection,
@@ -236,8 +238,23 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false);
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw;
+        }
+    }
 
+    private static async Task EnqueueCoreAsync(SqliteConnection connection, OfflineEditOperation operation, CancellationToken ct)
+    {
         await using var command = connection.CreateCommand();
+        await RejectAcknowledgedOperationAsync(connection, operation.OperationId, ct).ConfigureAwait(false);
         command.CommandText = @"
 INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, claimed_at_utc, attempt_count, status)
 VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $priority, $created_at_utc, NULL, $attempt_count, 'pending')
@@ -713,8 +730,18 @@ LIMIT 1;
     }
 
     /// <inheritdoc />
-    public async Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+    public Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
+        => UpsertFeatureCoreAsync((layerKey, featureJson), operation: null, ct);
+
+    public Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(operation);
+        return UpsertFeatureCoreAsync((operation.LayerKey, featureJson), operation, ct);
+    }
+
+    private async Task UpsertFeatureCoreAsync((string LayerKey, string FeatureJson) write, OfflineEditOperation? operation, CancellationToken ct)
+    {
+        var (layerKey, featureJson) = write;
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(featureJson);
 
@@ -731,6 +758,11 @@ LIMIT 1;
         try
         {
             await WriteFeatureCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
+            if (operation is not null)
+            {
+                await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false);
+            }
+
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
         }
         catch (SqliteException ex)
