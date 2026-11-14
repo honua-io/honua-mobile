@@ -118,6 +118,26 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .Build();
         await _network.CreateAsync();
 
+        await StartPostgresAsync();
+        ConfigureHonuaContainer();
+        await _honua.StartAsync();
+
+        await ApplyFixtureSeedAsync();
+        if (!string.IsNullOrWhiteSpace(Options.FixtureSqlPath))
+        {
+            // Initial startup creates the schema. The seed invalidates published metadata;
+            // restart to rebuild it from the seeded catalog before clients connect.
+            await _honua.StopAsync();
+            await _honua.StartAsync();
+        }
+
+        BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
+        Options = Options.WithTestcontainersGrpcEndpoint(
+            new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
+    }
+
+    private async Task StartPostgresAsync()
+    {
         _postgres = new ContainerBuilder(Options.PostgresImage)
             .WithNetwork(_network)
             .WithNetworkAliases(PostgresAlias)
@@ -129,7 +149,10 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .Build();
         await _postgres.StartAsync();
         await WaitForPostgresReadyAsync();
+    }
 
+    private void ConfigureHonuaContainer()
+    {
         _honua = new ContainerBuilder(Options.Image)
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
@@ -157,20 +180,6 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
                     .ForPort((ushort)HonuaHttpPort)
                     .ForPath(Options.ReadyPath)))
             .Build();
-        await _honua.StartAsync();
-
-        await ApplyFixtureSeedAsync();
-        if (!string.IsNullOrWhiteSpace(Options.FixtureSqlPath))
-        {
-            // Initial startup creates the schema. The seed invalidates published metadata;
-            // restart to rebuild it from the seeded catalog before clients connect.
-            await _honua.StopAsync();
-            await _honua.StartAsync();
-        }
-
-        BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
-        Options = Options.WithTestcontainersGrpcEndpoint(
-            new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
     }
 
     private async Task WaitForPostgresReadyAsync()
