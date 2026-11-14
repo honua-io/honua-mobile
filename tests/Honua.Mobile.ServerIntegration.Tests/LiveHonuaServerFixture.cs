@@ -46,6 +46,30 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
         await StartImageStackAsync();
         CompleteDerivedOptions();
         await WaitForReadyAsync();
+        if (!string.IsNullOrWhiteSpace(Options.FixtureSqlPath))
+        {
+            await ConfigureSeededLayerAsync();
+        }
+    }
+
+    private async Task ConfigureSeededLayerAsync()
+    {
+        // The legacy fixture catalog does not declare attachment support. Use the
+        // supported metadata API after projection, rather than editing its snapshot.
+        using var http = new HttpClient { BaseAddress = BaseUri, Timeout = TimeSpan.FromSeconds(30) };
+        http.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", Options.ApiKey);
+        using var content = new StringContent(
+            "{\"editing\":{\"supportsAttachments\":true}}",
+            System.Text.Encoding.UTF8,
+            "application/json");
+        using var response = await http.PutAsync(
+            $"api/v1/admin/services/{System.Uri.EscapeDataString(Options.ServiceId)}/layers/{Options.LayerId.ToString(CultureInfo.InvariantCulture)}/metadata",
+            content);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Seeded layer metadata setup failed ({response.StatusCode}): {await response.Content.ReadAsStringAsync()}");
+        }
     }
 
     public async Task DisposeAsync()
@@ -94,6 +118,26 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .Build();
         await _network.CreateAsync();
 
+        await StartPostgresAsync();
+        _honua = ConfigureHonuaContainer();
+        await _honua.StartAsync();
+
+        await ApplyFixtureSeedAsync();
+        if (!string.IsNullOrWhiteSpace(Options.FixtureSqlPath))
+        {
+            // Initial startup creates the schema. The seed invalidates published metadata;
+            // restart to rebuild it from the seeded catalog before clients connect.
+            await _honua.StopAsync();
+            await _honua.StartAsync();
+        }
+
+        BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
+        Options = Options.WithTestcontainersGrpcEndpoint(
+            new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
+    }
+
+    private async Task StartPostgresAsync()
+    {
         _postgres = new ContainerBuilder(Options.PostgresImage)
             .WithNetwork(_network)
             .WithNetworkAliases(PostgresAlias)
@@ -105,15 +149,27 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .Build();
         await _postgres.StartAsync();
         await WaitForPostgresReadyAsync();
+    }
 
-        _honua = new ContainerBuilder(Options.Image)
+    private IContainer ConfigureHonuaContainer()
+    {
+        return new ContainerBuilder(Options.Image)
             .WithNetwork(_network)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+            // Development-only grant exercises licensed endpoints without an external license.
+            .WithEnvironment("Licensing__DevGrantEdition", "Enterprise")
+            // The mobile seed has no road topology; test the routing wire contract deterministically.
+            .WithEnvironment("Routing__Provider", "mock")
             .WithEnvironment("Kestrel__Endpoints__Http__Url", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
             .WithEnvironment("Kestrel__Endpoints__Http__Protocols", "Http1")
             .WithEnvironment("Kestrel__Endpoints__Grpc__Url", $"http://+:{HonuaGrpcPort.ToString(CultureInfo.InvariantCulture)}")
             .WithEnvironment("Kestrel__Endpoints__Grpc__Protocols", "Http2")
             .WithEnvironment("ConnectionStrings__DefaultConnection", BuildPostgresConnectionString())
+            // Exercise the explicitly opted-in offline and scene contracts used by this suite.
+            .WithEnvironment("Capabilities__Experimental__sync.offline__Enabled", "true")
+            .WithEnvironment("Capabilities__Experimental__scene.catalog__Enabled", "true")
+            .WithEnvironment("Capabilities__Experimental__serve.3d-tiles-scene__Enabled", "true")
+            .WithEnvironment("Capabilities__Experimental__serve.i3s-scene__Enabled", "true")
             .WithEnvironment("HONUA_ADMIN_PASSWORD", DefaultAdminPassword)
             .WithEnvironment("Security__ConnectionEncryption__MasterKey", "mobile-live-image-test-master-key-32")
             .WithEnvironment("Security__ConnectionEncryption__Salt", "bW9iaWxlLWxpdmUtaW1hZ2Utc2FsdA==")
@@ -124,12 +180,6 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
                     .ForPort((ushort)HonuaHttpPort)
                     .ForPath(Options.ReadyPath)))
             .Build();
-        await _honua.StartAsync();
-
-        BaseUri = new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaHttpPort).ToString(CultureInfo.InvariantCulture)}/");
-        Options = Options.WithTestcontainersGrpcEndpoint(
-            new Uri($"http://127.0.0.1:{_honua.GetMappedPublicPort(HonuaGrpcPort).ToString(CultureInfo.InvariantCulture)}/"));
-        await ApplyFixtureSeedAsync();
     }
 
     private async Task WaitForPostgresReadyAsync()
