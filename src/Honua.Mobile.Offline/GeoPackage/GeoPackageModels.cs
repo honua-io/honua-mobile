@@ -17,6 +17,8 @@ public sealed class GeoPackageSyncStoreOptions
     /// </summary>
     public required string DatabasePath { get; init; }
 
+    public string? EncryptionKey { get; init; }
+
     /// <summary>
     /// When <see langword="true"/>, the parent directory of <see cref="DatabasePath"/> is created automatically. Defaults to <see langword="true"/>.
     /// </summary>
