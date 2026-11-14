@@ -15,6 +15,22 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAsync_SuccessRetainsServerIdentityAfterRestart()
+    {
+        var options = new GeoPackageSyncStoreOptions { DatabasePath = _databasePath };
+        var store = new GeoPackageSyncStore(options);
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateOperation("saved-record", "assets", OfflineOperationType.Add));
+
+        var engine = new OfflineSyncEngine(store, new AlwaysSuccessUploader());
+        Assert.Equal(1, (await engine.SyncAsync()).Succeeded);
+
+        var reopened = new GeoPackageSyncStore(options);
+        Assert.Equal(0, await reopened.CountPendingAsync());
+        Assert.Equal(["server-42"], (await reopened.GetUploadAcknowledgementAsync("saved-record"))!.ServerFeatureIds);
+    }
+
+    [Fact]
     public async Task SyncAsync_ClientWins_RetriesConflictWithForceWrite()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
@@ -43,6 +59,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
         Assert.Equal(0, result.Failed);
         Assert.Equal(0, remaining);
         Assert.Equal(2, uploader.CallCount);
+        Assert.Equal(["server-42"], (await store.GetUploadAcknowledgementAsync("conflict-op"))!.ServerFeatureIds);
     }
 
     [Fact]
@@ -174,6 +191,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
         Assert.Equal(0, result.Failed);
         // The local edit was discarded, not retried/forced.
         Assert.Null(await ReadOperationStateAsync("server-wins-discard"));
+        Assert.Null(await store.GetUploadAcknowledgementAsync("server-wins-discard"));
         Assert.Single(uploader.Calls);
         Assert.DoesNotContain(uploader.Calls, call => call.ForceWrite);
     }
@@ -320,7 +338,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
                 return Task.FromResult(new UploadResult { Outcome = UploadOutcome.Conflict, Message = "version conflict" });
             }
 
-            return Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
+            return Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] });
         }
     }
 
@@ -338,7 +356,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
         {
             Calls.Add((operation.OperationId, forceWrite));
             return Task.FromResult(forceWrite
-                ? new UploadResult { Outcome = UploadOutcome.Success }
+                ? new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] }
                 : new UploadResult { Outcome = UploadOutcome.Conflict, Message = "conflict" });
         }
     }
@@ -346,7 +364,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
     private sealed class AlwaysSuccessUploader : IOfflineOperationUploader
     {
         public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
-            => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });
+            => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] });
     }
 
     private sealed class BlockingUploader : IOfflineOperationUploader
@@ -357,7 +375,7 @@ public sealed class OfflineSyncEngineTests : IDisposable
         {
             Started.TrySetResult(true);
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
-            return new UploadResult { Outcome = UploadOutcome.Success };
+            return new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] };
         }
     }
 

@@ -17,6 +17,62 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task MarkUploadedAsync_ReopenRetainsIdsAndRejectsOperationReuse()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        var operation = new OfflineEditOperation
+        {
+            OperationId = "uploaded-42",
+            LayerKey = "assets",
+            TargetCollection = "remote-assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = "{}",
+        };
+        await store.EnqueueAsync(operation);
+        await store.MarkUploadedAsync(operation.OperationId, ["42", "id/with-\"quote"]);
+
+        var reopened = CreateStore();
+        await reopened.InitializeAsync();
+        Assert.Equal(0, await reopened.CountPendingAsync());
+        var acknowledgement = Assert.IsType<OfflineUploadAcknowledgement>(
+            await reopened.GetUploadAcknowledgementAsync(operation.OperationId));
+        Assert.Equal("assets", acknowledgement.LayerKey);
+        Assert.Equal("remote-assets", acknowledgement.TargetCollection);
+        Assert.Equal(["42", "id/with-\"quote"], acknowledgement.ServerFeatureIds);
+        Assert.NotEqual(default, acknowledgement.UploadedAtUtc);
+        await reopened.MarkUploadedAsync(operation.OperationId, ["different-id"]);
+        Assert.Equal(acknowledgement.ServerFeatureIds,
+            (await reopened.GetUploadAcknowledgementAsync(operation.OperationId))!.ServerFeatureIds);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reopened.EnqueueAsync(operation));
+    }
+
+    [Fact]
+    public async Task MarkUploadedAsync_ResultWriteFailurePreservesQueue()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "retry-42",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = "{}",
+        });
+        await ExecuteNonQueryAsync("""
+            CREATE TRIGGER reject_ack BEFORE INSERT ON honua_upload_acknowledgements
+            BEGIN SELECT RAISE(ABORT, 'simulated acknowledgement failure'); END;
+            """);
+
+        await Assert.ThrowsAsync<SqliteException>(() => store.MarkUploadedAsync("retry-42", ["42"]));
+
+        var reopened = CreateStore();
+        Assert.Equal("retry-42", Assert.Single(await reopened.GetPendingAsync(10)).OperationId);
+        Assert.Null(await reopened.GetUploadAcknowledgementAsync("retry-42"));
+    }
+
+    [Fact]
     public async Task UpsertFeatureAndEnqueueAsync_ReopenPreservesFeatureAndUpload()
     {
         var store = CreateStore();
