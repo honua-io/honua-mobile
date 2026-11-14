@@ -24,8 +24,8 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Offline Field SDK Beta Graduation Criteria](offline-sdk-beta-graduation.md) | Acceptance bar, required evidence, performance/reliability targets, known-gaps exit list, and sign-off owners for graduating the MAUI SDK + offline sync from Beta |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
-| [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |
-| [Plugin and Host Extension Boundary](plugin-extension-api.md) | Web embed extension APIs and the SDK/mobile ownership split for plugin work |
+| [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | Historical: MAUI and web plugin host design; the mobile plugin host was removed (see Field Runtime Scope) |
+| [Plugin and Host Extension Boundary](plugin-extension-api.md) | Historical: web embed extension APIs and the SDK/mobile plugin ownership split |
 | [Protected 3D Scene Auth](protected-3d-scene-auth.md) | Signed URL, proxy, header, CORS, cache, and revocation policy for protected scene assets |
 | [Repo Scaffolding Gates](repo-scaffolding-gates.md) | Issue #826 release workflow, package metadata, branch protection, Dependabot, Trivy, and platform smoke verification commands |
 | [Scene Controls](scene-controls.md) | `<honua-scene-*>` control surfaces, `HonuaSceneMetadata` schema, and typed scene events |

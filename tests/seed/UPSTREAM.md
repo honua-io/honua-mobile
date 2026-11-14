@@ -14,7 +14,8 @@ restarts the server to rebuild published metadata from the seeded catalog. The
 runs. The image fixture enables the offline/scene capability flags and uses the
 supported development-only Enterprise grant to exercise licensed endpoints.
 The server's routing provider is set to the deterministic `mock` provider because
-this seed supplies no road topology; the mobile suite no longer exercises routing. External-server runs retain the supplied server configuration.
+this seed supplies no road topology; the mobile suite no longer exercises
+routing. External-server runs retain the supplied server configuration.
 After restarting, the image fixture declares attachment support through the
 supported layer-metadata admin API; the legacy seed catalog does not carry that
 declaration. The round-trip attachment assertions remain unchanged.
