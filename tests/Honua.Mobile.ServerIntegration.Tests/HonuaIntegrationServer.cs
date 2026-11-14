@@ -309,33 +309,6 @@ internal sealed class HonuaIntegrationServer : IAsyncDisposable
             { "id": "{{featureId}}", "deleted": true }
             """));
 
-        app.MapPost("/rest/services/Routing/NAServer/Route/solve", () => Json("""
-            {
-              "routes": {
-                "features": [
-                  { "attributes": { "Name": "Route 1", "Total_Length": 10.5, "Total_Time": 25 } }
-                ]
-              },
-              "directions": [
-                {
-                  "features": [
-                    { "attributes": { "text": "Head east", "length": 0.1, "time": 1.2, "maneuverType": "esriDMTDepart" } }
-                  ]
-                }
-              ]
-            }
-            """));
-        app.MapPost("/rest/services/Routing/NAServer/ServiceArea/solveServiceArea", () => Json("{}"));
-        app.MapPost("/rest/services/Routing/NAServer/ClosestFacility/solveClosestFacility", () => Json("""
-            {
-              "directions": [
-                {
-                  "summary": { "routeName": "Incident - Facility A", "totalLength": 2.5, "totalTime": 8 }
-                }
-              ]
-            }
-            """));
-
         app.MapPost("/rest/services/{serviceId}/FeatureServer/createReplica", () => Json("""
             { "replicaID": "replica-abc-123", "serverGen": 42 }
             """));

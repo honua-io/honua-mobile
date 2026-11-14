@@ -6,12 +6,19 @@ plugin host and mobile routing facade are removed as part of #421. No reference
 app or field template consumed those APIs. Their dedicated tests are retired
 with them; field storage, sync, location and display coverage remains.
 
-This is a breaking alpha API change. Remove `AddHonuaRouting`,
-`AddHonuaNativeSceneAnchoring` and `AddHonuaMapPluginHost` registrations.
+This is a breaking alpha API change. Remove these calls and members:
+
+- Registrations: `AddHonuaRouting`, `AddHonuaNativeSceneAnchoring`,
+  `AddHonuaMapPluginHost` and `AddHonuaMapPlugin` (both overloads).
+- `HonuaMobileClient.Routing` (for example `client.Routing.GetDirectionsAsync`).
+- `HonuaMobileClientOptions.RoutingServiceId`, `RoutingRouteLayerName`,
+  `RoutingServiceAreaLayerName` and `RoutingClosestFacilityLayerName`.
+- The `ToMapPluginDescriptor` manifest adapter and the map plugin contracts.
+
 Applications that need routing can reference the published
 `Honua.Sdk.GeoServices` package and configure its routing client directly.
-Mobile client routing options and current-location routing helpers are removed;
-applications supply their own location when calling the standalone SDK.
+Current-location routing helpers are removed; applications supply their own
+location when calling the standalone SDK.
 No replacement AR runtime or plugin loader is included.
 
 Historical AR and plugin design documents remain for context and do not describe

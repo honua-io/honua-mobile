@@ -129,89 +129,12 @@ offline data-driven rendering is separately scoped.
 | Source | Authored on device | Published via `/ogc/styles` (OGC API – Styles) |
 | Rendering | Local/native renderer | Map renderer applying the data-driven style |
 
-## Native Scene Anchoring Adapter
+## Native Scene Anchoring Adapter (removed)
 
-`Honua.Mobile.Maui.SceneAnchoring` provides the mobile-owned boundary for #38
-and #23 native AR anchoring work. It does not define scene metadata, package
-manifests, geometry primitives, or server clients. Apps resolve scenes and
-packages through `Honua.Sdk.*`, then pass scene/package IDs and mobile runtime
-state into the platform adapter.
-
-- `IHonuaNativeArSceneAnchorAdapter` is the ARKit/ARCore boundary implemented by
-  app or platform packages.
-- `HonuaNativeArSceneAnchoringController` checks support, starts the native
-  session, handles app background/resume/stop transitions, and evaluates
-  readiness for mobile UX gates.
-- `HonuaNativeArReadiness` gates coarse rendering, evidence capture, and
-  precision tools from runtime status, horizontal/yaw accuracy, package state,
-  control-point count, and calibration residual.
-- `HonuaNativeArSceneAnchorRequest` carries scene id, scene revision, optional
-  offline package id, selected anchoring mode, and control-point IDs. The SDK or
-  app remains responsible for resolving the authoritative scene/package data.
-- `HonuaNativeArEvidenceContext` snapshots the mobile runtime metadata that AR
-  field photos, annotations, and reports should carry: scene/package ids,
-  online/offline state, runtime, device model, active anchor mode, package
-  state, accuracy samples, control points, readiness, blockers, and warnings.
-
-```csharp
-using Honua.Mobile.Maui;
-using Honua.Mobile.Maui.SceneAnchoring;
-
-builder.Services
-    .AddSingleton<IHonuaNativeArSceneAnchorAdapter, AndroidArCoreSceneAnchorAdapter>()
-    .AddHonuaNativeSceneAnchoring(new HonuaNativeArSessionOptions
-    {
-        CoarsePreviewHorizontalAccuracyMeters = 10,
-        SiteReviewHorizontalAccuracyMeters = 2,
-        PrecisionCalibrationResidualMeters = 0.5,
-    });
-```
-
-```csharp
-var readiness = await sceneAnchoring.StartAsync(
-    new HonuaNativeArSceneAnchorRequest
-    {
-        SceneId = sceneId,
-        SceneRevision = sceneRevision,
-        PackageId = packageId,
-        IsOffline = packageId is not null,
-        PreferredAnchoringMode = HonuaNativeArAnchoringMode.PlatformGeospatial,
-        ControlPointIds = selectedControlPointIds,
-    },
-    ct);
-
-if (readiness.CanRenderOverlay)
-{
-    // Render through the app's native AR adapter with the readiness state visible in the UI.
-}
-```
-
-Field evidence capture:
-
-```csharp
-var evidenceContext = await sceneAnchoring.CreateEvidenceContextAsync(ct);
-
-if (evidenceContext.CanAttachToFieldEvidence)
-{
-    // Attach evidenceContext to the captured photo, annotation, or report.
-}
-```
-
-Lifecycle integration:
-
-```csharp
-await sceneAnchoring.HandleAppLifecycleAsync(
-    HonuaNativeArAppLifecycleEvent.EnteringBackground,
-    ct);
-
-await sceneAnchoring.HandleAppLifecycleAsync(
-    HonuaNativeArAppLifecycleEvent.ResumingForeground,
-    ct);
-```
-
-GPS-only readiness never enables precision tools. Offline rendering requires a
-valid package state, and stale, expired, partial, or revoked packages block AR
-overlays until the package is refreshed.
+The `Honua.Mobile.Maui.SceneAnchoring` adapter, `AddHonuaNativeSceneAnchoring`
+and its request, readiness and evidence types were removed. No reference app or
+field template used them, and no replacement AR runtime is included. See
+[field runtime scope](field-runtime-scope.md).
 
 ## Device Location and Geofencing
 

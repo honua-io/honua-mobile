@@ -30,10 +30,10 @@ published shared SDK package versions above. When mobile packages gain
 | Offline sync state, journals, conflicts | `Honua.Sdk.Abstractions` (`Honua.Sdk.Offline.Abstractions` namespace) plus mobile runtime adapters | Mobile owns native queue persistence, scheduling, and GeoPackage behavior; SDK owns portable manifests, journals, checkpoints, retry checkpoints, and conflict envelopes. |
 | Form-related feature schemas and field workflows | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.Field` | SDK owns provider-neutral source fields, form schema, validation, calculated fields, duplicate detection, and record workflow. Mobile owns rendering, capture UX, local media paths, GPS acquisition, DI, and offline adapter integration. |
 | Scene metadata and offline scene packages | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions.Scenes` plus `Honua.Sdk.Scenes` | Mobile owns renderers, downloads, local storage, and display lifecycle. |
-| Routing and network analysis | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.GeoServices` NAServer client | Mobile keeps only device location providers, permission flows, route display, and map interaction adapters. |
+| Routing and network analysis | `honua-sdk-dotnet` / `Honua.Sdk.Abstractions` plus `Honua.Sdk.GeoServices` NAServer client | SDK only. Mobile ships no routing adapters; apps call the `Honua.Sdk.GeoServices` routing client directly and supply their own location. |
 | GeoPackage sync and native storage adapters | `honua-mobile` | Keep database tables, background sync, file-system downloads, and MAUI registration in mobile. |
 | Display/embed maps | `honua-mobile` / `Honua.Embed` | SDK returns portable contracts only; MapLibre, deck.gl, Cesium, Mapsui, WebGL/WebGPU, and map controls stay outside SDK core. |
-| Non-UI plugin contracts | Split pending SDK plugin contracts after server dependency | Hosts own runtime loading, UI registration, sandboxing, and signing. |
+| Non-UI plugin contracts | Split pending SDK plugin contracts after server dependency | Not shipped. The mobile plugin host was removed; no plugin loader is included. |
 | Legacy `honua-mobile-sdk` contracts | Quarantine | Migrate concepts only after the fixture assigns ownership. |
 
 ## Migration Rules
@@ -62,7 +62,7 @@ published shared SDK package versions above. When mobile packages gain
   capture, local path, UI, DI, and offline adapter behavior around those
   contracts.
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
-  camera/location, route-location-provider, display, and offline file-system
+  camera/location, display, and offline file-system
   concerns.
 - Sibling repos consume `Honua.Sdk.*` through published NuGet packages from
   GitHub Packages. Do not copy SDK source and do not add long-lived project
@@ -89,9 +89,8 @@ published shared SDK package versions above. When mobile packages gain
 - #54 now routes FeatureServer and OGC add/replace/delete offline uploads
   through SDK-native `FeatureEditRequest`; OGC merge-patch remains on the
   compatibility wrapper until the SDK owns that operation.
-- #54 now consumes SDK routing contracts and the `Honua.Sdk.GeoServices` routing
-  client from `Honua.Sdk.*`; mobile keeps only
-  location-provider helpers.
+- Routing is SDK-only: the mobile routing facade and its location-provider
+  helpers were removed (see [field runtime scope](field-runtime-scope.md)).
 - #55 consumes SDK scene metadata and package manifest contracts from
   `Honua.Sdk.*` `0.1.15-alpha.1`; mobile keeps downloader, GeoPackage catalog,
   display, and renderer lifecycle code.
