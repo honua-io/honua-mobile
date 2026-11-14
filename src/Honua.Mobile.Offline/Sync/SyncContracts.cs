@@ -35,7 +35,6 @@ public sealed class UploadResult
     /// </summary>
     public string? Message { get; init; }
 
-    /// <summary>Server feature identifiers in edit-result order, when supplied by the server.</summary>
     public IReadOnlyList<string> ServerFeatureIds { get; init; } = [];
 }
 
