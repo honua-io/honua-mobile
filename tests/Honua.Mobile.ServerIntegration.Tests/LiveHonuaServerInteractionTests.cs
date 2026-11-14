@@ -497,6 +497,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             });
             Assert.True(delete.Succeeded, delete.Error?.Message);
         }
+        catch (HonuaMobileApiException ex)
+        {
+            throw new Xunit.Sdk.XunitException($"Attachment request failed: {ex.Message}; response: {ex.ResponseBody}");
+        }
         finally
         {
             if (objectId is not null)
@@ -897,7 +901,10 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
     private static long AssertEditSucceeded(JsonDocument document, string resultProperty)
     {
-        var result = document.RootElement.GetProperty(resultProperty)[0];
+        Assert.True(document.RootElement.TryGetProperty(resultProperty, out var results),
+            $"Missing {resultProperty}: {document.RootElement.GetRawText()}");
+        Assert.True(results.GetArrayLength() > 0, document.RootElement.GetRawText());
+        var result = results[0];
         Assert.True(result.GetProperty("success").GetBoolean(), document.RootElement.GetRawText());
 
         if (result.TryGetProperty("objectId", out var objectId) && objectId.TryGetInt64(out var id))
