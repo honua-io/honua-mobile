@@ -18,6 +18,13 @@ public sealed class GeoPackageSyncStoreOptions
     public required string DatabasePath { get; init; }
 
     /// <summary>
+    /// Encryption key supplied by the application's secure key store. When set, the selected
+    /// native provider must support SQLCipher; opening fails rather than storing plaintext.
+    /// The application owns key creation, recovery and rotation. Null retains unencrypted storage.
+    /// </summary>
+    public string? EncryptionKey { get; init; }
+
+    /// <summary>
     /// When <see langword="true"/>, the parent directory of <see cref="DatabasePath"/> is created automatically. Defaults to <see langword="true"/>.
     /// </summary>
     public bool AutoCreateDirectory { get; init; } = true;
