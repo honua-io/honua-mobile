@@ -478,7 +478,9 @@ still own their record mapping, attachment completion and history. Retained resu
 currently have no automatic expiry. Blank server IDs are ignored. If an operation
 is no longer queued and has no acknowledgement, `MarkUploadedAsync` throws rather
 than silently dropping its server IDs; if an acknowledgement already exists, the
-call keeps the stored IDs. `GetUploadAcknowledgementAsync` returns `null` on a
+call keeps the stored IDs. In `OfflineSyncEngine` that exception ends the sync run:
+uploads already acknowledged in the run stay recorded, and the remaining claimed
+operations return to pending for the next run. `GetUploadAcknowledgementAsync` returns `null` on a
 database created before acknowledgements were added, until `InitializeAsync` runs.
 
 Custom stores and decorators that do not override `MarkUploadedAsync` keep
