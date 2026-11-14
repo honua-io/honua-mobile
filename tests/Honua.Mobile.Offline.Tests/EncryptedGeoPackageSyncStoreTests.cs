@@ -101,7 +101,7 @@ public sealed class EncryptedGeoPackageSyncStoreTests : IDisposable
     {
         public List<string> OperationIds { get; } = [];
 
-        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        Task<UploadResult> IOfflineOperationUploader.UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct)
         {
             OperationIds.Add(operation.OperationId);
             return Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success });

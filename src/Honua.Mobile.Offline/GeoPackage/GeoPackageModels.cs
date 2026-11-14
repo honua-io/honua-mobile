@@ -17,11 +17,6 @@ public sealed class GeoPackageSyncStoreOptions
     /// </summary>
     public required string DatabasePath { get; init; }
 
-    /// <summary>
-    /// Encryption key supplied by the application's secure key store. When set, the selected
-    /// native provider must support SQLCipher; opening fails rather than storing plaintext.
-    /// The application owns key creation, recovery and rotation. Null retains unencrypted storage.
-    /// </summary>
     public string? EncryptionKey { get; init; }
 
     /// <summary>
