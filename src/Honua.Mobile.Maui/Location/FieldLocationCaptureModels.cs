@@ -116,14 +116,14 @@ public sealed record FieldLocationCaptureEvidence
             if (Receiver.Properties.Count > 0)
             {
                 values[$"{normalizedPrefix}_receiver_properties_json"] =
-                    JsonSerializer.Serialize(Receiver.Properties, FieldLocationMetadataMapper.JsonOptions);
+                    JsonSerializer.Serialize(Receiver.Properties, FieldLocationJsonContext.Default.DictionaryStringString);
             }
         }
 
         if (Properties.Count > 0)
         {
             values[$"{normalizedPrefix}_properties_json"] =
-                JsonSerializer.Serialize(Properties, FieldLocationMetadataMapper.JsonOptions);
+                JsonSerializer.Serialize(Properties, FieldLocationJsonContext.Default.DictionaryStringString);
         }
 
         return values;
@@ -186,13 +186,6 @@ public sealed record FieldLocationFix
 
 public static class FieldLocationMetadataMapper
 {
-    internal static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     public static FieldLocationFix FromMauiLocation(
         MauiLocation location,
         FieldLocationCaptureMetadata? metadata = null)
@@ -350,7 +343,7 @@ public static class FieldLocationMetadataMapper
 
     public static string SerializeEvidence(FieldLocationCaptureEvidence? evidence)
     {
-        return evidence is null ? string.Empty : JsonSerializer.Serialize(evidence, JsonOptions);
+        return evidence is null ? string.Empty : JsonSerializer.Serialize(evidence, FieldLocationJsonContext.Default.FieldLocationCaptureEvidence);
     }
 
     public static FieldLocationCaptureEvidence? DeserializeEvidence(string? json)
@@ -362,7 +355,7 @@ public static class FieldLocationMetadataMapper
 
         try
         {
-            return JsonSerializer.Deserialize<FieldLocationCaptureEvidence>(json, JsonOptions);
+            return JsonSerializer.Deserialize(json, FieldLocationJsonContext.Default.FieldLocationCaptureEvidence);
         }
         catch (JsonException)
         {
@@ -487,3 +480,11 @@ public static class FieldLocationMetadataMapper
         return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 }
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    UseStringEnumConverter = true)]
+[JsonSerializable(typeof(FieldLocationCaptureEvidence))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+internal sealed partial class FieldLocationJsonContext : JsonSerializerContext;
