@@ -10,7 +10,6 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
 using Honua.Sdk.Abstractions.Features;
-using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.OgcFeatures.Models;
 using Honua.Sdk.Offline.Abstractions;
@@ -605,7 +604,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     }
 
     [SkippableFact]
-    public async Task LiveImage_ScenesAndRouting_RoundTrip()
+    public async Task LiveImage_Scenes_RoundTrip()
     {
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
@@ -622,33 +621,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         var resolved = await client.Scenes.ResolveSceneAsync(_server.Options.SceneId);
         Assert.Equal(_server.Options.SceneId, resolved.SceneId);
 
-        var directions = await client.Routing.GetDirectionsAsync(
-            RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Start"),
-            RoutingLocation.FromLongitudeLatitude(-157.8037, 21.2810, "Finish"));
-        Assert.NotEmpty(directions.Routes);
 
-        var optimized = await client.Routing.OptimizeRouteAsync(
-            [
-                RoutingLocation.FromLongitudeLatitude(-157.86, 21.30, "A"),
-                RoutingLocation.FromLongitudeLatitude(-157.84, 21.31, "B"),
-                RoutingLocation.FromLongitudeLatitude(-157.82, 21.32, "C"),
-            ],
-            new RouteOptimizationOptions
-            {
-                PreserveFirstStop = true,
-                PreserveLastStop = false,
-            });
-        Assert.NotEmpty(optimized.Routes);
-
-        var serviceArea = await client.Routing.GetServiceAreaAsync(
-            RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Depot"),
-            TimeSpan.FromMinutes(30));
-        Assert.NotNull(serviceArea);
-
-        var closest = await client.Routing.FindClosestFacilityAsync(
-            [RoutingLocation.FromLongitudeLatitude(-157.85, 21.30, "Incident")],
-            [RoutingLocation.FromLongitudeLatitude(-157.80, 21.28, "Facility A")]);
-        Assert.NotEmpty(closest.Routes);
     }
 
     [SkippableFact]
@@ -800,7 +773,6 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                 PreferGrpcForFeatureQueries = preferGrpc,
                 PreferGrpcForFeatureEdits = preferGrpc,
                 AllowRestFallbackOnGrpcFailure = allowRestFallbackOnGrpcFailure,
-                RoutingServiceId = _server.Options.RoutingServiceId,
             });
     }
 

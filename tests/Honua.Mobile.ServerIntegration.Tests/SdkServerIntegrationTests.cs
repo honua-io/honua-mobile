@@ -3,7 +3,6 @@ using System.Text.Json;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
 using Honua.Sdk.Abstractions.Features;
-using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.OgcFeatures.Models;
 
@@ -167,21 +166,6 @@ public sealed class SdkServerIntegrationTests
         var resolvedScene = await client.Scenes.ResolveSceneAsync("downtown-honolulu");
         Assert.Equal("downtown-honolulu", resolvedScene.SceneId);
 
-        var directions = await client.Routing.GetDirectionsAsync(
-            RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Start"),
-            RoutingLocation.FromLongitudeLatitude(-157.8037, 21.2810, "Finish"));
-        Assert.Equal("Route 1", directions.Routes[0].Name);
-
-        var serviceArea = await client.Routing.GetServiceAreaAsync(
-            RoutingLocation.FromLongitudeLatitude(-157.8583, 21.3069, "Depot"),
-            TimeSpan.FromMinutes(30));
-        Assert.NotNull(serviceArea);
-
-        var closest = await client.Routing.FindClosestFacilityAsync(
-            [RoutingLocation.FromLongitudeLatitude(-157.85, 21.30, "Incident")],
-            [RoutingLocation.FromLongitudeLatitude(-157.80, 21.28, "Facility A")]);
-        Assert.Equal("Incident - Facility A", closest.Routes[0].Name);
-
         Assert.True(server.Received("GET", "/rest/services/assets/FeatureServer/0/query"));
         Assert.True(server.Received("POST", "/rest/services/assets/FeatureServer/0/applyEdits"));
         Assert.True(server.Received("GET", "/ogc/features/collections"));
@@ -192,9 +176,6 @@ public sealed class SdkServerIntegrationTests
         Assert.True(server.Received("GET", "/api/scenes"));
         Assert.True(server.Received("GET", "/api/scenes/downtown-honolulu"));
         Assert.True(server.Received("GET", "/api/scenes/downtown-honolulu/resolve"));
-        Assert.True(server.Received("POST", "/rest/services/Routing/NAServer/Route/solve"));
-        Assert.True(server.Received("POST", "/rest/services/Routing/NAServer/ServiceArea/solveServiceArea"));
-        Assert.True(server.Received("POST", "/rest/services/Routing/NAServer/ClosestFacility/solveClosestFacility"));
 
         Assert.Contains(server.Requests, request =>
             request.Method == "GET" &&
@@ -306,7 +287,6 @@ public sealed class SdkServerIntegrationTests
             AllowInsecureTransportForDevelopment = true,
             PreferGrpcForFeatureQueries = false,
             PreferGrpcForFeatureEdits = false,
-            RoutingServiceId = "Routing",
         };
 
         return new HonuaMobileClient(new HttpClient(), options);
