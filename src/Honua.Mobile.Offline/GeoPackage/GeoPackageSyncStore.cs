@@ -714,17 +714,17 @@ LIMIT 1;
 
     /// <inheritdoc />
     public Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default)
-        => UpsertFeatureCoreAsync(layerKey, featureJson, operation: null, ct);
+        => UpsertFeatureCoreAsync((layerKey, featureJson), operation: null, ct);
 
-    /// <inheritdoc />
     public Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        return UpsertFeatureCoreAsync(operation.LayerKey, featureJson, operation, ct);
+        return UpsertFeatureCoreAsync((operation.LayerKey, featureJson), operation, ct);
     }
 
-    private async Task UpsertFeatureCoreAsync(string layerKey, string featureJson, OfflineEditOperation? operation, CancellationToken ct)
+    private async Task UpsertFeatureCoreAsync((string LayerKey, string FeatureJson) write, OfflineEditOperation? operation, CancellationToken ct)
     {
+        var (layerKey, featureJson) = write;
         ArgumentException.ThrowIfNullOrWhiteSpace(layerKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(featureJson);
 

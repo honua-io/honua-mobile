@@ -26,14 +26,6 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default);
 
-    /// <summary>
-    /// Saves a local feature and its upload operation in one durable transaction.
-    /// Both writes roll back if either fails. The feature is cached under the operation's layer key.
-    /// </summary>
-    /// <param name="operation">The edit operation to enqueue, upserting by operation ID.</param>
-    /// <param name="featureJson">The local feature JSON including its object ID.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <remarks>Stores must implement this atomically; separate save and enqueue calls are insufficient.</remarks>
     Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
         => throw new NotSupportedException("This GeoPackage sync store does not support atomic feature and queue writes.");
 
