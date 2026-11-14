@@ -63,27 +63,11 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     Task MarkSucceededAsync(string operationId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Records the server feature identifiers of a successful upload and removes the operation from the queue.
-    /// </summary>
-    /// <remarks>
-    /// Stores that persist acknowledgements write the identifiers and remove the queue entry in one transaction.
-    /// The default implementation keeps existing stores and decorators working: it calls
-    /// <see cref="MarkSucceededAsync"/> and does not retain the identifiers. Override it to retain them.
-    /// </remarks>
-    /// <param name="operationId">The operation ID that the server accepted.</param>
-    /// <param name="serverFeatureIds">Feature identifiers the server reported for the upload; may be empty.</param>
-    /// <param name="ct">Cancellation token.</param>
+    // The default keeps stores and decorators written before acknowledgements working: it completes the
+    // upload through MarkSucceededAsync without retaining server IDs. Override it to retain them.
     Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
         => MarkSucceededAsync(operationId, ct);
 
-    /// <summary>
-    /// Returns the durable acknowledgement of an uploaded operation, or <see langword="null"/> when none was recorded.
-    /// </summary>
-    /// <param name="operationId">The operation ID to look up.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The acknowledgement, or <see langword="null"/>.</returns>
-    /// <exception cref="NotSupportedException">The store does not persist upload acknowledgements.</exception>
     Task<OfflineUploadAcknowledgement?> GetUploadAcknowledgementAsync(string operationId, CancellationToken ct = default)
         => throw new NotSupportedException("This sync store does not persist upload acknowledgements.");
 

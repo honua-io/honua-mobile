@@ -376,10 +376,8 @@ public sealed class OfflineSyncEngineTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// A decorator written before durable acknowledgements existed: it forwards every abstract member and
-    /// relies on the interface defaults for the rest, including <c>MarkUploadedAsync</c>.
-    /// </summary>
+    // A decorator written before durable acknowledgements: it forwards every abstract member and
+    // relies on the interface defaults for the rest, including MarkUploadedAsync.
     private sealed class ForwardingStore(IGeoPackageSyncStore inner) : IGeoPackageSyncStore
     {
         public Task InitializeAsync(CancellationToken ct = default) => inner.InitializeAsync(ct);
