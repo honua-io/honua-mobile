@@ -6,7 +6,6 @@ using Honua.Mobile.Maui.Annotations;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.Maui.Display;
 using Honua.Mobile.Maui.Location;
-using Honua.Mobile.Maui.SceneAnchoring;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
 using Honua.Mobile.Offline.ScenePackages;
@@ -14,10 +13,8 @@ using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
 using Honua.Mobile.Sdk.Auth;
 using Honua.Sdk.Abstractions.Features;
-using Honua.Sdk.Abstractions.Routing;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.Field.Records;
-using Honua.Sdk.GeoServices.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -145,21 +142,6 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<IOfflineOperationUploader, HonuaApiOfflineOperationUploader>();
-        return services;
-    }
-
-    /// <summary>
-    /// Registers SDK routing clients from the configured <see cref="HonuaMobileClient"/>.
-    /// Requires <see cref="AddHonuaMobileSdk"/> to be called first.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddHonuaRouting(this IServiceCollection services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        services.AddSingleton(sp => sp.GetRequiredService<HonuaMobileClient>().Routing);
-        services.AddSingleton<IHonuaRoutingClient>(sp => sp.GetRequiredService<HonuaMobileClient>().Routing);
         return services;
     }
 
@@ -447,25 +429,6 @@ public static class HonuaMobileServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddTransient<HonuaNativeMapDisplayController>();
-        return services;
-    }
-
-    /// <summary>
-    /// Registers the native AR scene anchoring controller.
-    /// Applications must also register an <see cref="IHonuaNativeArSceneAnchorAdapter"/> for ARKit or ARCore.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="options">Optional readiness thresholds for the AR workflow.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddHonuaNativeSceneAnchoring(
-        this IServiceCollection services,
-        HonuaNativeArSessionOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        services.AddSingleton(options ?? new HonuaNativeArSessionOptions());
-        services.AddSingleton<HonuaNativeArSceneAnchoringController>();
-        services.AddSingleton<HonuaNativeArFieldWorkflow>();
         return services;
     }
 

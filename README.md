@@ -32,7 +32,7 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 |---------|---------|-----------|
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback, routing, and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline) |
-| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries, native scene anchoring, and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
+| **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
 | **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | Public release target: [npmjs.com](https://www.npmjs.com/package/@honua-io/embed), from signed `mobile-embed-v*` tags |
 
 Registry links are release evidence, not promises: use a version only when it
@@ -66,7 +66,6 @@ builder.Services
         GrpcEndpoint = new Uri("https://your-honua-server.com"),
         PreferGrpcForFeatureQueries = true,
     })
-    .AddHonuaRouting()
     .AddHonuaScenes()
     .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
@@ -91,7 +90,7 @@ See [docs/getting-started/](docs/getting-started/) for installation, a full
 tutorial, and the field collector project template
 ([`templates/honua-fieldcollector`](templates/honua-fieldcollector/)), and
 [examples/](examples/) for runnable samples (field data collection, embeds,
-scenes, AR utility visualization).
+scenes).
 
 ## Key Features
 
@@ -142,26 +141,11 @@ await foreach (var page in client.QueryFeaturesStreamAsync(request))
 Transport security enforced -- API keys and bearer tokens are never sent over HTTP
 unless `AllowInsecureTransportForDevelopment` is explicitly set.
 
-### Routing
+### Package scope
 
-Experimental GeoServices-compatible NAServer client for directions, service
-areas, closest facility, and route optimization:
-
-```csharp
-var route = await client.Routing.GetDirectionsAsync(
-    RoutingLocation.FromLatitudeLongitude(21.3069, -157.8583, "Start"),
-    RoutingLocation.FromLatitudeLongitude(21.2810, -157.8037, "Finish"));
-
-var optimized = await client.Routing.Route()
-    .From(currentLocation)
-    .Via(jobSite)
-    .To(depot)
-    .WithTraffic()
-    .AvoidTolls()
-    .ExecuteAsync();
-
-var reachable = await client.Routing.GetServiceAreaAsync(depot, TimeSpan.FromMinutes(30));
-```
+Routing, native AR scene anchoring and the plugin host are no longer shipped
+in the field packages. Routing callers can use `Honua.Sdk.GeoServices` directly.
+See [field runtime scope](docs/guides/field-runtime-scope.md) for migration.
 
 ### 3D Scene Metadata
 
@@ -201,7 +185,7 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | ✅ | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Physical device | 🟡 | deferred to GA | AR/VR field workflow follow-ups in [docs/guides/native-scene-anchoring-requirements.md](docs/guides/native-scene-anchoring-requirements.md); emulator/simulator platform smoke covers part of the surface |
+| Physical device | 🟡 | deferred to GA | Collect owns installed Android/iPhone acceptance; emulator/simulator smoke is separate evidence |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See
@@ -217,14 +201,14 @@ for the live-server workflow's scope and triggers.
 src/
   Honua.Mobile.Sdk/           Core mobile client: transport, auth, gRPC/REST, routing, scenes
   Honua.Mobile.Offline/       GeoPackage storage, sync engine, conflicts, map download
-  Honua.Mobile.Maui/          MAUI platform integration, native display, location, scene anchoring
+  Honua.Mobile.Maui/          MAUI platform integration, native display and location
   Honua.Embed/                @honua-io/embed web component package (tests/ inside)
 apps/
   Honua.Mobile.App/           Reference MAUI application
 tools/
   Honua.Migrate.Maui*/        ArcGIS Maps SDK -> Honua migration codemod + CLI
 templates/                    honua-fieldcollector project template
-examples/                     Field collection, embed, scene, and AR samples
+examples/                     Field collection, embed and scene samples
 tests/                        Sdk / Offline / Maui / ServerIntegration /
                               Smoke / PlatformSmoke test projects; tests/seed has the vendored seed SQL
 contracts/                    Cross-repo SDK contract harmonization fixtures

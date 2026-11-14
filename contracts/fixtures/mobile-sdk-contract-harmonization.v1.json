@@ -267,17 +267,13 @@
         "Honua.Sdk.Abstractions.Routing.ServiceAreaResult",
         "Honua.Sdk.Abstractions.Routing.ClosestFacilityResult"
       ],
-      "mobileTypes": [
-        "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider",
-        "Honua.Mobile.Sdk.Routing.HonuaRoutingClientMobileExtensions",
-        "Honua.Mobile.Sdk.HonuaMobileClient"
-      ],
-      "mobileDisposition": "adapter-only",
+      "mobileTypes": [],
+      "mobileDisposition": "sdk-only",
       "migrationIssue": "honua-mobile#54",
       "serverDependencyIssues": [
         "honua-server#366"
       ],
-      "notes": "Routing contracts and GeoServices NAServer client are SDK-owned. Device location providers, platform permission flows, route display, and map interaction stay mobile-owned."
+      "notes": "Mobile field packages do not ship this surface. Use the standalone SDK contracts where required."
     },
     {
       "id": "geopackage-sync",
@@ -319,15 +315,13 @@
       "owner": "shared-split",
       "authoritativePackage": "pending Honua.Sdk.Plugin contracts",
       "authoritativeTypes": [],
-      "mobileTypes": [
-        "Honua.Mobile plugin host contracts"
-      ],
-      "mobileDisposition": "host-runtime-owned-until-sdk-plugin",
+      "mobileTypes": [],
+      "mobileDisposition": "not-shipped",
       "migrationIssue": "honua-sdk-dotnet#72",
       "serverDependencyIssues": [
         "honua-server#347"
       ],
-      "notes": "SDK should own manifests, declared permissions, compatibility requirements, and safe configuration envelopes. Hosts own runtime loading, UI registration, sandboxing, and code signing."
+      "notes": "Mobile field packages do not ship this surface. Use the standalone SDK contracts where required."
     },
     {
       "id": "legacy-mobile-sdk",

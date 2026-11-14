@@ -88,13 +88,8 @@ public sealed class MobileContractHarmonizationFixtureTests
         Assert.Contains(
             "Honua.Sdk.Abstractions.Routing.IHonuaRoutingClient",
             routing.AuthoritativeTypes);
-        Assert.Contains(
-            "Honua.Mobile.Sdk.Routing.IRoutingLocationProvider",
-            routing.MobileTypes);
-        Assert.DoesNotContain(
-            "Honua.Mobile.Sdk.Routing.HonuaRoutingClient",
-            routing.MobileTypes);
-        Assert.Equal("adapter-only", routing.MobileDisposition);
+        Assert.Empty(routing.MobileTypes);
+        Assert.Equal("sdk-only", routing.MobileDisposition);
 
         var geopackage = FindFamily(fixture, "geopackage-sync");
         Assert.Equal("honua-mobile", geopackage.Owner);

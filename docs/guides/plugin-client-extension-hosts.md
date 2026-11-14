@@ -1,3 +1,5 @@
+> Historical design: the mobile field packages no longer ship routing, native AR anchoring or a plugin host. See [field runtime scope](field-runtime-scope.md).
+
 # Plugin Client Extension Hosts
 
 Issue [#226](https://github.com/honua-io/honua-mobile/issues/226) is scoped to

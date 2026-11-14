@@ -1,3 +1,5 @@
+> Historical design: the mobile field packages no longer ship routing, native AR anchoring or a plugin host. See [field runtime scope](field-runtime-scope.md).
+
 # Plugin and Host Extension Boundary
 
 Honua mobile and embed hosts can expose extension points for runtime behavior,

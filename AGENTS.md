@@ -5,7 +5,7 @@
 `honua-mobile` is the **Honua Mobile SDK for .NET** — a .NET MAUI mobile SDK for
 [Honua Server](https://github.com/honua-io/honua-server) providing offline-first
 field data collection: GeoPackage storage, gRPC-first transport (with REST
-fallback), dynamic forms, routing, 3D scene metadata, and background sync. It
+fallback), dynamic forms, scene metadata and background sync. It
 also ships `@honua-io/embed`, a framework-agnostic web component package for
 embedding maps/scenes.
 
@@ -100,9 +100,9 @@ Wiring is via DI extension methods (e.g. `AddHonuaMobileSdk`,
 
 ```
 src/
-  Honua.Mobile.Sdk/      Core mobile client: transport, auth, gRPC/REST, routing, scene adapter
+  Honua.Mobile.Sdk/      Core mobile client: transport, auth, gRPC/REST, scene adapter
   Honua.Mobile.Offline/  GeoPackage storage, sync queue, map-area download, conflict resolution
-  Honua.Mobile.Maui/     MAUI DI registration, native display, location, scene anchoring
+  Honua.Mobile.Maui/     MAUI DI registration, native display and location
   Honua.Embed/           @honua-io/embed web component package (TS/Vite); tests in tests/
 apps/
   Honua.Mobile.App/                 Reference MAUI application
@@ -116,6 +116,9 @@ NuGet.config             Package sources + source mapping (Honua.* -> github-hon
 .github/workflows/       CI (ci.yml, pr-validation.yml), live-server-integration, publish, store dist
 ```
 
+Routing, native AR anchoring and the plugin host are removed from shipped field
+packages; see `docs/guides/field-runtime-scope.md`.
+
 ## Conventions & Gotchas
 
 - **SDK ownership boundary** — this repo owns only mobile/platform-specific
@@ -123,7 +126,7 @@ NuGet.config             Package sources + source mapping (Honua.* -> github-hon
   - **Belongs here:** MAUI registration/DI glue, app lifecycle, native storage
     (GeoPackage/SQLite placement & lifecycle), background sync scheduling,
     reachability, permissions, camera/GPS/sensors, field workflow screens &
-    capture UX, native/AR/VR map UI, the `@honua/embed` viewer package, and thin
+    capture UX, native map UI, the `@honua/embed` viewer package, and thin
     adapters that translate SDK contracts into mobile runtime behavior.
   - **Does NOT belong here:** new plain `net*` server API clients, provider-
     neutral query/edit/gRPC/OGC/routing/geocoding/catalog/admin/stream/replica
