@@ -135,7 +135,7 @@ Known coverage gaps, with the owner ticket where one exists:
   unit-tested today (`BackgroundSyncOrchestratorTests.cs`,
   `BackgroundPrefetchSchedulerTests.cs`). No integration or live fixture
   walks the timer + connectivity + queue + server path together.
-- **Map annotations and plugin host** -- unit-only; no MAUI UI harness
+- **Map annotations** -- unit-only (the plugin host and its tests were removed); no MAUI UI harness
   yet.
 - **Cloud acceptance against production** -- the
   `cloud-acceptance.yml` workflow currently targets
