@@ -441,3 +441,18 @@ conflict policy rules.
 - [Offline 3D Scene Packages](offline-3d-scene-packages.md)
 - [Performance Guide](performance.md)
 - [Troubleshooting](troubleshooting.md)
+
+### Commit a local edit and its upload together
+
+Use `IGeoPackageSyncStore.UpsertFeatureAndEnqueueAsync(operation, featureJson)`
+when saving a local edit that must upload later. The SDK writes the feature cache,
+spatial index, and pending operation in one transaction under `operation.LayerKey`.
+If either write fails, neither change commits. Reopening the store retains both
+writes after success. Separate `UpsertFeatureAsync` and `EnqueueAsync` calls leave
+a crash window between saving and queuing.
+
+The caller supplies a stable operation ID, the cache feature's object ID, and the
+upload payload appropriate for the target collection. These payloads can differ
+when the server assigns the final object ID. This method does not upload or
+reconcile server IDs. Custom stores that do not implement atomic writes throw
+`NotSupportedException` rather than silently using two transactions.

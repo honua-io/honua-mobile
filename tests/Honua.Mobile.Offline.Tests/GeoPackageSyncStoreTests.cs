@@ -17,6 +17,60 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeatureAndEnqueueAsync_ReopenPreservesFeatureAndUpload()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        const string feature = """{"attributes":{"OBJECTID":42,"name":"saved offline"}}""";
+        var operation = new OfflineEditOperation
+        {
+            OperationId = "record-42",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = feature,
+        };
+
+        await store.UpsertFeatureAndEnqueueAsync(operation, feature);
+
+        var reopened = CreateStore();
+        Assert.Equal(feature, Assert.Single(await reopened.GetFeaturesAsync("assets")));
+        var pending = Assert.Single(await reopened.GetPendingAsync(10));
+        Assert.Equal(operation.OperationId, pending.OperationId);
+        Assert.Equal(feature, pending.PayloadJson);
+    }
+
+    [Fact]
+    public async Task UpsertFeatureAndEnqueueAsync_QueueFailureRollsBackFeatureAndSpatialIndex()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        const string original = """{"attributes":{"OBJECTID":42},"geometry":{"x":1,"y":2}}""";
+        const string edited = """{"attributes":{"OBJECTID":42},"geometry":{"x":10,"y":20}}""";
+        await store.UpsertFeatureAsync("assets", original);
+        await ExecuteNonQueryAsync("""
+            CREATE TRIGGER reject_queue_insert BEFORE INSERT ON honua_sync_queue
+            BEGIN SELECT RAISE(ABORT, 'simulated queue write failure'); END;
+            """);
+
+        await Assert.ThrowsAsync<GeoPackageStorageException>(() => store.UpsertFeatureAndEnqueueAsync(
+            new OfflineEditOperation
+            {
+                OperationId = "record-42",
+                LayerKey = "assets",
+                TargetCollection = "assets",
+                OperationType = OfflineOperationType.Update,
+                PayloadJson = edited,
+            }, edited));
+
+        var reopened = CreateStore();
+        Assert.Equal(original, Assert.Single(await reopened.GetFeaturesAsync("assets")));
+        Assert.Single(await reopened.GetFeaturesAsync("assets", new BoundingBox(0, 0, 3, 3)));
+        Assert.Empty(await reopened.GetFeaturesAsync("assets", new BoundingBox(9, 19, 11, 21)));
+        Assert.Equal(0, await reopened.CountPendingAsync());
+    }
+
+    [Fact]
     public async Task EnqueueAndGetPending_UsesPriorityOrdering()
     {
         var store = CreateStore();
