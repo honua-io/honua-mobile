@@ -18,9 +18,9 @@ Inputs:
 - `artifact_type`: `aab` or `apk`.
 - `app_target`: known Android app target to publish. The workflow maps this
   to a MAUI project, Google Play package name, and per-app signing secrets.
-  The default `field-collection` target builds
-  `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj`
-  with package name `io.honua.mobile.fieldcollection`.
+  The default `mobile-app` target builds
+  `apps/Honua.Mobile.App/Honua.Mobile.App.csproj`
+  with package name `io.honua.mobile.app`.
 - `version_name`: tester-facing application display version.
 - `version_code`: Android application version code. Leave blank to use the
   GitHub run number. For Play track uploads, this must be higher than any
@@ -41,7 +41,6 @@ Known Android app targets:
 
 | `app_target` | Project | Package name | Signing secret stem |
 | --- | --- | --- | --- |
-| `field-collection` | `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj` | `io.honua.mobile.fieldcollection` | `ANDROID_FIELD_COLLECTION_UPLOAD` |
 | `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `ANDROID_APP_UPLOAD` |
 
 The non-secret source of truth for this table is
@@ -63,13 +62,6 @@ Required environment secrets:
 - `<SIGNING_SECRET_STEM>_KEYSTORE_PASSWORD`: keystore password.
 - `<SIGNING_SECRET_STEM>_KEY_ALIAS`: signing key alias.
 - `<SIGNING_SECRET_STEM>_KEY_PASSWORD`: signing key password.
-
-For the default `field-collection` target, configure these signing secrets:
-
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64`
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD`
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS`
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD`
 
 For the `mobile-app` target, configure these signing secrets:
 

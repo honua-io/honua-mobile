@@ -20,7 +20,6 @@ Use this with:
 
 | Workflow | File | Purpose | Approval Boundary |
 | --- | --- | --- | --- |
-| Android Debug APK | `.github/workflows/android-debug-apk.yml` | Manual non-production sideload APK for FieldCollection tester validation. | No signing environment; endpoint guard refuses production-looking metadata. |
 | Android Internal Distribution | `.github/workflows/android-internal-distribution.yml` | Manual signed Android internal testing or Internal App Sharing upload. | Protected environment selected by the run, normally `android-internal`. |
 | iOS TestFlight | `.github/workflows/ios-testflight.yml` | Manual signed iPhone IPA archive and App Store Connect TestFlight upload. | Protected environment selected by the run, normally `ios-testflight`. |
 | Mobile Production Promotion | `.github/workflows/mobile-production-promotion.yml` | Manual production tag, GitHub Release, and promotion metadata creation. | Protected `mobile-production` environment. |
@@ -72,8 +71,7 @@ Required contents:
 
 - Issue #82 release slice or release ticket link.
 - Channel: direct APK, Android internal, TestFlight, or production promotion.
-- App target and identifier: `io.honua.mobile.app` or
-  `io.honua.mobile.fieldcollection`.
+- App target and identifier: `io.honua.mobile.app`.
 - Source ref and resolved commit SHA.
 - Version name and platform build number.
 - Target environment and endpoint policy.

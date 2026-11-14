@@ -2,7 +2,7 @@
 
 Tracking: [#421](https://github.com/honua-io/honua-mobile/issues/421),
 [#315](https://github.com/honua-io/honua-mobile/issues/315).
-This is release/2027.1 work; draft publication does not authorize release.
+This work is tracked under release/2027.1.
 
 ## Location evidence migration
 
@@ -22,18 +22,24 @@ This extraction preserves native GPS and external receiver evidence before
 removal of the duplicate field app. It does not complete the store/sync migration
 or change the Collect shell's existing core boundary.
 
-## Remaining removal gates
+## Duplicate app retirement
 
-- Retarget useful form, record, export, diagnostics, location and live-server
-  tests before retiring tests tied exclusively to the duplicate app.
-- Adopt one offline store and one sync engine in Collect through published
-  packages; keep the tested Collect form/runtime boundary during the shell spike.
-- Verify encrypted native storage with the chosen provider, key lifecycle and
-  recovery behavior on both platforms; a password option alone is not proof.
-- Retire duplicate app/core projects and their unused build/distribution
-  consumers after the replacement is verified.
-- Publish an installable Android and iOS build with the paired Collect change.
-  The shell spike and platform signing/install delivery are owned in Collect.
+The duplicate `Honua.Mobile.FieldCollection` app, its core library, and its
+app-specific tests have been removed. Location evidence is retained in the
+shared MAUI SDK. Diagnostics integration tests now call the shared SDK directly;
+the live integration suite still verifies upload and queued-report delivery.
+The reference `Honua.Mobile.App` and field collector template remain SDK examples.
+Distribution workflows target that reference app only. Historical UI sketches
+under `docs/design-handoff` describe the retired app.
+
+## Remaining M1 acceptance
+
+- Adopt one published offline store and sync engine in Collect while preserving
+  its tested form runtime boundary during the shell spike (paired
+  [Collect #173](https://github.com/honua-io/honua-collect/issues/173)).
+- Verify encrypted native storage, key lifecycle and recovery on both platforms.
+- Publish paired installable Android and iOS Collect builds and run the journey
+  below on physical phones. Record platform signing or device dependencies.
 
 ## Paired build test script
 
@@ -52,4 +58,4 @@ build location. Run this journey on the founder's Android and iOS phones:
    permission recovery path without inventing a new location fix.
 
 Keep the device results with the paired build. Unit-test success alone does not
-mark this install journey or the M1 removal gates complete.
+mark this install journey or the remaining M1 acceptance complete.

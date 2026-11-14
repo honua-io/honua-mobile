@@ -1,5 +1,10 @@
 # Honua FieldCollection - Design Handoff
 
+> Archive: these sketches describe the retired duplicate field app. Their source
+> paths and UI examples are historical. Current field app work lives in Collect;
+> shared location evidence lives in `Honua.Mobile.Maui.Location`.
+
+
 This bundle is a self-contained snapshot of the FieldCollection mobile UI surface, prepared so that Claude Design (or any other design reviewer) can audit layout, hierarchy, and design-token usage without needing to build the .NET MAUI project.
 
 Everything here was extracted from the live XAML in `apps/Honua.Mobile.FieldCollection/` plus the customer-facing starter template in `templates/honua-fieldcollector/`. No screenshots are included; each page is reconstructed as a static HTML mock that uses the real design tokens (CSS custom properties) so visual fidelity matches the app's intent.

@@ -16,27 +16,6 @@
   "playServiceAccountSecret": "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON",
   "appTargets": [
     {
-      "id": "field-collection",
-      "displayName": "Honua Field Collection",
-      "project": "apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj",
-      "androidPackageId": "io.honua.mobile.fieldcollection",
-      "playConsoleAppRecord": "external-required",
-      "testerAccess": "external-required",
-      "signingSecretStem": "ANDROID_FIELD_COLLECTION_UPLOAD",
-      "requiredSigningSecrets": [
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD"
-      ],
-      "rotationScope": [
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS",
-        "ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD"
-      ]
-    },
-    {
       "id": "mobile-app",
       "displayName": "Honua Mobile App",
       "project": "apps/Honua.Mobile.App/Honua.Mobile.App.csproj",

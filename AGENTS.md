@@ -18,8 +18,7 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 - **.NET 10** (`net10.0`) — library projects (`Sdk`, `Offline`, `Maui`)
   target `net10.0` and build on any platform without the MAUI workload.
-- **.NET MAUI** `10.0.70` — app/platform projects (`apps/Honua.Mobile.App`,
-  `apps/Honua.Mobile.FieldCollection`). Android targets need a configured
+- **.NET MAUI** `10.0.70` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
   Android SDK; iOS targets need macOS + Xcode.
 - **Honua .NET SDK** `1.0.0` train (`Honua.Sdk.*`), pinned in
   `Directory.Build.props`. Pulled from the private GitHub Packages feed.
@@ -107,8 +106,7 @@ src/
   Honua.Embed/           @honua-io/embed web component package (TS/Vite); tests in tests/
 apps/
   Honua.Mobile.App/                 Reference MAUI application
-  Honua.Mobile.FieldCollection*/    Field collection app + core
-tests/                   Sdk / FieldCollection / Offline / Maui / ServerIntegration /
+tests/                   Sdk / Offline / Maui / ServerIntegration /
                          Smoke / PlatformSmoke test projects; tests/seed has vendored live seed SQL
 templates/  examples/    Field collector template and sample apps
 scripts/    quality/      Validation/release scripts, store-prereq validators, release checklists

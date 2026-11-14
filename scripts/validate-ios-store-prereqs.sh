@@ -116,7 +116,6 @@ done
 
 target_rows=(
   "mobile-app|Honua Mobile App|apps/Honua.Mobile.App/Honua.Mobile.App.csproj|io.honua.mobile.app|IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64"
-  "field-collection|Honua Field Collection|apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj|io.honua.mobile.fieldcollection|IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64"
 )
 
 for row in "${target_rows[@]}"; do
@@ -145,7 +144,6 @@ required_ios_secret_names=(
   IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64
   IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
   IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64
-  IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64
 )
 
 for secret_name in "${required_ios_secret_names[@]}"; do
@@ -155,8 +153,7 @@ for secret_name in "${required_ios_secret_names[@]}"; do
 done
 
 if grep -Rqs "<key>CFBundleIdentifier</key>" \
-  apps/Honua.Mobile.App/Platforms/iOS \
-  apps/Honua.Mobile.FieldCollection/Platforms/iOS
+  apps/Honua.Mobile.App/Platforms/iOS
 then
   failures+=("iOS Info.plist files declare CFBundleIdentifier; update docs and workflow mapping if the MAUI ApplicationId is no longer authoritative.")
 fi
