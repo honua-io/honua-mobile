@@ -111,9 +111,8 @@ schema versioning should be added through the uploader boundary.
 
 The mobile-owned contract is an authenticated `POST` to
 `/api/mobile/exceptions` with an `application/json` body serialized from the
-sanitized `MobileExceptionReport` shape. FieldCollection attaches its API key
-with `X-API-Key` only when the upload endpoint shares the authenticated Honua
-Server origin. Server implementations should reject unauthenticated uploads,
+sanitized `MobileExceptionReport` shape. Hosts attach credentials through the
+request customizer only for the authenticated server origin. Server implementations should reject unauthenticated uploads,
 accept valid reports with a success response, and leave retry semantics to the
 mobile queue when a non-success response is returned.
 
@@ -125,21 +124,10 @@ small redacted context/metadata properties. It must not store auth headers,
 tokens, raw attachments, precise location, or form payloads unless an approved
 server retention policy explicitly allows those fields.
 
-The FieldCollection app keeps exception reporting off until both tester consent
-and the environment kill switch allow it. The Settings screen writes
-`honua_exception_reporting_tester_consent` and `honua_exception_reporting_mode`
-after the tester opts in. Environments can force reporting off by setting
-`honua_exception_reporting_environment_enabled=false`; that override wins even
-when a tester has opted in. Settings changes are read during app startup, so a
-restart is required before reporter registration changes take effect.
-
-When enabled without an upload endpoint, FieldCollection uses `LocalOnly` mode
-and stores sanitized reports in the local queue. When
-`honua_exception_reporting_endpoint` is configured, it uses `ServerUpload`. The
-app also maps the legacy `honua_exception_reporting_mode=Server` preference to
-`ServerUpload`, stamps build/device metadata from the mobile build
-configuration, and attaches its API key only when the configured upload endpoint
-shares the authenticated server origin.
+Hosts own consent, environment controls and lifecycle registration. Choose
+`LocalOnly` to retain sanitized reports on the device, or `ServerUpload` with an
+explicit approved endpoint. The retired field app's preference names and startup
+registration are no longer maintained SDK examples.
 
 Do not flush from a blocking UI path or synchronously during app startup. Start
 flush work from lifecycle/background scheduling code and allow it to stop on

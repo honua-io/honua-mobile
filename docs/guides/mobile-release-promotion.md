@@ -6,7 +6,7 @@ number policy, release notes metadata, rollback, hotfixes, and store
 resubmits.
 
 The production lane is separate from debug, beta, and internal distribution.
-Use `.github/workflows/android-debug-apk.yml` for sideloadable debug APKs and
+Use `.github/workflows/android-internal-distribution.yml` for Android internal builds and
 future beta/internal workflows for tester distribution. Do not use production
 tags or the `mobile-production` GitHub Environment for tester-only builds.
 

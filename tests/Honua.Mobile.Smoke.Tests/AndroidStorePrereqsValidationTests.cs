@@ -20,7 +20,7 @@ public sealed class AndroidStorePrereqsValidationTests
     }
 
     [Fact]
-    public void ValidationScript_RejectsSwappedWorkflowMapping()
+    public void ValidationScript_RejectsInvalidWorkflowMapping()
     {
         if (!HasValidationScriptTools())
         {
@@ -31,8 +31,8 @@ public sealed class AndroidStorePrereqsValidationTests
         var workflowPath = Path.Combine(root, ".github", "workflows", "android-internal-distribution.yml");
         var workflow = File.ReadAllText(workflowPath);
         var swappedWorkflow = workflow.Replace(
-            "package_name=\"io.honua.mobile.fieldcollection\"",
             "package_name=\"io.honua.mobile.app\"",
+            "package_name=\"io.honua.mobile.invalid\"",
             StringComparison.Ordinal);
 
         Assert.NotEqual(workflow, swappedWorkflow);
@@ -48,7 +48,7 @@ public sealed class AndroidStorePrereqsValidationTests
             });
 
             Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains("maps 'field-collection' without package 'io.honua.mobile.fieldcollection'", result.Output);
+            Assert.Contains("maps 'mobile-app' without package 'io.honua.mobile.app'", result.Output);
         }
         finally
         {

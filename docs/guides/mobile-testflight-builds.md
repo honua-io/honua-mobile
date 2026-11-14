@@ -22,7 +22,6 @@ The workflow owns this iOS target mapping:
 
 | Workflow `app_target` | Project | Expected iOS bundle ID | Provisioning profile secret |
 | --- | --- | --- | --- |
-| `field-collection` | `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj` | `io.honua.mobile.fieldcollection` | `IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` |
 | `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` |
 
 Before importing signing assets, the workflow evaluates the selected MAUI
@@ -55,15 +54,12 @@ secrets:
 - `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64`
   Base64-encoded App Store provisioning profile for
   `io.honua.mobile.app`.
-- `IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64`
-  Base64-encoded App Store provisioning profile for
-  `io.honua.mobile.fieldcollection`.
 
 Encode binary files without line wrapping:
 
 ```bash
 base64 -i ios-distribution.p12 | pbcopy
-base64 -i Honua_FieldCollection_AppStore.mobileprovision | pbcopy
+base64 -i Honua_Mobile_AppStore.mobileprovision | pbcopy
 ```
 
 The App Store Connect API key needs permission to upload builds for the app
@@ -77,9 +73,8 @@ repository checks alone:
 
 - The Apple Developer team identified by `APPLE_TEAM_ID` is active and has
   access to App Store distribution.
-- Explicit bundle identifiers exist for `io.honua.mobile.app` and
-  `io.honua.mobile.fieldcollection`.
-- App Store Connect app records exist for both bundle IDs.
+- An explicit bundle identifier exists for `io.honua.mobile.app`.
+- App Store Connect an app record exists for that bundle ID.
 - Each bundle ID has the capabilities required by the app before the App Store
   provisioning profile is generated.
 - The Apple Distribution certificate is valid, includes the private key in the
@@ -87,7 +82,7 @@ repository checks alone:
 - One App Store provisioning profile exists per bundle ID and is regenerated
   after any bundle ID capability change.
 - The App Store Connect API key is active and has permission to upload builds
-  for both app records.
+  for that app record.
 - The internal TestFlight tester group exists, initial testers are invited, and
   the Apple owner knows who may approve distribution after processing.
 
@@ -97,7 +92,7 @@ repository checks alone:
 2. Select the reviewed workflow branch or tag to build.
 3. Fill the dispatch inputs:
    - `target_environment`: normally `ios-testflight`.
-   - `app_target`: `field-collection` or `mobile-app`.
+   - `app_target`: `mobile-app`.
    - `build_number`: optional numeric iOS build number. Leave blank to use the
      GitHub run number.
    - `release_notes`: optional notes copied into the run summary and artifact.
@@ -168,8 +163,6 @@ Provisioning profile does not match bundle ID:
 
 - Use `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` for
   `io.honua.mobile.app`.
-- Use `IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` for
-  `io.honua.mobile.fieldcollection`.
 - Regenerate the App Store profile after changing bundle ID capabilities.
 
 No Apple Distribution identity found:

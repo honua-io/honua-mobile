@@ -38,6 +38,10 @@ public sealed class GeoPackageSyncStore : IGeoPackageSyncStore
     public GeoPackageSyncStore(GeoPackageSyncStoreOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (options.EncryptionKey is not null && string.IsNullOrWhiteSpace(options.EncryptionKey))
+        {
+            throw new ArgumentException("An encryption key must not be empty or whitespace.", nameof(options));
+        }
     }
 
     /// <inheritdoc />
@@ -2254,6 +2258,9 @@ LIMIT $limit;
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = _options.DatabasePath,
+            Password = _options.EncryptionKey ?? string.Empty,
+            // Do not retain keyed native connections beyond the caller's lifetime.
+            Pooling = _options.EncryptionKey is null,
         };
 
         var connection = new SqliteConnection(builder.ToString());
@@ -2271,11 +2278,21 @@ LIMIT $limit;
         return connection;
     }
 
-    private static void ApplyConnectionPragmasOnOpen(object? sender, StateChangeEventArgs e)
+    private void ApplyConnectionPragmasOnOpen(object? sender, StateChangeEventArgs e)
     {
         if (e.CurrentState != ConnectionState.Open || sender is not SqliteConnection connection)
         {
             return;
+        }
+
+        if (_options.EncryptionKey is not null)
+        {
+            using var cipherCommand = connection.CreateCommand();
+            cipherCommand.CommandText = "PRAGMA cipher_version;";
+            if (cipherCommand.ExecuteScalar() is not string { Length: > 0 })
+            {
+                throw new InvalidOperationException("Encrypted offline storage requires a SQLCipher-capable native provider.");
+            }
         }
 
         using var command = connection.CreateCommand();
