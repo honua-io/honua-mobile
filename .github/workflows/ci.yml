@@ -82,8 +82,8 @@ jobs:
           SRC_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|\.github/workflows/|tests/Honua\.Mobile\.PlatformSmoke/)')
           CORE_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|tests/|\.github/workflows/|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config|package(-lock)?\.json)')
           TEST_CHANGED=$(match_changed '^tests/')
-          PLATFORM_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|apps/Honua\.Mobile\.FieldCollection/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.Maui\.Tests/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-(android|ios)-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
-          ANDROID_SMOKE_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|apps/Honua\.Mobile\.FieldCollection/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-android-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+          PLATFORM_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.Maui\.Tests/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-(android|ios)-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+          ANDROID_SMOKE_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-android-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
 
           if [ "$FULL_MOBILE_REQUESTED" = "true" ]; then
             SRC_CHANGED="${SRC_CHANGED:-__full_mobile_ci__}"
@@ -236,7 +236,6 @@ jobs:
         run: |
           dotnet restore tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj
           dotnet restore tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj
-          dotnet restore tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj
           dotnet restore tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
           dotnet restore tests/Honua.Mobile.Maui.Tests/Honua.Mobile.Maui.Tests.csproj
           dotnet restore tests/Honua.Migrate.Maui.Tests/Honua.Migrate.Maui.Tests.csproj
@@ -250,8 +249,6 @@ jobs:
           dotnet build tests/Honua.Mobile.Sdk.Tests/Honua.Mobile.Sdk.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
-            --no-restore --configuration Release
-          dotnet build tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj \
             --no-restore --configuration Release
           dotnet build tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj \
             --no-restore --configuration Release
@@ -274,15 +271,6 @@ jobs:
           dotnet test tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj \
             --no-build --no-restore --configuration Release \
             --logger "trx;LogFileName=offline-tests.trx" \
-            --logger "console;verbosity=minimal" \
-            --results-directory ./TestResults \
-            --collect:"XPlat Code Coverage"
-
-      - name: Run FieldCollection App Tests
-        run: |
-          dotnet test tests/Honua.Mobile.FieldCollection.Tests/Honua.Mobile.FieldCollection.Tests.csproj \
-            --no-build --no-restore --configuration Release \
-            --logger "trx;LogFileName=fieldcollection-tests.trx" \
             --logger "console;verbosity=minimal" \
             --results-directory ./TestResults \
             --collect:"XPlat Code Coverage"
@@ -348,7 +336,7 @@ jobs:
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Setup Java
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: 'microsoft'
           java-version: '17'
@@ -372,14 +360,6 @@ jobs:
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifiers=android-x64
-
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
-            -p:TargetFramework=net10.0-android \
-            -p:RuntimeIdentifiers=android-x64
-
-          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
-            -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
@@ -409,23 +389,9 @@ jobs:
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 
-          dotnet build apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj \
-            --configuration Release \
-            --no-restore \
-            /p:RuntimeIdentifier=android-x64 \
-            /p:RuntimeIdentifiers=android-x64 \
-            /p:TreatWarningsAsErrors=true
-
       - name: Build Android Apps
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
-            --configuration Release \
-            --framework net10.0-android \
-            --no-restore \
-            /p:RuntimeIdentifiers=android-x64 \
-            /p:TreatWarningsAsErrors=true
-
-          dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-android \
             --no-restore \
@@ -543,16 +509,9 @@ jobs:
       - name: Restore iOS Apps
         if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
-            -p:TargetFramework=net10.0-ios \
-            -p:RuntimeIdentifier=iossimulator-x64 \
-            -p:RuntimeIdentifiers=iossimulator-x64
-
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net10.0-ios \
             '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
-
-          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
@@ -560,12 +519,6 @@ jobs:
         if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
-            --configuration Release \
-            --framework net10.0-ios \
-            /p:RuntimeIdentifier=iossimulator-x64 \
-            /p:TreatWarningsAsErrors=true
-
-          dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj \
             --configuration Release \
             --framework net10.0-ios \
             /p:RuntimeIdentifier=iossimulator-x64 \
@@ -642,28 +595,11 @@ jobs:
             -p:RuntimeIdentifiers=win-x64 `
             -p:Platform=x64
 
-          dotnet restore apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
-            -p:TargetFramework=net10.0-windows10.0.19041.0 `
-            -p:RuntimeIdentifier=win-x64 `
-            -p:RuntimeIdentifiers=win-x64 `
-            -p:Platform=x64
-
-          dotnet restore apps/Honua.Mobile.FieldCollection.Core/Honua.Mobile.FieldCollection.Core.csproj `
-            -p:Platform=x64
-
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
       - name: Build Reference App (Windows)
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
-            --configuration Release `
-            --framework net10.0-windows10.0.19041.0 `
-            --no-restore `
-            /p:Platform=x64
-
-      - name: Build Field Collection App (Windows)
-        run: |
-          dotnet build apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj `
             --configuration Release `
             --framework net10.0-windows10.0.19041.0 `
             --no-restore `
@@ -738,30 +674,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
-        with:
-          languages: csharp
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Configure GitHub Packages
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
-
-      - name: Restore and Build for Analysis
-        run: |
-          dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
-          dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
-          # Build cross-platform libraries for security analysis
-          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --configuration Release
-          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      # CodeQL runs through GitHub default setup; advanced uploads conflict with it.
 
   quality-gates:
     name: Quality Gates

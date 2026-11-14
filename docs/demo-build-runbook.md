@@ -1,10 +1,9 @@
 # Demo Build Runbook — How to Cut a Customer Demo Build
 
-This runbook covers cutting a **customer demo build** of the Honua mobile apps
-that points at the **Pro-licensed demo backend** at `https://demo.honua.io`.
-A demo build exists so a customer can install the app, sign in, and exercise the
-full capability set — including the Pro-only **feature editing / sync** path
-(`editing.feature-edits`) — against a live, Pro-licensed server.
+This runbook builds the SDK reference app against the demo backend at
+`https://demo.honua.io`. It verifies packaging and endpoint metadata. The
+reference app does not implement the retired field app's login/edit/sync
+journey. Collect owns field workflow builds and their on-device test scripts.
 
 Tracks issue
 [#292](https://github.com/honua-io/honua-mobile/issues/292). The repo-side build
@@ -25,10 +24,10 @@ staging / production builds use. The mapping lives in
 
 When the build environment is one of the demo names and no explicit
 `HonuaMobileApiBaseUrl` is supplied, the props default the base URL to
-`https://demo.honua.io`. The value is stamped into the assembly as the
-`HonuaMobile.ApiBaseUrl` metadata attribute and resolved at runtime by
-[`MobileBuildConfiguration`](../apps/Honua.Mobile.FieldCollection.Core/Services/Configuration/MobileBuildConfiguration.cs)
-into a `MobileServiceEndpointConfiguration` of kind `Demo`.
+`https://demo.honua.io`. The value is stamped into assembly metadata. The retired field app's runtime
+configuration and endpoint guard no longer exist. Host applications must read
+and enforce their endpoint configuration; verify the selected endpoint on-device.
+This reference app workflow does not deliver the Collect field workflow.
 
 **No secrets or license live in source.** Only the public base URL is baked in.
 The demo backend is Pro-licensed independently (server side); any credentials a
@@ -61,7 +60,7 @@ Trigger [`ios-testflight.yml`](../.github/workflows/ios-testflight.yml) via
 | Input | Value for a demo build |
 | --- | --- |
 | `target_environment` | `ios-demo` |
-| `app_target` | `field-collection` (the demo target) |
+| `app_target` | `mobile-app` |
 | `build_number` | optional; defaults to the run number |
 | `release_notes` | optional tester notes |
 
@@ -81,7 +80,7 @@ via **Actions → Android Internal Distribution → Run workflow**:
 | --- | --- |
 | `environment` | the protected Environment holding signing + Play secrets (e.g. `android-internal`) |
 | `target_environment` | `android-demo` |
-| `app_target` | `field-collection` |
+| `app_target` | `mobile-app` |
 | `channel` | `internal-testing` (durable) or `internal-app-sharing` (per-build link) |
 | `artifact_type` | `aab` for Play tracks, `apk` for sideload |
 | `version_name` / `version_code` | as usual; `version_code` must increase for Play uploads |
@@ -96,19 +95,13 @@ via **Actions → Android Internal Distribution → Run workflow**:
 Run this on the installed demo build before handing it to a customer. It proves
 the Pro `editing.feature-edits` path is green against `demo.honua.io`.
 
-1. **Confirm the backend.** Open the app's build/diagnostics screen and verify the
-   service endpoint reads `Demo: https://demo.honua.io/`.
-2. **Log in** with the demo credentials against `demo.honua.io` and confirm the
-   session is authenticated.
-3. **Open a field-collection layer** and confirm features render (read path works).
-4. **Make an edit** — add or modify a feature in that layer.
-5. **Sync** and **confirm sync succeeds** — the edit is accepted by the server with
-   no `FailedPrecondition` / `editing.feature-edits` error. A green sync confirms
-   the demo backend's Pro entitlement is active.
-6. (Optional) Reopen the layer / pull a fresh replica and confirm the edit
-   round-trips back from the server.
+The former field app's login/edit/sync journey has moved to Collect. Use the
+[paired Collect build script](guides/field-sdk-consolidation.md#paired-build-test-script)
+with the intended demo endpoint. Record the installed build, endpoint, login,
+offline capture, restart and successful reconnect/sync results on both phones.
+A reference-app store upload alone does not validate that journey.
 
-If step 5 fails with the `FailedPrecondition` message above, the demo backend is
+If sync fails with the `FailedPrecondition` message above, the demo backend is
 not Pro-licensed — fix the server license, not the build.
 
 ## What the external channel expects

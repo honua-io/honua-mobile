@@ -17,10 +17,9 @@ on:
       app_target:
         description: "MAUI app target to archive and upload."
         required: true
-        default: "field-collection"
+        default: "mobile-app"
         type: choice
         options:
-          - field-collection
           - mobile-app
       build_number:
         description: "Optional CFBundleVersion/ApplicationVersion. Defaults to the GitHub run number."
@@ -144,12 +143,6 @@ jobs:
           set -euo pipefail
 
           case "${APP_TARGET_INPUT}" in
-            field-collection)
-              project_path="apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj"
-              app_name="Honua Field Collection"
-              bundle_id="io.honua.mobile.fieldcollection"
-              profile_secret_name="IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64"
-              ;;
             mobile-app)
               project_path="apps/Honua.Mobile.App/Honua.Mobile.App.csproj"
               app_name="Honua Mobile App"

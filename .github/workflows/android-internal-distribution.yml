@@ -37,10 +37,9 @@ name: Android Internal Distribution
       app_target:
         description: "Known Android app target to build and upload."
         required: true
-        default: field-collection
+        default: mobile-app
         type: choice
         options:
-          - field-collection
           - mobile-app
       version_name:
         description: "ApplicationDisplayVersion override for this internal build."
@@ -88,11 +87,6 @@ jobs:
           set -euo pipefail
 
           case "${{ inputs.app_target }}" in
-            field-collection)
-              app_project="apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj"
-              package_name="io.honua.mobile.fieldcollection"
-              secret_stem="ANDROID_FIELD_COLLECTION_UPLOAD"
-              ;;
             mobile-app)
               app_project="apps/Honua.Mobile.App/Honua.Mobile.App.csproj"
               package_name="io.honua.mobile.app"

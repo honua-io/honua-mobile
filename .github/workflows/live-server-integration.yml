@@ -10,8 +10,8 @@ name: Live Server Integration
 #
 # Seed SQL: the live tests load `tests/seed/mobile-offline-demo-v1.sql`
 # (vendored from honua-io/honua-server -- see tests/seed/UPSTREAM.md and
-# tools/sync-mobile-offline-seed.sh) into the postgres container before the
-# Honua server starts. Because the seed is vendored, every PR-trigger run
+# tools/sync-mobile-offline-seed.sh) after schema initialization, then restart
+# Honua to rebuild published metadata. Because the seed is vendored, every PR-trigger run
 # is a fully-seeded run -- the dotnet test step is a hard gate, not a
 # soft-fail. `workflow_dispatch` still accepts `fixture_sql_ref` to override
 # the vendored seed with a fresh upstream snapshot for ad-hoc validation.

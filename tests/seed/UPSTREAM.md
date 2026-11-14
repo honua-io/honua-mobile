@@ -8,9 +8,17 @@ seed SQL that lives upstream in
 It is consumed by the `Live Server Integration` GitHub Actions workflow
 (`.github/workflows/live-server-integration.yml`) and by local runs of
 `LiveHonuaServerInteractionTests` -- the fixture loads it into the
-PostGIS container before the live Honua server starts, so the
-`mobile_offline_demo` service, layers, scene, and routing assets are
-registered before any test runs.
+PostGIS container after the live Honua server initializes its schema, then
+restarts the server to rebuild published metadata from the seeded catalog. The
+`mobile_offline_demo` service, layers, and scene are registered before any test
+runs. The image fixture enables the offline/scene capability flags and uses the
+supported development-only Enterprise grant to exercise licensed endpoints.
+Routing uses the deterministic `mock` provider because this seed supplies no road
+topology; this suite checks the mobile routing wire contract, not a road-network
+solver. External-server runs retain the supplied server configuration.
+After restarting, the image fixture declares attachment support through the
+supported layer-metadata admin API; the legacy seed catalog does not carry that
+declaration. The round-trip attachment assertions remain unchanged.
 
 ## Why vendor it?
 
@@ -27,10 +35,10 @@ section below.
 | --- | --- |
 | Upstream path | `tests/seed/mobile-offline-demo-v1.sql` |
 | Upstream repo | `honua-io/honua-server` |
-| Upstream blob SHA | `3420275023fa3cee45b1a4517ee1ac5cc74e9a55` |
-| Upstream `trunk` commit at fetch time | `5c179776929e4b62fdce11a5bc2e1e0369897466` |
-| Vendored on | 2026-06-20 |
-| Bytes | 14684 |
+| Upstream blob SHA | `8f684186c6e564b6ebbfdb4d2138dbb4d3429e2c` |
+| Upstream `trunk` commit at fetch time | `fc275f3d63f4a73f5fbf34338abbb3732f711b1f` |
+| Vendored on | 2026-11-14 |
+| Bytes | 15546 |
 
 When updating, refresh every row above (the blob SHA in particular --
 that's what the sync script checks against to detect drift).

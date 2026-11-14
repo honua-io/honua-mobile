@@ -18,13 +18,6 @@ Honua Mobile App:
 - Android package ID: `io.honua.mobile.app`
 - iOS bundle ID: `io.honua.mobile.app`
 
-Honua Field Collection:
-
-- Project configuration:
-  `apps/Honua.Mobile.FieldCollection/Honua.Mobile.FieldCollection.csproj`
-- Android package ID: `io.honua.mobile.fieldcollection`
-- iOS bundle ID: `io.honua.mobile.fieldcollection`
-
 Before the first store upload, confirm these IDs are final. Package IDs and
 bundle IDs become expensive to change after Play Console or App Store Connect
 app records are created. Template projects with placeholder IDs, such as
@@ -83,8 +76,7 @@ environment actually needs to sign or upload builds.
 - [ ] Confirm Google Play Console account ownership and billing status.
 - [ ] Grant least-privilege Play Console access to release owners and
       automation.
-- [ ] Create or verify app records for `io.honua.mobile.app` and
-      `io.honua.mobile.fieldcollection`.
+- [ ] Create or verify an app record for `io.honua.mobile.app`.
 - [ ] Confirm the package IDs above match the project configuration at release
       time.
 - [ ] Enable Play App Signing for each app record.
@@ -118,15 +110,6 @@ auditable in the repository.
   Upload key alias for `io.honua.mobile.app`.
 - `ANDROID_APP_UPLOAD_KEY_PASSWORD`
   Upload key password for `io.honua.mobile.app`.
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_BASE64`
-  Base64-encoded upload keystore file for
-  `io.honua.mobile.fieldcollection`.
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEYSTORE_PASSWORD`
-  Upload keystore password for `io.honua.mobile.fieldcollection`.
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_ALIAS`
-  Upload key alias for `io.honua.mobile.fieldcollection`.
-- `ANDROID_FIELD_COLLECTION_UPLOAD_KEY_PASSWORD`
-  Upload key password for `io.honua.mobile.fieldcollection`.
 
 ## iOS Checklist
 
@@ -169,9 +152,6 @@ environments.
   Distribution certificate export password.
 - `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64`
   Base64-encoded App Store provisioning profile for `io.honua.mobile.app`.
-- `IOS_FIELD_COLLECTION_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64`
-  Base64-encoded App Store provisioning profile for
-  `io.honua.mobile.fieldcollection`.
 
 ## Tester Groups
 
