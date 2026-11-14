@@ -63,13 +63,11 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     Task MarkSucceededAsync(string operationId, CancellationToken ct = default);
 
-    /// <summary>Atomically retains server identifiers and removes the uploaded queue entry.</summary>
     Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
         => serverFeatureIds.Count == 0
             ? MarkSucceededAsync(operationId, ct)
             : throw new NotSupportedException("This sync store cannot persist server feature identifiers before removing the queue entry.");
 
-    /// <summary>Reads a retained upload result, or null when no upload was acknowledged.</summary>
     Task<OfflineUploadAcknowledgement?> GetUploadAcknowledgementAsync(string operationId, CancellationToken ct = default)
         => throw new NotSupportedException("This sync store does not persist upload acknowledgements.");
 

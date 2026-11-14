@@ -424,7 +424,6 @@ ORDER BY priority ASC, created_at_utc ASC;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
     public async Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
@@ -455,7 +454,6 @@ DELETE FROM honua_sync_queue WHERE operation_id = $operation_id;
         await transaction.CommitAsync(ct).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
     public async Task<OfflineUploadAcknowledgement?> GetUploadAcknowledgementAsync(string operationId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
