@@ -1,3 +1,5 @@
+> Historical design: the mobile field packages no longer ship routing, native AR anchoring or a plugin host. See [field runtime scope](field-runtime-scope.md).
+
 # Native Scene Anchoring Requirements
 
 This spike resolves the native anchoring decision for

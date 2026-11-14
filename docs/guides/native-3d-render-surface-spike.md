@@ -1,3 +1,5 @@
+> Historical design: the mobile field packages no longer ship routing, native AR anchoring or a plugin host. See [field runtime scope](field-runtime-scope.md).
+
 # Native 3D Render Surface Spike
 
 Issue: [honua-mobile#1199][mobile-1199] (parent epic [honua-server#530][server-530])

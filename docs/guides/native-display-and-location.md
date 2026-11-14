@@ -1,3 +1,5 @@
+> Scope update: native AR anchoring and mobile routing helpers are removed from shipped field packages. Historical AR examples below are design context; see [field runtime scope](field-runtime-scope.md). Native display and location APIs remain.
+
 # Native Display and Location Integration
 
 This guide covers the mobile-owned surfaces for native .NET map display and

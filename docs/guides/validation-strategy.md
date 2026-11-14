@@ -52,11 +52,9 @@ and most reliable inward to most expensive and most operationally gated:
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- no current automated coverage. AR/VR field
-  workflows (honua-server#23, closed; deferred to GA) and physical-device
-  iOS/Android smoke runs are documented as follow-ups; emulator-based
-  platform smoke (`scripts/run-android-platform-smoke.sh`,
-  `scripts/run-ios-platform-smoke.sh`) is the closest current approximation.
+- **Physical device** -- Collect owns the installed Android/iPhone journey.
+  Emulator/simulator platform smoke is separate evidence and does not prove
+  physical-device acceptance.
 
 Embed DOM tests (`src/Honua.Embed/tests/`, npm) cover the web-component
 `<honua-map>` / `<honua-scene>` surfaces and run on every PR via the
@@ -81,7 +79,6 @@ honest gaps; the parenthesised reason indicates why.
 | Map annotations | `HonuaAnnotationLayerTests.cs` (13) | N/A (UI surface) | N/A (UI surface) | N/A (manual) | N/A (deferred) | unit-only |
 | Scene metadata | `HonuaSceneClientAdapterTests.cs` (15) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
 | Scene packages | `HonuaScenePackageManifestTests.cs` (10), `ScenePackageDownloaderTests.cs` (11) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
-| AR scene anchoring | `HonuaNativeSceneAnchoringTests.cs` (15) | N/A (UI/platform) | N/A (no device harness) | N/A (manual) | N/A (deferred to GA, #23) | unit-only |
 | Sync conflict resolution | `OfflineSyncEngineTests.cs` (subset of 7) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | Background sync orchestration | `BackgroundSyncOrchestratorTests.cs` (4), `BackgroundPrefetchSchedulerTests.cs` (1) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Connectivity-aware sync | `BackgroundSyncOrchestratorTests.cs` (4, `ToggleConnectivityProvider`) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
@@ -94,12 +91,10 @@ single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
 (including `Fixture_ShapeInvariants_PinKeyWireShapes`, which enforces
 sdk-contract-stability.md exit criterion #4);
 `LiveHonuaServerFixtureOptionsTests.cs`
-(4) validate harness configuration; `HonuaRoutingClientTests.cs` (9)
-covers routing; `HonuaNativeDisplayTests.cs` (4) and
+validate harness configuration; `HonuaNativeDisplayTests.cs` and
 `HonuaDeviceLocationTests.cs` (12) cover native display and device
-location boundaries; `HonuaMapPluginHostTests.cs` (9) covers plugin
-hosting; `SdkBackedOfflineFieldOperationsDemoHarnessTests.cs` (2),
-`SdkOfflineRegistrationTests.cs` (3), `MapAreaDownloaderTests.cs` (4)
+location boundaries; `SdkBackedOfflineFieldOperationsDemoHarnessTests.cs` (2),
+`SdkOfflineRegistrationTests.cs`, `MapAreaDownloaderTests.cs` (4)
 cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 18) is run by the `quality-gates` job.
 
@@ -113,10 +108,6 @@ physical-device acceptance.
 
 Known coverage gaps, with the owner ticket where one exists:
 
-- **AR physical-device validation** -- deferred to GA per closure of
-  honua-io/honua-mobile#23. Per-runtime native AR follow-ups are tracked
-  in `docs/guides/native-scene-anchoring-requirements.md` and the
-  3D/AR dependency matrix (`docs/guides/mobile-3d-ar-dependency-matrix.md`).
 - ~~**Live server (Docker) on every PR**~~ -- closed. The
   `Live Server Integration` workflow now runs
   `LiveHonuaServerInteractionTests` on every PR with the
