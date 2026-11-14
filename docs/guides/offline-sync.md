@@ -441,3 +441,49 @@ conflict policy rules.
 - [Offline 3D Scene Packages](offline-3d-scene-packages.md)
 - [Performance Guide](performance.md)
 - [Troubleshooting](troubleshooting.md)
+
+### Commit a local edit and its upload together
+
+Use `IGeoPackageSyncStore.UpsertFeatureAndEnqueueAsync(operation, featureJson)`
+when saving a local edit that must upload later. The SDK writes the feature cache,
+spatial index, and pending operation in one transaction under `operation.LayerKey`.
+If either write fails, neither change commits. Reopening the store retains both
+writes after success. Separate `UpsertFeatureAsync` and `EnqueueAsync` calls leave
+a crash window between saving and queuing.
+
+The caller supplies a stable operation ID, the cache feature's object ID, and the
+upload payload appropriate for the target collection. These payloads can differ
+when the server assigns the final object ID. This method does not upload or
+reconcile server IDs. Custom stores that do not implement atomic writes throw
+`NotSupportedException` rather than silently using two transactions.
+
+
+### Recover the server identity after an upload
+
+The mobile `OfflineSyncEngine` commits `OfflineUploadAcknowledgement` and removes
+its queued operation in one transaction. Operations synced through the
+`Honua.Sdk.Offline` journal adapter (`GeoPackageSdkOfflineStoreAdapter`) are
+removed without an acknowledgement, so `GetUploadAcknowledgementAsync` returns
+`null` for them. Read `GetUploadAcknowledgementAsync(operationId)`
+after a restart to recover server IDs before updating an app record's sync state.
+A failed acknowledgement write keeps the queued operation available for retry.
+Acknowledgements survive repeated sync and initialization; operation IDs cannot
+be reused after acknowledgement. Use a new operation ID for each later edit.
+
+FeatureServer edit-result IDs and OGC create/update IDs are retained when the
+server supplies them. An empty ID list means no identifier was supplied; it does
+not establish a local-to-server identity mapping. Server-wins conflict resolution
+discards the local edit without recording an upload acknowledgement. Applications
+still own their record mapping, attachment completion and history. Retained results
+currently have no automatic expiry. Blank server IDs are ignored. If an operation
+is no longer queued and has no acknowledgement, `MarkUploadedAsync` throws rather
+than silently dropping its server IDs; if an acknowledgement already exists, the
+call keeps the stored IDs. In `OfflineSyncEngine` that exception ends the sync run:
+uploads already acknowledged in the run stay recorded, and the remaining claimed
+operations return to pending for the next run. `GetUploadAcknowledgementAsync` returns `null` on a
+database created before acknowledgements were added, until `InitializeAsync` runs.
+
+Custom stores and decorators that do not override `MarkUploadedAsync` keep
+working: the default implementation calls `MarkSucceededAsync` and does not
+retain server IDs. Forward `MarkUploadedAsync` and `GetUploadAcknowledgementAsync`
+to retain them.

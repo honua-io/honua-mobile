@@ -61,6 +61,28 @@ public sealed class EncryptedGeoPackageSyncStoreTests : IDisposable
         Assert.Equal("upload-once", Assert.Single(uploader.OperationIds));
     }
 
+    [Fact]
+    public async Task EncryptedStore_RetainsUploadAcknowledgementAcrossReopen()
+    {
+        var store = CreateStore("acknowledgement-key");
+        await store.InitializeAsync();
+        await store.EnqueueAsync(new OfflineEditOperation
+        {
+            OperationId = "encrypted-ack",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = "{}",
+        });
+
+        await store.MarkUploadedAsync("encrypted-ack", ["server-7"]);
+
+        var reopened = CreateStore("acknowledgement-key");
+        await reopened.InitializeAsync();
+        Assert.Equal(0, await reopened.CountPendingAsync());
+        Assert.Equal(["server-7"], (await reopened.GetUploadAcknowledgementAsync("encrypted-ack"))!.ServerFeatureIds);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("incorrect-key")]

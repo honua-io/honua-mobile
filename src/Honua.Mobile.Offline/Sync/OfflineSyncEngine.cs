@@ -62,7 +62,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                     var uploadResult = await UploadSafelyAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
                     if (uploadResult.Outcome == UploadOutcome.Success)
                     {
-                        await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
+                        await _store.MarkUploadedAsync(operation.OperationId, uploadResult.ServerFeatureIds, ct).ConfigureAwait(false);
                         success++;
                         continue;
                     }
@@ -185,7 +185,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                     var forced = await UploadSafelyAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
                     if (forced.Outcome == UploadOutcome.Success)
                     {
-                        await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
+                        await _store.MarkUploadedAsync(operation.OperationId, forced.ServerFeatureIds, ct).ConfigureAwait(false);
                         return ConflictResolutionState.ResolvedState;
                     }
 

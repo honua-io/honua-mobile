@@ -26,6 +26,9 @@ public interface IGeoPackageSyncStore
     /// <param name="ct">Cancellation token.</param>
     Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default);
 
+    Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
+        => throw new NotSupportedException("This GeoPackage sync store does not support atomic feature and queue writes.");
+
     /// <summary>
     /// Claims up to <paramref name="maxCount"/> pending operations, marking them as in-progress.
     /// Stale claims older than the configured lease timeout are reclaimed.
@@ -59,6 +62,14 @@ public interface IGeoPackageSyncStore
     /// <param name="operationId">The operation ID to mark as succeeded.</param>
     /// <param name="ct">Cancellation token.</param>
     Task MarkSucceededAsync(string operationId, CancellationToken ct = default);
+
+    // The default keeps stores and decorators written before acknowledgements working: it completes the
+    // upload through MarkSucceededAsync without retaining server IDs. Override it to retain them.
+    Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
+        => MarkSucceededAsync(operationId, ct);
+
+    Task<OfflineUploadAcknowledgement?> GetUploadAcknowledgementAsync(string operationId, CancellationToken ct = default)
+        => throw new NotSupportedException("This sync store does not persist upload acknowledgements.");
 
     /// <summary>
     /// Resets an operation back to pending status, clearing its claim and error state.

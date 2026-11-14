@@ -34,6 +34,8 @@ public sealed class UploadResult
     /// Optional message from the server describing the outcome or error.
     /// </summary>
     public string? Message { get; init; }
+
+    public IReadOnlyList<string> ServerFeatureIds { get; init; } = [];
 }
 
 /// <summary>
