@@ -738,30 +738,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
-        with:
-          languages: csharp
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Configure GitHub Packages
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
-
-      - name: Restore and Build for Analysis
-        run: |
-          dotnet restore src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj
-          dotnet restore src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj
-          # Build cross-platform libraries for security analysis
-          dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --configuration Release
-          dotnet build src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --configuration Release
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      # CodeQL runs through GitHub default setup; advanced uploads conflict with it.
 
   quality-gates:
     name: Quality Gates
