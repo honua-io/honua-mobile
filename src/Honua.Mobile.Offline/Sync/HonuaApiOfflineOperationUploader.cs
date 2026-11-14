@@ -172,7 +172,7 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 
                     return TryReadError(response.RootElement, out var code, out var message)
                         ? FromErrorCode(code, message)
-                        : new UploadResult { Outcome = UploadOutcome.Success };
+                        : new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ReadOgcFeatureId(response.RootElement) };
                 }
 
             case OfflineOperationType.Update:
@@ -190,7 +190,7 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
                         return FromErrorCode(code, message);
                     }
 
-                    return new UploadResult { Outcome = UploadOutcome.Success };
+                    return new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = [payload.FeatureId] };
                 }
 
                 var updateResponse = await _client.ApplyEditsAsync(new FeatureEditRequest
@@ -249,7 +249,29 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
                 : new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = "applyEdits result reported failure." };
         }
 
-        return new UploadResult { Outcome = UploadOutcome.Success };
+        return new UploadResult
+        {
+            Outcome = UploadOutcome.Success,
+            ServerFeatureIds = editResults
+                .Select(result => result.Id ?? result.ObjectId?.ToString(CultureInfo.InvariantCulture))
+                .OfType<string>()
+                .ToArray(),
+        };
+    }
+
+    private static IReadOnlyList<string> ReadOgcFeatureId(JsonElement feature)
+    {
+        if (feature.ValueKind != JsonValueKind.Object || !feature.TryGetProperty("id", out var id))
+        {
+            return [];
+        }
+
+        return id.ValueKind switch
+        {
+            JsonValueKind.String => [id.GetString()!],
+            JsonValueKind.Number => [id.GetRawText()],
+            _ => [],
+        };
     }
 
     private static UploadResult FromStatusCode(HttpStatusCode statusCode, string message)

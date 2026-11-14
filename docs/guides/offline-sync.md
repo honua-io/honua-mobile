@@ -456,3 +456,21 @@ upload payload appropriate for the target collection. These payloads can differ
 when the server assigns the final object ID. This method does not upload or
 reconcile server IDs. Custom stores that do not implement atomic writes throw
 `NotSupportedException` rather than silently using two transactions.
+
+
+### Recover the server identity after an upload
+
+The sync engine commits `OfflineUploadAcknowledgement` and removes its queued
+operation in one transaction. Read `GetUploadAcknowledgementAsync(operationId)`
+after a restart to recover server IDs before updating an app record's sync state.
+A failed acknowledgement write keeps the queued operation available for retry.
+Acknowledgements survive repeated sync and initialization; operation IDs cannot
+be reused after acknowledgement. Use a new operation ID for each later edit.
+
+FeatureServer edit-result IDs and OGC create/update IDs are retained when the
+server supplies them. An empty ID list means no identifier was supplied; it does
+not establish a local-to-server identity mapping. Server-wins conflict resolution
+discards the local edit without recording an upload acknowledgement. Applications
+still own their record mapping, attachment completion and history. Retained results
+currently have no automatic expiry. Custom stores must implement durable results
+to accept uploads that return IDs; the default implementation fails closed.
