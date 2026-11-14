@@ -1,5 +1,5 @@
--- Copyright (c) Honua. All rights reserved.
--- Licensed under the Elastic License 2.0. See LICENSE in the project root.
+-- Copyright (c) Honua Geo Inc. All rights reserved.
+-- Licensed under the Fair Core License, Version 1.0, ALv2 Future License. See LICENSE in the project root.
 --
 -- Deterministic SDK-backed mobile offline field operations fixture.
 -- Safe to re-run: this seed removes only the fixture-owned service, scene,
@@ -142,7 +142,12 @@ VALUES
         68910,
         'Offline Field Sites',
         'Mobile-editable point layer for SDK offline create, update, delete, and conflict scenarios.',
-        current_schema(),
+        (
+            SELECT n.nspname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.oid = to_regclass('features')
+        ),
         'features',
         'objectid',
         'geometry',
@@ -188,7 +193,12 @@ VALUES
         68920,
         'Offline Work Zones',
         'Polygon context layer included in the offline package as readonly operational context.',
-        current_schema(),
+        (
+            SELECT n.nspname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.oid = to_regclass('features')
+        ),
         'features',
         'objectid',
         'geometry',
@@ -381,5 +391,13 @@ VALUES
             'notes', 'Readonly operational context for offline package.'
         )
     );
+
+-- Invalidate only the demo stack's metadata environment after the complete legacy fixture
+-- exists so its supported V1 compatibility projector rebuilds the adopted Metadata v2
+-- graph on restart. The server keys the graph by Metadata:Environment, else the host
+-- environment name (the demo Compose stack runs Development), else 'default'. Other
+-- environments may share this database in staging/cloud setups.
+DELETE FROM honua.metadata_v2_current
+WHERE environment IN ('default', 'Development');
 
 COMMIT;

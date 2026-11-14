@@ -1,3 +1,4 @@
+using Honua.Mobile.Maui.Location;
 using System.ComponentModel;
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services.Ai;

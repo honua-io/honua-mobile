@@ -1,5 +1,6 @@
 using Honua.Mobile.FieldCollection.Models;
 using Honua.Mobile.FieldCollection.Services;
+using Honua.Mobile.Maui.Location;
 using Microsoft.Maui.Devices.Sensors;
 
 namespace Honua.Mobile.FieldCollection.Tests;
