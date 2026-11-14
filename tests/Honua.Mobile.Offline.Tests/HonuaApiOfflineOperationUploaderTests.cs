@@ -8,6 +8,34 @@ namespace Honua.Mobile.Offline.Tests;
 
 public sealed class HonuaApiOfflineOperationUploaderTests
 {
+    [Theory]
+    [InlineData("""{"type":"Feature","id":""}""")]
+    [InlineData("""{"type":"Feature","id":"   "}""")]
+    public async Task UploadAsync_OgcCreateWithBlankId_ReturnsNoServerIds(string responseBody)
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
+        });
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "buildings",
+            TargetCollection = "buildings",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {
+              "protocol": "ogcfeatures",
+              "collectionId": "buildings",
+              "feature": { "type": "Feature", "properties": {}, "geometry": { "type": "Point", "coordinates": [0, 0] } }
+            }
+            """,
+        }, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.Success, result.Outcome);
+        Assert.Empty(result.ServerFeatureIds);
+    }
+
     [Fact]
     public async Task UploadAsync_FeatureServerAdd_ReturnsSuccess()
     {

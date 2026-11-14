@@ -460,8 +460,11 @@ reconcile server IDs. Custom stores that do not implement atomic writes throw
 
 ### Recover the server identity after an upload
 
-The sync engine commits `OfflineUploadAcknowledgement` and removes its queued
-operation in one transaction. Read `GetUploadAcknowledgementAsync(operationId)`
+The mobile `OfflineSyncEngine` commits `OfflineUploadAcknowledgement` and removes
+its queued operation in one transaction. Operations synced through the
+`Honua.Sdk.Offline` journal adapter (`GeoPackageSdkOfflineStoreAdapter`) are
+removed without an acknowledgement, so `GetUploadAcknowledgementAsync` returns
+`null` for them. Read `GetUploadAcknowledgementAsync(operationId)`
 after a restart to recover server IDs before updating an app record's sync state.
 A failed acknowledgement write keeps the queued operation available for retry.
 Acknowledgements survive repeated sync and initialization; operation IDs cannot
@@ -472,5 +475,13 @@ server supplies them. An empty ID list means no identifier was supplied; it does
 not establish a local-to-server identity mapping. Server-wins conflict resolution
 discards the local edit without recording an upload acknowledgement. Applications
 still own their record mapping, attachment completion and history. Retained results
-currently have no automatic expiry. Custom stores must implement durable results
-to accept uploads that return IDs; the default implementation fails closed.
+currently have no automatic expiry. Blank server IDs are ignored. If an operation
+is no longer queued and has no acknowledgement, `MarkUploadedAsync` throws rather
+than silently dropping its server IDs; if an acknowledgement already exists, the
+call keeps the stored IDs. `GetUploadAcknowledgementAsync` returns `null` on a
+database created before acknowledgements were added, until `InitializeAsync` runs.
+
+Custom stores and decorators that do not override `MarkUploadedAsync` keep
+working: the default implementation calls `MarkSucceededAsync` and does not
+retain server IDs. Forward `MarkUploadedAsync` and `GetUploadAcknowledgementAsync`
+to retain them.

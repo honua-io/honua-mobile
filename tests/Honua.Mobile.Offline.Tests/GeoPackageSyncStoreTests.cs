@@ -127,6 +127,77 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task MarkUploadedAsync_IgnoresBlankServerIds()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateQueuedOperation("blank-ids"));
+
+        await store.MarkUploadedAsync("blank-ids", ["", "  ", "7"]);
+
+        Assert.Equal(0, await store.CountPendingAsync());
+        Assert.Equal(["7"], (await store.GetUploadAcknowledgementAsync("blank-ids"))!.ServerFeatureIds);
+    }
+
+    [Fact]
+    public async Task MarkUploadedAsync_UnknownOperationThrowsInsteadOfDroppingIds()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.MarkUploadedAsync("never-queued", ["42"]));
+        Assert.Null(await store.GetUploadAcknowledgementAsync("never-queued"));
+    }
+
+    [Fact]
+    public async Task GetUploadAcknowledgementAsync_BeforeAcknowledgementTableExistsReturnsNull()
+    {
+        var store = CreateStore();
+        Assert.Null(await store.GetUploadAcknowledgementAsync("not-initialized"));
+
+        await store.InitializeAsync();
+        await ExecuteNonQueryAsync("DROP TABLE honua_upload_acknowledgements;");
+        Assert.Null(await CreateStore().GetUploadAcknowledgementAsync("pre-upgrade-database"));
+    }
+
+    [Fact]
+    public async Task UpsertFeatureAndEnqueueAsync_AcknowledgedOperationIdRollsBackFeatureAndSpatialIndex()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        const string original = """{"attributes":{"OBJECTID":42},"geometry":{"x":1,"y":2}}""";
+        const string edited = """{"attributes":{"OBJECTID":42},"geometry":{"x":10,"y":20}}""";
+        await store.UpsertFeatureAsync("assets", original);
+        await store.EnqueueAsync(CreateQueuedOperation("acknowledged-42"));
+        await store.MarkUploadedAsync("acknowledged-42", ["42"]);
+
+        var reused = new OfflineEditOperation
+        {
+            OperationId = "acknowledged-42",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = edited,
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.UpsertFeatureAndEnqueueAsync(reused, edited));
+
+        var reopened = CreateStore();
+        Assert.Equal(original, Assert.Single(await reopened.GetFeaturesAsync("assets")));
+        Assert.Single(await reopened.GetFeaturesAsync("assets", new BoundingBox(0, 0, 3, 3)));
+        Assert.Empty(await reopened.GetFeaturesAsync("assets", new BoundingBox(9, 19, 11, 21)));
+        Assert.Equal(0, await reopened.CountPendingAsync());
+    }
+
+    private static OfflineEditOperation CreateQueuedOperation(string operationId) => new()
+    {
+        OperationId = operationId,
+        LayerKey = "assets",
+        TargetCollection = "assets",
+        OperationType = OfflineOperationType.Update,
+        PayloadJson = "{}",
+    };
+
+    [Fact]
     public async Task EnqueueAndGetPending_UsesPriorityOrdering()
     {
         var store = CreateStore();

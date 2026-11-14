@@ -253,7 +253,10 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             Outcome = UploadOutcome.Success,
             ServerFeatureIds = editResults
-                .Select(result => result.Id ?? result.ObjectId?.ToString(CultureInfo.InvariantCulture))
+                .Select(result => string.IsNullOrWhiteSpace(result.Id)
+                    ? result.ObjectId?.ToString(CultureInfo.InvariantCulture)
+                    : result.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
                 .OfType<string>()
                 .ToArray(),
         };
@@ -268,7 +271,7 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
 
         return id.ValueKind switch
         {
-            JsonValueKind.String => [id.GetString()!],
+            JsonValueKind.String when !string.IsNullOrWhiteSpace(id.GetString()) => [id.GetString()!],
             JsonValueKind.Number => [id.GetRawText()],
             _ => [],
         };

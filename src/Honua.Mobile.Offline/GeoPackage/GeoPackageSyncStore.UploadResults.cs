@@ -10,6 +10,13 @@ namespace Honua.Mobile.Offline.GeoPackage;
 
 public sealed partial class GeoPackageSyncStore
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Blank identifiers are ignored: the server has already applied the edit, so a malformed identifier must not
+    /// block the queue. When the queue entry is already gone and an acknowledgement exists, the call is a no-op and the
+    /// stored identifiers are kept. When neither exists, the identifiers would be lost, so the call throws.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The operation is neither queued nor acknowledged.</exception>
     public async Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
@@ -17,34 +24,57 @@ public sealed partial class GeoPackageSyncStore
         var ids = new JsonArray();
         foreach (var id in serverFeatureIds)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(id);
-            ids.Add(id);
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                ids.Add(id);
+            }
         }
 
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
         using var transaction = connection.BeginTransaction(deferred: false);
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = @"
+        await using var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = @"
 INSERT INTO honua_upload_acknowledgements
     (operation_id, layer_key, target_collection, server_feature_ids_json, uploaded_at_utc)
 SELECT operation_id, layer_key, target_collection, $ids, $uploaded_at
 FROM honua_sync_queue WHERE operation_id = $operation_id;
-DELETE FROM honua_sync_queue WHERE operation_id = $operation_id;
 ";
-        command.Parameters.AddWithValue("$operation_id", operationId);
-        command.Parameters.AddWithValue("$ids", ids.ToJsonString());
-        command.Parameters.AddWithValue("$uploaded_at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        insert.Parameters.AddWithValue("$operation_id", operationId);
+        insert.Parameters.AddWithValue("$ids", ids.ToJsonString());
+        insert.Parameters.AddWithValue("$uploaded_at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        var inserted = await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        if (inserted == 0 && !await AcknowledgementExistsAsync(connection, transaction, operationId, ct).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException(
+                $"Operation '{operationId}' is no longer queued and has no acknowledgement; its server feature identifiers were not recorded.");
+        }
+
+        await using var delete = connection.CreateCommand();
+        delete.Transaction = transaction;
+        delete.CommandText = "DELETE FROM honua_sync_queue WHERE operation_id = $operation_id;";
+        delete.Parameters.AddWithValue("$operation_id", operationId);
+        await delete.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    /// <remarks>Returns <see langword="null"/> for a database that has not been initialized with acknowledgement support yet.</remarks>
     public async Task<OfflineUploadAcknowledgement?> GetUploadAcknowledgementAsync(string operationId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
+        await using (var exists = connection.CreateCommand())
+        {
+            exists.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'honua_upload_acknowledgements';";
+            if ((long)(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false) ?? 0L) == 0)
+            {
+                return null;
+            }
+        }
+
         await using var command = connection.CreateCommand();
         command.CommandText = @"
 SELECT layer_key, target_collection, server_feature_ids_json, uploaded_at_utc
@@ -66,6 +96,19 @@ FROM honua_upload_acknowledgements WHERE operation_id = $operation_id;
             ServerFeatureIds = ids.RootElement.EnumerateArray().Select(id => id.GetString()!).ToArray(),
             UploadedAtUtc = DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture),
         };
+    }
+
+    private static async Task<bool> AcknowledgementExistsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string operationId,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT COUNT(*) FROM honua_upload_acknowledgements WHERE operation_id = $operation_id;";
+        command.Parameters.AddWithValue("$operation_id", operationId);
+        return (long)(await command.ExecuteScalarAsync(ct).ConfigureAwait(false) ?? 0L) != 0;
     }
 
     private static async Task InitializeUploadResultsAsync(SqliteConnection connection, CancellationToken ct)
@@ -99,6 +142,5 @@ SELECT CASE WHEN EXISTS (
         {
             throw new InvalidOperationException("An acknowledged operation ID cannot be reused; enqueue a new operation ID.");
         }
-
     }
 }

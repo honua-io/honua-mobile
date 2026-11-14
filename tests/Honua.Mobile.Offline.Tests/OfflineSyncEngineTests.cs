@@ -31,6 +31,21 @@ public sealed class OfflineSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncAsync_DecoratorWithoutAcknowledgementSupportStillCompletesUpload()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateOperation("wrapped-record", "assets", OfflineOperationType.Add));
+        await store.EnqueueAsync(CreateOperation("wrapped-record-2", "assets", OfflineOperationType.Add));
+
+        var result = await new OfflineSyncEngine(new ForwardingStore(store), new AlwaysSuccessUploader()).SyncAsync();
+
+        Assert.Equal(2, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.Equal(0, await store.CountPendingAsync());
+    }
+
+    [Fact]
     public async Task SyncAsync_ClientWins_RetriesConflictWithForceWrite()
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
@@ -359,6 +374,34 @@ public sealed class OfflineSyncEngineTests : IDisposable
                 ? new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] }
                 : new UploadResult { Outcome = UploadOutcome.Conflict, Message = "conflict" });
         }
+    }
+
+    /// <summary>
+    /// A decorator written before durable acknowledgements existed: it forwards every abstract member and
+    /// relies on the interface defaults for the rest, including <c>MarkUploadedAsync</c>.
+    /// </summary>
+    private sealed class ForwardingStore(IGeoPackageSyncStore inner) : IGeoPackageSyncStore
+    {
+        public Task InitializeAsync(CancellationToken ct = default) => inner.InitializeAsync(ct);
+        public Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default) => inner.EnqueueAsync(operation, ct);
+        public Task<IReadOnlyList<OfflineEditOperation>> GetPendingAsync(int maxCount, CancellationToken ct = default) => inner.GetPendingAsync(maxCount, ct);
+        public Task<IReadOnlyList<OfflineEditOperation>> GetPendingByLayerKeyPrefixAsync(string layerKeyPrefix, int maxCount, CancellationToken ct = default)
+            => inner.GetPendingByLayerKeyPrefixAsync(layerKeyPrefix, maxCount, ct);
+        public Task<int> CountPendingAsync(CancellationToken ct = default) => inner.CountPendingAsync(ct);
+        public Task MarkSucceededAsync(string operationId, CancellationToken ct = default) => inner.MarkSucceededAsync(operationId, ct);
+        public Task MarkPendingAsync(string operationId, CancellationToken ct = default) => inner.MarkPendingAsync(operationId, ct);
+        public Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
+            => inner.MarkFailedAsync(operationId, failureReason, retryable, ct);
+        public Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default) => inner.SetSyncCursorAsync(cursorKey, cursorValue, ct);
+        public Task<string?> GetSyncCursorAsync(string cursorKey, CancellationToken ct = default) => inner.GetSyncCursorAsync(cursorKey, ct);
+        public Task UpsertMapAreaAsync(MapAreaPackage mapArea, CancellationToken ct = default) => inner.UpsertMapAreaAsync(mapArea, ct);
+        public Task<IReadOnlyList<MapAreaPackage>> ListMapAreasAsync(CancellationToken ct = default) => inner.ListMapAreasAsync(ct);
+        public Task UpsertScenePackageAsync(ScenePackageRecord scenePackage, CancellationToken ct = default) => inner.UpsertScenePackageAsync(scenePackage, ct);
+        public Task<IReadOnlyList<ScenePackageRecord>> ListScenePackagesAsync(CancellationToken ct = default) => inner.ListScenePackagesAsync(ct);
+        public Task DeleteScenePackageAsync(string packageId, CancellationToken ct = default) => inner.DeleteScenePackageAsync(packageId, ct);
+        public Task UpsertFeatureAsync(string layerKey, string featureJson, CancellationToken ct = default) => inner.UpsertFeatureAsync(layerKey, featureJson, ct);
+        public Task DeleteFeatureAsync(string layerKey, long objectId, CancellationToken ct = default) => inner.DeleteFeatureAsync(layerKey, objectId, ct);
+        public Task<IReadOnlyList<string>> GetFeaturesAsync(string layerKey, CancellationToken ct = default) => inner.GetFeaturesAsync(layerKey, ct);
     }
 
     private sealed class AlwaysSuccessUploader : IOfflineOperationUploader
