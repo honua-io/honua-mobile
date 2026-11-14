@@ -107,7 +107,8 @@ GeoPackage-backed offline storage with queue-based sync:
 - **Delta sync** -- replica-based incremental downloads with cursor persistence
 - **Cache governance** -- per-layer TTL eviction and R-tree-backed bbox lookups for replicated features
 
-See [docs/guides/offline-sync.md](docs/guides/offline-sync.md).
+See [docs/guides/offline-sync.md](docs/guides/offline-sync.md) and
+[encrypted offline storage](docs/guides/encrypted-offline-storage.md).
 
 ### Field Collection
 

@@ -34,6 +34,22 @@ dependencies anonymously before declaring a mobile release complete. Do not
 add the private GitHub Packages feed to work around a version that is absent
 from nuget.org; use a source checkout until that public cut completes.
 
+### Select one SQLite provider
+
+`Honua.Mobile.Offline` uses `Microsoft.Data.Sqlite.Core` and leaves native SQLite
+selection to the application. Install exactly one provider in the application
+project before opening an offline store. The examples below select
+`SQLitePCLRaw.bundle_e_sqlcipher` **2.1.11**, the version used by the encrypted-store
+tests. Do not combine it with `Microsoft.Data.Sqlite` (the non-Core package),
+`SQLitePCLRaw.bundle_e_sqlite3`, or another native SQLite bundle. Check transitive
+package references as well when upgrading an existing app.
+
+This provider also supports unencrypted stores. Encryption additionally requires
+an app-managed key and `GeoPackageSyncStoreOptions.EncryptionKey`; installing the
+provider alone does not encrypt a database. Follow [encrypted offline
+storage](../guides/encrypted-offline-storage.md) for key handling, existing-file
+migration, and physical-device validation before adopting it in a field app.
+
 ### Method 1: Project Templates (Recommended)
 
 The fastest way to get started is using our project templates:
@@ -53,6 +69,8 @@ Create a new project:
 ```bash
 dotnet new honua-fieldcollector -n MyFieldApp
 cd MyFieldApp
+# Check the generated references and keep exactly one native SQLite bundle
+dotnet add package SQLitePCLRaw.bundle_e_sqlcipher --version 2.1.11
 dotnet build
 ```
 
@@ -71,6 +89,7 @@ dotnet build
 ```xml
 <PackageReference Include="Honua.Mobile.Maui" Version="0.1.0-alpha.1" />
 <PackageReference Include="Honua.Mobile.Offline" Version="0.1.0-alpha.1" />
+<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
 <PackageReference Include="Honua.Mobile.Sdk" Version="0.1.0-alpha.1" />
 ```
 
@@ -84,6 +103,7 @@ cd MyHonuaApp
 # Add Honua packages
 dotnet add package Honua.Mobile.Maui --version 0.1.0-alpha.1
 dotnet add package Honua.Mobile.Offline --version 0.1.0-alpha.1
+dotnet add package SQLitePCLRaw.bundle_e_sqlcipher --version 2.1.11
 dotnet add package Honua.Mobile.Sdk --version 0.1.0-alpha.1
 
 # Restore packages
@@ -96,6 +116,7 @@ dotnet restore
 # In Visual Studio Package Manager Console
 Install-Package Honua.Mobile.Maui -Version 0.1.0-alpha.1
 Install-Package Honua.Mobile.Offline -Version 0.1.0-alpha.1
+Install-Package SQLitePCLRaw.bundle_e_sqlcipher -Version 2.1.11
 Install-Package Honua.Mobile.Sdk -Version 0.1.0-alpha.1
 ```
 
