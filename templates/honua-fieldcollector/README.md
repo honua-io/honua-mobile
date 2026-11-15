@@ -211,13 +211,11 @@ For large datasets:
 - [API Reference](https://github.com/honua-io/honua-mobile/tree/trunk/docs/api)
 
 ### Community
-- [Discord Community](https://discord.gg/honua)
+- [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
 - [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
-- [YouTube Tutorials](https://youtube.com/honuaproject)
 
 ### Enterprise
-<!-- TODO: replace with canonical enterprise/support links once published (placeholder enterprise.honua.com is not live) -->
-- Professional Support, Custom Development, and Training Services — contact via the repository maintainers
+- [Support options](https://honua.io/support.html)
 
 ## 📄 License
 
@@ -228,6 +226,4 @@ This template and generated code is licensed under the **Apache License 2.0**.
 - ✅ Patent use permitted
 - ✅ Private use permitted
 
-**Built something with this template? Share it with [@honuaproject](https://twitter.com/honuaproject)!**
-
-**[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Join Community](https://discord.gg/honua)**
+**[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Discussions](https://github.com/honua-io/honua-server/discussions)**

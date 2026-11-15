@@ -363,7 +363,7 @@ services.AddLogging(builder =>
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Offline Sync Guide](offline-sync.md)
 - [Performance Optimization](performance.md)
 - [Troubleshooting Guide](troubleshooting.md)

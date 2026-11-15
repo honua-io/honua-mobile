@@ -836,7 +836,7 @@ public class CustomDataSourceIntegration
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Performance Guide](performance.md)
 - [Offline Sync](offline-sync.md)
 - [Camera Integration](camera-integration.md)

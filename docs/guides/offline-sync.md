@@ -436,7 +436,7 @@ conflict policy rules.
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Camera Integration](camera-integration.md)
 - [Offline 3D Scene Packages](offline-3d-scene-packages.md)
 - [Performance Guide](performance.md)

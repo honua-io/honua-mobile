@@ -330,15 +330,10 @@ dotnet build
 ## Community & Support
 
 ### Get Help
-- 💬 **[Discord Community](https://discord.gg/honua)** - Real-time help
+- 💬 **[GitHub Discussions](https://github.com/honua-io/honua-server/discussions)** - Questions and help
 - 📖 **[Documentation](../guides/README.md)** - Comprehensive guides
 - 🐛 **[GitHub Issues](https://github.com/honua-io/honua-mobile/issues)** - Bug reports
-- 📧 **[Email Support](mailto:support@honua.com)** - Direct assistance
-
-### Share Your Success
-- 🐦 **[Twitter](https://twitter.com/honuaproject)** - Tag @honuaproject
-- 🎬 **[YouTube](https://youtube.com/honuaproject)** - Featured apps
-- 📰 **Blog** - User success stories <!-- TODO: add canonical blog URL once published (placeholder blog.honua.com is not live) -->
+- 🛟 **[Support options](https://honua.io/support.html)** - Commercial and direct help
 
 ---
 
@@ -349,8 +344,5 @@ schema for your use case, and run the applicable platform and offline-sync
 journeys described in the [validation strategy](../guides/validation-strategy.md).
 Record the results before distributing a build.
 
-**[🚀 Release Promotion](../guides/mobile-release-promotion.md) • [🎨 SDK Quick Start](../../README.md#quick-start) • [👥 Join the Community](https://discord.gg/honua)**
+**[🚀 Release Promotion](../guides/mobile-release-promotion.md) • [🎨 SDK Quick Start](../../README.md#quick-start) • [👥 Discussions](https://github.com/honua-io/honua-server/discussions)**
 
----
-
-*Built something awesome? Share it with [@honuaproject](https://twitter.com/honuaproject) and tag #HonuaMobile!*
