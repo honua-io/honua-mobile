@@ -428,8 +428,8 @@ If you encounter issues:
 
 1. **Check the documentation**: Browse our [troubleshooting guide](../guides/troubleshooting.md)
 2. **Search existing issues**: [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
-3. **Community support**: [Discord Channel](https://discord.gg/honua)
-4. **Professional support**: Enterprise Support <!-- TODO: add canonical Enterprise Support URL once published (placeholder enterprise.honua.com is not live) -->
+3. **Community support**: [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
+4. **Professional support**: [Support options](https://honua.io/support.html)
 
 ## Next Steps
 
@@ -438,7 +438,6 @@ Once installation is complete:
 1. 📖 **[Follow the Tutorial](tutorial.md)** - Build your first app
 2. 🎯 **[Explore Examples](../../examples/)** - See real-world implementations
 3. 📚 **[Read API Documentation](../api/core.md)** - Learn the SDK APIs
-4. 🎬 **[Watch Videos](https://youtube.com/honuaproject)** - Visual learning resources
 
 ---
 

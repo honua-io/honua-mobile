@@ -544,7 +544,7 @@ public string GetEnvironmentInfo()
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Camera Integration](camera-integration.md)
 - [Offline Sync](offline-sync.md)
 - [Performance Guide](performance.md)

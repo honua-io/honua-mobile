@@ -715,7 +715,7 @@ public void ImageProcessing_LargeImages_DoesNotExceedMemoryLimit()
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Offline Sync](offline-sync.md)
 - [Troubleshooting](troubleshooting.md)
 - [Camera Integration](camera-integration.md)

@@ -436,9 +436,7 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 
 ### **Community Resources**
 - **Documentation**: [honua-mobile docs](https://github.com/honua-io/honua-mobile/tree/trunk/docs)
-- **Community Forum**: [Discord](https://discord.gg/honua)
-- **Discord**: Real-time developer chat
-- **YouTube**: Tutorial videos and demos
+- **Community Forum**: [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
 
 ### **Professional Services**
 - **Custom development**: Tailored solutions for your needs
@@ -463,6 +461,6 @@ top), not capabilities available today.
 - ✅ **Apache 2.0** open source licensing
 - ✅ **Enterprise security** with government-grade encryption
 
-[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted mobile demo exists -->
+[📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://github.com/honua-io/honua-server/discussions) <!-- TODO: add live demo link once a hosted mobile demo exists -->
 
 **Start collecting revolutionary field data today.**

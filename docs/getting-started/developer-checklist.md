@@ -325,15 +325,11 @@ dotnet build
 - [ ] [Troubleshooting Guide](../guides/troubleshooting.md)
 
 **Community Support:**
-- [ ] [Discord Community](https://discord.gg/honua) - Real-time help
-- [ ] [GitHub Discussions](https://github.com/honua-io/honua-mobile/discussions)
-- [ ] [Stack Overflow](https://stackoverflow.com/questions/tagged/honua-mobile)
+- [ ] [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
+- [ ] [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
 
 **Professional Support:**
-<!-- TODO: add canonical Enterprise Support / Training / Custom Development URLs once published (placeholder enterprise.honua.com is not live) -->
-- [ ] Enterprise Support
-- [ ] Training Services
-- [ ] Custom Development
+- [ ] [Support options](https://honua.io/support.html)
 
 ---
 
@@ -342,8 +338,7 @@ dotnet build
 ### For Beginners:
 - [ ] Complete the [5-minute tutorial](tutorial.md)
 - [ ] Explore [example applications](../../examples/)
-- [ ] Join the [Discord community](https://discord.gg/honua)
-- [ ] Follow [YouTube tutorials](https://youtube.com/honuaproject)
+- [ ] Join [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
 
 ### For Advanced Developers:
 - [ ] Review [advanced features](../guides/advanced-features.md)
@@ -385,4 +380,4 @@ dotnet build
 
 Use the validation checklist above to record the results for your target platforms before distributing your app.
 
-**[📚 Explore Documentation](../guides/README.md) • [💻 Browse Examples](../../examples/) • [💬 Join Discord](https://discord.gg/honua) • [🐦 Follow on Twitter](https://twitter.com/honuaproject)**
+**[📚 Explore Documentation](../guides/README.md) • [💻 Browse Examples](../../examples/) • [💬 Discussions](https://github.com/honua-io/honua-server/discussions)**

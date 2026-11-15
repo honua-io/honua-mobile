@@ -593,7 +593,7 @@ echo "3. Test with mobile app"
 ## 🆘 Migration Support
 
 ### Self-Service Resources
-- **[Mobile SDK documentation](../README.md)**
+- **[Mobile SDK documentation](../../README.md)**
 - **[Feature status](../features/README.md)**
 - **[Validation strategy](validation-strategy.md)**
 

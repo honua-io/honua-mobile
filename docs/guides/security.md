@@ -905,7 +905,7 @@ public class SecurityTests
 
 ## Related Documentation
 
-- [Mobile SDK Overview](../README.md)
+- [Mobile SDK Overview](../../README.md)
 - [Troubleshooting](troubleshooting.md)
 - [Performance Guide](performance.md)
 - [Offline Sync](offline-sync.md)

@@ -229,8 +229,8 @@ dotnet add package Honua.Mobile.Maui --version $Version
 
 ## 🐛 Bug Reports & Support
 - [GitHub Issues](https://github.com/honua-io/honua-mobile/issues)
-- [Discord Community](https://discord.gg/honua)
-<!-- TODO: add Enterprise Support link once a canonical URL is published (placeholder enterprise.honua.com is not live) -->
+- [GitHub Discussions](https://github.com/honua-io/honua-server/discussions)
+- [Support options](https://honua.io/support.html)
 
 ---
 
@@ -304,8 +304,7 @@ function Main {
         Write-Host "`n🎯 Next Steps:" -ForegroundColor Green
         Write-Host "1. Test packages: dotnet new install Honua.Mobile.Templates --version $Version" -ForegroundColor White
         Write-Host "2. Create sample app: dotnet new honua-fieldcollector -n TestApp" -ForegroundColor White
-        Write-Host "3. Share the news: https://twitter.com/honuaproject" -ForegroundColor White
-        Write-Host "4. Update documentation: https://github.com/honua-io/honua-mobile/tree/trunk/docs" -ForegroundColor White
+        Write-Host "3. Update documentation: https://github.com/honua-io/honua-mobile/tree/trunk/docs" -ForegroundColor White
     }
 }
 
