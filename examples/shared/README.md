@@ -401,12 +401,11 @@ HonuaAnalytics.TrackPhotoCapture(withLocation: true, withPrivacyBlur: true);
 ## 🌟 Why Choose Honua Components?
 
 ### **🚀 Revolutionary Technology**
-- **First open-source** AR-enabled field collection components
 - **gRPC streaming** for real-time collaboration
 - **True offline-first** architecture
 
-### **💰 Cost Effective**
-- **No vendor lock-in** - full source code access
+### **📜 Licensing**
+- **Apache 2.0** - full source code access
 - **Professional support** available but not required
 
 ### **⚡ Developer Friendly**
@@ -437,7 +436,7 @@ dotnet new honua-fieldcollector
 
 **Key Benefits:**
 - ✅ **Save months** of development time
-- ✅ **No licensing** fees or vendor lock-in
+- ✅ **Apache 2.0** licensed
 - ✅ **Professional grade** with enterprise security
 - ✅ **Community support** with commercial options
 

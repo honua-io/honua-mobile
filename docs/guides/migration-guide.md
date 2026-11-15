@@ -185,7 +185,7 @@ public class FulcrumMigrationService
 }
 ```
 
-#### 5. **Enhanced Features** (1 hour)
+#### 5. **Add Map and Form Controls** (1 hour)
 
 Add the Honua map and form controls:
 
@@ -320,7 +320,7 @@ public class Survey123Converter
 }
 ```
 
-#### 3. **Enhanced Mobile App** (1 hour)
+#### 3. **Handle Submissions** (1 hour)
 
 Handle submissions in the app:
 
@@ -364,7 +364,7 @@ public partial class MainPage : ContentPage
 
 ### Migration Steps
 
-#### 1. **Simplify Architecture** (2 hours)
+#### 1. **Port Map Setup** (2 hours)
 
 **Before (ArcGIS Mobile):**
 ```csharp
@@ -402,7 +402,6 @@ public class ArcGISMapPage : ContentPage
             // Error handling
         }
     }
-    // ... hundreds of lines of boilerplate
 }
 ```
 
@@ -427,7 +426,7 @@ public partial class MapPage : ContentPage
                     ShowCollectedFeatures="true" />
 ```
 
-#### 2. **Simplify Data Access** (1 hour)
+#### 2. **Port Data Access** (1 hour)
 
 **Before (ArcGIS):**
 ```csharp
@@ -607,5 +606,3 @@ acceptance criteria:
 - Validate data migration accuracy with sample exports before production cutover
 - Measure performance on representative field workflows
 - Train the team until the pilot acceptance checklist passes
-
----

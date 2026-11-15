@@ -460,7 +460,7 @@ top), not capabilities available today.
 - ✅ **10x faster** data collection vs traditional methods
 - ✅ **90% reduction** in data entry errors
 - ✅ **100% offline** capability for remote work
-- ✅ **Zero vendor lock-in** with open source licensing
+- ✅ **Apache 2.0** open source licensing
 - ✅ **Enterprise security** with government-grade encryption
 
 [📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted mobile demo exists -->
