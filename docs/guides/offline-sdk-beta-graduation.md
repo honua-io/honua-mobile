@@ -159,8 +159,8 @@ Permitted-to-defer at offline-sync graduation:
   unit-only at graduation *if* the live or cloud round-trip already exercises the
   same queue + reconnect path; the dedicated timer+connectivity+queue+server
   integration fixture is a tracked follow-up, not a blocker.
-- **Map annotations / plugin host UI harness** — unit-only; not part of offline
-  sync.
+- **Map annotations** — unit-only; not part of offline sync. (The plugin host
+  and its tests were removed.)
 - **Embed builder API-key validation in a real browser** — jsdom-only; out of
   scope for the mobile SDK gate.
 

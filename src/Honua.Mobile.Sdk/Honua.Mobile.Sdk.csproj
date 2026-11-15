@@ -7,7 +7,7 @@
     <PackageId>Honua.Mobile.Sdk</PackageId>
     <PackageVersion>0.1.0-alpha.1</PackageVersion>
     <Authors>Honua</Authors>
-    <Description>Core mobile client for Honua feature queries, edits, routing, scenes, and gRPC transport.</Description>
+    <Description>Core mobile client for Honua feature queries, edits, scenes, and gRPC transport.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/honua-io/honua-mobile</PackageProjectUrl>

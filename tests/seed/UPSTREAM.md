@@ -13,9 +13,9 @@ restarts the server to rebuild published metadata from the seeded catalog. The
 `mobile_offline_demo` service, layers, and scene are registered before any test
 runs. The image fixture enables the offline/scene capability flags and uses the
 supported development-only Enterprise grant to exercise licensed endpoints.
-Routing uses the deterministic `mock` provider because this seed supplies no road
-topology; this suite checks the mobile routing wire contract, not a road-network
-solver. External-server runs retain the supplied server configuration.
+The server's routing provider is set to the deterministic `mock` provider because
+this seed supplies no road topology; the mobile suite no longer exercises
+routing. External-server runs retain the supplied server configuration.
 After restarting, the image fixture declares attachment support through the
 supported layer-metadata admin API; the legacy seed catalog does not carry that
 declaration. The round-trip attachment assertions remain unchanged.
@@ -76,8 +76,8 @@ Update when any of the following change upstream:
 
 - The `mobile_offline_demo` FeatureServer service definition, layers, or
   attribute schema.
-- Scene/routing identifiers referenced by `LiveHonuaServerInteractionTests`
-  (currently `downtown-honolulu` and `Routing`).
+- Scene identifiers referenced by `LiveHonuaServerInteractionTests`
+  (currently `downtown-honolulu`). Routing identifiers no longer affect the gate.
 - Seed feature counts that any live test asserts against.
 
 Routine upstream churn that doesn't affect these surfaces can be left

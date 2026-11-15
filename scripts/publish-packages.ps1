@@ -24,7 +24,7 @@ $packages = @(
     @{
         Name = "Honua.Mobile.Sdk"
         Path = "src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"
-        Description = "Core mobile client, gRPC transport, routing, and scene metadata"
+        Description = "Core mobile client, gRPC transport, and scene metadata"
     },
     @{
         Name = "Honua.Mobile.Field"

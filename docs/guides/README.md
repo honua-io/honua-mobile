@@ -12,19 +12,20 @@ In-depth guides for building with the Honua Mobile SDK.
 | [Migration Guide](migration-guide.md) | Migrating from other field collection platforms to Honua |
 | [Migrating from the ArcGIS Maps SDK for .NET (MAUI)](migration-arcgis-maps-sdk-maui.md) | Guided reimplement path + adapters from the ArcGIS Maps SDK for .NET (MAUI/Xamarin) to Honua MAUI, with the codemod feasibility decision (#280) |
 | [Mobile DevOps Release Handoff](mobile-devops-release-handoff.md) | Issue #82 release-owner packet for workflow inventory, approvals, evidence, protected environments, and #85/#87 store prerequisite gates |
+| [Field Runtime Scope](field-runtime-scope.md) | Removed AR anchoring, plugin host and mobile routing APIs, and what to use instead |
 | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) | Server, SDK, platform, offline, and edition dependencies for scene and AR work |
 | [Mobile Contract Harmonization](mobile-contract-harmonization.md) | Ownership and compatibility baseline between `honua-mobile` and `honua-sdk-dotnet` contracts |
 | [Mobile Platform Parity Tracks](mobile-platform-parity-tracks.md) | Issue #22 roadmap, parity matrix, priority feature map, and build/release requirements for Flutter and native iOS/Android tracks |
 | [Mobile SDK Backlog Roadmap](mobile-sdk-backlog-roadmap.md) | Epic #1 backlog sequencing, acceptance matrix, dependencies, and closure readiness |
-| [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, scene anchoring adapter, Mapsui evaluation, and device location/geofencing lifecycle |
-| [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | ARKit, ARCore, WebXR, MAUI, calibration, offline, and runtime ticket split for native AR scene anchoring |
+| [Native Display and Location Integration](native-display-and-location.md) | Native .NET display adapter boundary, Mapsui evaluation, and device location/geofencing lifecycle |
+| [Native Scene Anchoring Requirements](native-scene-anchoring-requirements.md) | Historical: requirements for native AR scene anchoring; the runtime was removed (see Field Runtime Scope) |
 | [No-Cloud Field Parity Information Model](no-cloud-field-parity-information-model.md) | Local project package, form, lifecycle, assignment, media, conflict, and export model handoff for field parity without hosted services or new UI design |
 | [Offline 3D Scene Packages](offline-3d-scene-packages.md) | Package manifest, cache, expiry, and platform policy for offline 3D scenes |
 | [Offline Field SDK Beta Graduation Criteria](offline-sdk-beta-graduation.md) | Acceptance bar, required evidence, performance/reliability targets, known-gaps exit list, and sign-off owners for graduating the MAUI SDK + offline sync from Beta |
 | [Offline Sync](offline-sync.md) | GeoPackage storage, sync engine configuration, and conflict resolution |
 | [Performance](performance.md) | Optimizing startup time, memory usage, and sync throughput |
-| [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | MAUI and web host/runtime plugin boundaries, SDK/server dependencies, and intentionally deferred contract work |
-| [Plugin and Host Extension Boundary](plugin-extension-api.md) | Web embed extension APIs and the SDK/mobile ownership split for plugin work |
+| [Plugin Client Extension Hosts](plugin-client-extension-hosts.md) | Historical: MAUI and web plugin host design; the mobile plugin host was removed (see Field Runtime Scope) |
+| [Plugin and Host Extension Boundary](plugin-extension-api.md) | Historical: web embed extension APIs and the SDK/mobile plugin ownership split |
 | [Protected 3D Scene Auth](protected-3d-scene-auth.md) | Signed URL, proxy, header, CORS, cache, and revocation policy for protected scene assets |
 | [Repo Scaffolding Gates](repo-scaffolding-gates.md) | Issue #826 release workflow, package metadata, branch protection, Dependabot, Trivy, and platform smoke verification commands |
 | [Scene Controls](scene-controls.md) | `<honua-scene-*>` control surfaces, `HonuaSceneMetadata` schema, and typed scene events |

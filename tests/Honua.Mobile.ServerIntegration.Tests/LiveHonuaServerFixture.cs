@@ -158,7 +158,7 @@ public sealed class LiveHonuaServerFixture : IAsyncLifetime
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
             // Development-only grant exercises licensed endpoints without an external license.
             .WithEnvironment("Licensing__DevGrantEdition", "Enterprise")
-            // The mobile seed has no road topology; test the routing wire contract deterministically.
+            // The mobile seed has no road topology; keep the server routing provider deterministic.
             .WithEnvironment("Routing__Provider", "mock")
             .WithEnvironment("Kestrel__Endpoints__Http__Url", $"http://+:{HonuaHttpPort.ToString(CultureInfo.InvariantCulture)}")
             .WithEnvironment("Kestrel__Endpoints__Http__Protocols", "Http1")
@@ -327,8 +327,6 @@ public sealed record LiveHonuaServerOptions
 
     public string SceneId { get; init; } = "downtown-honolulu";
 
-    public string RoutingServiceId { get; init; } = "Routing";
-
     public Uri? GrpcEndpoint { get; init; }
 
     public string ApiKey { get; init; } = LiveHonuaServerFixture.DefaultAdminPassword;
@@ -367,7 +365,6 @@ public sealed record LiveHonuaServerOptions
             ReplicaLayerIds = ReadIntList(readVariable, "HONUA_MOBILE_LIVE_SERVER_REPLICA_LAYER_IDS", [layerId, 68920]),
             OgcCollectionId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_OGC_COLLECTION_ID", layerId.ToString(CultureInfo.InvariantCulture)),
             SceneId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_SCENE_ID", "downtown-honolulu"),
-            RoutingServiceId = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_ROUTING_SERVICE_ID", "Routing"),
             GrpcEndpoint = TryUri(readVariable("HONUA_MOBILE_LIVE_SERVER_GRPC_URL")),
             ApiKey = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_API_KEY", LiveHonuaServerFixture.DefaultAdminPassword),
             BearerToken = ReadString(readVariable, "HONUA_MOBILE_LIVE_SERVER_BEARER_TOKEN", "live-image-test-bearer-token"),

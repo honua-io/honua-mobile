@@ -151,7 +151,7 @@ mechanical rewrite.
 
 | ArcGIS Maps SDK for .NET | Honua Mobile SDK (MAUI) |
 |--------------------------|-------------------------|
-| `RouteTask` / `RouteParameters` | `client.Routing` (`GetDirectionsAsync`, fluent `Route()` builder, `GetServiceAreaAsync`) — see README Routing |
+| `RouteTask` / `RouteParameters` | Configure the published `Honua.Sdk.GeoServices` routing client directly; see [field runtime scope](field-runtime-scope.md) |
 | `LocatorTask` (geocode) | Honua geocoding via the SDK client surface (server-side providers) |
 
 ---
@@ -194,7 +194,6 @@ builder.Services
         GrpcEndpoint = new Uri("https://your-honua-server.com"),
         PreferGrpcForFeatureQueries = true,
     })
-    .AddHonuaRouting()
     .AddHonuaScenes()
     .AddHonuaMobileFieldCollection()
     .AddHonuaGeoPackageOfflineSync(

@@ -128,7 +128,7 @@ jobs:
             echo
             echo "Then commit both \`${VENDORED_PATH}\` and \`tests/seed/UPSTREAM.md\` in a single change so the blob and the recorded SHA move in lockstep."
             echo
-            echo "Routine upstream churn that doesn't affect the \`mobile_offline_demo\` service definition, scene/routing identifiers, or feature counts asserted by \`LiveHonuaServerInteractionTests\` can be left alone -- see \`tests/seed/UPSTREAM.md\` for the full criteria."
+            echo "Routine upstream churn that doesn't affect the \`mobile_offline_demo\` service definition, scene identifiers, or feature counts asserted by \`LiveHonuaServerInteractionTests\` can be left alone -- see \`tests/seed/UPSTREAM.md\` for the full criteria."
           } > "${body_file}"
           if [[ -z "${existing}" ]]; then
             gh issue create --title "${ISSUE_TITLE}" --body-file "${body_file}"

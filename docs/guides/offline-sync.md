@@ -242,7 +242,7 @@ running Honua environment instead.
 The live suite covers health, FeatureServer REST query/edit, FeatureServer gRPC
 query/edit, OGC Features CRUD, attachments, replica sync, offline queued upload
 through the background orchestrator path, map area downloads, scene package
-asset downloads, scene metadata/resolve, routing, API-key
+asset downloads, scene metadata/resolve, API-key
 validation, OAuth refresh, and both app-level and MAUI exception upload paths.
 
 | Variable | Required | Purpose |
