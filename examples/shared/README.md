@@ -2,12 +2,12 @@
 
 **Revolutionary UI components that accelerate mobile geospatial development**
 
-Production-ready, cross-platform components that enable developers to build powerful field data collection applications with minimal code. These components provide the building blocks that competing platforms like Fulcrum and Survey123 charge premium prices for - but completely open source.
+Production-ready, cross-platform components that enable developers to build powerful field data collection applications with minimal code.
 
 ## 🚀 Revolutionary Components
 
 ### 📝 **HonuaFeatureForm** - Dynamic Form Generator
-**No-code form generation that competes directly with Fulcrum**
+**Form generation from a field schema**
 
 ```xml
 <forms:HonuaFeatureForm FormId="site-inspection"
@@ -36,7 +36,7 @@ Production-ready, cross-platform components that enable developers to build powe
 - Section headers and descriptions
 
 ### 🗺️ **HonuaMapView** - Advanced Cross-Platform Mapping
-**Enterprise mapping that rivals ArcGIS Mobile SDK**
+**Cross-platform map control for field apps**
 
 ```xml
 <maps:HonuaMapView ShowToolbar="true"
@@ -323,35 +323,6 @@ public partial class MonitoringPage : ContentPage
 - **Sync performance**: 1000+ records/minute
 - **Battery life**: 8+ hours continuous use
 
-## 🆚 Competitive Advantages
-
-### **vs. Fulcrum (ArcGIS)**
-| Feature | Honua Components | Fulcrum |
-|---------|------------------|---------|
-| **License** | ✅ Open Source (Apache 2.0) | ❌ $50-200/user/month |
-| **AR Visualization** | ✅ Built-in ARKit/ARCore | ❌ Not available |
-| **IoT Integration** | ✅ Native sensor support | ❌ Limited API only |
-| **Offline Capability** | ✅ True offline-first | ⚠️ Limited offline |
-| **Customization** | ✅ Full source code access | ❌ Vendor lock-in |
-| **Performance** | ✅ Native mobile optimized | ⚠️ Web-based limitations |
-
-### **vs. Survey123**
-| Feature | Honua Components | Survey123 |
-|---------|------------------|-----------|
-| **Platform** | ✅ Native .NET MAUI | ❌ Web wrapper |
-| **Real-time Sync** | ✅ gRPC streaming | ❌ Batch upload only |
-| **Advanced Mapping** | ✅ Native platform maps | ⚠️ Basic web maps |
-| **Enterprise Features** | ✅ Built-in security/audit | ❌ Extra cost add-ons |
-| **Developer Experience** | ✅ Visual Studio integration | ⚠️ Web-only development |
-
-### **vs. KoBo Toolbox**
-| Feature | Honua Components | KoBo |
-|---------|------------------|------|
-| **Professional Grade** | ✅ Enterprise security | ⚠️ NGO/Academic focus |
-| **Mobile Performance** | ✅ 60fps native UI | ❌ Slow web interface |
-| **Advanced Features** | ✅ AR, IoT, mapping | ❌ Basic forms only |
-| **Commercial Use** | ✅ Apache 2.0 licensed | ⚠️ Limited commercial rights |
-
 ## 🛠️ Development & Customization
 
 ### **Extending Components**
@@ -430,15 +401,11 @@ HonuaAnalytics.TrackPhotoCapture(withLocation: true, withPrivacyBlur: true);
 ## 🌟 Why Choose Honua Components?
 
 ### **🚀 Revolutionary Technology**
-- **First open-source** AR-enabled field collection components
-- **IoT integration** that no competitor offers
 - **gRPC streaming** for real-time collaboration
 - **True offline-first** architecture
 
-### **💰 Cost Effective**
-- **$0 licensing** vs $50-200/user/month for competitors
-- **No vendor lock-in** - full source code access
-- **Scales infinitely** without per-user fees
+### **📜 Licensing**
+- **Apache 2.0** - full source code access
 - **Professional support** available but not required
 
 ### **⚡ Developer Friendly**
@@ -469,8 +436,7 @@ dotnet new honua-fieldcollector
 
 **Key Benefits:**
 - ✅ **Save months** of development time
-- ✅ **Compete** with Fulcrum and Survey123
-- ✅ **No licensing** fees or vendor lock-in
+- ✅ **Apache 2.0** licensed
 - ✅ **Professional grade** with enterprise security
 - ✅ **Community support** with commercial options
 

@@ -1,10 +1,10 @@
-# Migration Guide: From Proprietary Platforms to Honua
+# Migration Guide: Moving Field Workflows to Honua
 
-**Plan migrations away from proprietary field platforms using Honua's
+**Plan a move of existing field forms, records and app code to Honua's
 open-source mobile runtime and SDK-backed workflows.**
 
 This guide is a migration planning aid. It includes target-state examples and
-future roadmap items; it is not a guarantee that every compared capability is
+future roadmap items; it is not a guarantee that every described capability is
 fully shipped and validated in this repository. For source-backed status, use
 [docs/features/README.md](../features/README.md),
 [docs/guides/validation-strategy.md](validation-strategy.md), and
@@ -13,16 +13,6 @@ fully shipped and validated in this repository. For source-backed status, use
 ---
 
 ## 🎯 Migration Overview
-
-### Why Evaluate Honua?
-
-| Benefit | Savings/Improvement |
-|---------|-------------------|
-| **Cost Control** | Open-source client code can reduce per-seat licensing pressure depending on hosting and support choices |
-| **No Vendor Lock-in** | Full source code access and control |
-| **Superior Technology** | Native performance vs web wrappers |
-| **Advanced Features** | IoT and AR are roadmap tracks with mobile/server dependencies |
-| **Future-Proof** | Open standards and community-driven development |
 
 ### Migration Timeline
 
@@ -35,20 +25,8 @@ fully shipped and validated in this repository. For source-backed status, use
 
 ## 📱 From Fulcrum to Honua
 
-Fulcrum is a popular field data collection platform charging $99-299/month per user.
-
-### Feature Comparison
-
-| Feature | **Honua** | **Fulcrum** |
-|---------|-----------|-------------|
-| **Cost** | ✅ **$0** (open source) | ❌ **$99-299/month/user** |
-| **Performance** | ✅ **Native mobile** | ❌ Web wrapper |
-| **Offline Capability** | ✅ **GeoPackage/sync runtime; app parity tracked in backlog** | Offline field collection |
-| **IoT Integration** | Roadmap extension track | Product-dependent |
-| **AR Visualization** | Roadmap after scene anchoring dependencies | Product-dependent |
-| **Custom Branding** | ✅ **Full customization** | ⚠️ Limited options |
-| **Data Ownership** | ✅ **Full control** | ❌ Vendor hosted |
-| **API Access** | ✅ **Full gRPC + REST APIs** | ⚠️ Limited REST API |
+The steps below export Fulcrum forms and records and map them to a Honua form
+schema and feature records.
 
 ### Migration Steps
 
@@ -207,14 +185,14 @@ public class FulcrumMigrationService
 }
 ```
 
-#### 5. **Enhanced Features** (1 hour)
+#### 5. **Add Map and Form Controls** (1 hour)
 
-Add capabilities that Fulcrum doesn't offer:
+Add the Honua map and form controls:
 
 ```xml
 <!-- Enhanced data collection -->
 <honua:HonuaFeatureForm FormId="site_inspection">
-    <!-- Regular form fields (same as Fulcrum) -->
+    <!-- Form fields from the migrated schema -->
 </honua:HonuaFeatureForm>
 
 <!-- Advanced mapping -->
@@ -229,32 +207,12 @@ Add capabilities that Fulcrum doesn't offer:
 > [`examples/ar-utility-visualization`](../../examples/ar-utility-visualization/README.md)
 > for the AR concept and its open accuracy questions.
 
-### **Cost Savings Calculator**
-
-**50-user organization:**
-- **Fulcrum**: $4,950/month × 12 = **$59,400/year**
-- **Honua**: **$0/year** (open source)
-- **Annual Savings**: **$59,400**
-- **3-Year Savings**: **$178,200**
-
 ---
 
 ## 📋 From Survey123 to Honua
 
-Survey123 is Esri's form-centric data collection tool charging $25-100/user/month.
-
-### Feature Comparison
-
-| Feature | **Honua** | **Survey123** |
-|---------|-----------|---------------|
-| **Platform** | ✅ **Native .NET MAUI** | ❌ Web wrapper |
-| **Performance** | ✅ **60fps native** | ❌ Slow web interface |
-| **Real-time Sync** | ✅ **gRPC streaming** | ❌ Batch upload only |
-| **Advanced Mapping** | ✅ **Native platform maps** | ⚠️ Basic web maps |
-| **IoT Integration** | ✅ **Built-in sensor support** | ❌ Not available |
-| **AR Features** | ✅ **Native AR** | ❌ Not available |
-| **Offline Capability** | ✅ **True offline-first** | ⚠️ Limited offline |
-| **Developer Experience** | ✅ **Visual Studio integration** | ❌ Web-only development |
+Survey123 forms are authored as XLSForm. The steps below export each survey
+definition and convert it to a Honua form schema.
 
 ### Migration Steps
 
@@ -347,7 +305,7 @@ public class Survey123Converter
             }
         }
 
-        // Add enhanced fields not available in Survey123
+        // Add Honua-specific fields
         schema.Fields.Add(new FormFieldDefinition
         {
             Id = "iot_readings",
@@ -362,9 +320,9 @@ public class Survey123Converter
 }
 ```
 
-#### 3. **Enhanced Mobile App** (1 hour)
+#### 3. **Handle Submissions** (1 hour)
 
-Create a superior mobile experience:
+Handle submissions in the app:
 
 ```csharp
 // MainPage.xaml.cs
@@ -382,7 +340,7 @@ public partial class MainPage : ContentPage
 
         if (result.Success)
         {
-            // Real-time notification (not available in Survey123)
+            // Notify subscribers after a successful submission
             await SendRealTimeNotificationAsync(e.FormData);
 
             // Automatic report generation
@@ -391,16 +349,6 @@ public partial class MainPage : ContentPage
     }
 }
 ```
-
-### **Performance Comparison**
-
-| Metric | **Honua** | **Survey123** |
-|--------|-----------|---------------|
-| **App Launch Time** | 2.1 seconds | 8.3 seconds |
-| **Form Load Time** | 0.8 seconds | 4.2 seconds |
-| **Photo Capture** | 1.1 seconds | 3.7 seconds |
-| **Offline Sync** | 15 seconds (1000 records) | 2.5 minutes |
-| **Memory Usage** | 45 MB | 127 MB |
 
 ---
 
@@ -414,27 +362,13 @@ public partial class MainPage : ContentPage
 > [honua-sdk-dotnet#182](https://github.com/honua-io/honua-sdk-dotnet/issues/182)
 > and [honua-mobile#280](https://github.com/honua-io/honua-mobile/issues/280)).
 
-ArcGIS Mobile SDK costs $1,500/developer/year and requires extensive setup.
-
-### Feature Comparison
-
-| Feature | **Honua** | **ArcGIS Mobile** |
-|---------|-----------|-------------------|
-| **Cost** | ✅ **$0** (open source) | ❌ **$1,500/dev/year** |
-| **Complexity** | ✅ **Simple 5-minute setup** | ❌ Complex multi-day setup |
-| **Learning Curve** | ✅ **Familiar .NET MAUI** | ❌ Proprietary APIs |
-| **Complete Solution** | ✅ **Full app framework** | ❌ SDK only |
-| **Documentation** | ✅ **Comprehensive guides** | ⚠️ Complex enterprise docs |
-| **Community** | ✅ **Open source community** | ❌ Vendor dependency |
-| **Innovation** | ✅ **Rapid feature delivery** | ❌ Slow enterprise cycles |
-
 ### Migration Steps
 
-#### 1. **Simplify Architecture** (2 hours)
+#### 1. **Port Map Setup** (2 hours)
 
 **Before (ArcGIS Mobile):**
 ```csharp
-// Complex ArcGIS setup
+// ArcGIS Maps SDK setup
 public class ArcGISMapPage : ContentPage
 {
     private MapView _mapView;
@@ -446,7 +380,7 @@ public class ArcGISMapPage : ContentPage
     {
         base.OnAppearing();
 
-        // Complex initialization
+        // Map initialization
         InitializeMap();
         SetupFeatureLayer();
         ConfigureGraphicsOverlay();
@@ -465,16 +399,15 @@ public class ArcGISMapPage : ContentPage
         }
         catch (Exception ex)
         {
-            // Complex error handling
+            // Error handling
         }
     }
-    // ... hundreds of lines of boilerplate
 }
 ```
 
 **After (Honua):**
 ```csharp
-// Simple Honua setup
+// Honua setup
 public partial class MapPage : ContentPage
 {
     public MapPage()
@@ -493,11 +426,11 @@ public partial class MapPage : ContentPage
                     ShowCollectedFeatures="true" />
 ```
 
-#### 2. **Simplify Data Access** (1 hour)
+#### 2. **Port Data Access** (1 hour)
 
 **Before (ArcGIS):**
 ```csharp
-// Complex ArcGIS data access
+// ArcGIS Maps SDK data access
 public async Task<IEnumerable<Feature>> QueryFeaturesAsync()
 {
     try
@@ -526,7 +459,7 @@ public async Task<IEnumerable<Feature>> QueryFeaturesAsync()
 
 **After (Honua):**
 ```csharp
-// Simple Honua data access
+// Honua data access
 public async Task<JsonDocument> QueryFeaturesAsync()
 {
     var request = new QueryFeaturesRequest
@@ -568,13 +501,6 @@ tail (portal items, renderers, tasks, widgets, XAML markup) is tracked as
 follow-up increments. See
 [`tools/Honua.Migrate.Maui/README.md`](../../tools/Honua.Migrate.Maui/README.md)
 for the full coverage matrix and CLI options.
-
-#### 4. **Cost Analysis**
-
-**10-developer team over 3 years:**
-- **ArcGIS Mobile SDK**: $45,000 (10 developers × $1,500/year × 3 years)
-- **Honua SDK**: **$0** (open source)
-- **Total Savings**: **$45,000**
 
 ---
 
@@ -664,69 +590,12 @@ echo "3. Test with mobile app"
 
 ---
 
-## 📊 ROI Calculator
-
-Use our ROI calculator to determine your savings:
-
-```javascript
-// Simple ROI Calculator
-function calculateROI(currentPlatform, userCount, years = 3) {
-    const costs = {
-        fulcrum: { min: 99, max: 299 },      // per user/month
-        survey123: { min: 25, max: 100 },   // per user/month
-        arcgis: { dev: 1500 },              // per developer/year
-        kobo: { enterprise: 50 }             // per user/month
-    };
-
-    const currentCost = costs[currentPlatform];
-    if (!currentCost) return "Platform not found";
-
-    let totalSavings = 0;
-
-    if (currentPlatform === 'arcgis') {
-        // ArcGIS is per developer, not per user
-        const devCount = Math.ceil(userCount / 50); // Estimate developers needed
-        totalSavings = devCount * currentCost.dev * years;
-    } else {
-        // Most platforms are per user/month
-        const monthlyCost = currentCost.max || currentCost.enterprise;
-        totalSavings = userCount * monthlyCost * 12 * years;
-    }
-
-    return {
-        platform: currentPlatform,
-        users: userCount,
-        years: years,
-        totalSavings: totalSavings,
-        monthlySavings: totalSavings / (years * 12),
-        paybackPeriod: "Immediate (Honua is free)"
-    };
-}
-
-// Examples
-console.log(calculateROI('fulcrum', 50, 3));
-// Result: $537,300 savings over 3 years
-
-console.log(calculateROI('survey123', 100, 3));
-// Result: $360,000 savings over 3 years
-```
-
----
-
 ## 🆘 Migration Support
 
 ### Self-Service Resources
-- **[Migration Documentation](../README.md)**
-- **[Video Tutorials](https://youtube.com/honuaproject)**
-- **[Community Forum](https://discord.gg/honua)**
-
-### Professional Migration Services
-- **Migration Assessment**: Free 1-hour consultation
-- **Data Migration**: Professional data conversion and validation
-- **Custom Development**: Tailored features and integrations
-- **Training Services**: Team onboarding and best practices
-
-**[Contact Migration Services](mailto:migration@honua.com)**
+- **[Mobile SDK documentation](../README.md)**
+- **[Feature status](../features/README.md)**
+- **[Validation strategy](validation-strategy.md)**
 
 ### Migration Acceptance Checklist
 
@@ -737,13 +606,3 @@ acceptance criteria:
 - Validate data migration accuracy with sample exports before production cutover
 - Measure performance on representative field workflows
 - Train the team until the pilot acceptance checklist passes
-
----
-
-**🎉 Ready to break free from vendor lock-in and save thousands per year?**
-
-**[Start Migration Today](../getting-started/tutorial.md) • [Get Professional Help](mailto:migration@honua.com) • [Join Success Stories](https://discord.gg/honua)**
-
----
-
-*Migration completed in record time? Share your story with [@honuaproject](https://twitter.com/honuaproject) and help others escape vendor lock-in!*

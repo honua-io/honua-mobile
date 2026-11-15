@@ -426,35 +426,6 @@ var importer = App.GetService<IDataImporter>();
 await importer.ImportFromCSV(inputPath, mappingConfig);
 ```
 
-## 🌟 Why Honua Field Collector?
-
-### **Revolutionary Advantages**
-
-> Note: AR visualization and IoT sensor integration are **forward-looking
-> concepts, not shipped** (see the status banner at the top). They are listed
-> below as intended directions, not as capabilities you get today.
-
-**🆚 vs. Fulcrum (ArcGIS):**
-- ✅ **Fully open source** - No vendor lock-in
-- 🔭 **AR visualization** (concept — not shipped) - See underground infrastructure
-- 🔭 **IoT integration** (concept — not shipped) - Automated sensor data collection
-- ✅ **Better offline** - True offline-first architecture
-- ✅ **Modern tech stack** - .NET MAUI cross-platform
-
-**🆚 vs. Survey123:**
-- ✅ **Advanced mapping** - Native platform integration
-- 🔭 **AR capabilities** (concept — not shipped) - 3D visualization and measurement
-- 🔭 **IoT automation** (concept — not shipped) - Hands-free data collection
-- ✅ **Real-time sync** - gRPC streaming protocols
-- ✅ **Enterprise ready** - Role-based security and audit trails
-
-**🆚 vs. KoBo Toolbox:**
-- ✅ **Professional grade** - Enterprise security and performance
-- ✅ **Native mobile** - Full platform integration
-- 🔭 **AR and IoT** (concept — not shipped) - Next-generation data collection
-- ✅ **Scalable architecture** - Handle millions of records
-- ✅ **Commercial support** - Professional services available
-
 ## 🤝 Contributing & Community
 
 ### **Open Source Development**
@@ -489,7 +460,7 @@ top), not capabilities available today.
 - ✅ **10x faster** data collection vs traditional methods
 - ✅ **90% reduction** in data entry errors
 - ✅ **100% offline** capability for remote work
-- ✅ **Zero vendor lock-in** with open source licensing
+- ✅ **Apache 2.0** open source licensing
 - ✅ **Enterprise security** with government-grade encryption
 
 [📚 Documentation](https://github.com/honua-io/honua-mobile/tree/trunk/docs) • [💬 Community](https://discord.gg/honua) <!-- TODO: add live demo link once a hosted mobile demo exists -->
