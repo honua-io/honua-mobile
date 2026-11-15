@@ -277,28 +277,13 @@ honua query mobile_offline_demo/68910 --where "1=1" --limit 25 --format geojson
 You can also inspect the synchronized layer in the server dashboard at
 <https://api.honua.io/dashboard>.
 
-## Compare to Competition
+## Capability and Validation Status
 
-This table is a planning comparison for the template and SDK surface, not a
-claim that every item is fully shipped and validated in this repository. For
-source-backed status, use the [feature map](../features/README.md), the
-[validation strategy](../guides/validation-strategy.md), and the
-[mobile SDK backlog roadmap](../guides/mobile-sdk-backlog-roadmap.md).
-
-### Template Direction vs. Fulcrum ($99/month)
-
-| Feature | Honua template direction | Fulcrum ($99/mo) |
-|---------|-----------------|------------------|
-| **Dynamic Forms** | SDK-backed schemas and rendering are active mobile scope | Web form builder |
-| **Offline Capability** | GeoPackage and sync runtime are implemented; app workflow parity is tracked in backlog | Offline field collection |
-| **GPS Accuracy** | Mobile location services and validation presentation are implemented; advanced field UX is backlog | Accuracy capture |
-| **Photo Management** | Media capture/local path handling is mobile scope; advanced AI hooks are backlog | Photo capture |
-| **IoT Integration** | Future extension track | Product-dependent |
-| **AR Visualization** | Future track after scene anchoring dependencies close | Not a core field form feature |
-| **Customization** | Source and template customization | Vendor-managed customization |
-| **License Cost** | Open-source client repository | Commercial subscription |
-
-Commercial savings depend on hosting, support, and implementation choices.
+Use the [feature map](../features/README.md),
+[validation strategy](../guides/validation-strategy.md), and
+[mobile SDK backlog roadmap](../guides/mobile-sdk-backlog-roadmap.md) to check
+which capabilities are implemented and which still need platform or app journey
+validation. Completing this tutorial does not establish production readiness.
 
 ## Next Steps (Choose Your Adventure)
 
@@ -347,7 +332,7 @@ dotnet build
 
 ### Get Help
 - 💬 **[Discord Community](https://discord.gg/honua)** - Real-time help
-- 📖 **[Documentation](../README.md)** - Comprehensive guides
+- 📖 **[Documentation](../guides/README.md)** - Comprehensive guides
 - 🐛 **[GitHub Issues](https://github.com/honua-io/honua-mobile/issues)** - Bug reports
 - 📧 **[Email Support](mailto:support@honua.com)** - Direct assistance
 
@@ -358,27 +343,14 @@ dotnet build
 
 ---
 
-## 🎉 Congratulations!
+## Next Steps Before Distribution
 
-**You just built a professional field data collection app in 5 minutes that competes with platforms costing $1,200+ per year!**
+Review the [security guide](../guides/security.md), configure the server and form
+schema for your use case, and run the applicable platform and offline-sync
+journeys described in the [validation strategy](../guides/validation-strategy.md).
+Record the results before distributing a build.
 
-### What's Next?
-- ✅ **Customize the form** for your specific use case
-- ✅ **Add more fields** (sensors, signatures, calculations)
-- ✅ **Deploy to app stores** (iOS App Store, Google Play)
-- ✅ **Scale to your team** with unlimited users
-- ✅ **Add enterprise features** (SSO, audit logs, analytics)
-
-### Key Benefits You've Unlocked:
-- 💰 **$0 cost** vs $1,200+/year for alternatives
-- 🔓 **No vendor lock-in** - you own the code
-- 🚀 **Professional grade** - enterprise-ready features
-- 🌍 **Cross-platform** - iOS, Android, Windows support
-- 🔄 **Modern architecture** - gRPC, offline-first, real-time sync
-
-**Ready to revolutionize your data collection workflow?**
-
-**[🚀 Deploy to Production](../guides/deployment.md) • [🎨 Customize Your App](../guides/customization.md) • [👥 Join the Community](https://discord.gg/honua)**
+**[🚀 Release Promotion](../guides/mobile-release-promotion.md) • [🎨 SDK Quick Start](../../README.md#quick-start) • [👥 Join the Community](https://discord.gg/honua)**
 
 ---
 

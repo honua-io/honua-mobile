@@ -383,6 +383,6 @@ dotnet build
 
 **🎉 Welcome to the Honua developer community!**
 
-You're now ready to build revolutionary mobile geospatial applications that compete with expensive proprietary platforms.
+Use the validation checklist above to record the results for your target platforms before distributing your app.
 
-**[📚 Explore Documentation](../README.md) • [💻 Browse Examples](../../examples/) • [💬 Join Discord](https://discord.gg/honua) • [🐦 Follow on Twitter](https://twitter.com/honuaproject)**
+**[📚 Explore Documentation](../guides/README.md) • [💻 Browse Examples](../../examples/) • [💬 Join Discord](https://discord.gg/honua) • [🐦 Follow on Twitter](https://twitter.com/honuaproject)**
