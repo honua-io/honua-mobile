@@ -85,7 +85,7 @@ FROM honua_upload_acknowledgements WHERE operation_id = $operation_id;
         var ids = new JsonArray();
         foreach (var id in serverFeatureIds.Where(id => !string.IsNullOrWhiteSpace(id)))
         {
-            ids.Add(id);
+            ids.Add(JsonValue.Create(id));
         }
 
         return ids.ToJsonString();
