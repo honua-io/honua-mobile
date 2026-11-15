@@ -16,7 +16,7 @@ tracked separately in #82 and #85. This roadmap intentionally excludes #22,
 which owns Flutter and broader platform parity expansion.
 
 This page is a sequencing and closure matrix. It also indexes the current
-Fulcrum/Survey123 parity backlog. It does not replace the detailed
+field collection parity backlog. It does not replace the detailed
 source-of-truth documents for implemented capabilities, validation coverage,
 contracts, 3D/AR, offline packaging, protected scene auth, or display
 implementation.
@@ -27,7 +27,6 @@ implementation.
 |------|--------|
 | Current implemented capability map | [Feature Map](../features/README.md) |
 | Current validation and coverage map | [Validation Strategy](validation-strategy.md) |
-| Historical Phase 0 parity, innovation, and test baseline | [Phase 0 Summary](../phase-0/PHASE_0_SUMMARY.md) |
 | SDK/mobile contract ownership | [Mobile Contract Harmonization](mobile-contract-harmonization.md) |
 | 3D, scene, and AR dependency order | [Mobile 3D and AR Dependency Matrix](mobile-3d-ar-dependency-matrix.md) |
 | Offline 3D package policy | [Offline 3D Scene Packages](offline-3d-scene-packages.md) |
@@ -37,8 +36,8 @@ implementation.
 
 ## Status Vocabulary
 
-Use these labels consistently when comparing Honua Mobile to Fulcrum,
-Survey123, or other field collection platforms:
+Use these labels consistently when describing Honua Mobile field collection
+capabilities:
 
 | Status | Meaning | Source of truth |
 |--------|---------|-----------------|
@@ -46,13 +45,12 @@ Survey123, or other field collection platforms:
 | Validated | Automated tests or CI jobs exercise the behavior. | [Validation Strategy](validation-strategy.md), `tests/`, `src/Honua.Embed/tests/`, and CI job status. |
 | Backlog | Product parity need is identified but not fully implemented or validated. | The backlog index below and linked GitHub issues. |
 | Cross-repo dependency | Required contracts or server behavior belong outside this repo. | Linked `honua-sdk-dotnet` or `honua-server` issues and dependency docs. |
-| Historical baseline | Phase 0 planning claim or target, not shipped status by itself. | `docs/phase-0/*` with the status notes at the top of each document. |
 
 ## Epic State
 
 | Layer | Status | How it affects #1 |
 |-------|--------|-------------------|
-| Phase 0 foundation | Complete as a planning baseline. | Keeps #1 anchored to parity, innovation, and test gates instead of reopening broad discovery. |
+| Phase 0 foundation | Complete; its planning documents were retired in favour of the Feature Map and Validation Strategy. | Keeps #1 anchored to parity, innovation, and test gates instead of reopening broad discovery. |
 | SDK contract alignment | Baseline documented and partially migrated to published `Honua.Sdk.*` packages. | New portable contracts should land in `honua-sdk-dotnet`; mobile should stay limited to adapters, DI, native storage, renderer integration, and lifecycle behavior. |
 | Offline mobile runtime | Mobile-owned runtime behavior is established around GeoPackage/SQLite, queueing, file placement, app lifecycle, local package intake, assignment packets, lifecycle transitions, and export evidence. | Remaining work should extend the runtime through SDK contracts instead of adding provider-neutral clients here. #92 stays open only for hosted cloud acceptance after honua-server#965. |
 | Display and embed | Web display adapter and native .NET evaluation slices are closed; embeddable map product packaging remains #10. | #10 should close over the closed #50 adapter foundation without reopening #57 native display evaluation. |
@@ -60,9 +58,9 @@ Survey123, or other field collection platforms:
 | Field location behavior | Geofencing acquisition/background location is closed as a mobile-owned runtime slice. | Future geofence work should continue consuming SDK contracts while mobile owns permissions, sensors, background behavior, and battery policy. |
 | Plugins | Mobile/web host runtime scope is closed; non-UI manifests and permission contracts remain shared SDK/server concerns. | Server plugin APIs remain tracked in honua-io/honua-server#347 and should not be redefined in mobile. |
 
-## Fulcrum/Survey123 Parity Backlog Index
+## Field Collection Parity Backlog Index
 
-The focused competitive parity sprint is no longer an open execution backlog.
+The focused parity sprint is no longer an open execution backlog.
 The local/no-cloud and no-design slices are closed, including #208 through
 #224, #226, and the no-cloud child backlog #249 through #258. Those closures
 cover local form runtime, validation, rules/calculations, repeat fixtures,
@@ -100,7 +98,7 @@ Closed local parity issue links:
 ## Back-Office Dependency Handoff
 
 #219 is a dependency-tracking issue, not a request to add server/admin clients to
-this repository. Fulcrum/Survey123 parity requires project/form administration,
+this repository. Field collection parity requires project/form administration,
 supervisor review, exports, reports, tenancy, permissions, and audit behavior,
 but those capabilities are owned by `honua-server`, admin UI, and SDK packages.
 Mobile should consume the resulting `Honua.Sdk.*` contracts through adapters,
@@ -160,8 +158,8 @@ contract/acceptance tests.
 
 ## Closure Readiness Summary
 
-The no-cloud/no-design Fulcrum and Survey123 parity backlog is closed for the
-mobile-owned local runtime. The remaining competitive-parity risks are now clear
+The no-cloud/no-design field collection parity backlog is closed for the
+mobile-owned local runtime. The remaining parity risks are now clear
 and narrower:
 
 - hosted cloud acceptance for #92 is blocked by honua-server#965 DNS/TLS;

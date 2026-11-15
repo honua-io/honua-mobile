@@ -1,8 +1,7 @@
 # 5-Minute Tutorial: Build Your First Field Data Collection App
 
 In just 5 minutes, you'll build an open-source field data collection app that
-demonstrates the same core workflow categories used by platforms like Fulcrum
-and Survey123.
+demonstrates the core field workflow: a form, a map and offline capture.
 
 ## What You'll Build
 

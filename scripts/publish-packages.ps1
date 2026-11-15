@@ -192,7 +192,8 @@ function Generate-ReleaseNotes {
 - Revolutionary open-source geospatial mobile SDK
 - Complete field data collection capabilities
 - Cross-platform support (iOS, Android, Windows)
-- Professional UI components that compete with Fulcrum and Survey123
+- Field form, map and capture UI components
+- Offline-first GeoPackage capture, dynamic forms, and sync
 
 ## 📦 Packages Released
 
@@ -209,12 +210,6 @@ function Generate-ReleaseNotes {
 - [Getting Started Guide](https://github.com/honua-io/honua-mobile/tree/trunk/docs/getting-started)
 - [API Reference](https://github.com/honua-io/honua-mobile/tree/trunk/docs/api)
 - [Sample Applications](https://github.com/honua-io/honua-mobile/tree/trunk/examples)
-
-## 🆚 Competitive Advantages
-- 💰 **$0 cost** vs \$1,200+/year for Fulcrum/Survey123
-- 🔓 **Open source** vs vendor lock-in
-- 🚀 **Native performance** vs web wrappers
-- 📴 **Offline-first** GeoPackage capture, dynamic forms, and sync
 
 ## 🔧 Installation
 

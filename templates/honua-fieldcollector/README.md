@@ -1,6 +1,6 @@
 # YOUR_COMPANY_NAME Field Data Collection App
 
-**Professional mobile field data collection that competes with Fulcrum and Survey123 - completely free and open source.**
+**A mobile field data collection app built on the open-source Honua Mobile SDK.**
 
 This template creates a complete field data collection application with:
 
@@ -202,27 +202,6 @@ For large datasets:
 - Enable data paging: `config.MaxRecordsPerPage = 100`
 - Use background sync: `config.EnableBackgroundSync = true`
 - Optimize photos: `config.PhotoCompressionLevel = 0.8`
-
-## 🆚 Competitive Advantages
-
-### vs. Fulcrum ($99/month)
-- ✅ **$0 cost** vs $1,188/year
-- ✅ **Native performance** vs web wrapper
-- ✅ **Full customization** vs vendor lock-in
-- ✅ **IoT integration** vs basic forms only
-- ✅ **AR capabilities** vs not available
-
-### vs. Survey123 ($25/user/month)
-- ✅ **Unlimited users** vs per-user licensing
-- ✅ **Real-time sync** vs batch upload
-- ✅ **Advanced mapping** vs basic maps
-- ✅ **Open source** vs proprietary
-
-### vs. ArcGIS Mobile SDK ($1500/dev/year)
-- ✅ **Open source** vs expensive licensing
-- ✅ **Complete app** vs SDK only
-- ✅ **Modern architecture** vs legacy APIs
-- ✅ **Community support** vs vendor dependency
 
 ## 📚 Resources
 
