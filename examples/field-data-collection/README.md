@@ -431,7 +431,8 @@ await importer.ImportFromCSV(inputPath, mappingConfig);
 ### **Open Source Development**
 - **GitHub**: [honua-io/honua-server](https://github.com/honua-io/honua-server)
 - **License**: Apache 2.0 - Fully open source
-- **Contributing**: Welcome! See CONTRIBUTING.md for guidelines
+- **Feedback**: Issues and interoperability reports are welcome. Outside code
+  contributions are not accepted; see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 - **Issues**: Bug reports and feature requests welcome
 
 ### **Community Resources**

@@ -39,9 +39,8 @@ lands.
 
 ## Contributing
 
-If you want to prototype this, start a discussion in the repository's issues
-before writing code, so the SDK surface and accuracy requirements can be agreed
-up front.
+Questions and design feedback can be raised in repository issues. Outside code
+contributions are not accepted; see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## License
 
