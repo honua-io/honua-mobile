@@ -326,10 +326,46 @@ public sealed class OfflineSyncEngineTests : IDisposable
         Assert.Contains(measurements, measurement =>
             measurement.Name == "mobile_sync_runs_total" &&
             measurement.Value == 1 &&
-            measurement.HasTag("result", "succeeded"));
+            measurement.HasTag("result", "succeeded") &&
+            measurement.HasTag("service_id", "assets"));
         Assert.Contains(measurements, measurement =>
             measurement.Name == "mobile_pending_operations" &&
             measurement.Value == 0);
+    }
+
+    [Fact]
+    public async Task SyncAsync_MultipleTargetLayers_EmitsMultipleServiceIdTag()
+    {
+        var measurements = new List<MetricMeasurement>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == MobileSyncTelemetry.MeterName)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            measurements.Add(new MetricMeasurement(instrument.Name, measurement, tags.ToArray()));
+        });
+        listener.Start();
+
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions { DatabasePath = _databasePath });
+        await store.InitializeAsync();
+        await store.EnqueueAsync(CreateOperation("multi-op-1", "assets", OfflineOperationType.Update));
+        await store.EnqueueAsync(CreateOperation("multi-op-2", "inspections", OfflineOperationType.Update));
+
+        var engine = new OfflineSyncEngine(store, new AlwaysSuccessUploader());
+
+        var result = await engine.SyncAsync();
+
+        Assert.Equal(2, result.Succeeded);
+        Assert.Contains(measurements, measurement =>
+            measurement.Name == "mobile_sync_runs_total" &&
+            measurement.Value == 1 &&
+            measurement.HasTag("result", "succeeded") &&
+            measurement.HasTag("service_id", "multiple"));
     }
 
     public void Dispose()

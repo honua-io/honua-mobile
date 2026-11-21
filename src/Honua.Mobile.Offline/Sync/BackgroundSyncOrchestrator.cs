@@ -174,7 +174,12 @@ public sealed class BackgroundSyncOrchestrator : IAsyncDisposable
         catch (Exception ex)
         {
             // Keep the background loop alive and retry on the next interval.
-            _logger.LogError(ex, "Background sync cycle failed.");
+            _logger.LogError(
+                ex,
+                "Background sync cycle failed for service {ServiceId} (SyncInterval={SyncInterval}, IsOnline={IsOnline}).",
+                _downloadServiceId ?? "(upload-only)",
+                _options.SyncInterval,
+                _connectivity.IsOnline);
             SyncFailed?.Invoke(ex);
         }
     }
