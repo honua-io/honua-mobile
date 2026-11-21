@@ -48,7 +48,26 @@ public static class MobileSyncTelemetry
     /// </summary>
     /// <param name="result">Run result label.</param>
     public static void RecordRun(string result)
-        => SyncRuns.Add(1, new KeyValuePair<string, object?>("result", result));
+        => RecordRun(result, serviceId: null);
+
+    /// <summary>
+    /// Records a completed sync run with an optional target service or layer identifier.
+    /// </summary>
+    /// <param name="result">Run result label.</param>
+    /// <param name="serviceId">Optional target service or layer identifier for the sync run.</param>
+    public static void RecordRun(string result, string? serviceId)
+    {
+        if (string.IsNullOrWhiteSpace(serviceId))
+        {
+            SyncRuns.Add(1, new KeyValuePair<string, object?>("result", result));
+            return;
+        }
+
+        SyncRuns.Add(
+            1,
+            new KeyValuePair<string, object?>("result", result),
+            new KeyValuePair<string, object?>("service_id", serviceId));
+    }
 
     /// <summary>
     /// Records a conflict handled by the specified strategy.

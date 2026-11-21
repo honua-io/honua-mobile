@@ -1,5 +1,6 @@
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.Sync;
+using Microsoft.Extensions.Logging;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -59,6 +60,35 @@ public sealed class BackgroundSyncOrchestratorTests
 
         Assert.True(runner.CallCount >= 2);
         Assert.True(runner.SuccessCount >= 1);
+    }
+
+    [Fact]
+    public async Task StartAsync_WhenSyncThrows_LogsStructuredServiceContext()
+    {
+        var runner = new FlakySyncRunner(initialFailures: 1);
+        var connectivity = new ToggleConnectivityProvider { IsOnline = true };
+        var logger = new CapturingLogger<BackgroundSyncOrchestrator>();
+        await using var orchestrator = new BackgroundSyncOrchestrator(
+            runner,
+            connectivity,
+            new BackgroundSyncOrchestratorOptions
+            {
+                SyncInterval = TimeSpan.FromMilliseconds(25),
+                RunImmediately = true,
+            },
+            downloadServiceId: "field-assets",
+            logger: logger);
+
+        await orchestrator.StartAsync();
+        await runner.FirstSuccess.WaitAsync(TimeSpan.FromSeconds(5));
+        await orchestrator.StopAsync();
+
+        var errorEntry = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.IsType<InvalidOperationException>(errorEntry.Exception);
+        Assert.Contains("field-assets", errorEntry.Message, StringComparison.Ordinal);
+        Assert.Equal("field-assets", errorEntry.GetProperty("ServiceId"));
+        Assert.Equal(TimeSpan.FromMilliseconds(25), errorEntry.GetProperty("SyncInterval"));
+        Assert.Equal(true, errorEntry.GetProperty("IsOnline"));
     }
 
     [Fact]
@@ -198,5 +228,56 @@ public sealed class BackgroundSyncOrchestratorTests
                 Failed = 0,
             });
         }
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        private readonly List<LogEntry> _entries = [];
+
+        public IReadOnlyList<LogEntry> Entries
+        {
+            get
+            {
+                lock (_entries)
+                {
+                    return [.. _entries];
+                }
+            }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var properties = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (state is IEnumerable<KeyValuePair<string, object?>> pairs)
+            {
+                foreach (var pair in pairs)
+                {
+                    properties[pair.Key] = pair.Value;
+                }
+            }
+
+            lock (_entries)
+            {
+                _entries.Add(new LogEntry(logLevel, exception, formatter(state, exception), properties));
+            }
+        }
+    }
+
+    private sealed record LogEntry(
+        LogLevel Level,
+        Exception? Exception,
+        string Message,
+        IReadOnlyDictionary<string, object?> Properties)
+    {
+        public object? GetProperty(string key) => Properties.TryGetValue(key, out var value) ? value : null;
     }
 }

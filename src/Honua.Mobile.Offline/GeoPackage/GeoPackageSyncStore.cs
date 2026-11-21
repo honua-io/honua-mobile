@@ -809,13 +809,16 @@ LIMIT 1;
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
         // A single BEGIN IMMEDIATE / COMMIT around the whole batch means one fsync for the
-        // entire change set instead of one per feature.
+        // entire change set instead of one per feature. Hoist layer-level metadata upserts out
+        // of the per-feature loop so they execute once per batch instead of once per feature.
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
         {
+            await UpsertFeatureLayerMetadataForBatchAsync(connection, layerKey, parsed, ct).ConfigureAwait(false);
+
             for (var i = 0; i < parsed.Length; i++)
             {
-                await WriteFeatureCoreAsync(connection, layerKey, parsed[i], featureJsons[i], expiresAtUtc, ct).ConfigureAwait(false);
+                await WriteFeatureRowCoreAsync(connection, layerKey, parsed[i], featureJsons[i], expiresAtUtc, ct).ConfigureAwait(false);
             }
 
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
@@ -921,8 +924,6 @@ LIMIT 1;
         DateTimeOffset? expiresAtUtc,
         CancellationToken ct)
     {
-        var objectId = feature.ObjectId;
-        var extent = feature.Extent;
         var spatialReference = feature.SpatialReference ?? FeatureSpatialReference.Default;
 
         await UpsertFeatureLayerMetadataAsync(
@@ -931,6 +932,71 @@ LIMIT 1;
             spatialReference,
             feature.SpatialReference is not null,
             ct).ConfigureAwait(false);
+
+        await WriteFeatureRowCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
+    }
+
+    private static async Task UpsertFeatureLayerMetadataForBatchAsync(
+        SqliteConnection connection,
+        string layerKey,
+        FeatureCacheRecord[] parsed,
+        CancellationToken ct)
+    {
+        FeatureSpatialReference? finalExplicit = null;
+        HashSet<int>? seenExplicitSrsIds = null;
+        List<FeatureSpatialReference>? extraExplicit = null;
+
+        for (var i = 0; i < parsed.Length; i++)
+        {
+            if (parsed[i].SpatialReference is not { } explicitSrs)
+            {
+                continue;
+            }
+
+            if (finalExplicit is { } previous && previous.SrsId != explicitSrs.SrsId)
+            {
+                seenExplicitSrsIds ??= new HashSet<int>();
+                if (seenExplicitSrsIds.Add(previous.SrsId))
+                {
+                    extraExplicit ??= new List<FeatureSpatialReference>();
+                    extraExplicit.Add(previous);
+                }
+            }
+
+            finalExplicit = explicitSrs;
+        }
+
+        if (extraExplicit is not null)
+        {
+            foreach (var srs in extraExplicit)
+            {
+                if (finalExplicit is { } last && srs.SrsId == last.SrsId)
+                {
+                    continue;
+                }
+
+                await UpsertSpatialReferenceAsync(connection, srs, ct).ConfigureAwait(false);
+            }
+        }
+
+        await UpsertFeatureLayerMetadataAsync(
+            connection,
+            layerKey,
+            finalExplicit ?? FeatureSpatialReference.Default,
+            isExplicit: finalExplicit is not null,
+            ct).ConfigureAwait(false);
+    }
+
+    private async Task WriteFeatureRowCoreAsync(
+        SqliteConnection connection,
+        string layerKey,
+        FeatureCacheRecord feature,
+        string featureJson,
+        DateTimeOffset? expiresAtUtc,
+        CancellationToken ct)
+    {
+        var objectId = feature.ObjectId;
+        var extent = feature.Extent;
 
         await using (var command = connection.CreateCommand())
         {

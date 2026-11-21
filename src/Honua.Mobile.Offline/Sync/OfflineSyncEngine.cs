@@ -34,12 +34,18 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
     public async Task<SyncRunResult> SyncAsync(CancellationToken ct = default)
     {
         using var activity = MobileSyncTelemetry.ActivitySource.StartActivity("honua.mobile.sync.run", ActivityKind.Internal);
+        string? telemetryTarget = null;
         try
         {
             await _store.InitializeAsync(ct).ConfigureAwait(false);
             await RecordPendingGaugeAsync(ct).ConfigureAwait(false);
             var pending = await _store.GetPendingAsync(_options.BatchSize, ct).ConfigureAwait(false);
+            telemetryTarget = ResolveTelemetryTarget(pending);
             activity?.SetTag("honua.mobile.sync.loaded", pending.Count);
+            if (telemetryTarget is not null)
+            {
+                activity?.SetTag("honua.mobile.sync.service_id", telemetryTarget);
+            }
 
             var failures = new List<SyncFailure>();
             var success = 0;
@@ -112,7 +118,7 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
             activity?.SetTag("honua.mobile.sync.succeeded", result.Succeeded);
             activity?.SetTag("honua.mobile.sync.failed", result.Failed);
             var resultLabel = result.Failed == 0 ? "succeeded" : result.Succeeded == 0 ? "failed" : "partial_failure";
-            MobileSyncTelemetry.RecordRun(resultLabel);
+            MobileSyncTelemetry.RecordRun(resultLabel, telemetryTarget);
             activity?.SetStatus(result.Failed == 0 ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
             await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
 
@@ -120,14 +126,14 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            MobileSyncTelemetry.RecordRun("cancelled");
+            MobileSyncTelemetry.RecordRun("cancelled", telemetryTarget);
             activity?.SetStatus(ActivityStatusCode.Error, "cancelled");
             await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
             throw;
         }
         catch (MobileSyncException ex)
         {
-            MobileSyncTelemetry.RecordRun("exception");
+            MobileSyncTelemetry.RecordRun("exception", telemetryTarget);
             activity?.SetStatus(ActivityStatusCode.Error, ex.Problem.Message);
             await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
             throw;
@@ -135,11 +141,38 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         catch (Exception ex)
         {
             var problem = MobileSyncProblemHelper.FromException(ex);
-            MobileSyncTelemetry.RecordRun("exception");
+            MobileSyncTelemetry.RecordRun("exception", telemetryTarget);
             activity?.SetStatus(ActivityStatusCode.Error, problem.Message);
             await RecordPendingGaugeAsync(CancellationToken.None).ConfigureAwait(false);
             throw new MobileSyncException(problem, ex);
         }
+    }
+
+    private static string? ResolveTelemetryTarget(IReadOnlyList<OfflineEditOperation> pending)
+    {
+        string? singleTarget = null;
+        for (var index = 0; index < pending.Count; index++)
+        {
+            var operation = pending[index];
+            var candidate = !string.IsNullOrWhiteSpace(operation.LayerKey)
+                ? operation.LayerKey
+                : operation.TargetCollection;
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (singleTarget is null)
+            {
+                singleTarget = candidate;
+            }
+            else if (!string.Equals(singleTarget, candidate, StringComparison.Ordinal))
+            {
+                return "multiple";
+            }
+        }
+
+        return singleTarget;
     }
 
     private SyncConflictStrategy ResolveConflictStrategy(OfflineEditOperation operation)

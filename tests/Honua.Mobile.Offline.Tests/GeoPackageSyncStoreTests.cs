@@ -534,6 +534,29 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertFeaturesAsync_BatchHoistsLayerMetadataAndPreservesExplicitSpatialReference()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+
+        await store.UpsertFeaturesAsync(
+            "batch-meters",
+            [
+                """{"attributes":{"OBJECTID":1,"name":"DefaultFirst"},"geometry":{"x":-17566607.5,"y":2425287.9}}""",
+                """{"attributes":{"OBJECTID":2,"name":"ExplicitSecond"},"geometry":{"x":-17566607.2,"y":2425288.1,"spatialReference":{"wkid":102100,"latestWkid":3857}}}""",
+                """{"attributes":{"OBJECTID":3,"name":"ExplicitThird"},"geometry":{"x":-17566607.1,"y":2425288.2,"spatialReference":{"wkid":102100,"latestWkid":3857}}}""",
+            ]);
+
+        var metadata = await store.GetFeatureLayerMetadataAsync("batch-meters");
+        var features = await store.GetFeaturesAsync("batch-meters");
+
+        Assert.NotNull(metadata);
+        Assert.Equal("EPSG:3857", metadata!.CrsIdentifier);
+        Assert.Equal(3857, metadata.SrsId);
+        Assert.Equal(3, features.Count);
+    }
+
+    [Fact]
     public async Task GetFeaturesAsync_WithLegacyMissingLayerMetadata_BackfillsCrsFromCachedFeatures()
     {
         var store = CreateStore();
