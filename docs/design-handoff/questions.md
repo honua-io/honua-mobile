@@ -1,6 +1,11 @@
-# Open UX questions
+# Open UX questions (Archived)
 
-Each question is grounded in something in the current XAML. Answers will shape the next round of mock revisions and corresponding XAML edits.
+> **Archive:** These questions were captured from the retired
+> `apps/Honua.Mobile.FieldCollection/` app before its removal during the M1 SDK
+> consolidation (see `docs/guides/field-sdk-consolidation.md`). Active field app
+> UX work lives in Collect.
+
+Each question below was grounded in the historical FieldCollection XAML snapshot.
 
 1. **SyncCenterPage surfaces `ActiveConflicts` as a flat `CollectionView` and `ConflictReviewItems` as a second flat list right below it.** When a partner returns from a week in the field with 50+ conflicts spanning Culverts, Headwalls, and Crews, would grouping by layer (with collapsible sections, totals, and a per-group "Resolve all") be more usable than two long flat lists? Or should the two lists be merged with a status filter chip row?
 

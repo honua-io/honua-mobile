@@ -1,6 +1,6 @@
 # AppShell - XAML source
 
-File: `apps/Honua.Mobile.FieldCollection/AppShell.xaml`
+Historical source (removed in M1 consolidation): `apps/Honua.Mobile.FieldCollection/AppShell.xaml`
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" ?>

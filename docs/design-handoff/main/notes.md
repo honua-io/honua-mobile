@@ -1,6 +1,6 @@
 # MainPage (Dashboard)
 
-**Source:** `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml`
 **ViewModel:** `MainViewModel` (Title default from `BaseViewModel`: "Honua Field Collection")
 
 ## Purpose

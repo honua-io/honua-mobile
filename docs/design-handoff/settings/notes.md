@@ -1,6 +1,6 @@
 # SettingsPage
 
-**Source:** `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml`
 **ViewModel:** `SettingsViewModel` (Title: "Settings")
 
 ## Purpose

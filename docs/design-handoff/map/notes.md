@@ -1,6 +1,6 @@
 # MapPage
 
-**Source:** `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml`
 **ViewModel:** `MapViewModel` (Title: "Map")
 
 ## Purpose

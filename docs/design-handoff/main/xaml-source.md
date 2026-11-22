@@ -1,6 +1,6 @@
 # MainPage - XAML source
 
-File: `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml`
+Historical source (removed in M1 consolidation): `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>

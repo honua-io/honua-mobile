@@ -1,6 +1,10 @@
-# Design Tokens
+# Design Tokens (Archived)
 
-Extracted verbatim from:
+> **Archive:** Extracted from the retired `apps/Honua.Mobile.FieldCollection/` app
+> before its removal during the M1 SDK consolidation (see
+> `docs/guides/field-sdk-consolidation.md`). Retained as historical reference.
+
+Historical source files (removed):
 
 - `apps/Honua.Mobile.FieldCollection/Resources/Styles/Colors.xaml` (colors)
 - `apps/Honua.Mobile.FieldCollection/Resources/Styles/Styles.xaml` (typography, control styles, shadow)

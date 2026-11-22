@@ -1,8 +1,8 @@
 # SyncCenterPage - XAML source
 
-Source path in repo: `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml`
+Historical source (removed in M1 consolidation): `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml`
 
-The full XAML for `SyncCenterPage` is reproduced below verbatim. Use it as the source of truth when proposing design changes that map back to MAUI; no sections are abbreviated.
+The historical XAML for the retired `SyncCenterPage` is reproduced below verbatim for archival reference; no sections are abbreviated.
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>

@@ -269,7 +269,7 @@ Example using a local `honua-server` checkout fixture seed:
 
 ```bash
 HONUA_MOBILE_LIVE_SERVER_TESTS=1 \
-HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=/home/makani/honua-server/tests/seed/mobile-offline-demo-v1.sql \
+HONUA_MOBILE_LIVE_SERVER_FIXTURE_SQL=/path/to/honua-server/tests/seed/mobile-offline-demo-v1.sql \
 dotnet test tests/Honua.Mobile.ServerIntegration.Tests/Honua.Mobile.ServerIntegration.Tests.csproj
 ```
 
@@ -394,8 +394,8 @@ telemetry counters listed in
 [Sync Problems And Telemetry](#sync-problems-and-telemetry).
 
 For end-to-end offline test patterns see
-[`tests/Honua.Mobile.Offline.Tests`](../../tests/Honua.Mobile.Offline.Tests) and
-which exercise the real `OfflineSyncEngine`, queue claim/lease semantics, and
+[`tests/Honua.Mobile.Offline.Tests`](../../tests/Honua.Mobile.Offline.Tests),
+which exercises the real `OfflineSyncEngine`, queue claim/lease semantics, and
 conflict policy rules.
 
 ## Performance Tips

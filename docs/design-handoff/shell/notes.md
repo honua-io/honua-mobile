@@ -1,6 +1,6 @@
 # AppShell
 
-**Source:** `apps/Honua.Mobile.FieldCollection/AppShell.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/AppShell.xaml`
 
 ## Purpose
 Root navigation container. Provides a bottom `TabBar` with four destinations and a `Shell.ItemTemplate` for any flyout-style item rendering.
