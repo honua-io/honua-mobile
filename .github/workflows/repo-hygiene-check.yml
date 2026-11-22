@@ -1,0 +1,16 @@
+name: Repository hygiene
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+# No concurrency group: this is a required check, and a cancelled run left as the
+# newest check run of that name blocks merging even when another run passed (a rerun
+# of an older run cancels the newer one). Runs take seconds, so every run completes.
+
+jobs:
+  repo-hygiene:
+    uses: honua-io/.github/.github/workflows/repo-hygiene.yml@ac1810ad6ef51b72204898a44c0cbeee90e57914
