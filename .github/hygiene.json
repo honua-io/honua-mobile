@@ -1,0 +1,28 @@
+{
+  "roots": [
+    ".github/",
+    ".gitignore",
+    "AGENTS.md",
+    "apps/",
+    "build/",
+    "contracts/",
+    "CONTRIBUTING.md",
+    "Directory.Build.props",
+    "docs/",
+    "examples/",
+    "global.json",
+    "Honua.Mobile.sln",
+    "LICENSE",
+    "NuGet.config",
+    "quality/",
+    "README.md",
+    "release/",
+    "RELEASING.md",
+    "scripts/",
+    "src/",
+    "templates/",
+    "tests/",
+    "tools/"
+  ],
+  "gate_inputs": {}
+}
