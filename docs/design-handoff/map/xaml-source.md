@@ -1,6 +1,6 @@
 # MapPage - XAML source
 
-File: `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml`
+Historical source (removed in M1 consolidation): `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>

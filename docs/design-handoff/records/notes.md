@@ -1,6 +1,6 @@
 # RecordsPage
 
-**Source:** `apps/Honua.Mobile.FieldCollection/Views/RecordsPage.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/Views/RecordsPage.xaml`
 **ViewModel:** `RecordsViewModel` (Title: "Records")
 
 ## Purpose

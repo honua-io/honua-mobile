@@ -75,7 +75,7 @@ Transform how field workers, inspectors, and data collectors interact with real-
 ## 📦 Installation & Quick Start
 
 ### **Prerequisites**
-- **Development**: Visual Studio 2022, .NET 8.0, MAUI workload
+- **Development**: Visual Studio 2022, .NET 10.0, MAUI workload
 - **iOS**: Xcode 15+, iOS 14.2+ device with ARKit support
 - **Android**: Android SDK 21+, device with ARCore support
 - **Windows**: Windows 10/11 for desktop development
@@ -83,8 +83,8 @@ Transform how field workers, inspectors, and data collectors interact with real-
 ### **Quick Start**
 ```bash
 # Clone the repository
-git clone https://github.com/honua-io/honua-server.git
-cd examples/mobile/field-data-collection
+git clone https://github.com/honua-io/honua-mobile.git
+cd honua-mobile/examples/field-data-collection
 
 # Restore packages
 dotnet restore
@@ -93,9 +93,9 @@ dotnet restore
 dotnet build
 
 # Run on specific platforms
-dotnet build -t:Run -f net8.0-android     # Android
-dotnet build -t:Run -f net8.0-ios         # iOS
-dotnet build -t:Run -f net8.0-windows     # Windows
+dotnet build -t:Run -f net10.0-android     # Android
+dotnet build -t:Run -f net10.0-ios         # iOS
+dotnet build -t:Run -f net10.0-maccatalyst # macOS (Mac Catalyst)
 ```
 
 ### **Configuration**

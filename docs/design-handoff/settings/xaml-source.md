@@ -1,6 +1,6 @@
 # SettingsPage - XAML source
 
-File: `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml`
+Historical source (removed in M1 consolidation): `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>
@@ -64,4 +64,4 @@ File: `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml`
 </ContentPage>
 ```
 
-> The Account card is shown in full. The remaining cards (Preferences, Device Information, Developer Options, Developer Mode toggle, About, Danger Zone) follow the same `CardFrameStyle` + `SectionHeaderStyle` pattern; see `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml` for the complete source.
+> The Account card is shown in full. The remaining cards (Preferences, Device Information, Developer Options, Developer Mode toggle, About, Danger Zone) follow the same `CardFrameStyle` + `SectionHeaderStyle` pattern; the retired `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml` was removed during the M1 SDK consolidation.

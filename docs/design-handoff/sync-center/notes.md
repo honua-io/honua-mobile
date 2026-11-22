@@ -1,6 +1,6 @@
 # SyncCenterPage
 
-**Source:** `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml`
+**Historical source (removed in M1 consolidation):** `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml`
 **ViewModel:** `SyncCenterViewModel` (Title: "Sync Center")
 
 ## Purpose

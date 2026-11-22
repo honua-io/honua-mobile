@@ -7,7 +7,7 @@
 
 This bundle is a self-contained snapshot of the FieldCollection mobile UI surface, prepared so that Claude Design (or any other design reviewer) can audit layout, hierarchy, and design-token usage without needing to build the .NET MAUI project.
 
-Everything here was extracted from the live XAML in `apps/Honua.Mobile.FieldCollection/` plus the customer-facing starter template in `templates/honua-fieldcollector/`. No screenshots are included; each page is reconstructed as a static HTML mock that uses the real design tokens (CSS custom properties) so visual fidelity matches the app's intent.
+Everything here was originally extracted from the now-removed `apps/Honua.Mobile.FieldCollection/` app (retired during the M1 SDK consolidation; see `docs/guides/field-sdk-consolidation.md`) plus the customer-facing starter template in `templates/honua-fieldcollector/`. No screenshots are included; each page is reconstructed as a static HTML mock that uses the captured design tokens (CSS custom properties) for historical reference.
 
 ## Pages in this bundle
 
@@ -38,6 +38,6 @@ Everything here was extracted from the live XAML in `apps/Honua.Mobile.FieldColl
 1. In Claude Design, create a new project for "Honua FieldCollection".
 2. Upload the entire `docs/design-handoff/` folder as the project source. All paths in this bundle are relative, so the folder is self-contained.
 3. Use the `README.md` (this file) as the project overview, `tokens.md` as the design-system reference, and each page subfolder as a separate review surface.
-4. When proposing changes, edit the relevant `mock.html` and, in parallel, mark which XAML file in `apps/Honua.Mobile.FieldCollection/Views/` needs to change (see `feedback-loop.md` for the convention).
+4. This bundle is retained as a historical archive for the retired FieldCollection app; only `templates/honua-fieldcollector/` remains in this repository, and active field app work lives in Collect (see `feedback-loop.md`).
 
 > Note: emojis appear in the mocks only where they appear in the original XAML (icons baked into button text, status badges, section headers). The bundle adds none.

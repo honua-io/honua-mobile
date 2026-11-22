@@ -1,25 +1,33 @@
-# Feedback loop
+# Feedback loop (Archived)
 
-How Claude Design's feedback flows back into the codebase.
+> **Archive:** `apps/Honua.Mobile.FieldCollection/` was removed during the M1 SDK
+> consolidation (see `docs/guides/field-sdk-consolidation.md`). The mappings below
+> for the retired FieldCollection app are kept for historical context only; active
+> field app UI work lives in Collect. Only `templates/honua-fieldcollector/MainPage.xaml`
+> remains in this repository.
+
+How Claude Design's feedback historically flowed back into the codebase.
 
 ## Mock to XAML mapping
 
-| Mock | Source XAML to edit |
-| --- | --- |
-| `shell/mock.html` | `apps/Honua.Mobile.FieldCollection/AppShell.xaml` |
-| `main/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml` |
-| `map/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml` |
-| `records/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/RecordsPage.xaml` |
-| `sync-center/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml` |
-| `settings/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml` |
-| `template-starter/mock.html` | `templates/honua-fieldcollector/MainPage.xaml` |
+| Mock | Historical / current source XAML | Status |
+| --- | --- | --- |
+| `shell/mock.html` | `apps/Honua.Mobile.FieldCollection/AppShell.xaml` | Removed (M1 consolidation) |
+| `main/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/MainPage.xaml` | Removed (M1 consolidation) |
+| `map/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/MapPage.xaml` | Removed (M1 consolidation) |
+| `records/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/RecordsPage.xaml` | Removed (M1 consolidation) |
+| `sync-center/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/SyncCenterPage.xaml` | Removed (M1 consolidation) |
+| `settings/mock.html` | `apps/Honua.Mobile.FieldCollection/Views/SettingsPage.xaml` | Removed (M1 consolidation) |
+| `template-starter/mock.html` | `templates/honua-fieldcollector/MainPage.xaml` | Active starter template |
 
-## Tokens to source
+## Tokens to source (historical)
 
-- Color tokens live in `apps/Honua.Mobile.FieldCollection/Resources/Styles/Colors.xaml`. Renames cascade to every `{StaticResource <Token>}` reference.
-- Typography, spacing, control defaults (Switch / Slider / SearchBar / etc.) live in `apps/Honua.Mobile.FieldCollection/Resources/Styles/Styles.xaml`.
-- App-wide button / card / header styles (`BaseButtonStyle`, `SecondaryButtonStyle`, `DangerButtonStyle`, `PageTitleStyle`, `SectionHeaderStyle`, `CardFrameStyle`) are inline in `apps/Honua.Mobile.FieldCollection/App.xaml`.
-- Shell-level theming is in `apps/Honua.Mobile.FieldCollection/AppShell.xaml` (`BaseStyle`).
+The retired FieldCollection token sources below were removed during the M1 SDK consolidation:
+
+- Color tokens historically lived in `apps/Honua.Mobile.FieldCollection/Resources/Styles/Colors.xaml`.
+- Typography, spacing, and control defaults historically lived in `apps/Honua.Mobile.FieldCollection/Resources/Styles/Styles.xaml`.
+- App-wide button / card / header styles (`BaseButtonStyle`, `SecondaryButtonStyle`, `DangerButtonStyle`, `PageTitleStyle`, `SectionHeaderStyle`, `CardFrameStyle`) historically lived in `apps/Honua.Mobile.FieldCollection/App.xaml`.
+- Shell-level theming historically lived in `apps/Honua.Mobile.FieldCollection/AppShell.xaml` (`BaseStyle`).
 
 ## Change convention
 
