@@ -245,7 +245,7 @@ iOS platform notes:
 
 ### External GNSS and High-Accuracy Capture
 
-The Field Collection app keeps high-accuracy location details in mobile-owned
+Honua Field keeps high-accuracy location details in mobile-owned
 capture evidence and maps only the stable geometry/media parts into SDK-owned
 field contracts:
 
@@ -266,7 +266,7 @@ field contracts:
   coordinates to the SDK `FieldMediaAttachment.CaptureLocation`, and include a
   compact `honua.location.*` keyword payload during SDK-backed attachment sync.
 
-The default Field Collection service requests `GeolocationAccuracy.Best` and
+The default Honua Field location service requests `GeolocationAccuracy.Best` and
 falls back to built-in GPS metadata when MAUI does not expose a richer source.
 External GNSS distinction is available when the platform hook supplies source
 metadata.
@@ -307,7 +307,7 @@ Physical-device validation checklist:
   inspect the pushed feature attributes and attachment keyword payload.
 
 Automated coverage should mock the metadata provider rather than native
-hardware. The existing Field Collection tests cover source mapping, record
+hardware. The existing Honua Field tests cover source mapping, record
 navigation metadata, attachment persistence, and sync keyword mapping.
 
 Background acquisition:
