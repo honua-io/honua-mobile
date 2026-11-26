@@ -101,9 +101,9 @@ dotnet build
 dotnet build -c Release
 
 # Deploy to device
-dotnet build -t:Run -f net10.0-android     # Android
-dotnet build -t:Run -f net10.0-ios         # iOS
-dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
+dotnet build -t:Run -f net11.0-android     # Android
+dotnet build -t:Run -f net11.0-ios         # iOS
+dotnet build -t:Run -f net11.0-windows10.0.19041.0 # Windows
 ```
 
 ## 📱 Platform Support

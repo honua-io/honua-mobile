@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: '10.0.x'  # Current repo targets net10
-  MAUI_DOTNET_VERSION: '10.0.100'
+  DOTNET_VERSION: '11.0.x'  # current repo targets net11
+  MAUI_DOTNET_VERSION: '11.0.100'
   NODE_VERSION: '24.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
@@ -339,11 +339,12 @@ jobs:
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: 'microsoft'
-          java-version: '17'
+          java-version: '21'
 
       - name: Install MAUI workload
         run: |
-          dotnet workload install maui-android --skip-manifest-update
+          dotnet workload install maui-android --version 11.0.100.1
+          sdkmanager "platforms;android-37.0"
 
       - name: Restore MAUI Components
         run: |
@@ -359,7 +360,7 @@ jobs:
       - name: Restore Android Apps
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
-            -p:TargetFramework=net10.0-android \
+            -p:TargetFramework=net11.0-android \
             -p:RuntimeIdentifiers=android-x64
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
@@ -393,7 +394,7 @@ jobs:
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net10.0-android \
+            --framework net11.0-android \
             --no-restore \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
@@ -405,7 +406,7 @@ jobs:
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net10.0-android \
+            --framework net11.0-android \
             /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:PublishTrimmed=true \
@@ -443,7 +444,7 @@ jobs:
 
   maui-ios:
     name: MAUI iOS Build & AOT Smoke
-    runs-on: macos-latest
+    runs-on: xcode-27
     needs: changes
     if: ${{ needs.changes.outputs.platform_changed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
@@ -463,13 +464,13 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
-      - name: Select Xcode 26.0
+      - name: Select Xcode 27.2
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
           xcodebuild -version
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --skip-manifest-update
+        run: dotnet workload install maui --version 11.0.100.1
 
       - name: Verify iOS 17+ simulator runtime
         run: xcrun simctl list runtimes | grep -E "iOS (1[7-9]|2[0-9])"
@@ -510,8 +511,8 @@ jobs:
         if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
-            -p:TargetFramework=net10.0-ios \
-            '-p:RuntimeIdentifiers=iossimulator-x64;ios-arm64'
+            -p:TargetFramework=net11.0-ios \
+            '-p:RuntimeIdentifiers=iossimulator-arm64;ios-arm64'
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
@@ -520,8 +521,8 @@ jobs:
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net10.0-ios \
-            /p:RuntimeIdentifier=iossimulator-x64 \
+            --framework net11.0-ios \
+            /p:RuntimeIdentifier=iossimulator-arm64 \
             /p:TreatWarningsAsErrors=true
 
       - name: iOS trim and NativeAOT smoke
@@ -531,7 +532,7 @@ jobs:
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
-            --framework net10.0-ios \
+            --framework net11.0-ios \
             /p:RuntimeIdentifier=ios-arm64 \
             /p:PublishTrimmed=true \
             /p:TrimMode=full \
@@ -575,7 +576,7 @@ jobs:
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
       - name: Install MAUI workload
-        run: dotnet workload install maui --skip-manifest-update
+        run: dotnet workload install maui --version 11.0.100.1
 
       - name: Restore MAUI Components
         run: |
@@ -590,7 +591,7 @@ jobs:
       - name: Restore Windows Apps
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
-            -p:TargetFramework=net10.0-windows10.0.19041.0 `
+            -p:TargetFramework=net11.0-windows10.0.19041.0 `
             -p:RuntimeIdentifier=win-x64 `
             -p:RuntimeIdentifiers=win-x64 `
             -p:Platform=x64
@@ -601,7 +602,7 @@ jobs:
         run: |
           dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj `
             --configuration Release `
-            --framework net10.0-windows10.0.19041.0 `
+            --framework net11.0-windows10.0.19041.0 `
             --no-restore `
             /p:Platform=x64
 
@@ -736,8 +737,8 @@ jobs:
             exit 1
           fi
 
-          SDK_DLL="src/Honua.Mobile.Sdk/bin/Release/net10.0/Honua.Mobile.Sdk.dll"
-          OFFLINE_DLL="src/Honua.Mobile.Offline/bin/Release/net10.0/Honua.Mobile.Offline.dll"
+          SDK_DLL="src/Honua.Mobile.Sdk/bin/Release/net11.0/Honua.Mobile.Sdk.dll"
+          OFFLINE_DLL="src/Honua.Mobile.Offline/bin/Release/net11.0/Honua.Mobile.Offline.dll"
 
           # Build the source projects so we can measure assembly sizes
           dotnet build src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --configuration Release --no-restore 2>/dev/null || \

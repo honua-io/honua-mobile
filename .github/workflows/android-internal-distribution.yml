@@ -60,10 +60,10 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "11.0.x"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
-  TARGET_FRAMEWORK: net10.0-android
+  TARGET_FRAMEWORK: net11.0-android
 
 jobs:
   distribute:
@@ -205,9 +205,17 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Setup Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: microsoft
+          java-version: '21'
+
       - name: Install Android MAUI workload
         shell: bash
-        run: dotnet workload install maui-android
+        run: |
+          dotnet workload install maui-android --version 11.0.100.1
+          sdkmanager "platforms;android-37.0"
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -239,7 +247,7 @@ jobs:
 
       - name: Restore app project
         shell: bash
-        run: dotnet restore "${{ steps.app.outputs.app_project }}" -f "${TARGET_FRAMEWORK}"
+        run: dotnet restore "${{ steps.app.outputs.app_project }}" -p:TargetFramework="${TARGET_FRAMEWORK}"
 
       - name: Decode Android signing keystore
         id: signing

@@ -13,7 +13,7 @@ the SDK to meet before it advances along that track.
 
 honua-mobile pins the SDK release train as a single property:
 
-- Pinned version: `1.10.0` (train packages published from `honua-sdk-dotnet`
+- Pinned version: `5.1.0` (train packages published from `honua-sdk-dotnet`
   to nuget.org, restorable anonymously, and mirrored to GitHub Packages;
   `NuGet.config` resolves `Honua.Sdk.*` and `Geospatial.Grpc` from nuget.org). Note: the `<HonuaSdkDotNetTrainReleaseUrl>` /
   `<HonuaSdkDotNetTrainReleaseCommit>` / `<HonuaSdkDotNetTrainReleasePublishedAt>`

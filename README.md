@@ -41,9 +41,9 @@ that exact version installs anonymously, and then create a checksum-bearing
 GitHub Release. See [RELEASING.md](RELEASING.md) for the gates and one-time
 credential setup.
 
-The library packages target `net10.0` and build on any platform without the MAUI
-workload. The reference apps and templates are .NET MAUI (`net10.0-android`,
-plus `net10.0-ios`/`net10.0-maccatalyst` on macOS and `net10.0-windows` on
+The library packages target `net11.0` and build on any platform without the MAUI
+workload. The reference apps and templates are .NET MAUI (`net11.0-android`,
+plus `net11.0-ios`/`net11.0-maccatalyst` on macOS and `net11.0-windows` on
 Windows). Platform-neutral client logic comes from the
 [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) `Honua.Sdk.*`
 packages, pinned as a single release train in
@@ -218,27 +218,15 @@ docs/                         Getting started, guides, feature map, API referenc
 
 ## Building
 
-Fresh checkouts need access to the private Honua GitHub Packages feed for
-`Honua.Sdk.*` packages. Use a GitHub token that can read packages in the
-`honua-io` organization:
-
-```bash
-gh auth refresh -s read:packages
-export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
-export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
-```
-
-Then run the local validation baseline:
+The shared `Honua.Sdk.*` dependencies restore from NuGet.org. Run the local
+validation baseline:
 
 ```bash
 scripts/validate-local.sh
 ```
 
 The script restores, builds, runs .NET tests and smoke tests, verifies format
-for the core source projects, and runs the `@honua-io/embed` npm build/tests. It
-uses a temporary NuGet config for `HONUA_GITHUB_PACKAGES_TOKEN` and removes it
-on exit. Without those environment variables it falls back to any existing
-NuGet credentials already configured for the `github-honua` source.
+for the core source projects, and runs the `@honua-io/embed` npm build/tests.
 
 Equivalent manual commands:
 
@@ -253,7 +241,7 @@ npm test --prefix src/Honua.Embed
 ```
 
 Building Android targets requires a configured Android SDK; iOS/Mac Catalyst
-targets require macOS with Xcode. The library projects target `net10.0` and
+targets require macOS with Xcode. The library projects target `net11.0` and
 build on any platform without the MAUI workload.
 
 The server integration project starts a real ASP.NET Core loopback server and

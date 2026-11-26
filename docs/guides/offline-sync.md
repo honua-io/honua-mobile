@@ -20,7 +20,9 @@ failed queue with an explanation and sends no network request. Once the
 replica-aware uploader is registered, use `IGeoPackageSyncStore.MarkPendingAsync`
 to retry the existing operation ID. Production replica uploads require a versioned
 `Honua.Sdk.Offline` package with the typed per-replica upload contract and
-a Mobile uploader adapter. The legacy enqueue and upload path continues to
+a Mobile uploader adapter. The pinned `5.1.0` release needs the upstream
+per-replica cursor fix for typed registration and a subsequent package release
+containing the typed upload contract. The legacy enqueue and upload path continues to
 accept unbound operations.
 
 ## Overview

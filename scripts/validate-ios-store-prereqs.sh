@@ -85,7 +85,7 @@ application_id_for_project() {
     application_id="$(dotnet msbuild "${project_path}" \
       -nologo \
       -getProperty:ApplicationId \
-      -p:TargetFramework=net10.0-ios 2>/dev/null \
+      -p:TargetFramework=net11.0-ios 2>/dev/null \
       | tr -d '\r' \
       | sed -n '/./p' \
       | tail -n 1 || true)"

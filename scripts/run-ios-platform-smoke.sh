@@ -6,8 +6,12 @@ PROJECT_PATH="${ROOT_DIR}/tests/Honua.Mobile.PlatformSmoke/Honua.Mobile.Platform
 PROJECT_DIR="$(dirname "${PROJECT_PATH}")"
 BUNDLE_ID="${HONUA_MOBILE_PLATFORM_SMOKE_BUNDLE_ID:-io.honua.mobile.platformsmoke}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
-TARGET_FRAMEWORK="net10.0-ios"
-RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-x64}"
+TARGET_FRAMEWORK="net11.0-ios"
+if [[ "$(uname -m)" == "arm64" ]]; then
+  RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-arm64}"
+else
+  RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-x64}"
+fi
 CONFIG_FILE="honua-mobile-platform-smoke-config.json"
 RESULT_FILE="honua-mobile-platform-smoke-result.json"
 

@@ -123,7 +123,7 @@ Mobile checkout based on `61929eee36ff0b2ef76582808c68fa2831eab213` and
 locally packed SDK `1.10.1-replica.final`. Against Honua Server, it exercised
 typed registration and upload, manual review, and conflict evidence readback.
 The production FeatureServer uploader uses standalone
-`applyEdits`. Adoption requires a released `net10.0`-compatible
+`applyEdits`. Adoption requires a released `net11.0`-compatible
 `Honua.Sdk.Offline` package with scalar generation handling at registration,
 typed upload against that generation, manual review, and per-edit results
 with conflict IDs. The Mobile queue already stores the source replica ID and
