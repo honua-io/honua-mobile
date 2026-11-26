@@ -2,7 +2,7 @@
 
 > Historical coverage: references to duplicate field app services and tests below
 > describe the retired implementation. See [M1 consolidation](field-sdk-consolidation.md)
-> for current SDK ownership and remaining Collect acceptance.
+> for current SDK ownership. The [Honua Field roadmap](https://github.com/honua-io/honua-field/blob/trunk/ROADMAP.md) pairs SDK enhancements with app and server acceptance tests, including offline XLSForm capture, recoverable sync, work areas, GNSS and Android map performance.
 
 
 Last reviewed: 2026-05-24.
