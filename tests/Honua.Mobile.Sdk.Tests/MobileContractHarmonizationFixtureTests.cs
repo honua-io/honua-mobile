@@ -124,7 +124,7 @@ public sealed class MobileContractHarmonizationFixtureTests
             fields.AuthoritativeTypes);
         // The mobile field-capture adapters (MobileFieldCaptureWorkflow /
         // MobileFieldMediaAttachment) were removed from honua-mobile and ported
-        // into the Honua Collect product repo; honua-mobile no longer ships any
+        // into the Honua Field product repo; honua-mobile no longer ships any
         // Honua.Mobile.Field.* type.
         Assert.DoesNotContain(
             fields.MobileTypes,

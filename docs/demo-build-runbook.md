@@ -3,7 +3,7 @@
 This runbook builds the SDK reference app against the demo backend at
 `https://demo.honua.io`. It verifies packaging and endpoint metadata. The
 reference app does not implement the retired field app's login/edit/sync
-journey. Collect owns field workflow builds and their on-device test scripts.
+journey. Honua Field owns field workflow builds and their on-device test scripts.
 
 Tracks issue
 [#292](https://github.com/honua-io/honua-mobile/issues/292). The repo-side build
@@ -27,7 +27,7 @@ When the build environment is one of the demo names and no explicit
 `https://demo.honua.io`. The value is stamped into assembly metadata. The retired field app's runtime
 configuration and endpoint guard no longer exist. Host applications must read
 and enforce their endpoint configuration; verify the selected endpoint on-device.
-This reference app workflow does not deliver the Collect field workflow.
+This reference app workflow does not deliver the Honua Field field workflow.
 
 **No secrets or license live in source.** Only the public base URL is baked in.
 The demo backend is Pro-licensed independently (server side); any credentials a
@@ -95,8 +95,8 @@ via **Actions → Android Internal Distribution → Run workflow**:
 Run this on the installed demo build before handing it to a customer. It proves
 the Pro `editing.feature-edits` path is green against `demo.honua.io`.
 
-The former field app's login/edit/sync journey has moved to Collect. Use the
-[paired Collect build script](guides/field-sdk-consolidation.md#paired-build-test-script)
+The former field app's login/edit/sync journey has moved to Honua Field. Use the
+[paired Honua Field build script](guides/field-sdk-consolidation.md#paired-build-test-script)
 with the intended demo endpoint. Record the installed build, endpoint, login,
 offline capture, restart and successful reconnect/sync results on both phones.
 A reference-app store upload alone does not validate that journey.
