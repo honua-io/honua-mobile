@@ -2,6 +2,27 @@
 
 This guide covers implementing offline-first data synchronization in mobile applications using the Honua Mobile SDK.
 
+## Queueing edits from a replica
+
+`DeltaDownloadEngine.DownloadAsync` returns a `ReplicaBinding` for the
+downloaded snapshot. Keep that value with the data being edited and pass it
+as `OfflineEditOperation.ReplicaBinding` when calling
+`IGeoPackageSyncStore.EnqueueAsync` or `UpsertFeatureAndEnqueueAsync`. Use
+the snapshot's generation even if the download cursor advances before enqueue.
+The queue retains the binding across retries and restarts and requires exact
+binding matches when replaying an operation ID.
+
+Register a replica-aware `IOfflineOperationUploader` in MAUI dependency
+injection before resolving the sync engine and queueing bound edits. If
+`AddHonuaApiOfflineUploader` also registers the default, register your
+replacement afterward. The default uploader leaves bound edits in the
+failed queue with an explanation and sends no network request. Once the
+replica-aware uploader is registered, use `IGeoPackageSyncStore.MarkPendingAsync`
+to retry the existing operation ID. Production replica uploads require a versioned
+`Honua.Sdk.Offline` package with the typed per-replica upload contract and
+a Mobile uploader adapter. The legacy enqueue and upload path continues to
+accept unbound operations.
+
 ## Overview
 
 The Honua Mobile SDK provides comprehensive offline synchronization capabilities designed for field data collection scenarios where network connectivity may be intermittent or unavailable.

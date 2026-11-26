@@ -34,6 +34,15 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        if (operation.ReplicaBinding is not null)
+        {
+            return new UploadResult
+            {
+                Outcome = UploadOutcome.FatalFailure,
+                Message = "Replica-bound edits require a replica-aware offline uploader.",
+            };
+        }
+
         OfflineOperationPayload payload;
         try
         {

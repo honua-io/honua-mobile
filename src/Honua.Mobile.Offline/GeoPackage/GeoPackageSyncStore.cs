@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS honua_sync_queue (
     target_collection TEXT NOT NULL,
     operation_type TEXT NOT NULL,
     payload_json TEXT NOT NULL,
+    replica_id TEXT,
+    replica_base_generation INTEGER,
     priority INTEGER NOT NULL,
     created_at_utc TEXT NOT NULL,
     claimed_at_utc TEXT,
@@ -225,6 +227,8 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         {
             await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
             await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claim_token", "TEXT", ct).ConfigureAwait(false);
+            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_id", "TEXT", ct).ConfigureAwait(false);
+            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_base_generation", "INTEGER", ct).ConfigureAwait(false);
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
         }
         catch
@@ -269,10 +273,17 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
     private static async Task<bool> EnqueueCoreAsync(SqliteConnection connection, OfflineEditOperation operation, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
+        var replica = operation.ReplicaBinding;
+        if (replica is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(replica.ReplicaId);
+            ArgumentOutOfRangeException.ThrowIfNegative(replica.BaseGeneration);
+        }
+
         await RejectAcknowledgedOperationAsync(connection, operation.OperationId, ct).ConfigureAwait(false);
         command.CommandText = @"
-INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, claimed_at_utc, attempt_count, status)
-VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $priority, $created_at_utc, NULL, $attempt_count, 'pending')
+INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, replica_id, replica_base_generation, priority, created_at_utc, claimed_at_utc, attempt_count, status)
+VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $replica_id, $replica_base_generation, $priority, $created_at_utc, NULL, $attempt_count, 'pending')
 ON CONFLICT(operation_id) DO NOTHING;
 ";
 
@@ -281,6 +292,8 @@ ON CONFLICT(operation_id) DO NOTHING;
         command.Parameters.AddWithValue("$target_collection", operation.TargetCollection);
         command.Parameters.AddWithValue("$operation_type", operation.OperationType.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("$payload_json", operation.PayloadJson);
+        command.Parameters.AddWithValue("$replica_id", (object?)replica?.ReplicaId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$replica_base_generation", (object?)replica?.BaseGeneration ?? DBNull.Value);
         command.Parameters.AddWithValue("$priority", operation.Priority);
         command.Parameters.AddWithValue("$created_at_utc", operation.CreatedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$attempt_count", operation.AttemptCount);
@@ -298,6 +311,8 @@ SELECT EXISTS (
       AND target_collection = $target_collection
       AND operation_type = $operation_type
       AND payload_json = $payload_json
+      AND replica_id IS $replica_id
+      AND replica_base_generation IS $replica_base_generation
 );";
         command.Parameters.RemoveAt("$priority");
         command.Parameters.RemoveAt("$created_at_utc");
@@ -380,7 +395,7 @@ WHERE status IN ('pending', 'retry', 'in_progress')
             {
                 var idParameters = AddOperationIdParameters(command, claimedOperationIds);
                 command.CommandText = $@"
-SELECT operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, attempt_count
+SELECT operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, attempt_count, replica_id, replica_base_generation
 FROM honua_sync_queue
 WHERE operation_id IN ({idParameters})
 ORDER BY priority ASC, created_at_utc ASC;
@@ -2136,6 +2151,7 @@ LIMIT $limit;
             Priority = reader.GetInt32(5),
             CreatedAtUtc = createdAt,
             AttemptCount = reader.GetInt32(7),
+            ReplicaBinding = reader.IsDBNull(8) ? null : new OfflineReplicaBinding(reader.GetString(8), reader.GetInt64(9)),
         };
     }
 

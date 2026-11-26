@@ -90,6 +90,13 @@ public sealed class OfflineEditOperation
     public required string PayloadJson { get; init; }
 
     /// <summary>
+    /// Replica snapshot on which this edit was based, when editing known replica data.
+    /// Capture this when reading the data for editing, before any later download advances the cursor.
+    /// Replay must use the captured generation.
+    /// </summary>
+    public OfflineReplicaBinding? ReplicaBinding { get; init; }
+
+    /// <summary>
     /// Upload priority; lower values are processed first. Defaults to 100.
     /// </summary>
     public int Priority { get; init; } = 100;
@@ -104,6 +111,11 @@ public sealed class OfflineEditOperation
     /// </summary>
     public int AttemptCount { get; init; }
 }
+
+/// <summary>A server replica identity and the generation of the data used as the edit baseline.</summary>
+/// <param name="ReplicaId">Replica identifier within the edit's target service.</param>
+/// <param name="BaseGeneration">Server generation of the replica snapshot.</param>
+public sealed record OfflineReplicaBinding(string ReplicaId, long BaseGeneration);
 
 /// <summary>
 /// CRS metadata observed for a cached feature layer in the local GeoPackage.

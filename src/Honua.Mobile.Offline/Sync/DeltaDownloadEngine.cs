@@ -121,6 +121,7 @@ public sealed class DeltaDownloadEngine
             Updates = totalUpdates,
             Deletes = totalDeletes,
             ServerGen = extractResult.ServerGen,
+            ReplicaBinding = new OfflineReplicaBinding(replicaId, extractResult.ServerGen),
         };
     }
 }

@@ -17,6 +17,59 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ReplicaBinding_MigratesLegacyQueueAndKeepsEachEditBaselineAcrossRetry()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        await ExecuteNonQueryAsync("""
+            ALTER TABLE honua_sync_queue DROP COLUMN replica_id;
+            ALTER TABLE honua_sync_queue DROP COLUMN replica_base_generation;
+            INSERT INTO honua_sync_queue (
+                operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc
+            ) VALUES ('legacy', 'assets', 'service', 'update', '{}', 100, '2026-11-26T00:00:00Z');
+            """);
+
+        store = CreateStore();
+        await store.InitializeAsync();
+
+        var replicaA = new OfflineReplicaBinding("replica-a", 0);
+        var replicaB = new OfflineReplicaBinding("replica-b", 23);
+        await store.EnqueueAsync(Edit("a", replicaA));
+        await store.EnqueueAsync(Edit("a", replicaA));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.EnqueueAsync(Edit("a", replicaB)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.EnqueueAsync(Edit("a", replicaA with { BaseGeneration = 1 })));
+        await store.EnqueueAsync(Edit("b", replicaB));
+
+        var reopened = CreateStore();
+        await reopened.InitializeAsync();
+        var entries = (await reopened.GetPendingAsync(10)).ToDictionary(entry => entry.OperationId);
+        Assert.Null(entries["legacy"].ReplicaBinding);
+        Assert.Equal(replicaA, entries["a"].ReplicaBinding);
+        Assert.Equal(replicaB, entries["b"].ReplicaBinding);
+
+        await reopened.MarkFailedAsync("a", "offline", retryable: true);
+        await reopened.MarkFailedAsync("b", "conflict requires manual review", retryable: false);
+
+        var retried = Assert.Single(await CreateStore().GetPendingAsync(10));
+        Assert.Equal("a", retried.OperationId);
+        Assert.Equal(1, retried.AttemptCount);
+        Assert.Equal(replicaA, retried.ReplicaBinding);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateStore().EnqueueAsync(Edit("b", replicaA)));
+        await CreateStore().MarkPendingAsync("b");
+        Assert.Equal(replicaB, Assert.Single(await CreateStore().GetPendingAsync(10)).ReplicaBinding);
+
+        static OfflineEditOperation Edit(string id, OfflineReplicaBinding binding) => new()
+        {
+            OperationId = id,
+            LayerKey = "assets",
+            TargetCollection = "service",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = "{}",
+            ReplicaBinding = binding,
+        };
+    }
+
+    [Fact]
     public async Task MarkUploadedAsync_ReopenRetainsIdsAndRejectsOperationReuse()
     {
         var store = CreateStore();

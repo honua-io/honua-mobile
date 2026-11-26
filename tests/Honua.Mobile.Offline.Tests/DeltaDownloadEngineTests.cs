@@ -46,6 +46,7 @@ public sealed class DeltaDownloadEngineTests : IDisposable
         Assert.Equal(0, result.Updates);
         Assert.Equal(0, result.Deletes);
         Assert.Equal(15, result.ServerGen);
+        Assert.Equal(new OfflineReplicaBinding("replica-1", 15), result.ReplicaBinding);
 
         var features = await store.GetFeaturesAsync("0");
         Assert.Equal(2, features.Count);

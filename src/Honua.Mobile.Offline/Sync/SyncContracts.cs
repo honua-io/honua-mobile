@@ -286,4 +286,10 @@ public sealed class DeltaDownloadResult
     /// Server generation number after synchronization.
     /// </summary>
     public long ServerGen { get; init; }
+
+    /// <summary>
+    /// Replica snapshot applied by this download. Keep this with records read from
+    /// this snapshot and assign it to <see cref="OfflineEditOperation.ReplicaBinding"/> when editing them.
+    /// </summary>
+    public OfflineReplicaBinding? ReplicaBinding { get; init; }
 }

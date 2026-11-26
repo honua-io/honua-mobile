@@ -584,7 +584,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Assert.Equal("Device B edit", SiteName(JsonSerializer.Deserialize<JsonElement>(
                 Assert.Single(await deviceB.Store.GetFeaturesAsync(layerKey)))));
 
-            var (firstSync, firstUpload) = await RunSyncAsync(deviceA.ReplicaId, deviceA.Store);
+            var (firstSync, firstUpload) = await RunSyncAsync(deviceA.Store);
             Assert.True(firstSync.Succeeded == 1, string.Join(", ", firstSync.Failures.Select(failure => failure.Reason)));
             Assert.Equal(1, firstUpload.GetProperty("appliedUpdates").GetInt32());
             Assert.Equal("Device A edit", SiteName(await ReadFeatureAsync()));
@@ -592,7 +592,7 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Assert.NotNull(receipt);
             Assert.Equal(objectId.ToString(CultureInfo.InvariantCulture), Assert.Single(receipt.ServerFeatureIds));
 
-            var (secondSync, secondUpload) = await RunSyncAsync(deviceB.ReplicaId, deviceB.Store);
+            var (secondSync, secondUpload) = await RunSyncAsync(deviceB.Store);
             Assert.Equal(0, secondSync.Succeeded);
             Assert.Equal(new SyncFailure(deviceB.OperationId, "conflict requires manual review"), Assert.Single(secondSync.Failures));
             Assert.Empty(await deviceB.Store.GetPendingAsync(1));
@@ -683,31 +683,33 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                 LayerKey = layerKey,
                 TargetCollection = serviceId,
                 OperationType = OfflineOperationType.Update,
+                ReplicaBinding = new OfflineReplicaBinding(replicaId, baseGeneration),
                 PayloadJson = JsonSerializer.Serialize(new OfflineOperationPayload
                 {
                     Protocol = "FeatureServer",
                     ServiceId = serviceId,
                     LayerId = layerId,
                     UpdatesJson = JsonSerializer.Serialize(new[] { edit }, JsonOptions),
-                    BaseSyncToken = baseGeneration.ToString(CultureInfo.InvariantCulture),
                 }, JsonOptions),
             };
             await store.UpsertFeatureAndEnqueueAsync(operation, JsonSerializer.Serialize(edit, JsonOptions));
             return (replicaId, baseGeneration, operation.OperationId, store);
         }
 
-        async Task<(SyncRunResult Sync, JsonElement Response)> RunSyncAsync(string replicaId, GeoPackageSyncStore store)
+        async Task<(SyncRunResult Sync, JsonElement Response)> RunSyncAsync(GeoPackageSyncStore store)
         {
-            var uploader = new ReplicaGateUploader((operation, ct) => UploadAsync(replicaId, operation, ct));
+            var uploader = new ReplicaGateUploader(UploadAsync);
             var runner = new OfflineSyncEngine(store, uploader, new() { ConflictStrategy = SyncConflictStrategy.ManualReview });
             var sync = await runner.SyncAsync();
             Assert.Equal(1, sync.Loaded);
             return (sync, uploader.Response);
         }
 
-        async Task<JsonElement> UploadAsync(string replicaId, OfflineEditOperation operation, CancellationToken ct)
+        async Task<JsonElement> UploadAsync(OfflineEditOperation operation, CancellationToken ct)
         {
             var payload = JsonSerializer.Deserialize<OfflineOperationPayload>(operation.PayloadJson, JsonOptions)!;
+
+            var binding = Assert.IsType<OfflineReplicaBinding>(operation.ReplicaBinding);
 
             // The .NET replica client exposes downloads. The test submits the server's manual
             // review extension directly until the upstream client exposes replica edit uploads.
@@ -715,8 +717,8 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
                 $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/synchronizeReplica",
                 new
                 {
-                    replicaID = replicaId,
-                    replicaServerGen = payload.BaseSyncToken,
+                    replicaID = binding.ReplicaId,
+                    replicaServerGen = binding.BaseGeneration.ToString(CultureInfo.InvariantCulture),
                     syncDirection = "upload",
                     conflictHandling = "manualReview",
                     edits = JsonSerializer.Serialize(new[] { new { id = layerId, updates = JsonSerializer.Deserialize<JsonElement>(payload.UpdatesJson!, JsonOptions) } }, JsonOptions),

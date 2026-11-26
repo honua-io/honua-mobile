@@ -9,6 +9,34 @@ namespace Honua.Mobile.Offline.Tests;
 public sealed class HonuaApiOfflineOperationUploaderTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UploadAsync_ReplicaBoundFeatureServerEdit_NeverUsesApplyEdits(bool forceWrite)
+    {
+        var uploader = CreateUploader((_, _) =>
+            throw new InvalidOperationException("A replica-bound edit reached the network."));
+
+        var result = await uploader.UploadAsync(new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Update,
+            PayloadJson = """
+            {
+              "protocol": "FeatureServer",
+              "serviceId": "default",
+              "layerId": 0,
+              "feature": { "attributes": { "objectid": 1, "asset_id": "A-1" } }
+            }
+            """,
+            ReplicaBinding = new OfflineReplicaBinding("replica-A", 10),
+        }, forceWrite);
+
+        Assert.Equal(UploadOutcome.FatalFailure, result.Outcome);
+        Assert.Equal("Replica-bound edits require a replica-aware offline uploader.", result.Message);
+    }
+
+    [Theory]
     [InlineData("""{"type":"Feature","id":""}""")]
     [InlineData("""{"type":"Feature","id":"   "}""")]
     public async Task UploadAsync_OgcCreateWithBlankId_ReturnsNoServerIds(string responseBody)
