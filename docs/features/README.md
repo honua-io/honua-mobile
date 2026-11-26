@@ -9,7 +9,7 @@ This repository owns mobile SDK packages, MAUI integration, offline field workfl
 - `Honua.Mobile.Maui`: DI registration, native display boundaries, map annotations, secure auth token storage, device location, background location, and geofencing contracts. Native AR anchoring, the map plugin host and the mobile routing facade were removed; see [field runtime scope](../guides/field-runtime-scope.md).
 - `@honua/embed`: framework-agnostic `<honua-map>` and `<honua-scene>` components with display adapters, scene package caching, snippets, and DOM behavior tests.
 - Reference MAUI applications, field collection example, embed example, scene example, and field collector template.
-- Integration and smoke tests for loopback server paths, SDK offline sync, MAUI helpers, embed components, and optional live Honua query. Collect owns the field app workflows; the duplicate app and its app-specific tests have been retired.
+- Integration and smoke tests for loopback server paths, SDK offline sync, MAUI helpers, embed components, and optional live Honua query. Honua Field owns the field app workflows. The duplicate app and its app-specific tests have been retired.
 
 ## Source Evidence
 

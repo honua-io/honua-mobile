@@ -52,7 +52,7 @@ and most reliable inward to most expensive and most operationally gated:
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- Collect owns the installed Android/iPhone journey.
+- **Physical device** -- Honua Field owns the installed Android/iPhone journey.
   Emulator/simulator platform smoke is separate evidence and does not prove
   physical-device acceptance.
 
@@ -68,7 +68,7 @@ honest gaps; the parenthesised reason indicates why.
 
 | Capability | Unit | Integration (loopback) | Live (Docker, gated) | Cloud (staging, gated) | Physical device | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Auth (API key, bearer, token provider) | `AuthTokenProviderTests.cs` (12), `MauiAuthRegistrationTests.cs` (4) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` (11, env-gated) | N/A (manual) | N/A (deferred) | covered |
+| Auth (API key, bearer, token provider) | `AuthTokenProviderTests.cs` (12), `MauiAuthRegistrationTests.cs` (4) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` (12, env-gated) | N/A (manual) | N/A (deferred) | covered |
 | GeoPackage storage | `GeoPackageSyncStoreTests.cs` (17), `GeoPackageSdkOfflineStoreAdapterTests.cs` (6) | `OfflineServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | exercised in `DisconnectedFieldWorkflowAcceptanceTests.cs` (7) | N/A (deferred) | covered |
 | Sync engine (queue, claim/lease, retry) | `OfflineSyncEngineTests.cs` (7), `HonuaApiOfflineOperationUploaderTests.cs` (10) | `OfflineServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
 | FeatureServer REST | `HonuaMobileClientHttpTests.cs` (17), `HonuaMobileSdkFeatureClientTests.cs` (5) | `SdkServerIntegrationTests.cs` (3) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
@@ -85,19 +85,38 @@ honest gaps; the parenthesised reason indicates why.
 | Telemetry redaction | `MobileExceptionRedactorTests.cs` (3), `LocalMobileExceptionReporterTests.cs` (8), `MobileExceptionReportUploadWorkerTests.cs` (7) | `MobileDiagnosticsServerIntegrationTests.cs` (2) | N/A (future) | N/A (manual) | N/A (deferred) | covered |
 | Embed builder / API-key validation | `src/Honua.Embed/tests/honua-builder.test.ts` (npm, multi-suite) | N/A (DOM-only) | N/A (DOM-only) | N/A (manual) | N/A (deferred) | unit-only (npm) |
 
-The two-store replica gate queues independent edits from the same server
-generation, submits them to the replica endpoint, and verifies the reviewed
-value and both conflict snapshots through server readback. The test runs
-the mobile sync engine with a test-only uploader for the FeatureServer replica
-wire contract and uses the admin API for review.
-The production FeatureServer uploader uses standalone `applyEdits`. Wiring
-manual review into mobile sync requires a released `Honua.Sdk.Offline` replica
-client that can register replicas with a shared server generation, upload edits
-against that generation, request manual review, and report conflict IDs and
-per-edit results. The release must support the Mobile SDK's `net10.0` target.
-Production adoption also needs durable replica IDs and generation tracking for
-explicitly configured replica layers, with conflict IDs available to reviewers
-after the sync run.
+`LiveImage_TwoDeviceReplicaConflict_RequiresReviewAndKeepsEvidence` queues
+independent edits in two GeoPackage stores at the same server generation. It
+submits those edits through a test-only FeatureServer replica uploader, resolves
+the conflict through the admin API, and verifies the reviewed value and both
+conflict snapshots through server readback.
+
+The hosted Live Server Integration run passed **11 of 12** tests with
+released SDK `1.10.0`.
+`LiveImage_ReplicaSyncAndOfflineQueue_RoundTrip` failed when registering a
+`perReplica` replica that returned a scalar server generation.
+[Hosted workflow run](https://github.com/honua-io/honua-mobile/actions/runs/45872772238)
+
+A local rerun passed **all 12** with the same test names, server and PostGIS
+image digests, seed SQL, and conformance fixtures (`0.1.0-alpha.1`). Its
+source and package versions were as follows.
+
+- Mobile commit `1ae03f62ca9b28bc756a6f1b05fe4b455cea0138`.
+- SDK .NET 10 backport commit `cd65296022299a595d77270bf53ee2ab08a6589c`,
+  packed into a local NuGet feed as `1.10.1-replica.cd65296`.
+- Honua Server image revision `83127df70c06d4162fcc11b8d95a8ab466be49e2`,
+  digest `sha256:a084fefa14fd38884c1b12510498d6844f7555f9f29370e037db295a07959613`.
+
+A separate local two-store run passed with the typed uploader in a scratch
+Mobile checkout based on `61929eee36ff0b2ef76582808c68fa2831eab213` and
+locally packed SDK `1.10.1-replica.final`. Against Honua Server, it exercised
+typed registration and upload, manual review, and conflict evidence readback. The production FeatureServer uploader uses standalone
+`applyEdits`. Adoption requires a released `net10.0`-compatible
+`Honua.Sdk.Offline` package with scalar generation handling at registration,
+typed upload against that generation, manual review, and per-edit results
+with conflict IDs. Mobile then needs to consume that release and persist
+replica IDs, generations, and reviewer-visible conflict IDs for layers
+configured for replica sync.
 
 The live map and scene package download test exercises the Mobile SDK
 downloaders against Honua Server. Honua Field needs to connect its assignment
@@ -131,7 +150,7 @@ cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 ### Count of N/A cells in the capability matrix
 
 Cells marked N/A remain unverified at that level. The retired duplicate app
-unit suite is no longer part of the evidence; Collect owns app workflow and
+unit suite is no longer part of the evidence; Honua Field owns app workflow and
 physical-device acceptance.
 
 ## 3. Gap Registry
