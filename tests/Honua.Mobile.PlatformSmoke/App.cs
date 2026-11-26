@@ -3,7 +3,7 @@ using Microsoft.Maui.Controls;
 
 namespace Honua.Mobile.PlatformSmoke;
 
-public sealed class App : Application
+internal sealed class App : Application
 {
     private readonly PlatformSmokeRunner _runner;
     private Label? _statusLabel;
