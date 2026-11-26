@@ -51,10 +51,9 @@ for field, pattern in fields.items():
     measurements[field] = float(match.group(1))
 
 print(json.dumps(measurements, indent=2))
-if measurements["frames"] < 60:
-    sys.exit("Fewer than 60 frames rendered. Check that the gesture pans the populated map.")
-
-failed = False
+failed = measurements["frames"] < 60
+if failed:
+    print("Fewer than 60 frames rendered. Check that the gesture pans the populated map.", file=sys.stderr)
 for field in ("panning_p95_ms", "panning_jank_percent"):
     value = measurements[field]
     budget = budgets[f"android_map_{field}"]
