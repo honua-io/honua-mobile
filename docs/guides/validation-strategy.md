@@ -94,7 +94,15 @@ The production FeatureServer uploader uses standalone `applyEdits`. Wiring
 manual review into mobile sync requires a released `Honua.Sdk.Offline` replica
 client that can register replicas with a shared server generation, upload edits
 against that generation, request manual review, and report conflict IDs and
-per-edit results.
+per-edit results. The release must support the Mobile SDK's `net10.0` target.
+Production adoption also needs durable replica IDs and generation tracking for
+explicitly configured replica layers, with conflict IDs available to reviewers
+after the sync run.
+
+The live map and scene package download test exercises the Mobile SDK
+downloaders against Honua Server. Honua Field needs to connect its assignment
+flow to map-area configuration and open the downloaded package on the device
+before that test can count as evidence for assignment-driven offline mapping.
 
 Other notable test files contributing to the totals but not listed as a
 single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
