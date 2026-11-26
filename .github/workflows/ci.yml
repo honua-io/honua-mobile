@@ -690,6 +690,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test Android map frame statistics parsing
+        run: bash scripts/test-check-android-map-panning.sh
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.1.0
         with:
