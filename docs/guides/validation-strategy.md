@@ -93,8 +93,9 @@ conflict snapshots through server readback.
 
 The hosted Live Server Integration run passed **11 of 12** tests with
 released SDK `1.10.0`.
-`LiveImage_ReplicaSyncAndOfflineQueue_RoundTrip` failed when registering a
-`perReplica` replica that returned a scalar server generation.
+`LiveImage_ReplicaSyncAndOfflineQueue_RoundTrip` failed during registration.
+The released client requested `perLayer` sync and tried to read the scalar
+`serverGen` field. The backport requests `perReplica` for this scalar cursor.
 [Hosted workflow run](https://github.com/honua-io/honua-mobile/actions/runs/45872772238)
 
 A local rerun passed **all 12** with the same test names, server and PostGIS
@@ -110,13 +111,15 @@ source and package versions were as follows.
 A separate local two-store run passed with the typed uploader in a scratch
 Mobile checkout based on `61929eee36ff0b2ef76582808c68fa2831eab213` and
 locally packed SDK `1.10.1-replica.final`. Against Honua Server, it exercised
-typed registration and upload, manual review, and conflict evidence readback. The production FeatureServer uploader uses standalone
+typed registration and upload, manual review, and conflict evidence readback.
+The production FeatureServer uploader uses standalone
 `applyEdits`. Adoption requires a released `net10.0`-compatible
 `Honua.Sdk.Offline` package with scalar generation handling at registration,
 typed upload against that generation, manual review, and per-edit results
-with conflict IDs. Mobile then needs to consume that release and persist
-replica IDs, generations, and reviewer-visible conflict IDs for layers
-configured for replica sync.
+with conflict IDs. The Mobile queue already stores the source replica ID and
+base generation on bound edits. Its production uploader still needs to use
+those bindings and return conflict IDs for review. Field needs to supply the
+downloaded replica binding when a worker edits a feature.
 
 The live map and scene package download test exercises the Mobile SDK
 downloaders against Honua Server. Honua Field needs to connect its assignment
