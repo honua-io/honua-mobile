@@ -103,6 +103,13 @@ The live map and scene package download test exercises the Mobile SDK
 downloaders against Honua Server. Honua Field needs to connect its assignment
 flow to map-area configuration and open the downloaded package on the device
 before that test can count as evidence for assignment-driven offline mapping.
+Map refresh tests also cover a failed layer download, a failed catalog commit,
+and distinct area IDs that previously shared a file name. The downloader
+publishes each completed refresh at a new path and removes staging files
+during normal failure unwinding. Applications managing the package directory
+can prune superseded files and abandoned staging files after stopping
+downloads and releasing readers. The catalog's current package paths must
+be retained.
 
 Other notable test files contributing to the totals but not listed as a
 single-capability row above: `MobileContractHarmonizationFixtureTests.cs`

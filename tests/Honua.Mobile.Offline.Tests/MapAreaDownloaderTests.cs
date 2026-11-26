@@ -218,32 +218,34 @@ public sealed class MapAreaDownloaderTests : IDisposable
     }
 
     [Fact]
-    public async Task DownloadAsync_FailedRefreshPreservesExistingPackage()
+    public async Task DownloadAsync_RefreshPublishesPackageAndCatalogTogether()
     {
+        var storePath = Path.Combine(_rootDirectory, "sync-store.gpkg");
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
         {
-            DatabasePath = Path.Combine(_rootDirectory, "sync-store.gpkg"),
+            DatabasePath = storePath,
         });
 
-        var refreshing = false;
+        var failRoads = false;
+        var payload = "original layer";
         using var client = new HttpClient(new StubHttpMessageHandler((request, _) =>
         {
-            if (refreshing && request.RequestUri!.AbsolutePath == "/roads")
+            if (failRoads && request.RequestUri!.AbsolutePath == "/roads")
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(refreshing ? "new layer" : "original layer"),
+                Content = new StringContent(payload),
             });
         }));
 
         var downloader = new MapAreaDownloader(client, store);
-        var request = new MapAreaDownloadRequest
+        MapAreaDownloadRequest CreateRequest(string areaId, string name) => new()
         {
-            AreaId = "oahu",
-            Name = "Original",
+            AreaId = areaId,
+            Name = name,
             BoundingBox = new BoundingBox(-158.30, 21.20, -157.60, 21.60),
             OutputDirectory = Path.Combine(_rootDirectory, "packages"),
             MinZoom = 10,
@@ -267,17 +269,51 @@ public sealed class MapAreaDownloaderTests : IDisposable
             ],
         };
 
-        var result = await downloader.DownloadAsync(request);
-        refreshing = true;
+        var original = await downloader.DownloadAsync(CreateRequest("oahu/north", "Original"));
+        payload = "new layer";
+        failRoads = true;
         await Assert.ThrowsAsync<HttpRequestException>(() =>
-            downloader.DownloadAsync(request));
+            downloader.DownloadAsync(CreateRequest("oahu/north", "Failed layer")));
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(original.GeoPackagePath)!));
+        failRoads = false;
 
-        Assert.Equal("Original", Assert.Single(await store.ListMapAreasAsync()).Name);
-        await using var connection = OpenSqliteConnection(result.GeoPackagePath);
+        await using var catalogConnection = OpenSqliteConnection(storePath);
+        await catalogConnection.OpenAsync();
+        await using var catalogCommand = catalogConnection.CreateCommand();
+        catalogCommand.CommandText = """
+            CREATE TRIGGER fail_map_area_update BEFORE UPDATE ON honua_map_areas
+            BEGIN SELECT RAISE(ABORT, 'catalog write failed'); END;
+            """;
+        await catalogCommand.ExecuteNonQueryAsync();
+        await Assert.ThrowsAsync<SqliteException>(() =>
+            downloader.DownloadAsync(CreateRequest("oahu/north", "Failed catalog write")));
+
+        var stillPublished = Assert.Single(await store.ListMapAreasAsync());
+        Assert.Equal("Original", stillPublished.Name);
+        Assert.Equal(original.GeoPackagePath, stillPublished.GeoPackagePath);
+        Assert.Equal("original layer", await ReadAssetsAsync(original.GeoPackagePath));
+
+        catalogCommand.CommandText = "DROP TRIGGER fail_map_area_update;";
+        await catalogCommand.ExecuteNonQueryAsync();
+
+        var refreshed = await downloader.DownloadAsync(CreateRequest("oahu/north", "Refreshed"));
+        payload = "separate layer";
+        var otherArea = await downloader.DownloadAsync(CreateRequest("oahu_north", "Separate area"));
+        var publishedAreas = await store.ListMapAreasAsync();
+        Assert.Equal(refreshed.GeoPackagePath, Assert.Single(publishedAreas, area => area.AreaId == "oahu/north").GeoPackagePath);
+        Assert.Equal(otherArea.GeoPackagePath, Assert.Single(publishedAreas, area => area.AreaId == "oahu_north").GeoPackagePath);
+        Assert.Equal("new layer", await ReadAssetsAsync(refreshed.GeoPackagePath));
+        Assert.Equal("separate layer", await ReadAssetsAsync(otherArea.GeoPackagePath));
+        Assert.Equal("original layer", await ReadAssetsAsync(original.GeoPackagePath));
+    }
+
+    private static async Task<string?> ReadAssetsAsync(string packagePath)
+    {
+        await using var connection = OpenSqliteConnection(packagePath);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT CAST(payload_blob AS TEXT) FROM honua_layer_payloads WHERE layer_key = 'assets';";
-        Assert.Equal("original layer", await command.ExecuteScalarAsync());
+        return (string?)await command.ExecuteScalarAsync();
     }
 
     public void Dispose()

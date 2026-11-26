@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
 
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Buffers;
 using Microsoft.Data.Sqlite;
@@ -49,41 +50,55 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
         }
 
         var packagePath = BuildPackagePath(request.OutputDirectory, request.AreaId);
-        await using var packageConnection = OpenSqliteConnection(packagePath);
-        await packageConnection.OpenAsync(ct).ConfigureAwait(false);
-
-        await using var transaction = packageConnection.BeginTransaction();
-        await EnsureGeoPackageTablesAsync(packageConnection, transaction, ct).ConfigureAwait(false);
-
+        var stagingPath = packagePath + ".partial";
         var layerCount = 0;
         long downloadedBytes = 0;
-
-        foreach (var layer in request.Layers.OrderBy(layer => layer.Priority))
+        try
         {
-            var url = ApplyTemplate(layer.SourceUrl, request);
-            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            await using (var packageConnection = OpenSqliteConnection(stagingPath))
             {
-                if (layer.Required)
+                await packageConnection.OpenAsync(ct).ConfigureAwait(false);
+
+                await using var transaction = packageConnection.BeginTransaction();
+                await EnsureGeoPackageTablesAsync(packageConnection, transaction, ct).ConfigureAwait(false);
+
+                foreach (var layer in request.Layers.OrderBy(layer => layer.Priority))
                 {
-                    response.EnsureSuccessStatusCode();
+                    var url = ApplyTemplate(layer.SourceUrl, request);
+                    using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        if (layer.Required)
+                        {
+                            response.EnsureSuccessStatusCode();
+                        }
+
+                        continue;
+                    }
+
+                    var payload = await ReadBoundedPayloadAsync(response.Content, request.MaxLayerPayloadBytes, layer.LayerKey, ct).ConfigureAwait(false);
+                    var contentType = layer.ContentType ?? response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+                    await UpsertLayerPayloadAsync(packageConnection, transaction, layer, url, payload, contentType, ct).ConfigureAwait(false);
+                    layerCount++;
+                    downloadedBytes += payload.LongLength;
                 }
 
-                continue;
+                ct.ThrowIfCancellationRequested();
+                await transaction.CommitAsync(ct).ConfigureAwait(false);
             }
 
-            var payload = await ReadBoundedPayloadAsync(response.Content, request.MaxLayerPayloadBytes, layer.LayerKey, ct).ConfigureAwait(false);
-            var contentType = layer.ContentType ?? response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
-
-            await UpsertLayerPayloadAsync(packageConnection, transaction, layer, url, payload, contentType, ct).ConfigureAwait(false);
-            layerCount++;
-            downloadedBytes += payload.LongLength;
+            await _syncStore.InitializeAsync(ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            File.Move(stagingPath, packagePath);
+        }
+        finally
+        {
+            DeleteStagingFile(stagingPath);
         }
 
-        ct.ThrowIfCancellationRequested();
-        await transaction.CommitAsync(ct).ConfigureAwait(false);
-
-        await _syncStore.InitializeAsync(ct).ConfigureAwait(false);
+        // Each publication points to an immutable file. Preserve the file after a catalog
+        // write starts because an exception may arrive after the store committed the pointer.
         await _syncStore.UpsertMapAreaAsync(new MapAreaPackage
         {
             AreaId = request.AreaId,
@@ -191,6 +206,7 @@ ON CONFLICT(layer_key) DO UPDATE SET
         var builder = new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
+            Pooling = false,
         };
 
         return new SqliteConnection(builder.ToString());
@@ -228,7 +244,11 @@ ON CONFLICT(layer_key) DO UPDATE SET
             throw new InvalidOperationException("Area ID must include at least one valid file-name character.");
         }
 
-        var packagePath = Path.GetFullPath(Path.Combine(normalizedOutputDirectory, $"{safeAreaId}.gpkg"));
+        var fileNamePrefix = safeAreaId[..Math.Min(safeAreaId.Length, 24)];
+        var identity = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(areaId)));
+        var packagePath = Path.GetFullPath(Path.Combine(
+            normalizedOutputDirectory,
+            $"{fileNamePrefix}-{identity}-{Guid.NewGuid():N}.gpkg"));
         if (!IsPathUnderDirectory(packagePath, normalizedOutputDirectory))
         {
             throw new InvalidOperationException("Resolved map package path is outside the requested output directory.");
@@ -271,6 +291,22 @@ ON CONFLICT(layer_key) DO UPDATE SET
             : parentDirectoryPath + Path.DirectorySeparatorChar;
 
         return candidatePath.StartsWith(normalizedParent, comparison);
+    }
+
+    private static void DeleteStagingFile(string stagingPath)
+    {
+        try
+        {
+            File.Delete(stagingPath);
+        }
+        catch (IOException)
+        {
+            // Keep the original download failure if the staging file cannot be removed.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Keep the original download failure if the staging file cannot be removed.
+        }
     }
 
     private static async Task<byte[]> ReadBoundedPayloadAsync(

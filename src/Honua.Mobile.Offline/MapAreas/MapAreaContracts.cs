@@ -91,7 +91,9 @@ public sealed class MapLayerDownloadSource
 public sealed class MapAreaDownloadResult
 {
     /// <summary>
-    /// File path to the created GeoPackage containing the downloaded layer data.
+    /// File path to the immutable GeoPackage containing the downloaded layer data.
+    /// Each successful refresh returns a new path. An application can prune superseded
+    /// files after releasing its existing readers and stopping downloads in the directory.
     /// </summary>
     public required string GeoPackagePath { get; init; }
 
