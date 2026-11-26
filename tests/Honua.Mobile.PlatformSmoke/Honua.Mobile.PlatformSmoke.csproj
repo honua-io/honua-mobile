@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
-    <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
+    <TargetFrameworks Condition="'$(HonuaPlatformSmokeAndroidOnly)' != 'true' and !$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>Honua.Mobile.PlatformSmoke</RootNamespace>
     <UseMaui>true</UseMaui>

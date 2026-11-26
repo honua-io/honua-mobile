@@ -39,21 +39,27 @@ until [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; do
   sleep 1
 done
 
-dotnet restore "${PROJECT_PATH}" \
-  --framework "${TARGET_FRAMEWORK}" \
-  /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}"
-
-dotnet build "${PROJECT_PATH}" \
-  --configuration "${CONFIGURATION}" \
-  --framework "${TARGET_FRAMEWORK}" \
-  --no-restore \
-  /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}" \
-  /p:AndroidPackageFormat=apk \
-  /p:TreatWarningsAsErrors=true
-
-apk_path="$(find "${PROJECT_DIR}/bin/${CONFIGURATION}/${TARGET_FRAMEWORK}" -type f \( -name "*Signed.apk" -o -name "*.apk" \) | head -n 1)"
+apk_path="${HONUA_MOBILE_PLATFORM_SMOKE_APK:-}"
 if [[ -z "${apk_path}" ]]; then
-  echo "::error::Android platform smoke APK was not produced."
+  dotnet restore "${PROJECT_PATH}" \
+    /p:HonuaPlatformSmokeAndroidOnly=true \
+    --runtime "${RUNTIME_IDENTIFIER}"
+
+  dotnet build "${PROJECT_PATH}" \
+    --configuration "${CONFIGURATION}" \
+    --framework "${TARGET_FRAMEWORK}" \
+    --no-restore \
+    /p:HonuaPlatformSmokeAndroidOnly=true \
+    --runtime "${RUNTIME_IDENTIFIER}" \
+    /p:AndroidPackageFormat=apk \
+    /p:EmbedAssembliesIntoApk=true \
+    /p:TreatWarningsAsErrors=true
+
+  apk_path="${PROJECT_DIR}/bin/${CONFIGURATION}/${TARGET_FRAMEWORK}/${RUNTIME_IDENTIFIER}/${PACKAGE_ID}-Signed.apk"
+fi
+
+if [[ ! -f "${apk_path}" ]]; then
+  echo "::error::Android platform smoke signed APK was not found."
   exit 1
 fi
 
@@ -75,15 +81,15 @@ print(json.dumps(payload, separators=(",", ":")))
 PY
 )"
 
-tmp_config="$(mktemp)"
-trap 'rm -f "${tmp_config}"' EXIT
-printf '%s' "${config_json}" > "${tmp_config}"
+cleanup_config() {
+  adb shell "run-as ${PACKAGE_ID} rm -f files/${CONFIG_FILE}" >/dev/null 2>&1 || true
+}
 
-adb push "${tmp_config}" "/data/local/tmp/${CONFIG_FILE}" >/dev/null
-adb shell chmod 644 "/data/local/tmp/${CONFIG_FILE}" >/dev/null
-adb shell run-as "${PACKAGE_ID}" sh -c "mkdir -p files && cp /data/local/tmp/${CONFIG_FILE} files/${CONFIG_FILE} && rm -f files/${RESULT_FILE}"
+trap cleanup_config EXIT
+adb shell "run-as ${PACKAGE_ID} mkdir -p files"
+adb shell "run-as ${PACKAGE_ID} rm -f files/${RESULT_FILE} files/${CONFIG_FILE}"
+printf '%s' "${config_json}" | adb shell -T "run-as ${PACKAGE_ID} sh -c 'umask 077; cat > files/${CONFIG_FILE}'" >/dev/null
 
-adb logcat -c || true
 adb shell am force-stop "${PACKAGE_ID}" >/dev/null 2>&1 || true
 adb shell monkey -p "${PACKAGE_ID}" -c android.intent.category.LAUNCHER 1 >/dev/null
 
