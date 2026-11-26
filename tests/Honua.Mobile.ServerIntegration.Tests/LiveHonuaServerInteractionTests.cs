@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Honua.Mobile.Maui.Diagnostics;
@@ -28,10 +29,12 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
 
     private readonly LiveHonuaServerFixture _server;
     private readonly string _rootDirectory;
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
 
-    public LiveHonuaServerInteractionTests(LiveHonuaServerFixture server)
+    public LiveHonuaServerInteractionTests(LiveHonuaServerFixture server, Xunit.Abstractions.ITestOutputHelper output)
     {
         _server = server;
+        _output = output;
         _rootDirectory = Path.Combine(Path.GetTempPath(), $"honua-live-server-integration-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_rootDirectory);
     }
@@ -554,6 +557,223 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         Assert.Equal(2, result.Loaded);
         Assert.Equal(2, result.Succeeded);
         Assert.Equal(0, await store.CountPendingAsync());
+    }
+
+    [SkippableFact]
+    public async Task LiveImage_TwoDeviceReplicaConflict_RequiresReviewAndKeepsEvidence()
+    {
+        Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
+
+        using var http = CreateHttpClient();
+        using var client = CreateMobileClient(preferGrpc: false);
+        var replicas = new ReplicaSyncClient(http);
+        var serviceId = _server.Options.ServiceId;
+        var layerId = _server.Options.LayerId;
+        var layerKey = $"{serviceId}/{layerId}";
+        var registered = new List<string>();
+        var objectId = await AddFeatureServerFeatureAsync(client, "conflict-base");
+        try
+        {
+            var deviceA = await PrepareDeviceAsync("Device A edit");
+            var deviceB = await PrepareDeviceAsync("Device B edit");
+
+            Assert.NotEqual(deviceA.ReplicaId, deviceB.ReplicaId);
+            Assert.Equal(deviceA.BaseGeneration, deviceB.BaseGeneration);
+            Assert.Equal("Device A edit", SiteName(JsonSerializer.Deserialize<JsonElement>(
+                Assert.Single(await deviceA.Store.GetFeaturesAsync(layerKey)))));
+            Assert.Equal("Device B edit", SiteName(JsonSerializer.Deserialize<JsonElement>(
+                Assert.Single(await deviceB.Store.GetFeaturesAsync(layerKey)))));
+
+            var (firstSync, firstUpload) = await RunSyncAsync(deviceA.ReplicaId, deviceA.Store);
+            Assert.True(firstSync.Succeeded == 1, string.Join(", ", firstSync.Failures.Select(failure => failure.Reason)));
+            Assert.Equal(1, firstUpload.GetProperty("appliedUpdates").GetInt32());
+            Assert.Equal("Device A edit", SiteName(await ReadFeatureAsync()));
+            var receipt = await deviceA.Store.GetUploadAcknowledgementAsync(deviceA.OperationId);
+            Assert.NotNull(receipt);
+            Assert.Equal(objectId.ToString(CultureInfo.InvariantCulture), Assert.Single(receipt.ServerFeatureIds));
+
+            var (secondSync, secondUpload) = await RunSyncAsync(deviceB.ReplicaId, deviceB.Store);
+            Assert.Equal(0, secondSync.Succeeded);
+            Assert.Equal(new SyncFailure(deviceB.OperationId, "conflict requires manual review"), Assert.Single(secondSync.Failures));
+            Assert.Empty(await deviceB.Store.GetPendingAsync(1));
+            Assert.Null(await deviceB.Store.GetUploadAcknowledgementAsync(deviceB.OperationId));
+            Assert.Equal(0, secondUpload.GetProperty("appliedUpdates").GetInt32());
+            var conflict = Assert.Single(secondUpload.GetProperty("conflicts").EnumerateArray());
+            Assert.False(conflict.GetProperty("applied").GetBoolean());
+            Assert.Equal(objectId, conflict.GetProperty("objectId").GetInt64());
+            Assert.Equal(layerId, conflict.GetProperty("layerId").GetInt32());
+            var conflictId = Assert.IsType<string>(conflict.GetProperty("conflictId").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(conflictId));
+            Assert.Equal("Device A edit", SiteName(await ReadFeatureAsync()));
+
+            var detailPath = $"/api/v1/admin/services/{Uri.EscapeDataString(serviceId)}/replicas/{deviceB.ReplicaId}/conflicts/{conflictId}";
+            var pending = (await ReadResponseAsync(await http.GetAsync(detailPath))).GetProperty("data");
+            Assert.Equal("pending", pending.GetProperty("status").GetString());
+            AssertSnapshots(pending);
+
+            var resolution = (await ReadResponseAsync(await http.PostAsJsonAsync(
+                $"{detailPath}/resolve", new { action = "acceptClient" }))).GetProperty("data");
+            Assert.True(resolution.GetProperty("committedNewServerState").GetBoolean());
+            var authoritative = await ReadFeatureAsync();
+            Assert.Equal("Device B edit", SiteName(authoritative));
+
+            var resolved = (await ReadResponseAsync(await http.GetAsync(detailPath))).GetProperty("data");
+            Assert.Equal("resolved", resolved.GetProperty("status").GetString());
+            Assert.Equal("acceptClient", resolved.GetProperty("resolutionAction").GetString());
+            Assert.True(resolved.GetProperty("resolvedServerGeneration").GetInt64() > 0);
+            Assert.NotNull(resolved.GetProperty("resolvedAt").GetString());
+            AssertSnapshots(resolved);
+            _output.WriteLine($"Resolved conflict evidence: {resolved.GetRawText()}");
+        }
+        finally
+        {
+            foreach (var replica in registered)
+            {
+                await replicas.UnRegisterReplicaAsync(serviceId, replica);
+            }
+
+            await DeleteFeatureServerFeatureAsync(client, objectId);
+        }
+
+        async Task<JsonElement> ReadFeatureAsync()
+        {
+            using var query = await client.QueryFeaturesAsync(new QueryFeaturesRequest
+            {
+                ServiceId = serviceId,
+                LayerId = layerId,
+                Where = $"objectid = {objectId.ToString(CultureInfo.InvariantCulture)}",
+                OutFields = ["*"],
+                ReturnGeometry = true,
+            });
+            return Assert.Single(query.RootElement.GetProperty("features").EnumerateArray()).Clone();
+        }
+
+        async Task<(string ReplicaId, long BaseGeneration, string OperationId, GeoPackageSyncStore Store)> PrepareDeviceAsync(string siteName)
+        {
+            // Use the per-replica sync model so a single server generation guards the queued edit.
+            var replica = await ReadResponseAsync(await http.PostAsJsonAsync(
+                $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/createReplica",
+                new
+                {
+                    replicaName = $"mobile-conflict-{Guid.NewGuid():N}",
+                    layers = layerId.ToString(CultureInfo.InvariantCulture),
+                    syncModel = "perReplica",
+                    f = "json",
+                }));
+            var replicaId = Assert.IsType<string>(replica.GetProperty("replicaID").GetString());
+            registered.Add(replicaId);
+            var baseGeneration = replica.GetProperty("serverGen").GetInt64();
+            var layer = Assert.Single(replica.GetProperty("layers").EnumerateArray());
+            var baseline = Assert.Single(layer.GetProperty("features").EnumerateArray(),
+                feature => feature.GetProperty("attributes").GetProperty("objectid").GetInt64() == objectId);
+
+            var store = CreateStore();
+            await store.InitializeAsync();
+
+            var attributes = baseline.GetProperty("attributes").Deserialize<Dictionary<string, JsonElement>>(JsonOptions)!;
+            attributes["site_name"] = JsonSerializer.SerializeToElement(siteName, JsonOptions);
+            var edit = new FeatureEditFeature
+            {
+                Attributes = attributes,
+                Geometry = baseline.GetProperty("geometry"),
+            };
+            var operation = new OfflineEditOperation
+            {
+                OperationId = Guid.NewGuid().ToString("N"),
+                LayerKey = layerKey,
+                TargetCollection = serviceId,
+                OperationType = OfflineOperationType.Update,
+                PayloadJson = JsonSerializer.Serialize(new OfflineOperationPayload
+                {
+                    Protocol = "FeatureServer",
+                    ServiceId = serviceId,
+                    LayerId = layerId,
+                    UpdatesJson = JsonSerializer.Serialize(new[] { edit }, JsonOptions),
+                    BaseSyncToken = baseGeneration.ToString(CultureInfo.InvariantCulture),
+                }, JsonOptions),
+            };
+            await store.UpsertFeatureAndEnqueueAsync(operation, JsonSerializer.Serialize(edit, JsonOptions));
+            return (replicaId, baseGeneration, operation.OperationId, store);
+        }
+
+        async Task<(SyncRunResult Sync, JsonElement Response)> RunSyncAsync(string replicaId, GeoPackageSyncStore store)
+        {
+            var uploader = new ReplicaGateUploader((operation, ct) => UploadAsync(replicaId, operation, ct));
+            var runner = new OfflineSyncEngine(store, uploader, new() { ConflictStrategy = SyncConflictStrategy.ManualReview });
+            var sync = await runner.SyncAsync();
+            Assert.Equal(1, sync.Loaded);
+            return (sync, uploader.Response);
+        }
+
+        async Task<JsonElement> UploadAsync(string replicaId, OfflineEditOperation operation, CancellationToken ct)
+        {
+            var payload = JsonSerializer.Deserialize<OfflineOperationPayload>(operation.PayloadJson, JsonOptions)!;
+
+            // The .NET replica client exposes downloads. The test submits the server's manual
+            // review extension directly until the upstream client exposes replica edit uploads.
+            var result = await ReadResponseAsync(await http.PostAsJsonAsync(
+                $"/rest/services/{Uri.EscapeDataString(serviceId)}/FeatureServer/synchronizeReplica",
+                new
+                {
+                    replicaID = replicaId,
+                    replicaServerGen = payload.BaseSyncToken,
+                    syncDirection = "upload",
+                    conflictHandling = "manualReview",
+                    edits = JsonSerializer.Serialize(new[] { new { id = layerId, updates = JsonSerializer.Deserialize<JsonElement>(payload.UpdatesJson!, JsonOptions) } }, JsonOptions),
+                    f = "json",
+                }, ct));
+            Assert.True(result.GetProperty("success").GetBoolean(), result.GetRawText());
+            return result;
+        }
+
+        static string? SiteName(JsonElement feature) => feature.GetProperty("attributes").GetProperty("site_name").GetString();
+
+        static void AssertSnapshots(JsonElement detail)
+        {
+            Assert.Equal("Device A edit", SiteName(detail.GetProperty("serverState")));
+            Assert.Equal("Device B edit", SiteName(detail.GetProperty("clientState")));
+        }
+
+        static async Task<JsonElement> ReadResponseAsync(HttpResponseMessage response)
+        {
+            using (response)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                Assert.True(response.IsSuccessStatusCode, $"HTTP {(int)response.StatusCode}: {json}");
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.Clone();
+            }
+        }
+    }
+
+    private sealed class ReplicaGateUploader(
+        Func<OfflineEditOperation, CancellationToken, Task<JsonElement>> upload) : IOfflineOperationUploader
+    {
+        public JsonElement Response { get; private set; }
+
+        public async Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        {
+            Assert.False(forceWrite);
+            Response = await upload(operation, ct);
+            if (Response.GetProperty("appliedUpdates").GetInt32() == 1)
+            {
+                if (Response.TryGetProperty("conflicts", out var successfulConflicts))
+                {
+                    Assert.Empty(successfulConflicts.EnumerateArray());
+                }
+
+                var payload = JsonSerializer.Deserialize<OfflineOperationPayload>(operation.PayloadJson, JsonOptions)!;
+                var edit = Assert.Single(JsonSerializer.Deserialize<FeatureEditFeature[]>(payload.UpdatesJson!, JsonOptions)!);
+                return new UploadResult
+                {
+                    Outcome = UploadOutcome.Success,
+                    ServerFeatureIds = [edit.Attributes!["objectid"].GetRawText()],
+                };
+            }
+
+            var conflict = Assert.Single(Response.GetProperty("conflicts").EnumerateArray());
+            return new UploadResult { Outcome = UploadOutcome.Conflict, Message = conflict.GetProperty("conflictId").GetString() };
+        }
     }
 
     [SkippableFact]

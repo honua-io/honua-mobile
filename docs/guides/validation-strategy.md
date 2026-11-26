@@ -79,11 +79,22 @@ honest gaps; the parenthesised reason indicates why.
 | Map annotations | `HonuaAnnotationLayerTests.cs` (13) | N/A (UI surface) | N/A (UI surface) | N/A (manual) | N/A (deferred) | unit-only |
 | Scene metadata | `HonuaSceneClientAdapterTests.cs` (15) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
 | Scene packages | `HonuaScenePackageManifestTests.cs` (10), `ScenePackageDownloaderTests.cs` (11) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | N/A (manual) | N/A (deferred) | unit + live |
-| Sync conflict resolution | `OfflineSyncEngineTests.cs` (subset of 7) | N/A (future) | covered by `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | covered |
+| Sync conflict resolution | `OfflineSyncEngineTests.cs` | N/A (future) | Two GeoPackage stores and server-side manual review in `LiveHonuaServerInteractionTests.cs` | covered by cloud acceptance suite | N/A (deferred) | unit + replica protocol |
 | Background sync orchestration | `BackgroundSyncOrchestratorTests.cs` (4), `BackgroundPrefetchSchedulerTests.cs` (1) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Connectivity-aware sync | `BackgroundSyncOrchestratorTests.cs` (4, `ToggleConnectivityProvider`) | N/A (future) | N/A (future) | N/A (manual) | N/A (deferred) | unit-only |
 | Telemetry redaction | `MobileExceptionRedactorTests.cs` (3), `LocalMobileExceptionReporterTests.cs` (8), `MobileExceptionReportUploadWorkerTests.cs` (7) | `MobileDiagnosticsServerIntegrationTests.cs` (2) | N/A (future) | N/A (manual) | N/A (deferred) | covered |
 | Embed builder / API-key validation | `src/Honua.Embed/tests/honua-builder.test.ts` (npm, multi-suite) | N/A (DOM-only) | N/A (DOM-only) | N/A (manual) | N/A (deferred) | unit-only (npm) |
+
+The two-store replica gate queues independent edits from the same server
+generation, submits them to the replica endpoint, and verifies the reviewed
+value and both conflict snapshots through server readback. The test runs
+the mobile sync engine with a test-only uploader for the FeatureServer replica
+wire contract and uses the admin API for review.
+The production FeatureServer uploader uses standalone `applyEdits`. Wiring
+manual review into mobile sync requires a released `Honua.Sdk.Offline` replica
+client that can register replicas with a shared server generation, upload edits
+against that generation, request manual review, and report conflict IDs and
+per-edit results.
 
 Other notable test files contributing to the totals but not listed as a
 single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
