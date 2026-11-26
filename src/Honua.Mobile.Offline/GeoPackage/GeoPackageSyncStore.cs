@@ -2,8 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See the LICENSE file in the repository root.
 
 using System.Data;
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -29,6 +30,7 @@ public sealed partial class GeoPackageSyncStore : IGeoPackageSyncStore
     private const string Wgs84Definition = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]]";
     private const string WebMercatorDefinition = "PROJCS[\"WGS 84 / Pseudo-Mercator\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],PROJECTION[\"Mercator_1SP\"],PARAMETER[\"central_meridian\",0],PARAMETER[\"scale_factor\",1],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"X\",EAST],AXIS[\"Y\",NORTH],AUTHORITY[\"EPSG\",\"3857\"]]";
     private readonly GeoPackageSyncStoreOptions _options;
+    private readonly ConditionalWeakTable<OfflineEditOperation, string> _claimTokens = new();
 
     /// <summary>
     /// Initializes a new <see cref="GeoPackageSyncStore"/> with the specified options.
@@ -113,6 +115,7 @@ CREATE TABLE IF NOT EXISTS honua_sync_queue (
     priority INTEGER NOT NULL,
     created_at_utc TEXT NOT NULL,
     claimed_at_utc TEXT,
+    claim_token TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
     status TEXT NOT NULL DEFAULT 'pending'
@@ -217,7 +220,19 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
 
         await InitializeUploadResultsAsync(connection, ct).ConfigureAwait(false);
 
-        await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
+        await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        try
+        {
+            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
+            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claim_token", "TEXT", ct).ConfigureAwait(false);
+            await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(connection).ConfigureAwait(false);
+            throw;
+        }
+
         await EnsureColumnExistsAsync(
             connection,
             "honua_scene_packages",
@@ -342,18 +357,21 @@ SELECT EXISTS (
                 return [];
             }
 
+            var claimToken = Guid.NewGuid().ToString("N");
             await using (var claimCommand = connection.CreateCommand())
             {
                 var idParameters = AddOperationIdParameters(claimCommand, claimedOperationIds);
                 claimCommand.CommandText = $@"
 UPDATE honua_sync_queue
 SET status = 'in_progress',
-    claimed_at_utc = $claimed_at_utc
+    claimed_at_utc = $claimed_at_utc,
+    claim_token = $claim_token
 WHERE status IN ('pending', 'retry', 'in_progress')
   AND operation_id IN ({idParameters});
 ";
                 claimCommand.Parameters.AddWithValue("$claimed_at_utc", claimedAtUtc.ToString("O", CultureInfo.InvariantCulture));
 
+                claimCommand.Parameters.AddWithValue("$claim_token", claimToken);
                 await claimCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
@@ -371,7 +389,9 @@ ORDER BY priority ASC, created_at_utc ASC;
                 await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 while (await reader.ReadAsync(ct).ConfigureAwait(false))
                 {
-                    items.Add(ReadOfflineEditOperation(reader));
+                    var operation = ReadOfflineEditOperation(reader);
+                    _claimTokens.Add(operation, claimToken);
+                    items.Add(operation);
                 }
             }
 
@@ -406,19 +426,33 @@ ORDER BY priority ASC, created_at_utc ASC;
     }
 
     /// <inheritdoc />
-    public async Task MarkSucceededAsync(string operationId, CancellationToken ct = default)
+    public Task MarkSucceededAsync(string operationId, CancellationToken ct = default)
+        => MarkSucceededCoreAsync(operationId, claimToken: null, ct);
+
+    internal Task<bool> MarkClaimSucceededAsync(OfflineEditOperation operation, CancellationToken ct)
+        => MarkSucceededCoreAsync(operation.OperationId, _claimTokens.GetValue(operation, MissingClaimToken), ct);
+
+    private async Task<bool> MarkSucceededCoreAsync(string operationId, string? claimToken, CancellationToken ct)
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM honua_sync_queue WHERE operation_id = $operation_id;";
+        command.CommandText = @"DELETE FROM honua_sync_queue WHERE operation_id = $operation_id
+  AND ($claim_token IS NULL OR (status = 'in_progress' AND claim_token = $claim_token));";
         command.Parameters.AddWithValue("$operation_id", operationId);
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        command.Parameters.AddWithValue("$claim_token", (object?)claimToken ?? DBNull.Value);
+        return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 0;
     }
 
     /// <inheritdoc />
-    public async Task MarkPendingAsync(string operationId, CancellationToken ct = default)
+    public Task MarkPendingAsync(string operationId, CancellationToken ct = default)
+        => MarkPendingCoreAsync(operationId, claimToken: null, ct);
+
+    internal Task<bool> MarkClaimPendingAsync(OfflineEditOperation operation, CancellationToken ct)
+        => MarkPendingCoreAsync(operation.OperationId, _claimTokens.GetValue(operation, MissingClaimToken), ct);
+
+    private async Task<bool> MarkPendingCoreAsync(string operationId, string? claimToken, CancellationToken ct)
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
@@ -428,15 +462,24 @@ ORDER BY priority ASC, created_at_utc ASC;
 UPDATE honua_sync_queue
 SET status = 'pending',
     claimed_at_utc = NULL,
+    claim_token = NULL,
     last_error = NULL
-WHERE operation_id = $operation_id;
+WHERE operation_id = $operation_id
+  AND ($claim_token IS NULL OR (status = 'in_progress' AND claim_token = $claim_token));
 ";
         command.Parameters.AddWithValue("$operation_id", operationId);
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        command.Parameters.AddWithValue("$claim_token", (object?)claimToken ?? DBNull.Value);
+        return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 0;
     }
 
     /// <inheritdoc />
-    public async Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
+    public Task MarkFailedAsync(string operationId, string failureReason, bool retryable, CancellationToken ct = default)
+        => MarkFailedCoreAsync(operationId, failureReason, retryable, claimToken: null, ct);
+
+    internal Task<bool> MarkClaimFailedAsync(OfflineEditOperation operation, string failureReason, bool retryable, CancellationToken ct)
+        => MarkFailedCoreAsync(operation.OperationId, failureReason, retryable, _claimTokens.GetValue(operation, MissingClaimToken), ct);
+
+    private async Task<bool> MarkFailedCoreAsync(string operationId, string failureReason, bool retryable, string? claimToken, CancellationToken ct)
     {
         await using var connection = OpenConnection();
         await connection.OpenAsync(ct).ConfigureAwait(false);
@@ -447,16 +490,22 @@ UPDATE honua_sync_queue
 SET status = $status,
     attempt_count = attempt_count + 1,
     claimed_at_utc = NULL,
+    claim_token = NULL,
     last_error = $last_error
-WHERE operation_id = $operation_id;
+WHERE operation_id = $operation_id
+  AND ($claim_token IS NULL OR (status = 'in_progress' AND claim_token = $claim_token));
 ";
 
         command.Parameters.AddWithValue("$status", retryable ? "retry" : "failed");
         command.Parameters.AddWithValue("$last_error", failureReason);
         command.Parameters.AddWithValue("$operation_id", operationId);
 
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        command.Parameters.AddWithValue("$claim_token", (object?)claimToken ?? DBNull.Value);
+        return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 0;
     }
+
+    private static string MissingClaimToken(OfflineEditOperation operation)
+        => throw new InvalidOperationException($"Operation '{operation.OperationId}' was not claimed by this store.");
 
     /// <inheritdoc />
     public async Task SetSyncCursorAsync(string cursorKey, string cursorValue, CancellationToken ct = default)

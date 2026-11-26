@@ -30,6 +30,61 @@ public sealed class OfflineSyncEngineTests : IDisposable
         Assert.Equal(["server-42"], (await reopened.GetUploadAcknowledgementAsync("saved-record"))!.ServerFeatureIds);
     }
 
+    [Theory]
+    [InlineData(UploadOutcome.Success, false)]
+    [InlineData(UploadOutcome.RetryableFailure, false)]
+    [InlineData(UploadOutcome.Conflict, false)]
+    [InlineData(UploadOutcome.Success, true)]
+    public async Task SyncAsync_LateWorkerCannotCompleteOrReleaseReclaimedEdit(UploadOutcome staleOutcome, bool cancel)
+    {
+        var options = new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = _databasePath,
+            InProgressLeaseTimeout = TimeSpan.Zero,
+            TimeProvider = new FixedTimeProvider(),
+        };
+        var firstStore = new GeoPackageSyncStore(options);
+        await firstStore.InitializeAsync();
+        const string operationId = "reclaimed-edit";
+        await firstStore.EnqueueAsync(CreateOperation(operationId, "assets", OfflineOperationType.Add));
+
+        var firstUploader = new GatedUploader();
+        var secondUploader = new GatedUploader();
+        var firstEngine = new OfflineSyncEngine(firstStore, firstUploader,
+            new OfflineSyncEngineOptions { ConflictStrategy = SyncConflictStrategy.ServerWins });
+        var secondStore = new GeoPackageSyncStore(options);
+        var secondEngine = new OfflineSyncEngine(secondStore, secondUploader);
+        using var cancelled = new CancellationTokenSource();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        var staleRun = firstEngine.SyncAsync(cancelled.Token);
+        await firstUploader.Started.Task.WaitAsync(timeout.Token);
+        var currentRun = secondEngine.SyncAsync(timeout.Token);
+        await secondUploader.Started.Task.WaitAsync(timeout.Token);
+
+        if (cancel)
+        {
+            await cancelled.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => staleRun.WaitAsync(timeout.Token));
+            Assert.True(staleRun.IsCanceled);
+        }
+        else
+        {
+            firstUploader.Result.SetResult(new UploadResult { Outcome = staleOutcome, ServerFeatureIds = ["stale-id"] });
+            var staleResult = await staleRun.WaitAsync(timeout.Token);
+            Assert.Equal(0, staleResult.Succeeded);
+            Assert.Equal(0, staleResult.Failed);
+        }
+
+        Assert.Null(await firstStore.GetUploadAcknowledgementAsync(operationId, timeout.Token));
+        Assert.Equal(0, await firstStore.CountPendingAsync(timeout.Token));
+        secondUploader.Result.SetResult(new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["current-id"] });
+        Assert.Equal(1, (await currentRun).Succeeded);
+        var acknowledgement = await secondStore.GetUploadAcknowledgementAsync(operationId, timeout.Token);
+        Assert.NotNull(acknowledgement);
+        Assert.Equal(["current-id"], acknowledgement.ServerFeatureIds);
+    }
+
     [Fact]
     public async Task SyncAsync_DecoratorWithoutAcknowledgementSupportStillCompletesUpload()
     {
@@ -442,6 +497,23 @@ public sealed class OfflineSyncEngineTests : IDisposable
     {
         public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
             => Task.FromResult(new UploadResult { Outcome = UploadOutcome.Success, ServerFeatureIds = ["server-42"] });
+    }
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+    }
+
+    private sealed class GatedUploader : IOfflineOperationUploader
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<UploadResult> Result { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<UploadResult> UploadAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct = default)
+        {
+            Started.SetResult();
+            return Result.Task.WaitAsync(ct);
+        }
     }
 
     private sealed class BlockingUploader : IOfflineOperationUploader

@@ -60,16 +60,22 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
 
                     if (operation.AttemptCount >= _options.MaxAttempts)
                     {
-                        await _store.MarkFailedAsync(operation.OperationId, "max attempts reached", retryable: false, ct).ConfigureAwait(false);
-                        failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
+                        if (await MarkFailedAsync(operation, "max attempts reached", retryable: false, ct).ConfigureAwait(false))
+                        {
+                            failures.Add(new SyncFailure(operation.OperationId, "max attempts reached"));
+                        }
+
                         continue;
                     }
 
                     var uploadResult = await UploadSafelyAsync(operation, forceWrite: false, ct).ConfigureAwait(false);
                     if (uploadResult.Outcome == UploadOutcome.Success)
                     {
-                        await _store.MarkUploadedAsync(operation.OperationId, uploadResult.ServerFeatureIds, ct).ConfigureAwait(false);
-                        success++;
+                        if (await MarkUploadedAsync(operation, uploadResult.ServerFeatureIds, ct).ConfigureAwait(false))
+                        {
+                            success++;
+                        }
+
                         continue;
                     }
 
@@ -80,20 +86,21 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                         if (conflictResolved.Resolved)
                         {
                             success++;
-                            continue;
+                        }
+                        else if (conflictResolved.FailureReason is { } failureReason)
+                        {
+                            failures.Add(new SyncFailure(operation.OperationId, failureReason));
                         }
 
-                        if (conflictResolved.FailureHandled)
-                        {
-                            failures.Add(new SyncFailure(operation.OperationId, conflictResolved.FailureReason ?? "Conflict resolution failed."));
-                            continue;
-                        }
+                        continue;
                     }
 
                     var retryable = uploadResult.Outcome == UploadOutcome.RetryableFailure;
                     var reason = uploadResult.Message ?? uploadResult.Outcome.ToString();
-                    await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
-                    failures.Add(new SyncFailure(operation.OperationId, reason));
+                    if (await MarkFailedAsync(operation, reason, retryable, ct).ConfigureAwait(false))
+                    {
+                        failures.Add(new SyncFailure(operation.OperationId, reason));
+                    }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -210,6 +217,12 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                 // overwrite the local feature here; callers that need the local store to
                 // reflect the server value must run a delta/replica download afterwards.
                 // See OfflineSyncEngineTests.SyncAsync_ServerWins_DiscardsLocalEditWithoutReUpload.
+                if (_store is GeoPackageSyncStore nativeStore)
+                {
+                    return new ConflictResolutionState(
+                        await nativeStore.MarkClaimSucceededAsync(operation, ct).ConfigureAwait(false), null);
+                }
+
                 await _store.MarkSucceededAsync(operation.OperationId, ct).ConfigureAwait(false);
                 return ConflictResolutionState.ResolvedState;
 
@@ -218,21 +231,46 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
                     var forced = await UploadSafelyAsync(operation, forceWrite: true, ct).ConfigureAwait(false);
                     if (forced.Outcome == UploadOutcome.Success)
                     {
-                        await _store.MarkUploadedAsync(operation.OperationId, forced.ServerFeatureIds, ct).ConfigureAwait(false);
-                        return ConflictResolutionState.ResolvedState;
+                        return new ConflictResolutionState(
+                            await MarkUploadedAsync(operation, forced.ServerFeatureIds, ct).ConfigureAwait(false), null);
                     }
 
                     var reason = forced.Message ?? "conflict retry failed";
-                    await _store.MarkFailedAsync(operation.OperationId, reason, retryable: forced.Outcome == UploadOutcome.RetryableFailure, ct).ConfigureAwait(false);
-                    return new ConflictResolutionState(false, true, reason);
+                    var marked = await MarkFailedAsync(
+                        operation, reason, retryable: forced.Outcome == UploadOutcome.RetryableFailure, ct).ConfigureAwait(false);
+                    return new ConflictResolutionState(false, marked ? reason : null);
                 }
 
             case SyncConflictStrategy.ManualReview:
             default:
                 const string manualReviewReason = "conflict requires manual review";
-                await _store.MarkFailedAsync(operation.OperationId, manualReviewReason, retryable: false, ct).ConfigureAwait(false);
-                return new ConflictResolutionState(false, true, manualReviewReason);
+                var requiresReview = await MarkFailedAsync(operation, manualReviewReason, retryable: false, ct).ConfigureAwait(false);
+                return new ConflictResolutionState(false, requiresReview ? manualReviewReason : null);
         }
+    }
+
+    private async Task<bool> MarkUploadedAsync(
+        OfflineEditOperation operation, IReadOnlyList<string> serverFeatureIds, CancellationToken ct)
+    {
+        if (_store is GeoPackageSyncStore nativeStore)
+        {
+            return await nativeStore.MarkClaimUploadedAsync(operation, serverFeatureIds, ct).ConfigureAwait(false);
+        }
+
+        await _store.MarkUploadedAsync(operation.OperationId, serverFeatureIds, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task<bool> MarkFailedAsync(
+        OfflineEditOperation operation, string reason, bool retryable, CancellationToken ct)
+    {
+        if (_store is GeoPackageSyncStore nativeStore)
+        {
+            return await nativeStore.MarkClaimFailedAsync(operation, reason, retryable, ct).ConfigureAwait(false);
+        }
+
+        await _store.MarkFailedAsync(operation.OperationId, reason, retryable, ct).ConfigureAwait(false);
+        return true;
     }
 
     private async Task<UploadResult> UploadSafelyAsync(OfflineEditOperation operation, bool forceWrite, CancellationToken ct)
@@ -251,9 +289,9 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         }
     }
 
-    private readonly record struct ConflictResolutionState(bool Resolved, bool FailureHandled, string? FailureReason)
+    private readonly record struct ConflictResolutionState(bool Resolved, string? FailureReason)
     {
-        public static readonly ConflictResolutionState ResolvedState = new(true, false, null);
+        public static readonly ConflictResolutionState ResolvedState = new(true, null);
     }
 
     private async Task ReleaseClaimedOperationsBestEffortAsync(IReadOnlyList<OfflineEditOperation> pending, int startIndex)
@@ -262,7 +300,14 @@ public sealed class OfflineSyncEngine : IOfflineSyncRunner
         {
             for (var i = startIndex; i < pending.Count; i++)
             {
-                await _store.MarkPendingAsync(pending[i].OperationId, CancellationToken.None).ConfigureAwait(false);
+                if (_store is GeoPackageSyncStore nativeStore)
+                {
+                    await nativeStore.MarkClaimPendingAsync(pending[i], CancellationToken.None).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _store.MarkPendingAsync(pending[i].OperationId, CancellationToken.None).ConfigureAwait(false);
+                }
             }
         }
         catch

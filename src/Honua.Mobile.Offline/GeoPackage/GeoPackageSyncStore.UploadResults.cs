@@ -12,7 +12,14 @@ public sealed partial class GeoPackageSyncStore
 {
     // Blank IDs are ignored: the server already applied the edit, so a malformed ID must not block the queue.
     // A missing queue row is a no-op when an acknowledgement exists; with neither, the IDs would be lost, so throw.
-    public async Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
+    public Task MarkUploadedAsync(string operationId, IReadOnlyList<string> serverFeatureIds, CancellationToken ct = default)
+        => MarkUploadedCoreAsync(operationId, serverFeatureIds, claimToken: null, ct);
+
+    internal Task<bool> MarkClaimUploadedAsync(OfflineEditOperation operation, IReadOnlyList<string> serverFeatureIds, CancellationToken ct)
+        => MarkUploadedCoreAsync(operation.OperationId, serverFeatureIds, _claimTokens.GetValue(operation, MissingClaimToken), ct);
+
+    private async Task<bool> MarkUploadedCoreAsync(
+        string operationId, IReadOnlyList<string> serverFeatureIds, string? claimToken, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         ArgumentNullException.ThrowIfNull(serverFeatureIds);
@@ -26,12 +33,19 @@ public sealed partial class GeoPackageSyncStore
 INSERT INTO honua_upload_acknowledgements
     (operation_id, layer_key, target_collection, server_feature_ids_json, uploaded_at_utc)
 SELECT operation_id, layer_key, target_collection, $ids, $uploaded_at
-FROM honua_sync_queue WHERE operation_id = $operation_id;
+FROM honua_sync_queue WHERE operation_id = $operation_id
+  AND ($claim_token IS NULL OR (status = 'in_progress' AND claim_token = $claim_token));
 ";
         insert.Parameters.AddWithValue("$operation_id", operationId);
+        insert.Parameters.AddWithValue("$claim_token", (object?)claimToken ?? DBNull.Value);
         insert.Parameters.AddWithValue("$ids", ToNonBlankIdsJson(serverFeatureIds));
         insert.Parameters.AddWithValue("$uploaded_at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         var inserted = await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        if (inserted == 0 && claimToken is not null)
+        {
+            return false;
+        }
+
         if (inserted == 0 && !await AcknowledgementExistsAsync(transaction, operationId, ct).ConfigureAwait(false))
         {
             throw new InvalidOperationException(
@@ -40,6 +54,7 @@ FROM honua_sync_queue WHERE operation_id = $operation_id;
 
         await DeleteQueuedOperationAsync(transaction, operationId, ct).ConfigureAwait(false);
         await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     // Returns null for a database not yet initialized with acknowledgement support.
