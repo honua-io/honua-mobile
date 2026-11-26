@@ -108,8 +108,12 @@ and distinct area IDs that previously shared a file name. The downloader
 publishes each completed refresh at a new path and removes staging files
 during normal failure unwinding. Applications managing the package directory
 can prune superseded files and abandoned staging files after stopping
-downloads and releasing readers. The catalog's current package paths must
-be retained.
+downloads and releasing readers. In a directory dedicated to map downloads,
+new packages use `<area-prefix>-<64-hex-digest>-<32-hex-generation>.gpkg`
+and staging files append `.partial`. Keep every path referenced by the map
+area catalog or stored elsewhere for later use. Older releases used different
+names, so remove a legacy file only if the application can identify it as an
+unreferenced map download.
 
 Other notable test files contributing to the totals but not listed as a
 single-capability row above: `MobileContractHarmonizationFixtureTests.cs`
