@@ -422,7 +422,11 @@ ORDER BY priority ASC, created_at_utc ASC;
             }
 
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
-            MobileStorageTelemetry.RecordCheckpoint("queue_lease_committed");
+            if (items.Count != 0)
+            {
+                MobileStorageTelemetry.RecordCheckpoint("queue_lease_committed");
+            }
+
             return items;
         }
         catch
