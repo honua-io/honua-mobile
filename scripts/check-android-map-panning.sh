@@ -21,6 +21,14 @@ if (( 10#$1 == 10#$3 && 10#$2 == 10#$4 )); then
 fi
 
 adb get-state >/dev/null
+build_fingerprint=$(adb shell getprop ro.build.fingerprint | tr -d '\r')
+package_info=$(adb shell dumpsys package "$package" | tr -d '\r')
+version_code=$(sed -n 's/^[[:space:]]*versionCode=\([0-9]*\).*/\1/p' <<< "$package_info")
+version_name=$(sed -n 's/^[[:space:]]*versionName=//p' <<< "$package_info")
+if [[ -z $build_fingerprint || -z $version_code ]]; then
+  echo "Could not identify the device build or installed Field package." >&2
+  exit 1
+fi
 adb shell dumpsys gfxinfo "$package" reset >/dev/null
 for _ in {1..5}; do
   adb shell input swipe "$1" "$2" "$3" "$4" 400
@@ -30,7 +38,8 @@ done
 stats="$(mktemp)"
 trap 'rm -f "$stats"' EXIT
 adb shell dumpsys gfxinfo "$package" > "$stats"
-python3 - "$stats" "$root/quality/performance-budget.json" <<'PY'
+python3 - "$stats" "$root/quality/performance-budget.json" "$package" "$version_code" "$version_name" \
+  "$build_fingerprint" "${HONUA_MAP_FIXTURE:-}" "$@" <<'PY'
 import json
 import re
 import sys
@@ -43,7 +52,14 @@ fields = {
     "panning_p95_ms": r"^95th percentile:\s*(\d+)ms",
     "panning_jank_percent": r"^Janky frames:\s*\d+\s*\(([\d.]+)%\)",
 }
-measurements = {}
+measurements = {
+    "package": sys.argv[3],
+    "version_code": int(sys.argv[4]),
+    "version_name": sys.argv[5],
+    "android_build": sys.argv[6],
+    "map_fixture": sys.argv[7] or None,
+    "gesture": {"endpoints_px": [int(value) for value in sys.argv[8:]], "swipes": 10, "duration_ms": 400},
+}
 for field, pattern in fields.items():
     match = re.search(pattern, stats, flags=re.MULTILINE)
     if not match:

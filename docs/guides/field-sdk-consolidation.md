@@ -68,11 +68,12 @@ inside the viewport for the gesture. With the selected device available through
 `adb`, run the following command with the device's screen coordinates.
 
 ```bash
-scripts/check-android-map-panning.sh 220 540 780 540
+HONUA_MAP_FIXTURE=offline-work-area-v1 scripts/check-android-map-panning.sh 220 540 780 540 > pan.json
 ```
 
 Ten swipes are sent across the viewport. The script requires at least 60 rendered
 frames and checks Android's app-level p95 frame time and jank percentage against
-`quality/performance-budget.json`. Save the JSON output with the APK version,
-Android model and OS, map fixture, and chosen coordinates. Run again for both
-connected and downloaded offline maps.
+`quality/performance-budget.json`. The JSON records the installed APK version, Android build fingerprint, gesture
+coordinates and the fixture label supplied in `HONUA_MAP_FIXTURE`. Use the
+identifier of the actual dataset and connectivity mode for each run. Keep results
+for both connected and downloaded offline maps.
