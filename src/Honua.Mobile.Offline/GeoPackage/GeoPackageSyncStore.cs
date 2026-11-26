@@ -210,8 +210,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS rtree_honua_features USING rtree(
     max_y
 );
 
-CREATE INDEX IF NOT EXISTS idx_honua_features_layer_expires ON honua_features(layer_key, expires_at_utc);
-
 INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description, srs_id)
 VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature cache for delta sync', 4326);
 ";
@@ -230,6 +228,9 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
             queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claim_token", "TEXT", ct).ConfigureAwait(false);
             queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_id", "TEXT", ct).ConfigureAwait(false);
             queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_base_generation", "INTEGER", ct).ConfigureAwait(false);
+            await EnsureColumnExistsAsync(connection, "honua_features", "expires_at_utc", "TEXT", ct).ConfigureAwait(false);
+            command.CommandText = "CREATE INDEX IF NOT EXISTS idx_honua_features_layer_expires ON honua_features(layer_key, expires_at_utc);";
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             if (queueUpgraded)
             {
                 MobileStorageTelemetry.RecordCheckpoint("queue_schema_before_commit");
@@ -254,7 +255,6 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
             "missing_optional_asset_keys_json",
             "TEXT NOT NULL DEFAULT '[]'",
             ct).ConfigureAwait(false);
-        await EnsureColumnExistsAsync(connection, "honua_features", "expires_at_utc", "TEXT", ct).ConfigureAwait(false);
         await EnsureColumnExistsAsync(connection, "honua_features", "min_x", "DOUBLE", ct).ConfigureAwait(false);
         await EnsureColumnExistsAsync(connection, "honua_features", "min_y", "DOUBLE", ct).ConfigureAwait(false);
         await EnsureColumnExistsAsync(connection, "honua_features", "max_x", "DOUBLE", ct).ConfigureAwait(false);

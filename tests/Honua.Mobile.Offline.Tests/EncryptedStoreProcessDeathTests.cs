@@ -30,6 +30,8 @@ public sealed class EncryptedStoreProcessDeathTests : IDisposable
         {
             await using var command = connection.CreateCommand();
             command.CommandText = """
+                DROP INDEX idx_honua_features_layer_expires;
+                ALTER TABLE honua_features DROP COLUMN expires_at_utc;
                 ALTER TABLE honua_sync_queue DROP COLUMN claimed_at_utc;
                 ALTER TABLE honua_sync_queue DROP COLUMN claim_token;
                 ALTER TABLE honua_sync_queue DROP COLUMN replica_id;
@@ -48,6 +50,8 @@ public sealed class EncryptedStoreProcessDeathTests : IDisposable
                 WHERE name IN ('claimed_at_utc', 'claim_token', 'replica_id', 'replica_base_generation');
                 """;
             Assert.Equal(expectedColumns, await command.ExecuteScalarAsync());
+            command.CommandText = "SELECT count(*) FROM pragma_index_info('idx_honua_features_layer_expires') WHERE name = 'expires_at_utc';";
+            Assert.Equal(expectedColumns == 0 ? 0L : 1L, await command.ExecuteScalarAsync());
         }
 
         var reopened = await InitializeAsync();
