@@ -52,7 +52,8 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
         await using var packageConnection = OpenSqliteConnection(packagePath);
         await packageConnection.OpenAsync(ct).ConfigureAwait(false);
 
-        await EnsureGeoPackageTablesAsync(packageConnection, ct).ConfigureAwait(false);
+        await using var transaction = packageConnection.BeginTransaction();
+        await EnsureGeoPackageTablesAsync(packageConnection, transaction, ct).ConfigureAwait(false);
 
         var layerCount = 0;
         long downloadedBytes = 0;
@@ -74,10 +75,13 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
             var payload = await ReadBoundedPayloadAsync(response.Content, request.MaxLayerPayloadBytes, layer.LayerKey, ct).ConfigureAwait(false);
             var contentType = layer.ContentType ?? response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
 
-            await UpsertLayerPayloadAsync(packageConnection, layer, url, payload, contentType, ct).ConfigureAwait(false);
+            await UpsertLayerPayloadAsync(packageConnection, transaction, layer, url, payload, contentType, ct).ConfigureAwait(false);
             layerCount++;
             downloadedBytes += payload.LongLength;
         }
+
+        ct.ThrowIfCancellationRequested();
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
 
         await _syncStore.InitializeAsync(ct).ConfigureAwait(false);
         await _syncStore.UpsertMapAreaAsync(new MapAreaPackage
@@ -99,7 +103,10 @@ public sealed class MapAreaDownloader : IMapAreaDownloader
         };
     }
 
-    private static async Task EnsureGeoPackageTablesAsync(SqliteConnection connection, CancellationToken ct)
+    private static async Task EnsureGeoPackageTablesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken ct)
     {
         var sql = @"
 CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys (
@@ -142,12 +149,14 @@ VALUES ('honua_layer_payloads', 'attributes', 'honua_layer_payloads', 'Layer pay
 ";
 
         await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     private static async Task UpsertLayerPayloadAsync(
         SqliteConnection connection,
+        SqliteTransaction transaction,
         MapLayerDownloadSource layer,
         string sourceUrl,
         byte[] payload,
@@ -155,6 +164,7 @@ VALUES ('honua_layer_payloads', 'attributes', 'honua_layer_payloads', 'Layer pay
         CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
         cmd.CommandText = @"
 INSERT INTO honua_layer_payloads (layer_key, source_url, priority, content_type, payload_blob, downloaded_at_utc)
 VALUES ($layer_key, $source_url, $priority, $content_type, $payload_blob, $downloaded_at_utc)

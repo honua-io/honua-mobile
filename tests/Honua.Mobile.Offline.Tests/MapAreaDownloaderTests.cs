@@ -217,6 +217,69 @@ public sealed class MapAreaDownloaderTests : IDisposable
         Assert.Contains("exceeds configured max", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task DownloadAsync_FailedRefreshPreservesExistingPackage()
+    {
+        var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = Path.Combine(_rootDirectory, "sync-store.gpkg"),
+        });
+
+        var refreshing = false;
+        using var client = new HttpClient(new StubHttpMessageHandler((request, _) =>
+        {
+            if (refreshing && request.RequestUri!.AbsolutePath == "/roads")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(refreshing ? "new layer" : "original layer"),
+            });
+        }));
+
+        var downloader = new MapAreaDownloader(client, store);
+        var request = new MapAreaDownloadRequest
+        {
+            AreaId = "oahu",
+            Name = "Original",
+            BoundingBox = new BoundingBox(-158.30, 21.20, -157.60, 21.60),
+            OutputDirectory = Path.Combine(_rootDirectory, "packages"),
+            MinZoom = 10,
+            MaxZoom = 15,
+            Layers =
+            [
+                new MapLayerDownloadSource
+                {
+                    LayerKey = "assets",
+                    SourceUrl = "https://tiles.honua.test/assets",
+                    Priority = 1,
+                    Required = true,
+                },
+                new MapLayerDownloadSource
+                {
+                    LayerKey = "roads",
+                    SourceUrl = "https://tiles.honua.test/roads",
+                    Priority = 2,
+                    Required = true,
+                },
+            ],
+        };
+
+        var result = await downloader.DownloadAsync(request);
+        refreshing = true;
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            downloader.DownloadAsync(request));
+
+        Assert.Equal("Original", Assert.Single(await store.ListMapAreasAsync()).Name);
+        await using var connection = OpenSqliteConnection(result.GeoPackagePath);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CAST(payload_blob AS TEXT) FROM honua_layer_payloads WHERE layer_key = 'assets';";
+        Assert.Equal("original layer", await command.ExecuteScalarAsync());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_rootDirectory))

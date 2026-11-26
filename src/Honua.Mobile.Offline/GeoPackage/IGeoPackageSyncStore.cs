@@ -20,12 +20,17 @@ public interface IGeoPackageSyncStore
     Task InitializeAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Enqueues an offline edit operation for later upload. Upserts on <see cref="OfflineEditOperation.OperationId"/>.
+    /// Enqueues an offline edit operation for later upload. Resubmitting a queued ID with the same
+    /// target, edit type, and payload preserves its current state. A different edit requires a new ID.
     /// </summary>
     /// <param name="operation">The edit operation to enqueue.</param>
     /// <param name="ct">Cancellation token.</param>
     Task EnqueueAsync(OfflineEditOperation operation, CancellationToken ct = default);
 
+    /// <summary>
+    /// Atomically stores a cached feature and enqueues its edit. Resubmitting the same queued
+    /// edit preserves the currently cached feature.
+    /// </summary>
     Task UpsertFeatureAndEnqueueAsync(OfflineEditOperation operation, string featureJson, CancellationToken ct = default)
         => throw new NotSupportedException("This GeoPackage sync store does not support atomic feature and queue writes.");
 

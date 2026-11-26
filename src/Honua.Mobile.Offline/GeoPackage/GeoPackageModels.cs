@@ -41,7 +41,7 @@ public sealed class GeoPackageSyncStoreOptions
         new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
 
     /// <summary>
-    /// Clock used for TTL calculation. Defaults to <see cref="TimeProvider.System"/>.
+    /// Clock used for feature TTL and queue claim leases. Defaults to <see cref="TimeProvider.System"/>.
     /// </summary>
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 }

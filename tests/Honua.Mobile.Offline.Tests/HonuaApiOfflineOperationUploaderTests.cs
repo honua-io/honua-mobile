@@ -475,6 +475,116 @@ public sealed class HonuaApiOfflineOperationUploaderTests
         Assert.Contains(operation.OperationId, capturedKeys[0]!, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task InterruptedUpload_ReclaimsEncryptedQueueAndReplaysServerResult()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"honua-crash-replay-{Guid.NewGuid():N}.gpkg");
+        var clock = new TestTimeProvider();
+        var options = new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = databasePath,
+            EncryptionKey = "test-only-crash-replay-key",
+            InProgressLeaseTimeout = TimeSpan.FromMinutes(5),
+            TimeProvider = clock,
+        };
+        var operation = new OfflineEditOperation
+        {
+            OperationId = "offline-capture-42",
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+            {"protocol":"FeatureServer","serviceId":"default","layerId":0,"feature":{"attributes":{"asset_name":"Offline asset"}}}
+            """,
+        };
+        var serverResults = new Dictionary<string, string>();
+        var requestCount = 0;
+        var uploader = CreateUploader((request, _) =>
+        {
+            requestCount++;
+            var key = Assert.Single(request.Headers.GetValues("Idempotency-Key"));
+            if (!serverResults.TryGetValue(key, out var result))
+            {
+                var serverObjectId = serverResults.Count + 42;
+                result = $$"""{"addResults":[{"success":true,"objectId":{{serverObjectId}}}]}""";
+                serverResults.Add(key, result);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(result, Encoding.UTF8, "application/json"),
+            };
+        });
+
+        try
+        {
+            var store = new GeoPackageSyncStore(options);
+            await store.InitializeAsync();
+            const string cachedFeature = """{"attributes":{"OBJECTID":-1,"asset_name":"Offline asset"}}""";
+            await store.UpsertFeatureAndEnqueueAsync(operation, cachedFeature);
+            var claimed = Assert.Single(await store.GetPendingAsync(1));
+            var serverResult = await uploader.UploadAsync(claimed, forceWrite: false);
+            Assert.Equal(UploadOutcome.Success, serverResult.Outcome);
+            Assert.Equal(["42"], serverResult.ServerFeatureIds);
+
+            // The first process stops after the remote commit and before saving its acknowledgement.
+            var reopened = new GeoPackageSyncStore(options);
+            var engine = new OfflineSyncEngine(reopened, uploader);
+            Assert.Equal(cachedFeature, Assert.Single(await reopened.GetFeaturesAsync("assets")));
+            Assert.Null(await reopened.GetUploadAcknowledgementAsync(operation.OperationId));
+            Assert.Equal(0, (await engine.SyncAsync()).Loaded);
+            Assert.Equal(1, requestCount);
+
+            clock.UtcNow += TimeSpan.FromMinutes(6);
+            Assert.Equal(1, (await engine.SyncAsync()).Succeeded);
+            Assert.Equal(2, requestCount);
+            Assert.Single(serverResults);
+
+            var recovered = new GeoPackageSyncStore(options);
+            Assert.Equal(["42"], (await recovered.GetUploadAcknowledgementAsync(operation.OperationId))!.ServerFeatureIds);
+            Assert.Equal(0, (await new OfflineSyncEngine(recovered, uploader).SyncAsync()).Loaded);
+            Assert.Equal(2, requestCount);
+        }
+        finally
+        {
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                File.Delete(databasePath + suffix);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task UploadAsync_FeatureServerIdempotencyReservationContention_ReturnsRetryableFailure()
+    {
+        var uploader = CreateUploader((_, _) => new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent("""
+                {"error":{"code":409,"message":"A concurrent request with the same Idempotency-Key is already being processed. Retry after a brief delay."}}
+                """, Encoding.UTF8, "application/json"),
+        });
+        var operation = new OfflineEditOperation
+        {
+            LayerKey = "assets",
+            TargetCollection = "assets",
+            OperationType = OfflineOperationType.Add,
+            PayloadJson = """
+                {"protocol":"FeatureServer","serviceId":"default","layerId":0,"feature":{"attributes":{"asset_id":"A-1"}}}
+                """,
+        };
+
+        var result = await uploader.UploadAsync(operation, forceWrite: false);
+
+        Assert.Equal(UploadOutcome.RetryableFailure, result.Outcome);
+    }
+
+    private sealed class TestTimeProvider : TimeProvider
+    {
+        public DateTimeOffset UtcNow { get; set; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+    }
+
     private static HonuaApiOfflineOperationUploader CreateUploader(Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)
     {
         var client = new HonuaMobileClient(

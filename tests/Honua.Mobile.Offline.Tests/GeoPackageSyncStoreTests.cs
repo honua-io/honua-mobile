@@ -97,7 +97,7 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task UpsertFeatureAndEnqueueAsync_QueueFailureRollsBackFeatureAndSpatialIndex()
+    public async Task UpsertFeatureAndEnqueueAsync_FeatureFailureRollsBackQueueAndPreservesSpatialIndex()
     {
         var store = CreateStore();
         await store.InitializeAsync();
@@ -105,8 +105,8 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         const string edited = """{"attributes":{"OBJECTID":42},"geometry":{"x":10,"y":20}}""";
         await store.UpsertFeatureAsync("assets", original);
         await ExecuteNonQueryAsync("""
-            CREATE TRIGGER reject_queue_insert BEFORE INSERT ON honua_sync_queue
-            BEGIN SELECT RAISE(ABORT, 'simulated queue write failure'); END;
+            CREATE TRIGGER reject_feature_write BEFORE UPDATE ON honua_features
+            BEGIN SELECT RAISE(ABORT, 'simulated feature write failure'); END;
             """);
 
         await Assert.ThrowsAsync<GeoPackageStorageException>(() => store.UpsertFeatureAndEnqueueAsync(
@@ -124,6 +124,36 @@ public sealed class GeoPackageSyncStoreTests : IDisposable
         Assert.Single(await reopened.GetFeaturesAsync("assets", new BoundingBox(0, 0, 3, 3)));
         Assert.Empty(await reopened.GetFeaturesAsync("assets", new BoundingBox(9, 19, 11, 21)));
         Assert.Equal(0, await reopened.CountPendingAsync());
+    }
+
+    [Fact]
+    public async Task Reenqueue_PreservesClaimAndNewerCachedFeature()
+    {
+        var store = CreateStore();
+        await store.InitializeAsync();
+        var original = CreateQueuedOperation("original-42");
+        const string originalFeature = """{"attributes":{"OBJECTID":42,"name":"original"}}""";
+        const string newerFeature = """{"attributes":{"OBJECTID":42,"name":"newer"}}""";
+        await store.UpsertFeatureAndEnqueueAsync(original, originalFeature);
+        Assert.Equal(original.OperationId, Assert.Single(await store.GetPendingAsync(1)).OperationId);
+        await store.UpsertFeatureAndEnqueueAsync(CreateQueuedOperation("newer-42"), newerFeature);
+
+        var reopened = CreateStore();
+        await reopened.EnqueueAsync(original);
+        await reopened.UpsertFeatureAndEnqueueAsync(original, originalFeature);
+        var changed = new OfflineEditOperation
+        {
+            OperationId = original.OperationId,
+            LayerKey = original.LayerKey,
+            TargetCollection = original.TargetCollection,
+            OperationType = original.OperationType,
+            PayloadJson = """{"changed":true}""",
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reopened.EnqueueAsync(changed));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reopened.UpsertFeatureAndEnqueueAsync(changed, originalFeature));
+        Assert.Equal(newerFeature, Assert.Single(await reopened.GetFeaturesAsync("assets")));
+        Assert.Equal("newer-42", Assert.Single(await reopened.GetPendingAsync(10)).OperationId);
     }
 
     [Fact]

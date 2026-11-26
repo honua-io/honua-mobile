@@ -70,6 +70,17 @@ public sealed class HonuaApiOfflineOperationUploader : IOfflineOperationUploader
         {
             return new UploadResult { Outcome = UploadOutcome.FatalFailure, Message = $"Invalid offline payload: {ex.Message}" };
         }
+        catch (HonuaMobileApiException ex) when (
+            ex.StatusCode == HttpStatusCode.Conflict &&
+            ex.ResponseBody?.Contains("A concurrent request with the same Idempotency-Key is already being processed.",
+                StringComparison.Ordinal) == true)
+        {
+            return new UploadResult
+            {
+                Outcome = UploadOutcome.RetryableFailure,
+                Message = "A previous upload attempt is still being processed. Retry the same edit.",
+            };
+        }
         catch (HonuaMobileApiException ex)
         {
             return FromStatusCode(ex.StatusCode, ex.Message);

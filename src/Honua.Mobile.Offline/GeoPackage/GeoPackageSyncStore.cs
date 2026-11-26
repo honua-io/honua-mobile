@@ -251,24 +251,14 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         }
     }
 
-    private static async Task EnqueueCoreAsync(SqliteConnection connection, OfflineEditOperation operation, CancellationToken ct)
+    private static async Task<bool> EnqueueCoreAsync(SqliteConnection connection, OfflineEditOperation operation, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
         await RejectAcknowledgedOperationAsync(connection, operation.OperationId, ct).ConfigureAwait(false);
         command.CommandText = @"
 INSERT INTO honua_sync_queue (operation_id, layer_key, target_collection, operation_type, payload_json, priority, created_at_utc, claimed_at_utc, attempt_count, status)
 VALUES ($operation_id, $layer_key, $target_collection, $operation_type, $payload_json, $priority, $created_at_utc, NULL, $attempt_count, 'pending')
-ON CONFLICT(operation_id) DO UPDATE SET
-  layer_key = excluded.layer_key,
-  target_collection = excluded.target_collection,
-  operation_type = excluded.operation_type,
-  payload_json = excluded.payload_json,
-  priority = excluded.priority,
-  created_at_utc = excluded.created_at_utc,
-  claimed_at_utc = NULL,
-  attempt_count = excluded.attempt_count,
-  status = 'pending',
-  last_error = NULL;
+ON CONFLICT(operation_id) DO NOTHING;
 ";
 
         command.Parameters.AddWithValue("$operation_id", operation.OperationId);
@@ -280,7 +270,29 @@ ON CONFLICT(operation_id) DO UPDATE SET
         command.Parameters.AddWithValue("$created_at_utc", operation.CreatedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$attempt_count", operation.AttemptCount);
 
-        await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        if (await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1)
+        {
+            return true;
+        }
+
+        command.CommandText = @"
+SELECT EXISTS (
+    SELECT 1 FROM honua_sync_queue
+    WHERE operation_id = $operation_id
+      AND layer_key = $layer_key
+      AND target_collection = $target_collection
+      AND operation_type = $operation_type
+      AND payload_json = $payload_json
+);";
+        command.Parameters.RemoveAt("$priority");
+        command.Parameters.RemoveAt("$created_at_utc");
+        command.Parameters.RemoveAt("$attempt_count");
+        if (await command.ExecuteScalarAsync(ct).ConfigureAwait(false) is not 1L)
+        {
+            throw new InvalidOperationException("An offline edit operation ID cannot be reused for a different edit.");
+        }
+
+        return false;
     }
 
     /// <inheritdoc />
@@ -316,7 +328,8 @@ ON CONFLICT(operation_id) DO UPDATE SET
             var leaseTimeout = _options.InProgressLeaseTimeout < TimeSpan.Zero
                 ? TimeSpan.Zero
                 : _options.InProgressLeaseTimeout;
-            var staleClaimCutoffUtc = DateTimeOffset.UtcNow - leaseTimeout;
+            var claimedAtUtc = _options.TimeProvider.GetUtcNow();
+            var staleClaimCutoffUtc = claimedAtUtc - leaseTimeout;
             var claimedOperationIds = await ReadPendingOperationIdsAsync(
                 connection,
                 maxCount,
@@ -339,7 +352,7 @@ SET status = 'in_progress',
 WHERE status IN ('pending', 'retry', 'in_progress')
   AND operation_id IN ({idParameters});
 ";
-                claimCommand.Parameters.AddWithValue("$claimed_at_utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                claimCommand.Parameters.AddWithValue("$claimed_at_utc", claimedAtUtc.ToString("O", CultureInfo.InvariantCulture));
 
                 await claimCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
@@ -757,10 +770,9 @@ LIMIT 1;
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
         try
         {
-            await WriteFeatureCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
-            if (operation is not null)
+            if (operation is null || await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false))
             {
-                await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false);
+                await WriteFeatureCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
             }
 
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
