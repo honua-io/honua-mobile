@@ -223,18 +223,29 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
         await InitializeUploadResultsAsync(connection, ct).ConfigureAwait(false);
 
         await ExecuteTransactionCommandAsync(connection, "BEGIN IMMEDIATE;", ct).ConfigureAwait(false);
+        bool queueUpgraded;
         try
         {
-            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
-            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claim_token", "TEXT", ct).ConfigureAwait(false);
-            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_id", "TEXT", ct).ConfigureAwait(false);
-            await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_base_generation", "INTEGER", ct).ConfigureAwait(false);
+            queueUpgraded = await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claimed_at_utc", "TEXT", ct).ConfigureAwait(false);
+            queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "claim_token", "TEXT", ct).ConfigureAwait(false);
+            queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_id", "TEXT", ct).ConfigureAwait(false);
+            queueUpgraded |= await EnsureColumnExistsAsync(connection, "honua_sync_queue", "replica_base_generation", "INTEGER", ct).ConfigureAwait(false);
+            if (queueUpgraded)
+            {
+                MobileStorageTelemetry.RecordCheckpoint("queue_schema_before_commit");
+            }
+
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
         }
         catch
         {
             await RollbackQuietlyAsync(connection).ConfigureAwait(false);
             throw;
+        }
+
+        if (queueUpgraded)
+        {
+            MobileStorageTelemetry.RecordCheckpoint("queue_schema_committed");
         }
 
         await EnsureColumnExistsAsync(
@@ -411,6 +422,7 @@ ORDER BY priority ASC, created_at_utc ASC;
             }
 
             await ExecuteTransactionCommandAsync(connection, "COMMIT;", ct).ConfigureAwait(false);
+            MobileStorageTelemetry.RecordCheckpoint("queue_lease_committed");
             return items;
         }
         catch
@@ -836,6 +848,11 @@ LIMIT 1;
         {
             if (operation is null || await EnqueueCoreAsync(connection, operation, ct).ConfigureAwait(false))
             {
+                if (operation is not null)
+                {
+                    MobileStorageTelemetry.RecordCheckpoint("edit_enqueued_before_cache_write");
+                }
+
                 await WriteFeatureCoreAsync(connection, layerKey, feature, featureJson, expiresAtUtc, ct).ConfigureAwait(false);
             }
 
@@ -2401,7 +2418,7 @@ LIMIT $limit;
         }
     }
 
-    private static async Task EnsureColumnExistsAsync(
+    private static async Task<bool> EnsureColumnExistsAsync(
         SqliteConnection connection,
         string tableName,
         string columnName,
@@ -2419,13 +2436,14 @@ LIMIT $limit;
         {
             if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return false;
             }
         }
 
         await using var alterCommand = connection.CreateCommand();
         alterCommand.CommandText = $"ALTER TABLE \"{tableName}\" ADD COLUMN \"{columnName}\" {columnDefinition};";
         await alterCommand.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     private SqliteConnection OpenConnection()

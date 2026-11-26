@@ -53,6 +53,11 @@ FROM honua_sync_queue WHERE operation_id = $operation_id
         }
 
         await DeleteQueuedOperationAsync(transaction, operationId, ct).ConfigureAwait(false);
+        if (inserted != 0)
+        {
+            MobileStorageTelemetry.RecordCheckpoint("upload_acknowledgement_before_commit");
+        }
+
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return true;
     }

@@ -35,3 +35,31 @@ this store in Honua Field and removing the duplicate store, run on Android and i
 
 Record installable build locations and the journey results with the paired Honua Field
 change. Desktop success does not establish native provider or key-store behavior.
+
+## Interruption checkpoints
+
+An isolated test harness can subscribe to the `Honua.Mobile.Storage` activity
+source, sample the `honua.mobile.storage.checkpoint.` activities, and terminate
+its test process when the target activity stops. The checkpoint activities
+carry no tags or payloads. Enable the crash listener only in test hosts.
+
+| Checkpoint suffix | Storage boundary |
+| --- | --- |
+| `queue_schema_before_commit` | Queue schema columns were added inside the upgrade transaction. |
+| `queue_schema_committed` | The queue schema upgrade transaction committed. |
+| `edit_enqueued_before_cache_write` | A new edit was staged in the journal. The cache write and commit are still pending. |
+| `queue_lease_committed` | A nonempty lease committed, before the store returns the claimed edits to the uploader. |
+| `upload_acknowledgement_before_commit` | After upload success, the receipt and queue deletion were staged in one transaction. |
+
+Run the host-side SQLCipher interruption suite with:
+
+```bash
+dotnet test tests/Honua.Mobile.Offline.Tests/Honua.Mobile.Offline.Tests.csproj --filter FullyQualifiedName~EncryptedStoreProcessDeathTests
+```
+
+The suite kills a separate .NET test process, reopens the keyed GeoPackage,
+and checks that partial writes roll back, committed upgrades survive, expired
+leases are recoverable, and replay preserves the original operation and its
+server-issued ID. The upload cases use a durable test fixture for remote
+acceptance. Installed-app migration and the live server's idempotency contract
+require their own device and server evidence.

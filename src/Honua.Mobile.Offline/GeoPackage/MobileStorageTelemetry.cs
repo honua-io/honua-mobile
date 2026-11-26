@@ -28,6 +28,14 @@ public static class MobileStorageTelemetry
     /// </summary>
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName);
 
+    internal static void RecordCheckpoint(string name)
+    {
+        if (ActivitySource.HasListeners())
+        {
+            using var activity = ActivitySource.StartActivity("honua.mobile.storage.checkpoint." + name);
+        }
+    }
+
     private static readonly Meter Meter = new(MeterName);
     private static readonly Counter<long> Queries = Meter.CreateCounter<long>(
         "mobile_storage_queries_total",
