@@ -108,6 +108,16 @@ source and package versions were as follows.
 - Honua Server image revision `83127df70c06d4162fcc11b8d95a8ab466be49e2`,
   digest `sha256:a084fefa14fd38884c1b12510498d6844f7555f9f29370e037db295a07959613`.
 
+On an Android API 33 emulator, the standalone Debug platform smoke at Mobile
+`01ff0b3` exceeded its 1,000 ms first-feature-query limit on two cold starts
+(1,333 ms and 1,471 ms). Honua Server returned HTTP 200 with one feature on
+each request and logged 296 ms and 71 ms of request processing. A separate
+instrumented build queried the same layer twice in one process. The first call
+took 2,403 ms and the second took 363 ms. Time from response headers to the
+SDK returning the feature was approximately 1,416 ms and 71 ms respectively.
+The trace includes reading the body, decoding and scheduling in that interval.
+A physical-device profile with separate timings for those steps is still needed.
+
 A separate local two-store run passed with the typed uploader in a scratch
 Mobile checkout based on `61929eee36ff0b2ef76582808c68fa2831eab213` and
 locally packed SDK `1.10.1-replica.final`. Against Honua Server, it exercised
@@ -147,8 +157,8 @@ validate harness configuration; `HonuaNativeDisplayTests.cs` and
 `HonuaDeviceLocationTests.cs` (12) cover native display and device
 location boundaries; `SdkBackedOfflineFieldOperationsDemoHarnessTests.cs` (2),
 `SdkOfflineRegistrationTests.cs`, `MapAreaDownloaderTests.cs` (4)
-cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
-18) is run by the `quality-gates` job.
+cover registration and map-area download. The `quality-gates` job runs
+`Honua.Mobile.Smoke.Tests` (24 passing test cases on this branch).
 
 ### Count of N/A cells in the capability matrix
 
@@ -224,7 +234,7 @@ The relevant workflows under `.github/workflows/`:
     with `TreatWarningsAsErrors`, plus
     `npm run build` for the embed package; runs `dotnet format` checks.
   - `test` -- runs the 5 unit projects plus the
-    `Honua.Mobile.ServerIntegration.Tests` project; the 11
+    `Honua.Mobile.ServerIntegration.Tests` project; the 12
     `LiveHonuaServerInteractionTests` report as **Skipped**
     (`Xunit.SkippableFact`) here because `HONUA_MOBILE_LIVE_SERVER_TESTS`
     is unset on the unit-test job. They run for real (and as a hard gate)
@@ -239,8 +249,8 @@ The relevant workflows under `.github/workflows/`:
     integration step.
   - `security` -- Trivy filesystem scan plus CodeQL on the three core
     library projects.
-  - `quality-gates` -- runs `Honua.Mobile.Smoke.Tests` and
-    validates assembly-size budgets against
+  - `quality-gates` runs the Android map frame parser fixtures,
+    executes `Honua.Mobile.Smoke.Tests` and validates assembly-size budgets against
     `quality/performance-budget.json`.
   - `ci-gate` -- aggregates the above; required for merge.
 - `cloud-acceptance.yml` -- `workflow_dispatch` only. Runs
