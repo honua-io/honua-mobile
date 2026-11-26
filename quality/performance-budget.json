@@ -19,6 +19,16 @@
       "warning": 500,
       "error": 2000,
       "description": "Feature query returning 100 results"
+    },
+    "android_map_panning_p95_ms": {
+      "warning": 32,
+      "error": 50,
+      "description": "Android app p95 frame render time during ten map pan gestures"
+    },
+    "android_map_panning_jank_percent": {
+      "warning": 10,
+      "error": 20,
+      "description": "Android app janky frame percentage during ten map pan gestures"
     }
   }
 }

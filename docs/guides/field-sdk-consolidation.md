@@ -59,3 +59,20 @@ build location. Run this journey on the founder's Android and iOS phones:
 
 Keep the device results with the paired build. Unit-test success alone does not
 mark this install journey or the remaining M1 acceptance complete.
+
+## Android map pan gate
+
+Install Honua Field on the target Android device, open the populated map and let
+its initial layers finish loading. Keep the map visible and use two points
+inside the viewport for the gesture. With the selected device available through
+`adb`, run the following command with the device's screen coordinates.
+
+```bash
+scripts/check-android-map-panning.sh 220 540 780 540
+```
+
+Ten swipes are sent across the viewport. The script requires at least 60 rendered
+frames and checks Android's app-level p95 frame time and jank percentage against
+`quality/performance-budget.json`. Save the JSON output with the APK version,
+Android model and OS, map fixture, and chosen coordinates. Run again for both
+connected and downloaded offline maps.
