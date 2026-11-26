@@ -38,6 +38,9 @@ done
 stats="$(mktemp)"
 trap 'rm -f "$stats"' EXIT
 adb shell dumpsys gfxinfo "$package" > "$stats"
+if [[ -n ${HONUA_MAP_GFXINFO_PATH:-} ]]; then
+  cp -- "$stats" "$HONUA_MAP_GFXINFO_PATH"
+fi
 python3 - "$stats" "$root/quality/performance-budget.json" "$package" "$version_code" "$version_name" \
   "$build_fingerprint" "${HONUA_MAP_FIXTURE:-}" "$@" <<'PY'
 import json
@@ -46,6 +49,16 @@ import sys
 from pathlib import Path
 
 stats = Path(sys.argv[1]).read_text()
+process_headers = list(re.finditer(
+    r"^\*\* Graphics info for pid \d+ \[([^\]\r\n]+)\] \*\*[ \t]*\r?$", stats, re.MULTILINE
+))
+main_processes = [(index, header) for index, header in enumerate(process_headers) if header[1] == sys.argv[3]]
+if len(main_processes) != 1:
+    sys.exit("Expected exactly one Android frame statistics section for the main Honua Field process.")
+index, main_process = main_processes[0]
+end = process_headers[index + 1].start() if index + 1 < len(process_headers) else len(stats)
+stats = stats[main_process.end():end]
+
 budgets = json.loads(Path(sys.argv[2]).read_text())["budgets"]
 fields = {
     "frames": r"^Total frames rendered:\s*(\d+)",

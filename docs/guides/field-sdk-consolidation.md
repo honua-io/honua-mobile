@@ -69,7 +69,8 @@ screen pixel positions on the target device. Perform one trial swipe and verify
 that it moves the map before starting the measurement.
 
 ```bash
-HONUA_MAP_FIXTURE=offline-work-area-v1 scripts/check-android-map-panning.sh \
+HONUA_MAP_FIXTURE=offline-work-area-v1 HONUA_MAP_GFXINFO_PATH=pan-gfxinfo.txt \
+  scripts/check-android-map-panning.sh \
   "$start_x" "$start_y" "$end_x" "$end_y" > pan.json
 ```
 
@@ -79,5 +80,5 @@ percentage against `quality/performance-budget.json`. App-level frame counts
 include other UI drawing, so verify the map actually moves during the swipes.
 The JSON records the installed APK version, Android build fingerprint, gesture
 coordinates and fixture label. Set `HONUA_MAP_FIXTURE` to identify the actual
-dataset and connectivity mode. Keep the report and a screenshot of the
-populated viewport for each run on a connected or downloaded offline map.
+dataset and connectivity mode. Use `HONUA_MAP_GFXINFO_PATH` to keep the raw histogram and jank counters. Keep the
+report and a screenshot of the populated viewport for each run on a connected or downloaded offline map.
