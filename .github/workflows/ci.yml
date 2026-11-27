@@ -524,7 +524,7 @@ jobs:
         run: |
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             -p:TargetFramework=net11.0-ios \
-            '-p:RuntimeIdentifiers=iossimulator-arm64;ios-arm64'
+            '-p:RuntimeIdentifiers="iossimulator-arm64;ios-arm64"'
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj
 
