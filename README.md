@@ -49,6 +49,11 @@ Windows). Platform-neutral client logic comes from the
 packages, pinned as a single release train in
 [`Directory.Build.props`](Directory.Build.props).
 
+Honua Field, the separately shipped collection app, uses .NET 11. To build
+the SDK or its reference apps, use this repository’s .NET 10 pin. To build
+Field, use the SDK and MAUI workload versions pinned in the Field repository.
+[Mobile SDK build pin](global.json) · [Field build pin](https://github.com/honua-io/honua-field/blob/trunk/global.json)
+
 ## Quick Start
 
 ```csharp
