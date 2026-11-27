@@ -186,9 +186,9 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Integration (in-process loopback) | ✅ | every PR | `Honua.Mobile.ServerIntegration.Tests` against a real ASP.NET Core loopback server |
 | Smoke | ✅ | every PR | `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
-| Live server (Docker image) | ✅ | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
+| Live server (Docker image) | Required | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Physical device | 🟡 | deferred to GA | Honua Field owns installed Android and iPhone acceptance. Emulator and simulator checks have separate results. |
+| Physical device | Partial | Field acceptance runs | Field verified an in-place upgrade on a Pixel 8. Physical iPhone acceptance is pending. |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See

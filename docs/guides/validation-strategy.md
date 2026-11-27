@@ -48,6 +48,7 @@ and most reliable inward to most expensive and most operationally gated:
   so the suite is now a hard gate on PRs -- a failing live test blocks the
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
+  On November 27, 2026, the assigned-work branch passed 10 of 11 live tests with its pinned packages. The per-replica synchronization test needs the shared SDK to send the server generation. All 11 passed with the .NET 10 candidate package `1.10.1-net10replica.1` against the seeded Server and PostGIS. The hosted gate still requires a published fix and a passing run with that pin. [Hosted live run](https://github.com/honua-io/honua-mobile/actions/runs/46040127785/job/140645553744) · [Shared SDK fix](https://github.com/honua-io/honua-sdk-dotnet/pull/598)
 - **Cloud acceptance** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
