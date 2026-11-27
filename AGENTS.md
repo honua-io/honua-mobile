@@ -20,17 +20,17 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
   target `net11.0` and build on any platform without the MAUI workload.
 - **.NET MAUI** `11.0.10` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
   Android SDK; iOS targets need macOS + Xcode.
-- **Honua .NET SDK** `5.1.0` train (`Honua.Sdk.*`), pinned in
-  `Directory.Build.props`. Restored from NuGet.org.
+- **Honua .NET SDK** (`Honua.Sdk.*`) uses the version pinned in
+  `Directory.Build.props` and restores from nuget.org.
 - **TypeScript / Vite / Vitest** — `src/Honua.Embed` (`@honua-io/embed`), with
   Cesium, MapLibre, deck.gl; React/Vue/Angular wrappers.
 - gRPC + Protobuf for transport; GeoPackage/SQLite for offline storage.
 
 ## Setup
 
-Restore `Honua.Sdk.*` from NuGet.org. Access to the Honua GitHub Packages
-feed (`github-honua` in `NuGet.config`) is only needed to consume private
-`Honua.Mobile.*` packages.
+The core solution restores the shared SDK from nuget.org. Consumers of
+private `Honua.Mobile.*` packages need read access to the `github-honua` source
+listed in `NuGet.config`.
 
 ## Commands
 
@@ -85,7 +85,7 @@ is GeoPackage-backed with a queue-based, connectivity-aware sync engine
 (ClientWins/ServerWins/ManualReview conflict strategies, delta/replica sync).
 
 Wiring is via DI extension methods (e.g. `AddHonuaMobileSdk`,
-`AddHonuaGeoPackageOfflineSync`, `AddHonuaBackgroundSync`,
+`AddHonuaSdkGeoPackageOfflineSync`, `AddHonuaBackgroundSync`,
 `AddHonuaMobileFieldCollection`) — see `README.md` Quick Start.
 
 ## Directory Layout
@@ -104,7 +104,7 @@ templates/  examples/    Field collector template and sample apps
 scripts/    quality/      Validation/release scripts, store-prereq validators, release checklists
 docs/       contracts/    Guides (validation-strategy, offline-sync, sdk-contract-stability), proto/contracts
 Directory.Build.props    SDK train version + MauiVersion pins (shared MSBuild props)
-NuGet.config             Package sources + source mapping (Honua.Mobile.* -> github-honua feed)
+NuGet.config             Package sources + source mapping (Honua.Sdk.* from nuget.org, Honua.Mobile.* from github-honua)
 .github/workflows/       CI (ci.yml, pr-validation.yml), live-server-integration, publish, store dist
 ```
 
@@ -117,9 +117,11 @@ packages; see `docs/guides/field-runtime-scope.md`.
   behavior. Before adding code here, check `honua-sdk-dotnet` first:
   - **Belongs here:** MAUI registration/DI glue, app lifecycle, native storage
     (GeoPackage/SQLite placement & lifecycle), background sync scheduling,
-    reachability, permissions, camera/GPS/sensors, field workflow screens &
-    capture UX, native map UI, the `@honua/embed` viewer package, and thin
-    adapters that translate SDK contracts into mobile runtime behavior.
+    reachability, permissions, camera/GPS/sensors, reusable native map and
+    capture integrations, the `@honua/embed` viewer package, and adapters
+    that translate SDK contracts into mobile runtime behavior.
+  - **Honua Field** owns the product’s capture screens, draft and outbox
+    presentation, conflict choices, and phone/tablet layouts.
   - **Does NOT belong here:** new plain `net*` server API clients, provider-
     neutral query/edit/gRPC/OGC/routing/geocoding/catalog/admin/stream/replica
     contracts, scene metadata models, field form schemas/validation engines,

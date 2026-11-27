@@ -15,7 +15,7 @@ for embedding Honua maps and scenes.
 
 This repo is the **SDK** (libraries, reference apps, templates). If you want a
 ready-made field data collection **app** built on this SDK, see
-[honua-collect](https://github.com/honua-io/honua-collect).
+[Honua Field](https://github.com/honua-io/honua-field).
 
 ## Status
 
@@ -55,8 +55,29 @@ packages, pinned as a single release train in
 // In MauiProgram.cs
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
-using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
+var manifest = new OfflinePackageManifest
+{
+    PackageId = "field-sites",
+    DisplayName = "Field sites",
+    Version = "1",
+    Sources =
+    [
+        new OfflineSourceDescriptor
+        {
+            SourceId = "mobile_offline_demo/FeatureServer/68910",
+            Source = new SourceDescriptor
+            {
+                Id = "field-sites",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+            },
+        },
+    ],
+};
 
 builder.Services
     .AddHonuaMobilePlatformAuth()
@@ -67,21 +88,28 @@ builder.Services
         PreferGrpcForFeatureQueries = true,
     })
     .AddHonuaScenes()
-    .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
-    .AddHonuaGeoPackageOfflineSync(
+    .AddHonuaSdkGeoPackageOfflineSync(
         new GeoPackageSyncStoreOptions
         {
             DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-offline.gpkg"),
         },
-        new OfflineSyncEngineOptions
+        manifest,
+        new Honua.Sdk.Offline.OfflineSyncEngineOptions
         {
-            ConflictStrategy = SyncConflictStrategy.ClientWins,
+            ConflictStrategy = OfflineConflictStrategy.ManualReview,
             BatchSize = 50,
         })
     .AddHonuaMapAreaDownload()
     .AddHonuaBackgroundSync();
 ```
+
+Set the service and layer IDs to a layer on your server. The public
+`Honua.Sdk.Offline` package supplies the sync engine. Mobile persists its
+journal, features and checkpoints in the device’s GeoPackage and schedules sync.
+The app must select one native SQLite provider. See the
+[provider setup](docs/getting-started/installation.md#select-one-sqlite-provider) and
+the [reference app](apps/Honua.Mobile.App/MauiProgram.cs) for a two-layer manifest.
 
 After sign-in or bootstrap, store the API key or bearer token with `IAuthTokenProvider.StoreTokenAsync(...)`;
 the platform auth registration persists it in iOS Keychain or Android secure storage.
@@ -186,7 +214,7 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | ✅ | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Physical device | 🟡 | deferred to GA | Collect owns installed Android/iPhone acceptance; emulator/simulator smoke is separate evidence |
+| Physical device | 🟡 | deferred to GA | Honua Field owns installed Android/iPhone acceptance; emulator/simulator smoke is separate evidence |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See
@@ -218,8 +246,11 @@ docs/                         Getting started, guides, feature map, API referenc
 
 ## Building
 
-The shared `Honua.Sdk.*` dependencies restore from NuGet.org. Run the local
-validation baseline:
+Mobile restores the pinned `Honua.Sdk.*` packages from nuget.org. The
+`github-honua` feed is mapped to `Honua.Mobile.*` for consumers of private
+Mobile packages. See the [package source mapping](NuGet.config).
+
+Run the local validation baseline:
 
 ```bash
 scripts/validate-local.sh
@@ -274,7 +305,7 @@ platform smoke guardrails are documented in
 | Repo | What it is |
 |------|------------|
 | [honua-server](https://github.com/honua-io/honua-server) | Flagship multi-protocol geospatial server this SDK talks to |
-| [honua-collect](https://github.com/honua-io/honua-collect) | Offline-first field data collection app built on this SDK |
+| [Honua Field](https://github.com/honua-io/honua-field) | Offline-first field data collection app built on this SDK |
 | [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) | Platform-neutral `Honua.Sdk.*` .NET packages this repo consumes |
 | [honua-sdk-js](https://github.com/honua-io/honua-sdk-js) | JavaScript/TypeScript SDKs + MCP server |
 | [honua-console](https://github.com/honua-io/honua-console) | Unified web console (Studio, Catalog, Operate, Share) |

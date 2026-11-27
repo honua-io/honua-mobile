@@ -11,35 +11,17 @@ the SDK to meet before it advances along that track.
 
 ## Current state
 
-honua-mobile pins the SDK release train as a single property:
+Mobile pins its `Honua.Sdk.*` dependencies together through
+`HonuaSdkDotNetTrainVersion` in [Directory.Build.props](../../Directory.Build.props).
+[NuGet.config](../../NuGet.config) resolves them from nuget.org, including
+[Honua.Sdk.Offline](https://www.nuget.org/packages/Honua.Sdk.Offline).
+The separately named `Honua.Mobile.*` packages use the Mobile feed mapping.
+The release provenance properties record a manually refreshed release and may
+lag the package version used for restore.
 
-- Pinned version: `5.1.0` (train packages published from `honua-sdk-dotnet`
-  to nuget.org, restorable anonymously, and mirrored to GitHub Packages;
-  `NuGet.config` resolves `Honua.Sdk.*` and `Geospatial.Grpc` from nuget.org). Note: the `<HonuaSdkDotNetTrainReleaseUrl>` /
-  `<HonuaSdkDotNetTrainReleaseCommit>` / `<HonuaSdkDotNetTrainReleasePublishedAt>`
-  provenance properties record the last manual refresh (currently the `1.0.0`
-  train run) and are not updated on routine version bumps — the authoritative
-  record for the pinned version is the GitHub Packages feed entry for
-  `<HonuaSdkDotNetTrainVersion>` itself.
-- Pin location: [`Directory.Build.props`](../../Directory.Build.props)
-  (`<HonuaSdkDotNetTrainVersion>`)
-- Release channel: `<HonuaSdkDotNetTrainTag>` (currently `trunk`)
-- Upstream repo: `honua-io/honua-sdk-dotnet` (`<HonuaSdkDotNetTrainRepository>`)
-- Cross-repo handshake fixture:
-  [`contracts/fixtures/mobile-sdk-contract-harmonization.v1.json`](../../contracts/fixtures/mobile-sdk-contract-harmonization.v1.json)
-
-Mobile pins the **train tag**: a single `HonuaSdkDotNetTrainVersion` property
-moves the whole package set together. There is no per-package floating range in
-the mobile repo today, and we intend to keep that invariant.
-
-During the alpha phase the SDK cycled through 17+ alpha bumps in a month
-(`0.1.1-alpha.1` through `0.1.17-alpha.1`; PR #187 consumed `0.1.17-alpha.1`
-and subsequent PRs, e.g. #190, continued that pin), and each alpha bump
-historically required a mobile-side refactor PR. The train has since moved to
-`1.x` version numbers (currently `1.3.0`). Note that a `1.x` version number
-alone does not mean the "stable" bar below has been met: mobile has not yet
-re-graded the train against the beta/stable exit criteria in this doc, and the
-packages still ship only to GitHub Packages (no public nuget.org release).
+The [cross-repository contract fixture](../../contracts/fixtures/mobile-sdk-contract-harmonization.v1.json)
+records the downstream expectations. The criteria below describe how Mobile
+assesses compatibility as the upstream SDK evolves.
 
 ## Package surface
 
@@ -48,13 +30,13 @@ packages (from `.csproj` files under `src/`, `apps/`, `tests/`):
 
 | Package | Purpose |
 | --- | --- |
-| `Honua.Sdk.Abstractions` | Interfaces and DTOs shared across SDK clients (feature, scene, routing, plugins). |
+| `Honua.Sdk.Abstractions` | Interfaces and DTOs shared across SDK clients, including `Honua.Sdk.Offline.Abstractions` contracts for feature storage, change journals, sync checkpoints, sync state, and offline package manifests. |
+| `Honua.Sdk.Geometry` | Shared geometry and spatial-reference operations used by the MAUI integration. |
 | `Honua.Sdk.Grpc` | gRPC transport and mobile-side request converters. |
 | `Honua.Sdk.GeoServices` | ArcGIS-compatible FeatureServer + routing client implementations. |
 | `Honua.Sdk.OgcFeatures` | OGC API Features client (models, conversion, exceptions). |
 | `Honua.Sdk.Scenes` | 3D scene client and scene-specific exceptions. |
 | `Honua.Sdk.Field` | Field forms (`FormDefinition`, `FormField`, `FormFieldType`) and `FieldRecord` types. |
-| `Honua.Sdk.Abstractions` | Also carries the `Honua.Sdk.Offline.Abstractions` namespace for offline sync interfaces and DTOs: `IOfflineChangeJournal`, `IOfflineFeatureStore`, `IOfflineSyncCheckpointStore`, `IOfflineSyncStateStore`, `OfflinePackageManifest`. |
 | `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, and concrete behavior built on the offline abstractions namespace. |
 
 Any of these package IDs disappearing, splitting further, or being renamed
