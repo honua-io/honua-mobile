@@ -52,7 +52,7 @@ and most reliable inward to most expensive and most operationally gated:
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- Collect owns the installed Android/iPhone journey.
+- **Physical device** -- Honua Field owns the installed Android/iPhone journey.
   Emulator/simulator platform smoke is separate evidence and does not prove
   physical-device acceptance.
 
@@ -101,7 +101,7 @@ cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 ### Count of N/A cells in the capability matrix
 
 Cells marked N/A remain unverified at that level. The retired duplicate app
-unit suite is no longer part of the evidence; Collect owns app workflow and
+unit suite is no longer part of the evidence; Honua Field owns app workflow and
 physical-device acceptance.
 
 ## 3. Gap Registry

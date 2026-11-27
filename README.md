@@ -15,7 +15,7 @@ for embedding Honua maps and scenes.
 
 This repo is the **SDK** (libraries, reference apps, templates). If you want a
 ready-made field data collection **app** built on this SDK, see
-[honua-collect](https://github.com/honua-io/honua-collect).
+[Honua Field](https://github.com/honua-io/honua-field).
 
 ## Status
 
@@ -106,6 +106,8 @@ GeoPackage-backed offline storage with queue-based sync:
 - **Delta sync** -- replica-based incremental downloads with cursor persistence
 - **Cache governance** -- per-layer TTL eviction and R-tree-backed bbox lookups for replicated features
 
+The opt-in .NET 11 assigned-work adapter caches a worker’s assignments and pinned form versions in the encrypted store. A worker can queue a transition or completion offline and recover its receipt after reconnecting. Building this adapter requires a version of `Honua.Sdk.Field` that includes `WorkTaskClient`. [Offline assigned work](docs/offline-assigned-work.md)
+
 See [docs/guides/offline-sync.md](docs/guides/offline-sync.md) and
 [encrypted offline storage](docs/guides/encrypted-offline-storage.md).
 
@@ -186,7 +188,7 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | ✅ | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Physical device | 🟡 | deferred to GA | Collect owns installed Android/iPhone acceptance; emulator/simulator smoke is separate evidence |
+| Physical device | 🟡 | deferred to GA | Honua Field owns installed Android and iPhone acceptance. Emulator and simulator checks have separate results. |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See
@@ -284,7 +286,7 @@ platform smoke guardrails are documented in
 | Repo | What it is |
 |------|------------|
 | [honua-server](https://github.com/honua-io/honua-server) | Flagship multi-protocol geospatial server this SDK talks to |
-| [honua-collect](https://github.com/honua-io/honua-collect) | Offline-first field data collection app built on this SDK |
+| [Honua Field](https://github.com/honua-io/honua-field) | Offline-first field data collection app built on this SDK |
 | [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) | Platform-neutral `Honua.Sdk.*` .NET packages this repo consumes |
 | [honua-sdk-js](https://github.com/honua-io/honua-sdk-js) | JavaScript/TypeScript SDKs + MCP server |
 | [honua-console](https://github.com/honua-io/honua-console) | Unified web console (Studio, Catalog, Operate, Share) |
