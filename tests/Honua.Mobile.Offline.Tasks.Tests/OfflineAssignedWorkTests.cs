@@ -45,7 +45,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
             ExpectedVersion = 3,
             Answers = JsonSerializer.SerializeToElement(new { condition = "private-observation" })
         });
-        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.ReplayAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
 
         adapter = await OpenAsync(http, Scope);
         Assert.Equal(AssignedCommandStatus.Pending, Assert.Single((await adapter.ReadAsync()).Commands).Status);
@@ -62,6 +62,51 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         Assert.Contains("private-observation", requests[1], StringComparison.Ordinal);
         Assert.False((await File.ReadAllBytesAsync(_path)).AsSpan().StartsWith("SQLite format 3"u8));
         Assert.Empty((await (await OpenAsync(http, Scope with { AccountSubject = "subject-2" })).ReadAsync()).Commands);
+    }
+
+    [Fact]
+    public async Task ConflictForAnotherCommandStaysPendingAcrossReopen()
+    {
+        var task = MakeTask(Guid.NewGuid());
+        var commandId = Guid.NewGuid();
+        var posts = 0;
+        using var http = CreateClient(request =>
+        {
+            if (request.Method == HttpMethod.Get)
+                return Task.FromResult(Ok(new WorkTaskPage { Items = [task] }));
+
+            if (++posts == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.Conflict)
+                {
+                    Content = JsonContent.Create(new { commandId = Guid.NewGuid(), reason = "version_conflict", currentVersion = 4 })
+                };
+                response.Headers.Add("Honua-Command-Outcome", "conflict");
+                return Task.FromResult(response);
+            }
+
+            return Task.FromResult(Ok(new WorkTaskReceipt
+            {
+                Outcome = "duplicate", CommandId = commandId, Task = task with { Version = 4 }
+            }));
+        });
+
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshAsync();
+        await adapter.QueueTransitionAsync(task.TaskId, new WorkTaskTransitionRequest
+        {
+            CommandId = commandId, ExpectedVersion = 3, Action = "start"
+        });
+        var error = await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
+        Assert.Equal(409, error.HttpStatus);
+        Assert.IsType<JsonException>(error.InnerException);
+
+        var reopened = await OpenAsync(http, Scope);
+        Assert.Equal(AssignedCommandStatus.Pending, Assert.Single((await reopened.ReadAsync()).Commands).Status);
+        await reopened.ReplayAsync();
+        var confirmed = Assert.Single((await reopened.ReadAsync()).Commands);
+        Assert.Equal(AssignedCommandStatus.Confirmed, confirmed.Status);
+        Assert.Equal(commandId, confirmed.Receipt?.CommandId);
     }
 
     [Fact]
@@ -102,7 +147,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         });
         pendingRefresh = true;
         failPage = true;
-        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshAsync());
         Assert.Equal(task.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
 
         failPage = false;
@@ -173,8 +218,96 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         await adapter.RefreshAsync();
 
         invalid = true;
-        await Assert.ThrowsAsync<JsonException>(() => adapter.RefreshAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshAsync());
         Assert.Equal(cached.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
+    }
+
+    [Theory]
+    [InlineData("asset-forbidden")]
+    [InlineData("list-forbidden")]
+    [InlineData("omitted")]
+    [InlineData("replay-forbidden")]
+    public async Task AssetAccessChangesDoNotDiscardPinnedFormOrAttachments(string accessChange)
+    {
+        var form = new WorkTaskFormReference { FormId = "inspection", Version = 7 };
+        var task = MakeTask(Guid.NewGuid()) with { AssetId = "asset-123", Form = form };
+        var summary = new AssignedAssetSummary("asset-123", 4, JsonSerializer.SerializeToElement(new { name = "Pump" }));
+        var disposition = "authorized";
+        using var http = CreateClient(request =>
+        {
+            if (request.Method == HttpMethod.Post || disposition == "list-forbidden")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+            return Task.FromResult(Ok(new WorkTaskPage { Items = disposition == "omitted" ? [] : [task] }));
+        });
+
+        Task<AssignedAssetSummary?> ReadAsset(AssignedWorkScope scope, WorkTask assigned, CancellationToken ct)
+        {
+            Assert.Equal(Scope, scope);
+            Assert.Equal(task.TaskId, assigned.TaskId);
+            return disposition switch
+            {
+                "incomplete" => throw new HttpRequestException("Incomplete asset refresh"),
+                "asset-forbidden" => throw new HttpRequestException(null, null, HttpStatusCode.Forbidden),
+                _ => Task.FromResult<AssignedAssetSummary?>(summary)
+            };
+        }
+
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshWithAssetsAsync(ReadAsset);
+        var completion = new WorkTaskCompletionRequest
+        {
+            CommandId = Guid.NewGuid(), ExpectedVersion = 3,
+            Form = form, SummaryRevision = summary.Revision,
+            Answers = JsonSerializer.SerializeToElement(new { condition = "observation" })
+        };
+        var attachment = new AssignedAttachmentReference("local-photo-1");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.QueueCompletionWithAttachmentsAsync(
+            task.TaskId, completion with { Form = form with { Version = 8 } }, [attachment]));
+        await adapter.QueueCompletionWithAttachmentsAsync(task.TaskId, completion, [attachment]);
+
+        disposition = "incomplete";
+        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshWithAssetsAsync(ReadAsset));
+        adapter = await OpenAsync(http, Scope);
+        var offline = await adapter.ReadAsync();
+        Assert.Equal("Pump", offline.AssetSummaries[task.TaskId].Attributes.GetProperty("name").GetString());
+        Assert.Equal(form, Assert.Single(offline.Tasks).Form);
+        var otherScope = await (await OpenAsync(http, Scope with { AccountSubject = "other" })).ReadAsync();
+        Assert.Empty(otherScope.AssetSummaries);
+
+        disposition = accessChange;
+        if (accessChange == "replay-forbidden")
+            await adapter.ReplayAsync();
+        else if (accessChange == "list-forbidden")
+            await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshWithAssetsAsync(ReadAsset));
+        else
+            await adapter.RefreshWithAssetsAsync(ReadAsset);
+
+        var revoked = await (await OpenAsync(http, Scope)).ReadAsync();
+        Assert.Empty(revoked.AssetSummaries);
+        Assert.Equal(accessChange == "asset-forbidden" ? 1 : 0, revoked.Tasks.Count);
+        var journal = Assert.Single(revoked.Commands);
+        Assert.Equal(form, journal.Completion?.Form);
+        Assert.Equal(4L, journal.Completion?.SummaryRevision);
+        Assert.Equal("observation", journal.Completion?.Answers?.GetProperty("condition").GetString());
+        Assert.Equal(attachment, Assert.Single(journal.Attachments));
+    }
+
+    [Fact]
+    public async Task ExplicitAssetDenialIsRetainedWhenAnotherAssetRefreshIsIncomplete()
+    {
+        var inaccessible = MakeTask(Guid.NewGuid()) with { AssetId = "first" };
+        var remaining = MakeTask(Guid.NewGuid()) with { AssetId = "second" };
+        using var http = CreateClient(_ => Task.FromResult(Ok(new WorkTaskPage { Items = [inaccessible, remaining] })));
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshWithAssetsAsync((_, task, _) => Task.FromResult<AssignedAssetSummary?>(
+            new(task.AssetId!, null, JsonSerializer.SerializeToElement(new { name = task.AssetId }))));
+        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshWithAssetsAsync((_, task, _) =>
+            throw new HttpRequestException(null, null, task.TaskId == inaccessible.TaskId
+                ? HttpStatusCode.Forbidden : HttpStatusCode.ServiceUnavailable)));
+
+        var state = await (await OpenAsync(http, Scope)).ReadAsync();
+        Assert.Equal(2, state.Tasks.Count);
+        Assert.Equal(remaining.TaskId, Assert.Single(state.AssetSummaries).Key);
     }
 
     private async Task<OfflineAssignedWork> OpenAsync(HttpClient http, AssignedWorkScope scope)
