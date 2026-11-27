@@ -15,6 +15,21 @@ adapter while that identity and its credentials remain active.
 - Run `RefreshAsync` online to replace the cached list after all pages succeed.
   `ReadAsync` reads the cached tasks and journal offline. The app can use the
   server's permitted actions and due dates when presenting the tasks.
+- Use `RefreshWithAssetsAsync` with the same active account's authorized asset
+  reader to cache asset summaries alongside the task list. Resolve the
+  asset within the task's authoritative profile or layer, since an asset ID
+  alone does not identify a record across profiles. A successful full
+  refresh replaces the prior summaries. An incomplete refresh preserves the
+  previous assignments and summaries, apart from explicitly denied assets.
+  The asset reader must propagate transient failures and return null only
+  when the asset is absent or inaccessible. A successful task-only
+  `RefreshAsync` clears summaries because it does not reauthorize them.
+- Read the pinned form ID and version from the cached task. The completion
+  request must use that pin. Use `QueueCompletionWithAttachmentsAsync` to
+  commit durable local file IDs alongside the request. The app owns the
+  referenced files and their retention. These IDs remain in the encrypted
+  command journal even if the assignment or asset becomes inaccessible.
+  The current shared completion contract cannot upload these local IDs.
 - Use `QueueTransitionAsync` or `QueueCompletionAsync` with a fresh command
   ID and the cached task version for each new action. Queueing commits the
   request before any upload. A task has at most one pending local command.

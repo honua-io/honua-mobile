@@ -21,6 +21,12 @@ public enum AssignedCommandStatus
     Rejected
 }
 
+/// <summary>A locally cached asset summary read under the active assignment credentials.</summary>
+public sealed record AssignedAssetSummary(string AssetId, long? Revision, JsonElement Attributes);
+
+/// <summary>References to captured files managed by the caller's offline attachment store.</summary>
+public sealed record AssignedAttachmentReference(string LocalId);
+
 /// <summary>A queued command and any authoritative replay evidence.</summary>
 public sealed record AssignedCommand(
     Guid TaskId,
@@ -31,13 +37,21 @@ public sealed record AssignedCommand(
     WorkTaskReceipt? Receipt = null,
     int? HttpStatus = null,
     long? CurrentVersion = null,
-    string? Reason = null);
+    string? Reason = null)
+{
+    /// <summary>Local evidence references retained independently of the server receipt.</summary>
+    public IReadOnlyList<AssignedAttachmentReference> Attachments { get; init; } = [];
+}
 
 /// <summary>The last fully downloaded assignment list and the local command journal.</summary>
 public sealed record AssignedWorkSnapshot(IReadOnlyList<WorkTask> Tasks, IReadOnlyList<AssignedCommand> Commands)
 {
     /// <summary>The local revision of the authoritative task list, used when publishing refreshes.</summary>
     public long TaskRevision { get; init; }
+
+    /// <summary>Authorized asset summaries keyed by current task ID.</summary>
+    public IReadOnlyDictionary<Guid, AssignedAssetSummary> AssetSummaries { get; init; } =
+        new Dictionary<Guid, AssignedAssetSummary>();
 }
 
 /// <summary>Persists and replays assigned work for one authenticated account in the initialized offline store.</summary>
@@ -69,8 +83,24 @@ public sealed class OfflineAssignedWork
     public async Task<AssignedWorkSnapshot> ReadAsync(CancellationToken ct = default)
         => Read(await _store.GetDocumentAsync(Collection, _id, ct).ConfigureAwait(false));
 
-    /// <summary>Downloads all pages and publishes a complete replacement. Failed refreshes preserve the previous list.</summary>
-    public async Task RefreshAsync(CancellationToken ct = default)
+    /// <summary>Publishes a complete assignment list. An explicit access denial clears the cached list.</summary>
+    public Task RefreshAsync(CancellationToken ct = default) => RefreshCoreAsync(null, ct);
+
+    /// <summary>
+    /// Publishes a complete assignment list and summaries loaded using the same authenticated scope.
+    /// Return null for an absent or inaccessible asset and throw for an incomplete read.
+    /// </summary>
+    public Task RefreshWithAssetsAsync(
+        Func<AssignedWorkScope, WorkTask, CancellationToken, Task<AssignedAssetSummary?>> readAssetSummary,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(readAssetSummary);
+        return RefreshCoreAsync(readAssetSummary, ct);
+    }
+
+    private async Task RefreshCoreAsync(
+        Func<AssignedWorkScope, WorkTask, CancellationToken, Task<AssignedAssetSummary?>>? readAssetSummary,
+        CancellationToken ct)
     {
         while (true)
         {
@@ -80,12 +110,25 @@ public sealed class OfflineAssignedWork
             string? cursor = null;
             do
             {
-                var page = await _client.ListAssignedAsync(new AssignedWorkTaskQuery
+                WorkTaskPage page;
+                try
                 {
-                    ServiceId = _scope.ServiceId,
-                    Assignee = _scope.Assignee,
-                    Cursor = cursor
-                }, ct).ConfigureAwait(false);
+                    page = await _client.ListAssignedAsync(new AssignedWorkTaskQuery
+                    {
+                        ServiceId = _scope.ServiceId,
+                        Assignee = _scope.Assignee,
+                        Cursor = cursor
+                    }, ct).ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    await UpdateAsync(state => state.TaskRevision != revision ? null : state with
+                    {
+                        Tasks = [], AssetSummaries = new Dictionary<Guid, AssignedAssetSummary>(),
+                        TaskRevision = revision + 1
+                    }, CancellationToken.None).ConfigureAwait(false);
+                    throw;
+                }
                 foreach (var task in page.Items)
                 {
                     if (!string.Equals(task.ServiceId, _scope.ServiceId, StringComparison.Ordinal) ||
@@ -101,10 +144,66 @@ public sealed class OfflineAssignedWork
                     throw new InvalidDataException("The server repeated an assigned-work cursor.");
             } while (cursor is not null);
 
+            var summaries = new Dictionary<Guid, AssignedAssetSummary>();
+            var deniedTasks = new HashSet<Guid>();
+            try
+            {
+                if (readAssetSummary is not null)
+                    await ReadSummariesAsync(summaries, deniedTasks, tasks.Values, readAssetSummary, ct).ConfigureAwait(false);
+            }
+            catch (Exception) when (deniedTasks.Count > 0)
+            {
+                await UpdateAsync(state => state.TaskRevision != revision ? null : state with
+                {
+                    AssetSummaries = state.AssetSummaries.Where(item => !deniedTasks.Contains(item.Key)).ToDictionary(),
+                    TaskRevision = revision + 1
+                }, CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+
             if (await UpdateAsync(state => state.TaskRevision != revision
                     ? null
-                    : state with { Tasks = tasks.Values.ToArray(), TaskRevision = revision + 1 }, ct).ConfigureAwait(false))
+                    : state with
+                    {
+                        Tasks = tasks.Values.ToArray(), AssetSummaries = summaries, TaskRevision = revision + 1
+                    }, deniedTasks.Count > 0 ? CancellationToken.None : ct).ConfigureAwait(false))
                 return;
+        }
+    }
+
+    private async Task ReadSummariesAsync(
+        Dictionary<Guid, AssignedAssetSummary> summaries,
+        HashSet<Guid> deniedTasks,
+        IEnumerable<WorkTask> tasks,
+        Func<AssignedWorkScope, WorkTask, CancellationToken, Task<AssignedAssetSummary?>> readAssetSummary,
+        CancellationToken ct)
+    {
+        foreach (var task in tasks)
+        {
+            if (task.AssetId is not { } assetId)
+                continue;
+
+            AssignedAssetSummary? summary;
+            try
+            {
+                summary = await readAssetSummary(_scope, task, ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            {
+                summary = null;
+            }
+
+            if (summary is null)
+            {
+                deniedTasks.Add(task.TaskId);
+                continue;
+            }
+
+            if (!string.Equals(summary.AssetId, assetId, StringComparison.Ordinal) ||
+                summary.Attributes.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("The asset summary does not match the assigned asset.");
+
+            summaries.Add(task.TaskId, summary with { Attributes = summary.Attributes.Clone() });
         }
     }
 
@@ -115,6 +214,22 @@ public sealed class OfflineAssignedWork
     /// <summary>Persists a completion and its captured form answers before upload.</summary>
     public Task QueueCompletionAsync(Guid taskId, WorkTaskCompletionRequest request, CancellationToken ct = default)
         => QueueAsync(new(taskId, request.CommandId, null, request), request.ExpectedVersion, ct);
+
+    /// <summary>Persists a completion and caller-owned durable attachment references in one transaction.</summary>
+    public Task QueueCompletionWithAttachmentsAsync(Guid taskId, WorkTaskCompletionRequest request,
+        IReadOnlyList<AssignedAttachmentReference> attachments, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(attachments);
+        var evidence = attachments.ToArray();
+        foreach (var attachment in evidence)
+        {
+            ArgumentNullException.ThrowIfNull(attachment);
+            ArgumentException.ThrowIfNullOrWhiteSpace(attachment.LocalId);
+        }
+
+        return QueueAsync(new(taskId, request.CommandId, null, request) { Attachments = evidence },
+            request.ExpectedVersion, ct);
+    }
 
     private Task QueueAsync(AssignedCommand command, long expectedVersion, CancellationToken ct)
     {
@@ -136,8 +251,11 @@ public sealed class OfflineAssignedWork
                 return null;
             }
 
-            if (!state.Tasks.Any(task => task.TaskId == command.TaskId && task.Version == expectedVersion))
+            var task = state.Tasks.FirstOrDefault(item => item.TaskId == command.TaskId && item.Version == expectedVersion);
+            if (task is null)
                 throw new InvalidOperationException("Refresh the assigned task before queuing a command for this version.");
+            if (command.Completion is { } completion && task.Form != completion.Form)
+                throw new InvalidOperationException("Use the pinned form version on the assigned task.");
             if (state.Commands.Any(item => item.TaskId == command.TaskId && item.Status == AssignedCommandStatus.Pending))
                 throw new InvalidOperationException("This task already has a pending command.");
 
@@ -199,6 +317,7 @@ public sealed class OfflineAssignedWork
             return next with
             {
                 Tasks = state.Tasks.Where(item => item.TaskId != outcome.TaskId).ToArray(),
+                AssetSummaries = WithoutSummary(state, outcome.TaskId),
                 TaskRevision = state.TaskRevision + 1
             };
         }
@@ -207,17 +326,23 @@ public sealed class OfflineAssignedWork
             return outcome.Receipt is null ? next : next with { TaskRevision = state.TaskRevision + 1 };
         if (outcome.Receipt?.Task is { } task && task.Version >= cached.Version)
         {
+            var stillAssigned = string.Equals(task.Assignee, _scope.Assignee, StringComparison.Ordinal);
             return next with
             {
-                Tasks = string.Equals(task.Assignee, _scope.Assignee, StringComparison.Ordinal)
+                Tasks = stillAssigned
                     ? state.Tasks.Select(item => item.TaskId == task.TaskId ? task : item).ToArray()
                     : state.Tasks.Where(item => item.TaskId != task.TaskId).ToArray(),
+                AssetSummaries = stillAssigned && task.AssetId == cached.AssetId
+                    ? state.AssetSummaries : WithoutSummary(state, task.TaskId),
                 TaskRevision = state.TaskRevision + 1
             };
         }
 
         return next;
     }
+
+    private static IReadOnlyDictionary<Guid, AssignedAssetSummary> WithoutSummary(AssignedWorkSnapshot state, Guid taskId)
+        => state.AssetSummaries.Where(item => item.Key != taskId).ToDictionary();
 
     private async Task<bool> UpdateAsync(Func<AssignedWorkSnapshot, AssignedWorkSnapshot?> update, CancellationToken ct)
     {
