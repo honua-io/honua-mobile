@@ -15,7 +15,7 @@ for embedding Honua maps and scenes.
 
 This repo is the **SDK** (libraries, reference apps, templates). If you want a
 ready-made field data collection **app** built on this SDK, see
-[honua-collect](https://github.com/honua-io/honua-collect).
+[Honua Field](https://github.com/honua-io/honua-field).
 
 ## Status
 
@@ -33,6 +33,7 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline) |
 | **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
+| **Honua.Mobile.Offline.Tasks** | Offline assigned work, durable commands and asset-linked request replay | Release candidate. Requires the .NET 11 Field SDK with asset-request support. |
 | **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | Public release target: [npmjs.com](https://www.npmjs.com/package/@honua-io/embed), from signed `mobile-embed-v*` tags |
 
 Registry links are release evidence, not promises: use a version only when it
@@ -41,12 +42,12 @@ that exact version installs anonymously, and then create a checksum-bearing
 GitHub Release. See [RELEASING.md](RELEASING.md) for the gates and one-time
 credential setup.
 
-The library packages target `net10.0` and build on any platform without the MAUI
-workload. The reference apps and templates are .NET MAUI (`net10.0-android`,
+The Sdk, Offline and Maui libraries target `net10.0`. The optional Offline.Tasks
+adapter targets `net11.0`. All four libraries build without the MAUI workload. The reference apps and templates are .NET MAUI (`net10.0-android`,
 plus `net10.0-ios`/`net10.0-maccatalyst` on macOS and `net10.0-windows` on
 Windows). Platform-neutral client logic comes from the
 [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) `Honua.Sdk.*`
-packages, pinned as a single release train in
+packages. The core SDK train and the optional adapter dependency are pinned in
 [`Directory.Build.props`](Directory.Build.props).
 
 ## Quick Start
@@ -284,7 +285,7 @@ platform smoke guardrails are documented in
 | Repo | What it is |
 |------|------------|
 | [honua-server](https://github.com/honua-io/honua-server) | Flagship multi-protocol geospatial server this SDK talks to |
-| [honua-collect](https://github.com/honua-io/honua-collect) | Offline-first field data collection app built on this SDK |
+| [Honua Field](https://github.com/honua-io/honua-field) | Offline-first field data collection app built on this SDK |
 | [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) | Platform-neutral `Honua.Sdk.*` .NET packages this repo consumes |
 | [honua-sdk-js](https://github.com/honua-io/honua-sdk-js) | JavaScript/TypeScript SDKs + MCP server |
 | [honua-console](https://github.com/honua-io/honua-console) | Unified web console (Studio, Catalog, Operate, Share) |
