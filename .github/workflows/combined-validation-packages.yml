@@ -1,0 +1,107 @@
+name: Combined Field validation packages
+
+on:
+  push:
+    branches: [validation/mobile-tasks-form-queue]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MSBuildEnableWorkloadResolver: 'false'
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldcombined.1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100
+      - name: Verify SDK validation packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/download-combined-sdk-candidate.sh "$RUNNER_TEMP/task-sdk"
+      - name: Test and pack the Mobile candidate
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          feed="$RUNNER_TEMP/task-sdk"
+          config="$RUNNER_TEMP/task-nuget.config"
+          cat > "$config" <<EOF
+          <configuration>
+            <packageSources>
+              <clear/>
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json"/>
+              <add key="task-sdk" value="$feed"/>
+            </packageSources>
+          </configuration>
+          EOF
+          args=(-p:HonuaWorkTasksSdkVersion="$HONUA_TASK_SDK_VERSION" -p:TreatWarningsAsErrors=true)
+          for suite in Offline Offline.Tasks; do
+            tests="$GITHUB_WORKSPACE/tests/Honua.Mobile.$suite.Tests/Honua.Mobile.$suite.Tests.csproj"
+            dotnet restore "$tests" --configfile "$config" "${args[@]}"
+            dotnet test "$tests" --no-restore "${args[@]}"
+          done
+          output="$RUNNER_TEMP/mobile-candidate"
+          version="0.1.0-fieldcombined.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          for assembly in Sdk Offline Maui Offline.Tasks; do
+            project="$GITHUB_WORKSPACE/src/Honua.Mobile.$assembly/Honua.Mobile.$assembly.csproj"
+            pack_args=(-p:Version="$version" -p:PackageVersion="$version" "${args[@]}")
+            dotnet restore "$project" --configfile "$config" "${pack_args[@]}"
+            dotnet pack "$project" --no-restore -c Release -o "$output" "${pack_args[@]}"
+            test -s "$output/Honua.Mobile.$assembly.$version.nupkg"
+          done
+          bash "$GITHUB_WORKSPACE/scripts/check-offline-package-consumers.sh" "$output" "$version"
+          mkdir -p "$RUNNER_TEMP/combined-consumer"
+          consumer="$RUNNER_TEMP/combined-consumer/Combined.csproj"
+          cat > "$consumer" <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net11.0</TargetFramework>
+              <OutputType>Exe</OutputType>
+              <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Honua.Mobile.Offline.Tasks" Version="[$version]" />
+              <PackageReference Include="Honua.Mobile.Maui" Version="[$version]" />
+              <PackageReference Include="Honua.Sdk.Field" Version="[$HONUA_TASK_SDK_VERSION]" />
+            </ItemGroup>
+          </Project>
+          EOF
+          cat > "$RUNNER_TEMP/combined-consumer/Program.cs" <<'EOF'
+          using Honua.Mobile.Offline.GeoPackage;
+          using Honua.Mobile.Offline.Tasks;
+          using Honua.Sdk.Field.Forms;
+          using Honua.Sdk.Field.Tasks;
+
+          System.Console.WriteLine(typeof(OfflineAssignedWork).GetConstructor(new[]
+          {
+              typeof(GeoPackageSyncStore), typeof(WorkTaskClient), typeof(AssignedWorkScope)
+          }) ?? throw new System.InvalidOperationException("Assigned-work adapter constructor could not be loaded."));
+          System.Console.WriteLine(typeof(PublishedFormSubmissionClient).Assembly.FullName);
+          System.Console.WriteLine(typeof(GeoPackageSyncStore).GetMethod(nameof(GeoPackageSyncStore.EnqueueOperationAsync))
+              ?? throw new System.InvalidOperationException("Published-form queue method could not be loaded."));
+          EOF
+          dotnet restore "$consumer" --configfile "$config" --source "$feed" --source "$output" --source https://api.nuget.org/v3/index.json
+          dotnet build "$consumer" --no-restore
+          dotnet "$RUNNER_TEMP/combined-consumer/bin/Debug/net11.0/Combined.dll"
+          cd "$output"
+          printf '%s\n' "$GITHUB_SHA" > checkout.txt
+          sha256sum ./*.nupkg > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-field-combined-validation
+          path: |
+            ${{ runner.temp }}/mobile-candidate/*.nupkg
+            ${{ runner.temp }}/mobile-candidate/checkout.txt
+            ${{ runner.temp }}/mobile-candidate/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
