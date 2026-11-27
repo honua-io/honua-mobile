@@ -166,6 +166,40 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task ChangeJournal_DurablyRecordsProviderIdsWhenAnUploadSucceeds()
+    {
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+
+        await adapter.MarkUploadedAsync("op-1", new FeatureEditResponse
+        {
+            UpdateResults = [new FeatureEditResult { Succeeded = true, ObjectId = 42 }],
+        });
+
+        var reopenedStore = CreateStore();
+        var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
+        Assert.NotNull(acknowledgement);
+        Assert.Equal(["42"], acknowledgement.ServerFeatureIds);
+        Assert.Equal(0, await reopenedStore.CountPendingAsync());
+    }
+
+    [Fact]
+    public async Task ChangeJournal_LeavesTheOperationQueuedWhenTheProviderRejectsIt()
+    {
+        var store = CreateStore();
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(store);
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => adapter.MarkUploadedAsync("op-1", new FeatureEditResponse
+        {
+            UpdateResults = [new FeatureEditResult { Succeeded = false }],
+        }));
+
+        Assert.Equal(1, await store.CountPendingAsync());
+        Assert.Null(await store.GetUploadAcknowledgementAsync("op-1"));
+    }
+
+    [Fact]
     public async Task ChangeJournal_OnlyClaimsEntriesForRequestedPackage()
     {
         var store = CreateStore();
