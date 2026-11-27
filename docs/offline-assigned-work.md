@@ -33,6 +33,12 @@ adapter while that identity and its credentials remain active.
 - Use `QueueTransitionAsync` or `QueueCompletionAsync` with a fresh command
   ID and the cached task version for each new action. Queueing commits the
   request before any upload. A task has at most one pending local command.
+- Use `QueueAssetRequestAsync` to persist a title and the authorized
+  asset/profile IDs for a new request. Allocate one client task ID and one
+  command ID and retain both when retrying the same request. The typed request
+  accepts only the canonical service ID, asset and profile IDs, title, and
+  the two client IDs. An accepted create stays in the command journal.
+  The assigned list reflects subsequent server assignments after refresh.
 - Call `ReplayAsync` after connectivity returns. A transport interruption
   leaves the original command pending. Replay retains the original command ID
   and expected version, and records the authoritative receipt, including a
@@ -46,18 +52,18 @@ adapter while that identity and its credentials remain active.
 Use a .NET 11 SDK from a directory outside this repository's .NET 10
 `global.json`. Configure a temporary NuGet source for the versioned
 `Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
-package sources. For the candidate from SDK commit `aa9c90c9c6dc355e09a6e0215e51e698f9cfe7c8`, use
-`5.1.1-fieldtasks.3`.
+package sources. Set `WORK_TASKS_SDK_VERSION` to the exact candidate package
+version that includes the typed asset request API.
 
 ```sh
 suite="$MOBILE_REPO/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"
-dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3
-dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3
+dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION"
+dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION"
 ```
 
 The test project exercises the packaged shared HTTP client with controlled
 responses and an encrypted on-disk database. Deployment also requires a Server
-version that supports the task list, transition and completion APIs. The
+version that supports the task list, transition, completion and asset request APIs. The
 consuming application owns scheduling, user-facing conflict handling and
 collection of the completion form answers.
 
@@ -91,7 +97,7 @@ path. The default test run skips it when this variable is unset.
 
 ```sh
 HONUA_MOBILE_ASSIGNED_WORK_LIVE_CONFIG="$LIVE_CONFIG" dotnet test "$suite" \
-  --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3 \
+  --no-restore -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION" \
   --filter FullyQualifiedName~OfflineAssignedWorkLiveTests
 ```
 
@@ -101,3 +107,30 @@ version races, replay after a dropped completion response, cancellation and
 reassignment. It retains local attachment IDs but does not upload the files.
 The test reopens storage in-process and uses request tasks. Asset-linked
 pending review and process termination require separate checks.
+
+### Asset request receipt retry
+
+Use a disposable PostGIS database with a real asset, an active profile for
+its layer, and a worker authorized to create asset-linked requests. Use a
+fresh task ID and a fresh command ID for each run. Save this configuration
+to a private file and set `HONUA_MOBILE_ASSET_REQUEST_LIVE_CONFIG` to its path.
+
+```json
+{
+  "server": "https://localhost:5196",
+  "serviceId": "<canonical service ID>",
+  "profileId": "<active profile UUID>",
+  "assetId": "<existing asset ID>",
+  "subject": "<worker subject>",
+  "taskId": "<fresh task UUID>",
+  "commandId": "<fresh command UUID>",
+  "crewTokenFile": "/private/fixture/crew.token"
+}
+```
+
+Run the restored test project with
+`--filter FullyQualifiedName~OfflineAssetRequestLiveTests`. It drops the
+successful create response before the adapter sees it, reopens the encrypted
+database, and checks that replay retrieves a duplicate receipt with the
+original IDs. Check the disposable database for one unassigned request whose
+geometry source is the asset and one task creation receipt for those IDs.

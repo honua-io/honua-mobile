@@ -39,6 +39,9 @@ public sealed record AssignedCommand(
     long? CurrentVersion = null,
     string? Reason = null)
 {
+    /// <summary>A frozen asset-linked request that can be created offline.</summary>
+    public WorkTaskAssetRequest? AssetRequest { get; init; }
+
     /// <summary>Local evidence references retained independently of the server receipt.</summary>
     public IReadOnlyList<AssignedAttachmentReference> Attachments { get; init; } = [];
 }
@@ -231,11 +234,24 @@ public sealed class OfflineAssignedWork
             request.ExpectedVersion, ct);
     }
 
-    private Task QueueAsync(AssignedCommand command, long expectedVersion, CancellationToken ct)
+    /// <summary>Persists an asset-linked request before upload. Allocate both IDs once per request.</summary>
+    public Task QueueAssetRequestAsync(WorkTaskAssetRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!string.Equals(request.ServiceId, _scope.ServiceId, StringComparison.Ordinal))
+            throw new ArgumentException("Use the canonical service ID for this assigned-work scope.", nameof(request));
+        ArgumentOutOfRangeException.ThrowIfEqual(request.ProfileId, Guid.Empty);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.AssetId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Title);
+        return QueueAsync(new(request.TaskId, request.CommandId, null, null) { AssetRequest = request }, null, ct);
+    }
+
+    private Task QueueAsync(AssignedCommand command, long? expectedVersion, CancellationToken ct)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(command.TaskId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(command.CommandId, Guid.Empty);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(expectedVersion);
+        if (expectedVersion is { } version)
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
         return UpdateAsync(state =>
         {
             var existing = state.Commands.FirstOrDefault(item => item.CommandId == command.CommandId);
@@ -251,11 +267,20 @@ public sealed class OfflineAssignedWork
                 return null;
             }
 
-            var task = state.Tasks.FirstOrDefault(item => item.TaskId == command.TaskId && item.Version == expectedVersion);
-            if (task is null)
-                throw new InvalidOperationException("Refresh the assigned task before queuing a command for this version.");
-            if (command.Completion is { } completion && task.Form != completion.Form)
-                throw new InvalidOperationException("Use the pinned form version on the assigned task.");
+            var task = state.Tasks.FirstOrDefault(item => item.TaskId == command.TaskId);
+            if (command.AssetRequest is not null)
+            {
+                if (task is not null || state.Commands.Any(item => item.TaskId == command.TaskId))
+                    throw new InvalidOperationException("The task ID is already in use.");
+            }
+            else
+            {
+                if (task is null || task.Version != expectedVersion)
+                    throw new InvalidOperationException("Refresh the assigned task before queuing a command for this version.");
+                if (command.Completion is { } completion && task.Form != completion.Form)
+                    throw new InvalidOperationException("Use the pinned form version on the assigned task.");
+            }
+
             if (state.Commands.Any(item => item.TaskId == command.TaskId && item.Status == AssignedCommandStatus.Pending))
                 throw new InvalidOperationException("This task already has a pending command.");
 
@@ -263,7 +288,7 @@ public sealed class OfflineAssignedWork
         }, ct);
     }
 
-    /// <summary>Uploads the pending commands with their original IDs and expected versions.</summary>
+    /// <summary>Uploads pending commands with their original IDs and payloads.</summary>
     public async Task ReplayAsync(CancellationToken ct = default)
     {
         var state = await ReadAsync(ct).ConfigureAwait(false);
@@ -273,9 +298,13 @@ public sealed class OfflineAssignedWork
             AssignedCommand outcome;
             try
             {
-                var receipt = command.Transition is { } transition
-                    ? await _client.TransitionAsync(command.TaskId, transition, ct).ConfigureAwait(false)
-                    : await _client.CompleteAsync(command.TaskId, command.Completion!, ct).ConfigureAwait(false);
+                var receipt = command switch
+                {
+                    { AssetRequest: { } request } => await _client.CreateAssetRequestAsync(request, ct).ConfigureAwait(false),
+                    { Transition: { } transition } => await _client.TransitionAsync(command.TaskId, transition, ct).ConfigureAwait(false),
+                    { Completion: { } completion } => await _client.CompleteAsync(command.TaskId, completion, ct).ConfigureAwait(false),
+                    _ => throw new InvalidDataException("The queued command has no request.")
+                };
                 if (!string.Equals(receipt.Task.ServiceId, _scope.ServiceId, StringComparison.Ordinal))
                     throw new InvalidDataException("The task receipt refers to another service.");
                 outcome = command with { Status = AssignedCommandStatus.Confirmed, Receipt = receipt };
