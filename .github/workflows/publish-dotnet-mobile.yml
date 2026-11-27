@@ -70,6 +70,13 @@ jobs:
           echo "NUGET_HTTP_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/http-cache" >> "${GITHUB_ENV}"
           echo "NUGET_PLUGINS_CACHE_PATH=${RUNNER_TEMP}/honua-mobile-public-nuget/plugin-cache" >> "${GITHUB_ENV}"
 
+      - name: Stage the verified Field SDK candidate for this validation run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/download-asset-request-sdk-candidate.sh "$RUNNER_TEMP/sdk-candidate"
+          dotnet nuget add source "$RUNNER_TEMP/sdk-candidate" --name sdk-candidate --configfile "$PUBLIC_NUGET_CONFIG"
+
       - name: Resolve package version
         id: version
         shell: bash
