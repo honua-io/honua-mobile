@@ -2,16 +2,17 @@
 
 public partial class App : Application
 {
-    private readonly MainPage _mainPage;
+    private readonly IServiceProvider _services;
 
-    public App(MainPage mainPage)
+    public App(IServiceProvider services)
     {
         InitializeComponent();
-        _mainPage = mainPage;
+        _services = services;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(_mainPage);
+        // Resolve the page after the application resources used by its XAML are loaded.
+        return new Window(_services.GetRequiredService<MainPage>());
     }
 }
