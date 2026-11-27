@@ -26,5 +26,5 @@ the shipped field packages. The browser embed package has a separate transfer
 tracked in #425. Scene metadata and package storage are unchanged by this change.
 
 Validate the remaining SDK, Offline and MAUI library suites and formatting on the
-build host. Platform builds and the Collect physical-phone journey remain
+build host. Platform builds and the Honua Field physical-phone journey remain
 separate acceptance evidence; this cleanup does not claim that journey passed.

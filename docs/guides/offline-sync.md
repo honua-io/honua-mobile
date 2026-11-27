@@ -13,6 +13,11 @@ The reusable offline package, journal, checkpoint, conflict, and sync engine con
 
 This mobile repo supplies the native runtime layer around those SDK contracts: GeoPackage/SQLite adapters, local file placement, MAUI dependency injection, app lifecycle integration, reachability checks, background scheduling, permissions, and field workflow UX.
 
+For assigned tasks, use the account-scoped command journal to queue a transition
+or a completion against its pinned form version and recover the outcome when
+connectivity returns. The adapter guide covers package requirements, cancellation
+and access changes. [Offline assigned work](../offline-assigned-work.md)
+
 ## Core Concepts
 
 ### Offline-First Architecture

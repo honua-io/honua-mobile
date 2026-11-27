@@ -17,7 +17,7 @@ The repository validates the SDK in five concentric layers, from cheapest
 and most reliable inward to most expensive and most operationally gated:
 
 ```
-                       Physical device  (none today, deferred to GA)
+                       Physical device  (installed app acceptance in Honua Field)
                   Cloud acceptance      (manual dispatch)
               Live server (Docker)      (hard-gated on every PR)
           Server integration            (loopback + fixture config)
@@ -48,17 +48,21 @@ and most reliable inward to most expensive and most operationally gated:
   so the suite is now a hard gate on PRs -- a failing live test blocks the
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
+  On November 27, 2026, the assigned-work branch passed 10 of 11 live tests with its pinned packages. The failing test creates a replica. The pinned client requests per-layer synchronization but expects a single server generation in the response. The shared SDK fix requests per-replica synchronization to match the generation the client reads. All 11 passed with the .NET 10 candidate package `1.10.1-net10replica.1` against the seeded Server and PostGIS. The candidate came from a .NET 10 backport based on v1.10.0. The shared SDK trunk targets .NET 11. To clear the hosted gate, publish a supported .NET 10 package containing the fix, update the Mobile pin, and rerun the live suite. [Hosted live run](https://github.com/honua-io/honua-mobile/actions/runs/46040127785/job/140645553744) · [.NET 10 backport](https://github.com/honua-io/honua-sdk-dotnet/tree/fix/net10-field-replica-uploads) · [Candidate build](https://github.com/honua-io/honua-sdk-dotnet/actions/runs/45960188104) · [.NET 11 upstream fix](https://github.com/honua-io/honua-sdk-dotnet/pull/598)
 - **Cloud acceptance** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- Collect owns the installed Android/iPhone journey.
-  Emulator/simulator platform smoke is separate evidence and does not prove
-  physical-device acceptance.
 
 Embed DOM tests (`src/Honua.Embed/tests/`, npm) cover the web-component
 `<honua-map>` / `<honua-scene>` surfaces and run on every PR via the
 `test` job's "Run Embed Component Tests" step.
+
+### Installed Field app
+
+On an Android emulator, Honua Field saved an inspection with a gallery photo in airplane mode. After a restart, the inspection was in the outbox and the server had no matching feature. After sync and a second restart, Field showed the inspection as sent. Honua Server returned the same feature and attachment IDs across the restart, and the downloaded JPEG matched the device copy byte for byte. [Reproduce the Android test](https://github.com/honua-io/honua-field/blob/e7a52702c1e322b15b41c12a17fb17fb550e488d/docs/verification/e2e/README.md#ordinary-feature-photos-on-android) · [Server readback](https://github.com/honua-io/honua-field/blob/e7a52702c1e322b15b41c12a17fb17fb550e488d/docs/verification/e2e/ordinary-photo-android.json)
+
+Field also runs phone and tablet workflows on Android emulators and Apple simulators. AWS Device Farm verified a physical Pixel 8 upgrade and separate iPhone simulator XLSForm upgrades. Physical iPhone acceptance remains open. [Pixel 8 upgrade](https://github.com/honua-io/honua-field/blob/5890f3b/docs/verification/e2e/README.md#aws-physical-android-in-place-update) · [AWS iPhone simulator evidence](https://github.com/honua-io/honua-field/pull/208#issuecomment-7217287017)
 
 ## 2. Capability Matrix
 
@@ -101,7 +105,7 @@ cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 ### Count of N/A cells in the capability matrix
 
 Cells marked N/A remain unverified at that level. The retired duplicate app
-unit suite is no longer part of the evidence; Collect owns app workflow and
+unit suite is no longer part of the evidence; Honua Field owns app workflow and
 physical-device acceptance.
 
 ## 3. Gap Registry
