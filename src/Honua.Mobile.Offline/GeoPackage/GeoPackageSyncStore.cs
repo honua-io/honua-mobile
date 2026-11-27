@@ -212,7 +212,7 @@ VALUES ('honua_features', 'attributes', 'honua_features', 'Replicated feature ca
 ";
 
         await using var command = connection.CreateCommand();
-        command.CommandText = sql;
+        command.CommandText = sql + "\n" + DocumentSchema;
         await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
         await InitializeUploadResultsAsync(connection, ct).ConfigureAwait(false);
