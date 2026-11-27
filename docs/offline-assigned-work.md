@@ -46,13 +46,13 @@ adapter while that identity and its credentials remain active.
 Use a .NET 11 SDK from a directory outside this repository's .NET 10
 `global.json`. Configure a temporary NuGet source for the versioned
 `Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
-package sources. For the candidate from SDK commit `8eb3a424`, use
-`5.1.1-fieldtasks.1`.
+package sources. For the candidate from SDK commit `90ca73985560fca4b2abe486fb8841f7303bbc70`, use
+`5.1.1-fieldtasks.2`.
 
 ```sh
 suite="$MOBILE_REPO/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"
-dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.1
-dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.1
+dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2
+dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2
 ```
 
 The test project exercises the packaged shared HTTP client with controlled
@@ -60,3 +60,44 @@ responses and an encrypted on-disk database. Deployment also requires a Server
 version that supports the task list, transition and completion APIs. The
 consuming application owns scheduling, user-facing conflict handling and
 collection of the completion form answers.
+
+## Verify against a disposable server
+
+Use a migrated Honua Server backed by PostGIS, a published form pinned to
+the target service, and TLS trusted by the test host. The test was run with
+Server commit `83127df70c06d4162fcc11b8d95a8ab466be49e2`. Provision a planner
+API key and two distinct signed worker bearer tokens (the users must be able
+to create tasks and read assignments in the target service). The planner must
+be able to assign, reassign and cancel tasks. Store the three credentials in
+separate private files.
+
+Save the following JSON in a private file. Use answers that satisfy the
+published form, and absolute paths to the credential files.
+
+```json
+{
+  "server": "https://localhost:5193",
+  "serviceId": "<target service ID>",
+  "formId": "<published form ID>",
+  "answers": { "name": "Replay verification" },
+  "plannerKeyFile": "/private/fixture/planner.key",
+  "crewTokenFile": "/private/fixture/crew.token",
+  "alternateCrewTokenFile": "/private/fixture/other-crew.token"
+}
+```
+
+After restoring the suite as above, run the live test with the configuration
+path. The default test run skips it when this variable is unset.
+
+```sh
+HONUA_MOBILE_ASSIGNED_WORK_LIVE_CONFIG="$LIVE_CONFIG" dotnet test "$suite" \
+  --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2 \
+  --filter FullyQualifiedName~OfflineAssignedWorkLiveTests
+```
+
+Use a disposable database. The test creates and retains six fixture tasks
+for server-side inspection. It covers encrypted store reopen, two-store
+version races, replay after a dropped completion response, cancellation and
+reassignment. It retains local attachment IDs but does not upload the files.
+The test reopens storage in-process and uses request tasks. Asset-linked
+pending review and process termination require separate checks.
