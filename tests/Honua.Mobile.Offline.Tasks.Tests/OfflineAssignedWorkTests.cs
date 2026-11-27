@@ -173,7 +173,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         await adapter.RefreshAsync();
 
         invalid = true;
-        await Assert.ThrowsAsync<InvalidDataException>(() => adapter.RefreshAsync());
+        await Assert.ThrowsAsync<JsonException>(() => adapter.RefreshAsync());
         Assert.Equal(cached.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
     }
 
