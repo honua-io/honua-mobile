@@ -115,3 +115,39 @@ counters = ET.parse(sys.argv[1]).find(".//{*}Counters").attrib
 if [counters.get(key) for key in ("total", "executed", "passed")] != ["1", "1", "1"]:
     raise SystemExit("Expected exactly one executed and passed two-worker live test.")
 CHECK
+
+printf '%s\n' verifying-authoritative-postgis-state >> "$report/stages.txt"
+"${db[@]}" -qAt > "$report/postgis-readback.json" <<'SQL'
+WITH task_counts AS (
+    SELECT t.status, count(*) AS tasks, count(r.service_record_id) AS records,
+           count(DISTINCT r.service_record_id) AS unique_records,
+           count(*) FILTER (
+               WHERE r.service_record_id IS NOT NULL
+                 AND (r.actor IS DISTINCT FROM t.assignee OR r.actor IS DISTINCT FROM t.created_by)
+           ) AS wrong_owner_records,
+           count(*) FILTER (WHERE t.assignee <> t.created_by) AS other_assignee
+    FROM honua.work_tasks t LEFT JOIN honua.asset_service_records r USING (task_id)
+    GROUP BY t.status
+), record_counts AS (
+    SELECT count(*) AS records, count(DISTINCT task_id) AS unique_tasks
+    FROM honua.asset_service_records
+), receipt_counts AS (
+    SELECT count(*) AS completion_receipts, count(DISTINCT subject_id) AS unique_completed_subjects
+    FROM honua.asset_command_receipts WHERE subject_kind = 'work_task' AND action = 'complete'
+)
+SELECT jsonb_build_object(
+    'tasks', (SELECT jsonb_agg(to_jsonb(task_counts) ORDER BY status) FROM task_counts),
+    'records', (SELECT to_jsonb(record_counts) FROM record_counts),
+    'receipts', (SELECT to_jsonb(receipt_counts) FROM receipt_counts));
+SQL
+
+jq -e '
+    .tasks == [
+        {status:"cancelled", tasks:1, records:0, unique_records:0, wrong_owner_records:0, other_assignee:0},
+        {status:"completed", tasks:3, records:3, unique_records:3, wrong_owner_records:0, other_assignee:0},
+        {status:"in_progress", tasks:1, records:0, unique_records:0, wrong_owner_records:0, other_assignee:1},
+        {status:"unassigned", tasks:1, records:0, unique_records:0, wrong_owner_records:0, other_assignee:0}
+    ]
+    and .records == {records:3, unique_tasks:3}
+    and .receipts == {completion_receipts:3, unique_completed_subjects:3}
+' "$report/postgis-readback.json" >/dev/null
