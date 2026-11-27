@@ -1,0 +1,70 @@
+name: Assigned work validation packages
+
+on:
+  push:
+    branches: [codex/mobile-assigned-work-validation]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MSBuildEnableWorkloadResolver: 'false'
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldtasks.2
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100
+      - name: Verify SDK validation packages
+        run: |
+          bash .github/scripts/download-task-sdk-candidate.sh "$RUNNER_TEMP/task-sdk"
+      - name: Test and pack the Mobile candidate
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          feed="$RUNNER_TEMP/task-sdk"
+          config="$RUNNER_TEMP/task-nuget.config"
+          cat > "$config" <<EOF
+          <configuration>
+            <packageSources>
+              <clear/>
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json"/>
+              <add key="task-sdk" value="$feed"/>
+            </packageSources>
+          </configuration>
+          EOF
+          args=(-p:HonuaWorkTasksSdkVersion="$HONUA_TASK_SDK_VERSION" -p:TreatWarningsAsErrors=true)
+          tests="$GITHUB_WORKSPACE/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"
+          dotnet restore "$tests" --configfile "$config" "${args[@]}"
+          dotnet test "$tests" --no-restore "${args[@]}"
+          output="$RUNNER_TEMP/mobile-candidate"
+          version="0.1.0-fieldtasks.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          for assembly in Sdk Offline Maui Offline.Tasks; do
+            project="$GITHUB_WORKSPACE/src/Honua.Mobile.$assembly/Honua.Mobile.$assembly.csproj"
+            pack_args=(-p:Version="$version" -p:PackageVersion="$version" "${args[@]}")
+            dotnet restore "$project" --configfile "$config" "${pack_args[@]}"
+            dotnet pack "$project" --no-restore -c Release -o "$output" "${pack_args[@]}"
+            test -s "$output/Honua.Mobile.$assembly.$version.nupkg"
+          done
+          cd "$output"
+          printf '%s\n' "$GITHUB_SHA" > checkout.txt
+          sha256sum ./*.nupkg > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-assigned-work-validation
+          path: |
+            ${{ runner.temp }}/mobile-candidate/*.nupkg
+            ${{ runner.temp }}/mobile-candidate/checkout.txt
+            ${{ runner.temp }}/mobile-candidate/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
