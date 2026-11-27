@@ -410,12 +410,14 @@ jobs:
         run: |
           # Keep direct mobile-code trim warnings blocking, but do not fail on assembly-level
           # summaries emitted by upstream NuGet packages during the baseline app smoke.
+          # Disable ReadyToRun for this linker smoke; the Release build above uses the default.
           dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
             --configuration Release \
             --framework net11.0-android \
             /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:PublishTrimmed=true \
+            /p:PublishReadyToRun=false \
             /p:TrimMode=full \
             /p:TreatWarningsAsErrors=true \
             /p:WarningsNotAsErrors=IL2104 \
