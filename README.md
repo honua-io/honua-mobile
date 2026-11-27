@@ -193,6 +193,7 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | Required | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
+| Installed Android app | Passed on emulator | Field Android end-to-end workflow | Field captures an inspection photo offline, reopens the outbox after a restart, syncs with Honua Server, and compares the downloaded photo with the device copy. [Device test coverage](docs/guides/validation-strategy.md#installed-field-app) |
 | Physical device | Partial | Field acceptance runs | Field verified an in-place upgrade on a Pixel 8. Physical iPhone acceptance is pending. |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
