@@ -17,7 +17,7 @@ The repository validates the SDK in five concentric layers, from cheapest
 and most reliable inward to most expensive and most operationally gated:
 
 ```
-                       Physical device  (none today, deferred to GA)
+                       Physical device  (installed app acceptance in Honua Field)
                   Cloud acceptance      (manual dispatch)
               Live server (Docker)      (hard-gated on every PR)
           Server integration            (loopback + fixture config)
@@ -52,9 +52,7 @@ and most reliable inward to most expensive and most operationally gated:
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- Honua Field owns the installed Android/iPhone journey.
-  Emulator/simulator platform smoke is separate evidence and does not prove
-  physical-device acceptance.
+- **Installed app** -- Honua Field runs phone and tablet workflows on Android emulators and Apple simulators. Its AWS Device Farm evidence includes a physical Pixel 8 upgrade and separate iPhone simulator XLSForm upgrades. Physical iPhone acceptance remains open. [Field device verification](https://github.com/honua-io/honua-field/pull/208)
 
 Embed DOM tests (`src/Honua.Embed/tests/`, npm) cover the web-component
 `<honua-map>` / `<honua-scene>` surfaces and run on every PR via the
