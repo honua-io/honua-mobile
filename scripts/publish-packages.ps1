@@ -58,7 +58,7 @@ function Test-Prerequisites {
         Write-Host "✅ .NET SDK: $dotnetVersion" -ForegroundColor Green
     }
     catch {
-        Write-Error "❌ .NET SDK not found. Please install .NET 10.0+ SDK"
+        Write-Error "❌ .NET SDK not found. Please install .NET 11.0+ SDK"
         exit 1
     }
 

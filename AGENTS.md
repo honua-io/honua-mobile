@@ -16,35 +16,27 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 ## Tech Stack
 
-- **.NET 10** (`net10.0`) — library projects (`Sdk`, `Offline`, `Maui`)
-  target `net10.0` and build on any platform without the MAUI workload.
-- **.NET MAUI** `10.0.70` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
+- **.NET 11** (`net11.0`) — library projects (`Sdk`, `Offline`, `Maui`)
+  target `net11.0` and build on any platform without the MAUI workload.
+- **.NET MAUI** `11.0.10` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
   Android SDK; iOS targets need macOS + Xcode.
-- **Honua .NET SDK** `1.0.0` train (`Honua.Sdk.*`), pinned in
-  `Directory.Build.props`. Pulled from the private GitHub Packages feed.
+- **Honua .NET SDK** `5.1.0` train (`Honua.Sdk.*`), pinned in
+  `Directory.Build.props`. Restored from NuGet.org.
 - **TypeScript / Vite / Vitest** — `src/Honua.Embed` (`@honua-io/embed`), with
   Cesium, MapLibre, deck.gl; React/Vue/Angular wrappers.
 - gRPC + Protobuf for transport; GeoPackage/SQLite for offline storage.
 
 ## Setup
 
-Fresh checkouts need read access to the private Honua GitHub Packages feed
-(`github-honua` source in `NuGet.config`) for `Honua.Sdk.*` packages:
-
-```bash
-gh auth refresh -s read:packages
-export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
-export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
-```
-
-`scripts/validate-local.sh` uses a temporary NuGet config built from those
-vars and removes it on exit; without them it falls back to existing credentials
-configured for the `github-honua` source.
+Restore `Honua.Sdk.*` from NuGet.org. Access to the Honua GitHub Packages
+feed (`github-honua` in `NuGet.config`) is only needed to consume private
+`Honua.Mobile.*` packages.
 
 ## Commands
 
 Full local validation baseline (restore, build, test, smoke, format, embed
-build/tests):
+build/tests). The solution includes the platform smoke app. Install the
+matching MAUI workloads and platform SDKs for your host before running it:
 
 ```bash
 scripts/validate-local.sh
@@ -112,7 +104,7 @@ templates/  examples/    Field collector template and sample apps
 scripts/    quality/      Validation/release scripts, store-prereq validators, release checklists
 docs/       contracts/    Guides (validation-strategy, offline-sync, sdk-contract-stability), proto/contracts
 Directory.Build.props    SDK train version + MauiVersion pins (shared MSBuild props)
-NuGet.config             Package sources + source mapping (Honua.* -> github-honua feed)
+NuGet.config             Package sources + source mapping (Honua.Mobile.* -> github-honua feed)
 .github/workflows/       CI (ci.yml, pr-validation.yml), live-server-integration, publish, store dist
 ```
 

@@ -52,7 +52,7 @@ dotnet workload list
 ```bash
 # Clean and rebuild
 dotnet clean
-dotnet build -f net10.0-android
+dotnet build -f net11.0-android
 
 # Check Android SDK path
 echo $ANDROID_SDK_ROOT
@@ -62,7 +62,7 @@ echo $ANDROID_SDK_ROOT
 ```bash
 # Clean and rebuild
 dotnet clean
-dotnet build -f net10.0-ios
+dotnet build -f net11.0-ios
 
 # Verify Xcode installation
 xcode-select --print-path

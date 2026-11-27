@@ -62,13 +62,13 @@ Local equivalents for maintainers with platform tooling installed:
 
 ```bash
 dotnet workload install maui-android
-dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj --configuration Release --framework net10.0-android /p:PublishTrimmed=true /p:TrimMode=full /p:TreatWarningsAsErrors=true /p:WarningsNotAsErrors=IL2104 /p:AndroidPackageFormat=apk
+dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj --configuration Release --framework net11.0-android /p:PublishTrimmed=true /p:TrimMode=full /p:TreatWarningsAsErrors=true /p:WarningsNotAsErrors=IL2104 /p:AndroidPackageFormat=apk
 dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj --configuration Release
 ```
 
 ```bash
 dotnet workload install maui
-dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj --configuration Release --framework net10.0-ios /p:RuntimeIdentifier=ios-arm64 /p:PublishTrimmed=true /p:TrimMode=full /p:PublishAot=true /p:PublishAotUsingRuntimePack=true /p:EnableCodeSigning=false /p:ArchiveOnBuild=false /p:TreatWarningsAsErrors=true '/p:WarningsNotAsErrors=IL2104;IL3053'
+dotnet publish apps/Honua.Mobile.App/Honua.Mobile.App.csproj --configuration Release --framework net11.0-ios /p:RuntimeIdentifier=ios-arm64 /p:PublishTrimmed=true /p:TrimMode=full /p:PublishAot=true /p:PublishAotUsingRuntimePack=true /p:EnableCodeSigning=false /p:ArchiveOnBuild=false /p:TreatWarningsAsErrors=true '/p:WarningsNotAsErrors=IL2104;IL3053'
 dotnet test tests/Honua.Mobile.Smoke.Tests/Honua.Mobile.Smoke.Tests.csproj --configuration Release
 ```
 

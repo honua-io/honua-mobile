@@ -4,7 +4,7 @@ Issue #88 adds a manual GitHub Actions workflow for signed iPhone builds. Use
 `.github/workflows/ios-testflight.yml` when a developer needs a TestFlight build
 without a local Mac.
 
-The workflow builds `net10.0-ios`, signs an `ios-arm64` IPA with protected Apple
+The workflow builds `net11.0-ios`, signs an `ios-arm64` IPA with protected Apple
 signing assets, uploads the IPA to App Store Connect, and writes a run summary
 with the version, commit SHA, upload status, release notes, and tester
 instructions.
@@ -25,7 +25,7 @@ The workflow owns this iOS target mapping:
 | `mobile-app` | `apps/Honua.Mobile.App/Honua.Mobile.App.csproj` | `io.honua.mobile.app` | `IOS_APP_PROVISIONING_PROFILE_MOBILEPROVISION_BASE64` |
 
 Before importing signing assets, the workflow evaluates the selected MAUI
-project's `ApplicationId` for `net10.0-ios` and fails if it no longer matches
+project's `ApplicationId` for `net11.0-ios` and fails if it no longer matches
 the expected bundle ID in the table. After importing the selected profile, it
 also verifies that the decoded profile team and application identifier match the
 same expected bundle ID.
@@ -130,9 +130,9 @@ tester membership in App Store Connect.
 
 ## Runner and Xcode Notes
 
-The workflow uses `macos-latest`, pins .NET SDK `10.0.100`, installs the iOS
-workload with `--skip-manifest-update`, and explicitly selects Xcode 26.0 from
-`/Applications/Xcode_26.0.app`. Keep those values aligned because newer .NET
+The workflow uses `macos-latest`, pins .NET SDK `11.0.100`, installs the iOS
+workload with `--skip-manifest-update`, and explicitly selects Xcode 27.2 from
+`/Applications/Xcode_27.2.app`. Keep those values aligned because newer .NET
 iOS workload manifests can require newer Xcode toolchains than the selected
 hosted runner provides.
 
@@ -174,7 +174,7 @@ No Apple Distribution identity found:
 No IPA produced:
 
 - Inspect the `Publish signed iOS IPA` step first.
-- Confirm the project still targets `net10.0-ios`.
+- Confirm the project still targets `net11.0-ios`.
 - Confirm the publish command includes `RuntimeIdentifier=ios-arm64`,
   `ArchiveOnBuild=true`, and `BuildIpa=true`.
 

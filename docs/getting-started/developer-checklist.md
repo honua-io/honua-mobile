@@ -11,7 +11,7 @@ Welcome to Honua Mobile SDK development! This checklist ensures you have everyth
   - [Download Visual Studio](https://visualstudio.microsoft.com/downloads/)
   - ✅ .NET Multi-platform App UI development workload
   - ✅ Azure development workload (for cloud features)
-- [ ] **.NET 10.0 SDK** or later
+- [ ] **.NET 11.0 SDK** or later
   - [Download .NET](https://dotnet.microsoft.com/download/dotnet/10.0)
   - Verify: `dotnet --version` should show 10.0 or higher
 - [ ] **Git** for version control
@@ -19,7 +19,7 @@ Welcome to Honua Mobile SDK development! This checklist ensures you have everyth
 
 **Platform-Specific Requirements:**
 - [ ] **iOS Development** (macOS only):
-  - [ ] Xcode 15.0+ from Mac App Store
+  - [ ] Xcode 27.2+ from Mac App Store
   - [ ] iOS Simulator or physical iOS device
   - [ ] Apple Developer Account (for device testing)
 - [ ] **Android Development**:
@@ -79,9 +79,9 @@ builder.Services.AddHonuaMobileSdk(new HonuaMobileClientOptions
 
 ```bash
 # Run on your preferred platform
-dotnet build -t:Run -f net10.0-android     # Android
-dotnet build -t:Run -f net10.0-ios         # iOS (macOS only)
-dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
+dotnet build -t:Run -f net11.0-android     # Android
+dotnet build -t:Run -f net11.0-ios         # iOS (macOS only)
+dotnet build -t:Run -f net11.0-windows10.0.19041.0 # Windows
 ```
 
 **Success Indicators:**

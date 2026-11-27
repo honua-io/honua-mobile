@@ -84,7 +84,7 @@ public sealed class RepoScaffoldingGateTests
 
         Assert.Contains("MAUI Android Build & Trim Smoke", workflow);
         Assert.Contains("dotnet workload install maui-android", workflow);
-        Assert.Contains("--framework net10.0-android", workflow);
+        Assert.Contains("--framework net11.0-android", workflow);
         Assert.Contains("Android trim smoke", workflow);
         Assert.Contains("/p:PublishTrimmed=true", workflow);
         Assert.Contains("/p:TrimMode=full", workflow);
@@ -94,7 +94,7 @@ public sealed class RepoScaffoldingGateTests
         Assert.Contains("MAUI iOS Build & AOT Smoke", workflow);
         Assert.Contains("Verify iOS 17+ simulator runtime", workflow);
         Assert.Contains("iOS (1[7-9]|2[0-9])", workflow);
-        Assert.Contains("--framework net10.0-ios", workflow);
+        Assert.Contains("--framework net11.0-ios", workflow);
         Assert.Contains("iOS trim and NativeAOT smoke", workflow);
         Assert.Contains("/p:PublishAot=true", workflow);
         Assert.Contains("/p:PublishAotUsingRuntimePack=true", workflow);

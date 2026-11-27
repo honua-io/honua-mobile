@@ -15,7 +15,7 @@ usage() {
 Usage: scripts/validate-local.sh [options]
 
 Runs the local Honua Mobile validation baseline:
-  - dotnet restore/build/test Honua.Mobile.sln
+  - dotnet restore/build/test Honua.Mobile.sln (requires MAUI workloads)
   - dotnet format checks for core source projects
   - Honua.Mobile.Smoke.Tests
   - npm ci/build/test for src/Honua.Embed
@@ -29,8 +29,9 @@ Options:
   -h, --help             Show this help.
 
 GitHub Packages:
-  Fresh checkouts need a GitHub token with read:packages access to honua-io
-  packages. Set HONUA_GITHUB_PACKAGES_USER and HONUA_GITHUB_PACKAGES_TOKEN.
+  The Honua.Sdk.* dependencies restore from NuGet.org. For private
+  Honua.Mobile.* packages, set HONUA_GITHUB_PACKAGES_USER and
+  HONUA_GITHUB_PACKAGES_TOKEN with read:packages access.
   The script writes credentials only to a temporary NuGet.config and removes it
   on exit.
 EOF
@@ -67,7 +68,7 @@ make_nuget_config() {
   local user="${HONUA_GITHUB_PACKAGES_USER:-${GITHUB_ACTOR:-}}"
 
   if [[ -z "${token}" ]]; then
-    printf '%s' "${nuget_config}"
+    restore_config="${nuget_config}"
     return
   fi
 
@@ -114,7 +115,7 @@ make_nuget_config() {
 EOF
   umask "${old_umask}"
 
-  printf '%s' "${config_path}"
+  restore_config="${config_path}"
 }
 
 cleanup_paths=()
@@ -162,15 +163,10 @@ done
 cd "${repo_root}"
 
 if [[ "${run_dotnet}" == "true" ]]; then
-  restore_config="$(make_nuget_config)"
+  make_nuget_config
 
   if [[ -z "${HONUA_GITHUB_PACKAGES_TOKEN:-}" ]]; then
-    step "Using existing NuGet credentials"
-    cat <<'EOF'
-No HONUA_GITHUB_PACKAGES_TOKEN is set. Restore will use any credentials already
-configured for the github-honua source. For a fresh checkout, set
-HONUA_GITHUB_PACKAGES_USER and HONUA_GITHUB_PACKAGES_TOKEN with read:packages.
-EOF
+    step "Using repository NuGet configuration"
   else
     step "Using temporary GitHub Packages NuGet credentials"
   fi
@@ -205,7 +201,7 @@ EOF
     step "Verify dotnet format"
     run dotnet format src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj --no-restore --verify-no-changes --verbosity minimal
     run dotnet format src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj --no-restore --verify-no-changes --verbosity minimal
-    run dotnet format src/Honua.Mobile.Field/Honua.Mobile.Field.csproj --no-restore --verify-no-changes --verbosity minimal
+    run dotnet format src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj --no-restore --verify-no-changes --verbosity minimal
   fi
 fi
 
