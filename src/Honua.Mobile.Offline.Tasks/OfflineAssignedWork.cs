@@ -125,10 +125,10 @@ public sealed class OfflineAssignedWork
                 }
                 catch (WorkTaskApiException ex) when (ex.HttpStatus == (int)HttpStatusCode.Forbidden)
                 {
-                    await UpdateAsync(state => state.TaskRevision != revision ? null : state with
+                    await UpdateAsync(state => state with
                     {
                         Tasks = [], AssetSummaries = new Dictionary<Guid, AssignedAssetSummary>(),
-                        TaskRevision = revision + 1
+                        TaskRevision = state.TaskRevision + 1
                     }, CancellationToken.None).ConfigureAwait(false);
                     throw;
                 }
@@ -148,19 +148,15 @@ public sealed class OfflineAssignedWork
             } while (cursor is not null);
 
             var summaries = new Dictionary<Guid, AssignedAssetSummary>();
-            var deniedTasks = new HashSet<Guid>();
+            var deniedAssets = new Dictionary<Guid, string>();
             try
             {
                 if (readAssetSummary is not null)
-                    await ReadSummariesAsync(summaries, deniedTasks, tasks.Values, readAssetSummary, ct).ConfigureAwait(false);
+                    await ReadSummariesAsync(summaries, deniedAssets, tasks.Values, readAssetSummary, ct).ConfigureAwait(false);
             }
-            catch (Exception) when (deniedTasks.Count > 0)
+            catch (Exception) when (deniedAssets.Count > 0)
             {
-                await UpdateAsync(state => state.TaskRevision != revision ? null : state with
-                {
-                    AssetSummaries = state.AssetSummaries.Where(item => !deniedTasks.Contains(item.Key)).ToDictionary(),
-                    TaskRevision = revision + 1
-                }, CancellationToken.None).ConfigureAwait(false);
+                await InvalidateDeniedSummariesAsync(deniedAssets).ConfigureAwait(false);
                 throw;
             }
 
@@ -169,14 +165,28 @@ public sealed class OfflineAssignedWork
                     : state with
                     {
                         Tasks = tasks.Values.ToArray(), AssetSummaries = summaries, TaskRevision = revision + 1
-                    }, deniedTasks.Count > 0 ? CancellationToken.None : ct).ConfigureAwait(false))
+                    }, deniedAssets.Count > 0 ? CancellationToken.None : ct).ConfigureAwait(false))
                 return;
+
+            if (deniedAssets.Count > 0)
+                await InvalidateDeniedSummariesAsync(deniedAssets).ConfigureAwait(false);
         }
     }
 
+    private Task InvalidateDeniedSummariesAsync(Dictionary<Guid, string> deniedAssets)
+        => UpdateAsync(state =>
+        {
+            var summaries = state.AssetSummaries.Where(item =>
+                !deniedAssets.TryGetValue(item.Key, out var assetId) ||
+                !string.Equals(item.Value.AssetId, assetId, StringComparison.Ordinal)).ToDictionary();
+            return summaries.Count == state.AssetSummaries.Count
+                ? null
+                : state with { AssetSummaries = summaries, TaskRevision = state.TaskRevision + 1 };
+        }, CancellationToken.None);
+
     private async Task ReadSummariesAsync(
         Dictionary<Guid, AssignedAssetSummary> summaries,
-        HashSet<Guid> deniedTasks,
+        Dictionary<Guid, string> deniedAssets,
         IEnumerable<WorkTask> tasks,
         Func<AssignedWorkScope, WorkTask, CancellationToken, Task<AssignedAssetSummary?>> readAssetSummary,
         CancellationToken ct)
@@ -198,7 +208,7 @@ public sealed class OfflineAssignedWork
 
             if (summary is null)
             {
-                deniedTasks.Add(task.TaskId);
+                deniedAssets.Add(task.TaskId, assetId);
                 continue;
             }
 
