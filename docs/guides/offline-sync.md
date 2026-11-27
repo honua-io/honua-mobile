@@ -13,6 +13,11 @@ The reusable offline package, journal, checkpoint, conflict, and sync engine con
 
 Mobile implements those contracts with GeoPackage/SQLite, places files on the device, and handles MAUI registration, permissions, reachability and background scheduling. [Honua Field](https://github.com/honua-io/honua-field) owns the phone and tablet screens, draft and outbox workflows, and the operator’s conflict-resolution choices.
 
+For assigned tasks, use the account-scoped command journal to queue a transition
+or a completion against its pinned form version and recover the outcome when
+connectivity returns. The adapter guide covers package requirements, cancellation
+and access changes. [Offline assigned work](../offline-assigned-work.md)
+
 ## Core Concepts
 
 ### Offline-First Architecture
