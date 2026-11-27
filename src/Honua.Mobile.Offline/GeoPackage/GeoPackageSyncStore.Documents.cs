@@ -168,6 +168,24 @@ public sealed partial class GeoPackageSyncStore
             !await ChangeDocumentAsync(collection, document.Id, document, null, compare: false, ct).ConfigureAwait(false));
     }
 
+    /// <summary>Reads one opaque document, or returns null if it does not exist.</summary>
+    public async Task<OfflineDocument?> GetDocumentAsync(string collection, string id, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(collection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT document_json FROM honua_local_documents WHERE collection = $collection AND document_id = $id;
+            """;
+        command.Parameters.AddWithValue("$collection", collection);
+        command.Parameters.AddWithValue("$id", id);
+        var json = await command.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return json is null ? null : new OfflineDocument(id, json);
+    }
+
+
     /// <summary>Deletes an opaque document by ID.</summary>
     /// <exception cref="InvalidOperationException">The document has a pending operation.</exception>
     public async Task DeleteDocumentAsync(string collection, string id, CancellationToken ct = default)

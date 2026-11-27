@@ -17,7 +17,7 @@ The repository validates the SDK in five concentric layers, from cheapest
 and most reliable inward to most expensive and most operationally gated:
 
 ```
-                       Physical device  (none today, deferred to GA)
+                       Physical device  (installed app acceptance in Honua Field)
                   Cloud acceptance      (manual dispatch)
               Live server (Docker)      (hard-gated on every PR)
           Server integration            (loopback + fixture config)
@@ -48,17 +48,25 @@ and most reliable inward to most expensive and most operationally gated:
   so the suite is now a hard gate on PRs -- a failing live test blocks the
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
+
+  The live replica test registers through the [Mobile replica client configuration](offline-sync.md#geoservices-replica-downloads),
+  synchronizes the replica, and checks that the queued edit and updated generation
+  survive reopening the offline store. The configured client adapts new registrations
+  to the scalar generation contract supported by the pinned SDK.
 - **Cloud acceptance** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
   (`.github/workflows/cloud-acceptance.yml`, `workflow_dispatch`).
-- **Physical device** -- Collect owns the installed Android/iPhone journey.
-  Emulator/simulator platform smoke is separate evidence and does not prove
-  physical-device acceptance.
 
 Embed DOM tests (`src/Honua.Embed/tests/`, npm) cover the web-component
 `<honua-map>` / `<honua-scene>` surfaces and run on every PR via the
 `test` job's "Run Embed Component Tests" step.
+
+### Installed Field app
+
+On an Android emulator, Honua Field saved an inspection with a gallery photo in airplane mode. After a restart, the inspection was in the outbox and the server had no matching feature. After sync and a second restart, Field showed the inspection as sent. Honua Server returned the same feature and attachment IDs across the restart, and the downloaded JPEG matched the device copy byte for byte. [Reproduce the Android test](https://github.com/honua-io/honua-field/blob/e7a52702c1e322b15b41c12a17fb17fb550e488d/docs/verification/e2e/README.md#ordinary-feature-photos-on-android) · [Server readback](https://github.com/honua-io/honua-field/blob/e7a52702c1e322b15b41c12a17fb17fb550e488d/docs/verification/e2e/ordinary-photo-android.json)
+
+Field also runs phone and tablet workflows on Android emulators and Apple simulators. AWS Device Farm verified a physical Pixel 8 upgrade and separate iPhone simulator XLSForm upgrades. Physical iPhone acceptance remains open. [Pixel 8 upgrade](https://github.com/honua-io/honua-field/blob/5890f3b/docs/verification/e2e/README.md#aws-physical-android-in-place-update) · [AWS iPhone simulator evidence](https://github.com/honua-io/honua-field/pull/208#issuecomment-7217287017)
 
 ## 2. Capability Matrix
 
@@ -101,7 +109,7 @@ cover registration and map-area download. Smoke (`Honua.Mobile.Smoke.Tests`,
 ### Count of N/A cells in the capability matrix
 
 Cells marked N/A remain unverified at that level. The retired duplicate app
-unit suite is no longer part of the evidence; Collect owns app workflow and
+unit suite is no longer part of the evidence; Honua Field owns app workflow and
 physical-device acceptance.
 
 ## 3. Gap Registry
