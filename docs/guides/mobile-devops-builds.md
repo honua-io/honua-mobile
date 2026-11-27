@@ -6,7 +6,7 @@ The maintained MAUI reference app is `apps/Honua.Mobile.App`. Use the
 Their run summaries record the source commit, version, artifact and digest.
 The duplicate field app and its dedicated debug APK workflow have been retired.
 
-Collect owns its installable field app builds. The
+Honua Field owns its installable field app builds. The
 [field SDK consolidation journey](field-sdk-consolidation.md#paired-build-test-script)
 records paired SDK/package versions and physical Android/iOS results. A reference
 app build or simulator result does not satisfy that phone journey.
