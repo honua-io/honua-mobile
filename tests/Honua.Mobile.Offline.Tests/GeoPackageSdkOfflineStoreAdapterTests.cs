@@ -2,6 +2,7 @@ using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
+using SdkOfflineSyncEngine = Honua.Sdk.Offline.OfflineSyncEngine;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -173,13 +174,38 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
 
         await adapter.MarkUploadedAsync("op-1", new FeatureEditResponse
         {
-            UpdateResults = [new FeatureEditResult { Succeeded = true, ObjectId = 42 }],
+            UpdateResults =
+            [
+                new FeatureEditResult { Succeeded = true, Id = "provider-41", ObjectId = 41 },
+                new FeatureEditResult { Succeeded = true, ObjectId = 42 },
+            ],
         });
 
         var reopenedStore = CreateStore();
         var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
         Assert.NotNull(acknowledgement);
-        Assert.Equal(["42"], acknowledgement.ServerFeatureIds);
+        Assert.Equal(["provider-41", "42"], acknowledgement.ServerFeatureIds);
+        Assert.Equal(0, await reopenedStore.CountPendingAsync());
+    }
+
+    [Fact(Skip = "Enable after pinning the published SDK containing the upload acknowledgement contract.")]
+    public async Task OfflineSyncEngine_PersistsProviderIdentifierThroughTheChangeJournal()
+    {
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+        var client = new RecordingFeatureClient(new FeatureEditResponse
+        {
+            UpdateResults = [new FeatureEditResult { Succeeded = true, Id = "provider-42", ObjectId = 42 }],
+        });
+        var engine = new SdkOfflineSyncEngine(client, client, adapter, adapter, adapter);
+
+        var sync = await engine.PushAsync("area-1");
+
+        Assert.Equal(1, sync.Succeeded);
+        var reopenedStore = CreateStore();
+        var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
+        Assert.NotNull(acknowledgement);
+        Assert.Equal(["provider-42"], acknowledgement.ServerFeatureIds);
         Assert.Equal(0, await reopenedStore.CountPendingAsync());
     }
 
@@ -305,6 +331,24 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
                 },
             },
         };
+
+    private sealed class RecordingFeatureClient(FeatureEditResponse response)
+        : IHonuaFeatureQueryClient, IHonuaFeatureEditClient
+    {
+        public string ProviderName => "receipt-test";
+
+        public FeatureEditCapabilities EditCapabilities { get; } = new();
+
+        public Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(response);
+
+        public Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public IAsyncEnumerable<FeatureQueryResult> QueryPagesAsync(
+            FeatureQueryRequest request, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+    }
 
     private static SourceDescriptor CreateSourceDescriptor()
         => new()
