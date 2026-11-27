@@ -361,6 +361,22 @@ public static class HonuaMobileServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the SDK replica client for <see cref="DeltaDownloadEngine"/> with the
+    /// supplied named HTTP client's endpoint, authentication, and policies.
+    /// </summary>
+    /// <param name="builder">Builder for a dedicated GeoServices replica HTTP client.</param>
+    /// <returns>The HTTP client builder for chaining.</returns>
+    public static IHttpClientBuilder AddHonuaDeltaReplicaClient(this IHttpClientBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        return builder
+            .AddHttpMessageHandler(() => new DeltaReplicaRegistrationHandler())
+            .AddTypedClient<Honua.Sdk.Offline.Abstractions.IReplicaSyncClient>(
+                client => new Honua.Sdk.Offline.ReplicaSyncClient(client));
+    }
+
+    /// <summary>
     /// Registers <see cref="IMapAreaDownloader"/> for downloading offline map area packages.
     /// Requires <see cref="AddHonuaGeoPackageOfflineSync"/> to be called first.
     /// </summary>
