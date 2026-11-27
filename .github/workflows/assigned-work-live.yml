@@ -1,0 +1,85 @@
+name: Mobile assigned work live replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [validation/mobile-assigned-work-live]
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MSBuildEnableWorkloadResolver: 'false'
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldcombined.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: honua-io/honua-field
+          ref: 732fa8fd2889962935ef3cd2324efdde9fca9b6e
+          path: field-fixture
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: honua-io/honua-server
+          ref: ea127fc0916f2bce70596deb7e4f11784ce9f7d1
+          path: server-candidate
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/server-dotnet
+        with:
+          global-json-file: server-candidate/global.json
+      - name: Publish isolated assignment server
+        working-directory: server-candidate
+        env:
+          NuGetPackageSourceCredentials_github-honua: Username=${{ github.actor }};Password=${{ github.token }}
+          MSBuildEnableWorkloadResolver: 'true'
+        run: |
+          "$RUNNER_TEMP/server-dotnet/dotnet" publish src/Honua.Server/Honua.Server.csproj \
+            --runtime linux-x64 --self-contained true --configuration Debug \
+            -p:PublishAot=false -p:PublishTrimmed=false -p:PublishSingleFile=false \
+            --output "$RUNNER_TEMP/published"
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100
+      - name: Verify SDK validation packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/download-combined-sdk-candidate.sh "$RUNNER_TEMP/task-sdk"
+      - name: Restore opt-in integration test
+        working-directory: ${{ runner.temp }}
+        run: |
+          cat > "$RUNNER_TEMP/assigned-work-nuget.config" <<CONFIG
+          <configuration>
+            <packageSources>
+              <clear/>
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json"/>
+              <add key="task-sdk" value="$RUNNER_TEMP/task-sdk"/>
+            </packageSources>
+          </configuration>
+          CONFIG
+          dotnet restore "$GITHUB_WORKSPACE/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj" \
+            --configfile "$RUNNER_TEMP/assigned-work-nuget.config" \
+            -p:HonuaWorkTasksSdkVersion="$HONUA_TASK_SDK_VERSION"
+      - name: Replay with two scoped workers against real Server and PostGIS
+        run: |
+          bash .github/scripts/run-assigned-work-live.sh "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/field-fixture" "$GITHUB_WORKSPACE/server-candidate" \
+            "$RUNNER_TEMP/assigned-work-report"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: assigned-work-live-results
+          path: ${{ runner.temp }}/assigned-work-report/
+          if-no-files-found: ignore
