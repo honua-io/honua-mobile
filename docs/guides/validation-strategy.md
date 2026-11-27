@@ -48,7 +48,11 @@ and most reliable inward to most expensive and most operationally gated:
   so the suite is now a hard gate on PRs -- a failing live test blocks the
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
-  On November 27, 2026, the assigned-work branch passed 10 of 11 live tests with its pinned packages. The failing test creates a replica. The pinned client requests per-layer synchronization but expects a single server generation in the response. The shared SDK fix requests per-replica synchronization to match the generation the client reads. All 11 passed with the .NET 10 candidate package `1.10.1-net10replica.1` against the seeded Server and PostGIS. The candidate came from a .NET 10 backport based on v1.10.0. The shared SDK trunk targets .NET 11. To clear the hosted gate, publish a supported .NET 10 package containing the fix, update the Mobile pin, and rerun the live suite. [Hosted live run](https://github.com/honua-io/honua-mobile/actions/runs/46040127785/job/140645553744) · [.NET 10 backport](https://github.com/honua-io/honua-sdk-dotnet/tree/fix/net10-field-replica-uploads) · [Candidate build](https://github.com/honua-io/honua-sdk-dotnet/actions/runs/45960188104) · [.NET 11 upstream fix](https://github.com/honua-io/honua-sdk-dotnet/pull/598)
+
+  The live replica test registers through the [Mobile replica client configuration](offline-sync.md#delta-replica-client-registration),
+  synchronizes the replica, and checks that the queued edit and updated generation
+  survive reopening the offline store. The configured client adapts new registrations
+  to the scalar generation contract supported by the pinned SDK.
 - **Cloud acceptance** -- `DisconnectedFieldWorkflowAcceptanceTests`
   run only when `HONUA_MOBILE_CLOUD_ACCEPTANCE=1` is set against a staging
   Honua deployment. Triggered manually via the `Cloud Acceptance` workflow
