@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Honua.Mobile.Offline/Honua.Mobile.Offline.csproj" />
+    <PackageReference Include="Honua.Sdk.Field" Version="$(HonuaWorkTasksSdkVersion)" />
+  </ItemGroup>
+  <Target Name="RequireWorkTasksPackageVersion" BeforeTargets="CollectPackageReferences"
+          Condition="'$(HonuaWorkTasksSdkVersion)' == ''">
+    <Error Text="Set HonuaWorkTasksSdkVersion to a version of Honua.Sdk.Field that includes WorkTaskClient." />
+  </Target>
+</Project>

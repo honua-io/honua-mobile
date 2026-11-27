@@ -94,6 +94,54 @@ public sealed partial class GeoPackageSyncStore
         await SaveDocumentCoreAsync(connection, null, collection, document, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Reads one opaque document, or returns null if it does not exist.</summary>
+    public async Task<OfflineDocument?> GetDocumentAsync(string collection, string id, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(collection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT document_json FROM honua_local_documents WHERE collection = $collection AND document_id = $id;
+            """;
+        command.Parameters.AddWithValue("$collection", collection);
+        command.Parameters.AddWithValue("$id", id);
+        var json = await command.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return json is null ? null : new OfflineDocument(id, json);
+    }
+
+    /// <summary>Replaces one document if its stored JSON matches the expected value. Null expects a missing document.</summary>
+    public async Task<bool> CompareExchangeDocumentAsync(
+        string collection, OfflineDocument document, string? expectedJson, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(collection);
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrWhiteSpace(document.Id);
+        ArgumentNullException.ThrowIfNull(document.Json);
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = expectedJson is null
+            ? """
+                INSERT INTO honua_local_documents (collection, document_id, document_json)
+                VALUES ($collection, $id, $json) ON CONFLICT(collection, document_id) DO NOTHING;
+                """
+            : """
+                UPDATE honua_local_documents SET document_json = $json
+                WHERE collection = $collection AND document_id = $id AND document_json = $expected;
+                """;
+        command.Parameters.AddWithValue("$collection", collection);
+        command.Parameters.AddWithValue("$id", document.Id);
+        command.Parameters.AddWithValue("$json", document.Json);
+        if (expectedJson is not null)
+        {
+            command.Parameters.AddWithValue("$expected", expectedJson);
+        }
+
+        return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1;
+    }
+
     /// <summary>Deletes an opaque document by ID.</summary>
     public async Task DeleteDocumentAsync(string collection, string id, CancellationToken ct = default)
     {
