@@ -2,8 +2,8 @@
 
 `Honua.Mobile.Offline.Tasks` is a .NET 11 adapter for the shared task client in
 `Honua.Sdk.Field`. It is an opt-in project while the task client awaits a
-published package. The existing .NET 10 Mobile packages can be built and used
-independently.
+published package. The default .NET 11 Mobile packages build independently
+with the released Honua SDK.
 
 Initialize a SQLCipher-backed `GeoPackageSyncStore` with the app's durable
 encryption key. Construct `OfflineAssignedWork` with that store, a
@@ -59,8 +59,8 @@ under the original account.
 
 ## Verify with a candidate SDK package
 
-Use a .NET 11 SDK from a directory outside this repository's .NET 10
-`global.json`. Configure a temporary NuGet source for the versioned
+Use the .NET 11 SDK pinned in this repository's `global.json`. Configure a
+temporary NuGet source for the versioned
 `Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
 package sources. Set `WORK_TASKS_SDK_VERSION` to the exact candidate package
 version that includes the typed asset request API. This adapter is opt-in and

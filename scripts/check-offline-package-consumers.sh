@@ -50,7 +50,7 @@ for mode in stock sqlcipher; do
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -64,5 +64,5 @@ for mode in stock sqlcipher; do
 XML
     dotnet restore "$consumer/Consumer.csproj" --configfile "$scratch/NuGet.config"
     dotnet build "$consumer/Consumer.csproj" --configuration Release --no-restore
-    dotnet "$consumer/bin/Release/net10.0/Consumer.dll" "$mode" "$consumer/offline.gpkg"
+    dotnet "$consumer/bin/Release/net11.0/Consumer.dll" "$mode" "$consumer/offline.gpkg"
 done
