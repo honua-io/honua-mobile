@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 35
     env:
       MSBuildEnableWorkloadResolver: 'false'
-      HONUA_TASK_SDK_VERSION: 5.1.1-fieldasset.3
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldcombined.4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
