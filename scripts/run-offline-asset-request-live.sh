@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+for tool in docker python3 openssl curl jq dotnet git dirname mkdir mktemp rm cat sleep sed head; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        printf '%s: required command "%s" not found on PATH\n' "${0##*/}" "$tool" >&2
+        exit 127
+    fi
+done
+
 mobile_root=$(cd -- "$(dirname -- "$0")/.." && pwd)
 : "${HONUA_ASSET_E2E_SERVER_CHECKOUT:?Set to the Server source checkout matching the published binary}"
 : "${HONUA_ASSET_E2E_SERVER_PUBLISH:?Set to the directory containing the published Honua.Server executable}"
