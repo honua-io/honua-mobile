@@ -354,6 +354,26 @@ await using var orchestrator = new BackgroundSyncOrchestrator(
 await orchestrator.StartAsync();
 ```
 
+## GeoServices replica downloads
+
+For apps using `DeltaDownloadEngine`, configure the SDK replica client with
+`DeltaReplicaRegistrationHandler` on its dedicated HTTP client. The engine stores
+one replica generation per service, so new replicas must use the server's
+replica-wide generation. Register the client and its handler with the app's
+existing authentication and HTTP lifetime configuration.
+
+```csharp
+var replicaHttp = new HttpClient(new DeltaReplicaRegistrationHandler
+{
+    InnerHandler = new HttpClientHandler(),
+}) { BaseAddress = serverBaseUri };
+var replicaClient = new Honua.Sdk.Offline.ReplicaSyncClient(replicaHttp);
+var delta = new DeltaDownloadEngine(store, replicaClient);
+```
+
+This configuration applies when creating replicas and leaves persisted replica
+IDs and generations intact.
+
 ## Sync Problems And Telemetry
 
 Sync upload failures are mapped through `MobileSyncProblemHelper` before they are

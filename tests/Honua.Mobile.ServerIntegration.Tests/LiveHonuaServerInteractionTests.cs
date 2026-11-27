@@ -511,29 +511,53 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     {
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
-        using var http = CreateHttpClient();
+        using var http = CreateHttpClient(new DeltaReplicaRegistrationHandler { InnerHandler = new HttpClientHandler() });
+        using var client = CreateMobileClient(preferGrpc: false);
         var replicaClient = new ReplicaSyncClient(http);
-        var replica = await replicaClient.CreateReplicaAsync(
-            _server.Options.ServiceId,
-            $"mobile-live-{Guid.NewGuid():N}",
-            _server.Options.ReplicaLayerIds.ToArray());
+        var serviceId = _server.Options.ServiceId;
+        var storeOptions = new GeoPackageSyncStoreOptions
+        {
+            DatabasePath = Path.Combine(_rootDirectory, "replica-cache.gpkg"),
+        };
+        var replicaStore = new GeoPackageSyncStore(storeOptions);
+        var options = new DeltaDownloadOptions
+        {
+            ReplicaName = $"mobile-live-{Guid.NewGuid():N}",
+            LayerIds = _server.Options.ReplicaLayerIds.ToArray(),
+        };
 
+        long? addedObjectId = null;
         try
         {
-            Assert.False(string.IsNullOrWhiteSpace(replica.ReplicaId));
+            var initial = await new DeltaDownloadEngine(replicaStore, replicaClient, options).DownloadAsync(serviceId);
+            var replicaId = await replicaStore.GetSyncCursorAsync($"replica:{serviceId}");
+            Assert.False(string.IsNullOrWhiteSpace(replicaId));
+            Assert.True(initial.ServerGen >= 0);
+            Assert.Equal(initial.ServerGen.ToString(CultureInfo.InvariantCulture), await replicaStore.GetSyncCursorAsync($"servergen:{serviceId}"));
 
-            var changes = await replicaClient.ExtractChangesAsync(_server.Options.ServiceId, replica.ReplicaId);
-            Assert.True(changes.ServerGen >= 0);
+            addedObjectId = await AddFeatureServerFeatureAsync(client, "offline-delta");
+            var resumedStore = new GeoPackageSyncStore(storeOptions);
+            var resumed = await new DeltaDownloadEngine(resumedStore, replicaClient, options).DownloadAsync(serviceId);
 
-            var sync = await replicaClient.SynchronizeReplicaAsync(_server.Options.ServiceId, replica.ReplicaId);
-            Assert.True(sync.ServerGen >= 0);
+            Assert.Equal(replicaId, await resumedStore.GetSyncCursorAsync($"replica:{serviceId}"));
+            Assert.True(resumed.ServerGen > initial.ServerGen);
+            Assert.Equal(resumed.ServerGen.ToString(CultureInfo.InvariantCulture), await resumedStore.GetSyncCursorAsync($"servergen:{serviceId}"));
+            var cachedFeatures = await resumedStore.GetFeaturesAsync(_server.Options.LayerId.ToString(CultureInfo.InvariantCulture));
+            Assert.Contains(cachedFeatures, feature => feature.Contains("offline-delta", StringComparison.Ordinal));
         }
         finally
         {
-            await replicaClient.UnRegisterReplicaAsync(_server.Options.ServiceId, replica.ReplicaId);
+            if (await replicaStore.GetSyncCursorAsync($"replica:{serviceId}") is { Length: > 0 } replicaId)
+            {
+                await replicaClient.UnRegisterReplicaAsync(serviceId, replicaId);
+            }
+
+            if (addedObjectId is { } objectId)
+            {
+                await DeleteFeatureServerFeatureAsync(client, objectId);
+            }
         }
 
-        using var client = CreateMobileClient(preferGrpc: false);
         var featureObjectId = await AddFeatureServerFeatureAsync(client, "offline-delete");
         var ogcId = await CreateOgcFeatureAsync(client, "offline-delete");
 
@@ -745,9 +769,11 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         return JsonSerializer.SerializeToElement(envelope, JsonOptions);
     }
 
-    private HttpClient CreateHttpClient()
+    private HttpClient CreateHttpClient(HttpMessageHandler? handler = null)
     {
-        var http = new HttpClient { BaseAddress = _server.BaseUri, Timeout = TimeSpan.FromSeconds(30) };
+        var http = handler is null ? new HttpClient() : new HttpClient(handler);
+        http.BaseAddress = _server.BaseUri;
+        http.Timeout = TimeSpan.FromSeconds(30);
         http.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _server.Options.ApiKey);
         http.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _server.Options.BearerToken);
