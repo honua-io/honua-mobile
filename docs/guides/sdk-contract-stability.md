@@ -30,13 +30,13 @@ packages (from `.csproj` files under `src/`, `apps/`, `tests/`):
 
 | Package | Purpose |
 | --- | --- |
-| `Honua.Sdk.Abstractions` | Interfaces and DTOs shared across SDK clients (feature, scene, routing, plugins). |
+| `Honua.Sdk.Abstractions` | Interfaces and DTOs shared across SDK clients, including `Honua.Sdk.Offline.Abstractions` contracts for feature storage, change journals, sync checkpoints, sync state, and offline package manifests. |
+| `Honua.Sdk.Geometry` | Shared geometry and spatial-reference operations used by the MAUI integration. |
 | `Honua.Sdk.Grpc` | gRPC transport and mobile-side request converters. |
 | `Honua.Sdk.GeoServices` | ArcGIS-compatible FeatureServer + routing client implementations. |
 | `Honua.Sdk.OgcFeatures` | OGC API Features client (models, conversion, exceptions). |
 | `Honua.Sdk.Scenes` | 3D scene client and scene-specific exceptions. |
 | `Honua.Sdk.Field` | Field forms (`FormDefinition`, `FormField`, `FormFieldType`) and `FieldRecord` types. |
-| `Honua.Sdk.Abstractions` | Also carries the `Honua.Sdk.Offline.Abstractions` namespace for offline sync interfaces and DTOs: `IOfflineChangeJournal`, `IOfflineFeatureStore`, `IOfflineSyncCheckpointStore`, `IOfflineSyncStateStore`, `OfflinePackageManifest`. |
 | `Honua.Sdk.Offline` | Offline sync engine, `ReplicaSyncClient`, and concrete behavior built on the offline abstractions namespace. |
 
 Any of these package IDs disappearing, splitting further, or being renamed
