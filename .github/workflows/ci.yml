@@ -82,8 +82,8 @@ jobs:
           SRC_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|\.github/workflows/|tests/Honua\.Mobile\.PlatformSmoke/)')
           CORE_CHANGED=$(match_changed '^(src/|apps/|proto/|quality/|scripts/|tests/|\.github/workflows/|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config|package(-lock)?\.json)')
           TEST_CHANGED=$(match_changed '^tests/')
-          PLATFORM_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.Maui\.Tests/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-(android|ios)-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
-          ANDROID_SMOKE_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/run-android-platform-smoke\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+          PLATFORM_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.Maui\.Tests/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/(run-(android|ios)-platform-smoke|check-android-packaged-sqlite)\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
+          ANDROID_SMOKE_CHANGED=$(match_changed '^(apps/Honua\.Mobile\.App/|src/Honua\.Mobile\.Maui/|tests/Honua\.Mobile\.PlatformSmoke/|scripts/(run-android-platform-smoke|check-android-packaged-sqlite)\.sh|\.github/workflows/ci\.yml|Directory\.(Build|Packages)\.props|global\.json|NuGet\.config)')
 
           if [ "$FULL_MOBILE_REQUESTED" = "true" ]; then
             SRC_CHANGED="${SRC_CHANGED:-__full_mobile_ci__}"
@@ -452,7 +452,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
             adb shell getprop ro.build.version.sdk
-            scripts/run-android-platform-smoke.sh
+            scripts/check-android-packaged-sqlite.sh apps/Honua.Mobile.App/bin/Release/net11.0-android/android-x64/publish/io.honua.mobile.app-Signed.apk && scripts/run-android-platform-smoke.sh
 
   maui-ios:
     name: MAUI iOS Build & AOT Smoke
