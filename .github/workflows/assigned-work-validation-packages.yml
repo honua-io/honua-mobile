@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 15
     env:
       MSBuildEnableWorkloadResolver: 'false'
-      HONUA_TASK_SDK_VERSION: 5.1.1-fieldtasks.2
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldtasks.3
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
