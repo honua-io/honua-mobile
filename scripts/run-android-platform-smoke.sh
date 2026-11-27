@@ -40,13 +40,16 @@ until [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; do
 done
 
 dotnet restore "${PROJECT_PATH}" \
-  --framework "${TARGET_FRAMEWORK}" \
+  /p:Configuration="${CONFIGURATION}" \
+  /p:TargetFramework="${TARGET_FRAMEWORK}" \
+  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
   /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}"
 
 dotnet build "${PROJECT_PATH}" \
   --configuration "${CONFIGURATION}" \
   --framework "${TARGET_FRAMEWORK}" \
   --no-restore \
+  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
   /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}" \
   /p:AndroidPackageFormat=apk \
   /p:TreatWarningsAsErrors=true

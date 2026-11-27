@@ -365,8 +365,11 @@ jobs:
 
       - name: Restore Android Apps
         run: |
+          # Restore with the same configuration and RID as the build to resolve the ReadyToRun pack.
           dotnet restore apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            -p:Configuration=Release \
             -p:TargetFramework=net11.0-android \
+            -p:RuntimeIdentifier=android-x64 \
             -p:RuntimeIdentifiers=android-x64
 
           dotnet restore src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj \
@@ -402,6 +405,7 @@ jobs:
             --configuration Release \
             --framework net11.0-android \
             --no-restore \
+            /p:RuntimeIdentifier=android-x64 \
             /p:RuntimeIdentifiers=android-x64 \
             /p:TreatWarningsAsErrors=true
 

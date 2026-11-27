@@ -256,7 +256,7 @@ jobs:
 
       - name: Restore app project
         shell: bash
-        run: dotnet restore "${{ steps.app.outputs.app_project }}" -p:TargetFramework="${TARGET_FRAMEWORK}"
+        run: dotnet restore "${{ steps.app.outputs.app_project }}" -p:Configuration=Release -p:TargetFramework="${TARGET_FRAMEWORK}"
 
       - name: Decode Android signing keystore
         id: signing
