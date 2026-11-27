@@ -324,7 +324,9 @@ public sealed class OfflineAssignedWork
                 outcome = command with { Status = AssignedCommandStatus.Rejected, HttpStatus = ex.HttpStatus };
             }
 
-            await UpdateAsync(latest => ApplyOutcome(latest, outcome), ct).ConfigureAwait(false);
+            // A definitive response must survive cancellation before another command is dispatched.
+            await UpdateAsync(latest => ApplyOutcome(latest, outcome), CancellationToken.None).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
         }
     }
 

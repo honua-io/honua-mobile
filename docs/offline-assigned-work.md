@@ -49,6 +49,14 @@ adapter while that identity and its credentials remain active.
   Removing a reassigned task from the assignment list preserves its command
   history in the original account scope.
 
+If the user cancels replay before a definitive response, read the journal on
+reopen and replay pending commands with their existing IDs. If replay already
+received a receipt, conflict or rejection, it saves that outcome before
+observing cancellation and stops before sending the next command. An HTTP 403
+or 404 for the command also removes that task and its cached asset summary.
+The command and its local attachment references remain available for review
+under the original account.
+
 ## Verify with a candidate SDK package
 
 Use a .NET 11 SDK from a directory outside this repository's .NET 10

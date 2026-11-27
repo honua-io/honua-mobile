@@ -20,7 +20,7 @@ namespace during the transition; there is one definition of each evidence type.
 
 This extraction preserves native GPS and external receiver evidence before
 removal of the duplicate field app. It does not complete the store/sync migration
-or change the Collect shell's existing core boundary.
+or change the Honua Field shell's existing core boundary.
 
 ## Duplicate app retirement
 
@@ -34,19 +34,19 @@ under `docs/design-handoff` describe the retired app.
 
 ## Remaining M1 acceptance
 
-- Adopt one published offline store and sync engine in Collect while preserving
+- Adopt one published offline store and sync engine in Honua Field while preserving
   its tested form runtime boundary during the shell spike (paired
-  [Collect #173](https://github.com/honua-io/honua-collect/issues/173)).
+  [Honua Field #173](https://github.com/honua-io/honua-field/issues/173)).
 - Verify encrypted native storage, key lifecycle and recovery on both platforms.
-- Publish paired installable Android and iOS Collect builds and run the journey
+- Publish paired installable Android and iOS Honua Field builds and run the journey
   below on physical phones. Record platform signing or device dependencies.
 
 ## Paired build test script
 
-Record the SDK package version, Collect commit, phone model/OS and installable
+Record the SDK package version, Honua Field commit, phone model/OS and installable
 build location. Run this journey on the founder's Android and iOS phones:
 
-1. Install the paired Collect build and grant location permission.
+1. Install the paired Honua Field build and grant location permission.
 2. Open the scripted project online, then disconnect the phone.
 3. Capture a point with the built-in receiver; save and reopen the record.
    Confirm coordinates, timestamp, accuracy and source survive restart.

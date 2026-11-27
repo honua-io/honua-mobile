@@ -24,14 +24,14 @@ attachment files or exported data.
 
 The desktop tests verify encrypted queue reopen, non-plaintext database contents,
 wrong/missing-key rejection and rejection by a plaintext provider. Before adopting
-this store in Collect and removing the duplicate store, run on Android and iOS:
+this store in Honua Field and removing the duplicate store, run on Android and iOS:
 
-1. Install the paired Collect build and record its package version and device OS.
+1. Install the paired Honua Field build and record its package version and device OS.
 2. Disconnect, save a field observation and attachment, terminate, and reopen.
 3. Verify the same observation and pending edit survive with the persisted key.
 4. Reconnect and confirm one upload, with no duplicate queue entry.
 5. Exercise key-store failure and recovery without deleting pending data.
 6. Verify exported data and attachment protection follow the application's policy.
 
-Record installable build locations and the journey results with the paired Collect
+Record installable build locations and the journey results with the paired Honua Field
 change. Desktop success does not establish native provider or key-store behavior.

@@ -50,6 +50,11 @@ Windows). Platform-neutral client logic comes from the
 packages. The core SDK train and the optional adapter dependency are pinned in
 [`Directory.Build.props`](Directory.Build.props).
 
+Honua Field, the separately shipped collection app, uses .NET 11. To build
+the SDK or its reference apps, use this repository’s .NET 10 pin. To build
+Field, use the SDK and MAUI workload versions pinned in the Field repository.
+[Mobile SDK build pin](global.json) · [Field build pin](https://github.com/honua-io/honua-field/blob/trunk/global.json)
+
 ## Quick Start
 
 ```csharp
@@ -106,6 +111,8 @@ GeoPackage-backed offline storage with queue-based sync:
 - **Map area download** -- offline basemap packages with path traversal protection
 - **Delta sync** -- replica-based incremental downloads with cursor persistence
 - **Cache governance** -- per-layer TTL eviction and R-tree-backed bbox lookups for replicated features
+
+The opt-in .NET 11 assigned-work adapter caches a worker’s assignments and pinned form versions in the encrypted store. A worker can queue a transition or completion offline and recover its receipt after reconnecting. Building this adapter requires a version of `Honua.Sdk.Field` that includes `WorkTaskClient`. [Offline assigned work](docs/offline-assigned-work.md)
 
 See [docs/guides/offline-sync.md](docs/guides/offline-sync.md) and
 [encrypted offline storage](docs/guides/encrypted-offline-storage.md).
@@ -185,9 +192,10 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Integration (in-process loopback) | ✅ | every PR | `Honua.Mobile.ServerIntegration.Tests` against a real ASP.NET Core loopback server |
 | Smoke | ✅ | every PR | `Honua.Mobile.Smoke.Tests` (`quality-gates` job) |
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
-| Live server (Docker image) | ✅ | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
+| Live server (Docker image) | Required | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Physical device | 🟡 | deferred to GA | Collect owns installed Android/iPhone acceptance; emulator/simulator smoke is separate evidence |
+| Installed Android app | Passed on emulator | Field Android end-to-end workflow | Field captures an inspection photo offline, reopens the outbox after a restart, syncs with Honua Server, and compares the downloaded photo with the device copy. [Device test coverage](docs/guides/validation-strategy.md#installed-field-app) |
+| Physical device | Partial | Field acceptance runs | Field verified an in-place upgrade on a Pixel 8. Physical iPhone acceptance is pending. |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See
