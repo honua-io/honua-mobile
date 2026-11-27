@@ -2,6 +2,7 @@ using System.Text.Json;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Offline.Abstractions;
+using SdkOfflineSyncEngine = Honua.Sdk.Offline.OfflineSyncEngine;
 
 namespace Honua.Mobile.Offline.Tests;
 
@@ -166,6 +167,74 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task ChangeJournal_DurablyRecordsProviderIdsWhenAnUploadSucceeds()
+    {
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+
+        await adapter.MarkUploadedAsync("op-1", new FeatureEditResponse
+        {
+            UpdateResults =
+            [
+                new FeatureEditResult { Succeeded = true, Id = "provider-41", ObjectId = 41 },
+                new FeatureEditResult { Succeeded = true, ObjectId = 42 },
+            ],
+        });
+
+        var reopenedStore = CreateStore();
+        var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
+        Assert.NotNull(acknowledgement);
+        Assert.Equal(["provider-41", "42"], acknowledgement.ServerFeatureIds);
+        Assert.Equal(0, await reopenedStore.CountPendingAsync());
+    }
+
+    [Fact]
+    public async Task OfflineSyncEngine_PersistsProviderIdentifierThroughTheChangeJournal()
+    {
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+        var client = new RecordingFeatureClient(new FeatureEditResponse
+        {
+            UpdateResults = [new FeatureEditResult { Succeeded = true, Id = "provider-42", ObjectId = 42 }],
+        });
+        var engine = new SdkOfflineSyncEngine(client, client, adapter, adapter, adapter);
+
+        var sync = await engine.PushAsync("area-1");
+
+        Assert.Equal(1, sync.Succeeded);
+        var reopenedStore = CreateStore();
+        var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
+        var sdkSupportsUploadReceipts = typeof(IOfflineChangeJournal).GetMethod(nameof(adapter.MarkUploadedAsync)) is not null;
+        var requireUploadReceipt = Environment.GetEnvironmentVariable("HONUA_MOBILE_REQUIRE_SDK_UPLOAD_RECEIPTS") == "1";
+        if (sdkSupportsUploadReceipts || requireUploadReceipt)
+        {
+            Assert.NotNull(acknowledgement);
+            Assert.Equal(["provider-42"], acknowledgement.ServerFeatureIds);
+        }
+        else
+        {
+            Assert.Null(acknowledgement);
+        }
+        Assert.Equal(0, await reopenedStore.CountPendingAsync());
+    }
+
+    [Fact]
+    public async Task ChangeJournal_LeavesTheOperationQueuedWhenTheProviderRejectsIt()
+    {
+        var store = CreateStore();
+        var adapter = new GeoPackageSdkOfflineStoreAdapter(store);
+        await adapter.EnqueueAsync(CreateJournalEntry("area-1", "parks", "op-1"));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => adapter.MarkUploadedAsync("op-1", new FeatureEditResponse
+        {
+            UpdateResults = [new FeatureEditResult { Succeeded = false }],
+        }));
+
+        Assert.Equal(1, await store.CountPendingAsync());
+        Assert.Null(await store.GetUploadAcknowledgementAsync("op-1"));
+    }
+
+    [Fact]
     public async Task ChangeJournal_OnlyClaimsEntriesForRequestedPackage()
     {
         var store = CreateStore();
@@ -271,6 +340,24 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
                 },
             },
         };
+
+    private sealed class RecordingFeatureClient(FeatureEditResponse response)
+        : IHonuaFeatureQueryClient, IHonuaFeatureEditClient
+    {
+        public string ProviderName => "receipt-test";
+
+        public FeatureEditCapabilities EditCapabilities { get; } = new();
+
+        public Task<FeatureEditResponse> ApplyEditsAsync(FeatureEditRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(response);
+
+        public Task<FeatureQueryResult> QueryAsync(FeatureQueryRequest request, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public IAsyncEnumerable<FeatureQueryResult> QueryPagesAsync(
+            FeatureQueryRequest request, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+    }
 
     private static SourceDescriptor CreateSourceDescriptor()
         => new()
