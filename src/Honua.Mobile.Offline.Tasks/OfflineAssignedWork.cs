@@ -120,7 +120,7 @@ public sealed class OfflineAssignedWork
                         Cursor = cursor
                     }, ct).ConfigureAwait(false);
                 }
-                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+                catch (WorkTaskApiException ex) when (ex.HttpStatus == (int)HttpStatusCode.Forbidden)
                 {
                     await UpdateAsync(state => state.TaskRevision != revision ? null : state with
                     {
@@ -288,11 +288,11 @@ public sealed class OfflineAssignedWork
                     CurrentVersion = ex.CurrentVersion, Reason = ex.Message
                 };
             }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden
-                or HttpStatusCode.NotFound or HttpStatusCode.Conflict or HttpStatusCode.BadRequest
-                or HttpStatusCode.UnprocessableEntity)
+            catch (WorkTaskApiException ex) when (ex.InnerException is HttpRequestException
+                { StatusCode: HttpStatusCode.Forbidden or HttpStatusCode.NotFound or HttpStatusCode.Conflict
+                    or HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity })
             {
-                outcome = command with { Status = AssignedCommandStatus.Rejected, HttpStatus = (int?)ex.StatusCode };
+                outcome = command with { Status = AssignedCommandStatus.Rejected, HttpStatus = ex.HttpStatus };
             }
 
             await UpdateAsync(latest => ApplyOutcome(latest, outcome), ct).ConfigureAwait(false);

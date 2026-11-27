@@ -45,7 +45,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
             ExpectedVersion = 3,
             Answers = JsonSerializer.SerializeToElement(new { condition = "private-observation" })
         });
-        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.ReplayAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
 
         adapter = await OpenAsync(http, Scope);
         Assert.Equal(AssignedCommandStatus.Pending, Assert.Single((await adapter.ReadAsync()).Commands).Status);
@@ -62,6 +62,51 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         Assert.Contains("private-observation", requests[1], StringComparison.Ordinal);
         Assert.False((await File.ReadAllBytesAsync(_path)).AsSpan().StartsWith("SQLite format 3"u8));
         Assert.Empty((await (await OpenAsync(http, Scope with { AccountSubject = "subject-2" })).ReadAsync()).Commands);
+    }
+
+    [Fact]
+    public async Task ConflictForAnotherCommandStaysPendingAcrossReopen()
+    {
+        var task = MakeTask(Guid.NewGuid());
+        var commandId = Guid.NewGuid();
+        var posts = 0;
+        using var http = CreateClient(request =>
+        {
+            if (request.Method == HttpMethod.Get)
+                return Task.FromResult(Ok(new WorkTaskPage { Items = [task] }));
+
+            if (++posts == 1)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.Conflict)
+                {
+                    Content = JsonContent.Create(new { commandId = Guid.NewGuid(), reason = "version_conflict", currentVersion = 4 })
+                };
+                response.Headers.Add("Honua-Command-Outcome", "conflict");
+                return Task.FromResult(response);
+            }
+
+            return Task.FromResult(Ok(new WorkTaskReceipt
+            {
+                Outcome = "duplicate", CommandId = commandId, Task = task with { Version = 4 }
+            }));
+        });
+
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshAsync();
+        await adapter.QueueTransitionAsync(task.TaskId, new WorkTaskTransitionRequest
+        {
+            CommandId = commandId, ExpectedVersion = 3, Action = "start"
+        });
+        var error = await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
+        Assert.Equal(409, error.HttpStatus);
+        Assert.IsType<JsonException>(error.InnerException);
+
+        var reopened = await OpenAsync(http, Scope);
+        Assert.Equal(AssignedCommandStatus.Pending, Assert.Single((await reopened.ReadAsync()).Commands).Status);
+        await reopened.ReplayAsync();
+        var confirmed = Assert.Single((await reopened.ReadAsync()).Commands);
+        Assert.Equal(AssignedCommandStatus.Confirmed, confirmed.Status);
+        Assert.Equal(commandId, confirmed.Receipt?.CommandId);
     }
 
     [Fact]
@@ -102,7 +147,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         });
         pendingRefresh = true;
         failPage = true;
-        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshAsync());
         Assert.Equal(task.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
 
         failPage = false;
@@ -173,7 +218,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         await adapter.RefreshAsync();
 
         invalid = true;
-        await Assert.ThrowsAsync<JsonException>(() => adapter.RefreshAsync());
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshAsync());
         Assert.Equal(cached.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
     }
 
@@ -233,7 +278,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         if (accessChange == "replay-forbidden")
             await adapter.ReplayAsync();
         else if (accessChange == "list-forbidden")
-            await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshWithAssetsAsync(ReadAsset));
+            await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshWithAssetsAsync(ReadAsset));
         else
             await adapter.RefreshWithAssetsAsync(ReadAsset);
 

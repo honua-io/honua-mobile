@@ -46,13 +46,13 @@ adapter while that identity and its credentials remain active.
 Use a .NET 11 SDK from a directory outside this repository's .NET 10
 `global.json`. Configure a temporary NuGet source for the versioned
 `Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
-package sources. For the candidate from SDK commit `90ca73985560fca4b2abe486fb8841f7303bbc70`, use
-`5.1.1-fieldtasks.2`.
+package sources. For the candidate from SDK commit `aa9c90c9c6dc355e09a6e0215e51e698f9cfe7c8`, use
+`5.1.1-fieldtasks.3`.
 
 ```sh
 suite="$MOBILE_REPO/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"
-dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2
-dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2
+dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3
+dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3
 ```
 
 The test project exercises the packaged shared HTTP client with controlled
@@ -91,7 +91,7 @@ path. The default test run skips it when this variable is unset.
 
 ```sh
 HONUA_MOBILE_ASSIGNED_WORK_LIVE_CONFIG="$LIVE_CONFIG" dotnet test "$suite" \
-  --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.2 \
+  --no-restore -p:HonuaWorkTasksSdkVersion=5.1.1-fieldtasks.3 \
   --filter FullyQualifiedName~OfflineAssignedWorkLiveTests
 ```
 

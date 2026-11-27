@@ -93,9 +93,9 @@ public sealed class OfflineAssignedWorkLiveTests
             var repeat = await crewTasks.TransitionAsync(first.TaskId, winner.Transition!);
             Assert.Equal("duplicate", repeat.Outcome);
             Assert.Equal(first.Version + 1, repeat.Task.Version);
-            var changed = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            var changed = await Assert.ThrowsAsync<WorkTaskApiException>(() =>
                 crewTasks.TransitionAsync(first.TaskId, winner.Transition! with { Reason = "different command body" }));
-            Assert.Equal(HttpStatusCode.Conflict, changed.StatusCode);
+            Assert.Equal((int)HttpStatusCode.Conflict, changed.HttpStatus);
 
             foreach (var task in assigned.Skip(1))
                 await crewTasks.TransitionAsync(task.TaskId, Transition("start", task.Version));
@@ -129,7 +129,7 @@ public sealed class OfflineAssignedWorkLiveTests
 
             // Drop the first successful completion response after the real server commits.
             interrupt.Armed = true;
-            await Assert.ThrowsAsync<HttpRequestException>(() => reopened.ReplayAsync());
+            await Assert.ThrowsAsync<WorkTaskApiException>(() => reopened.ReplayAsync());
             var committed = Assert.IsType<WorkTaskReceipt>(interrupt.Dropped);
             reopened = await OpenAsync(database, crewTasks, scope);
             Assert.Equal(AssignedCommandStatus.Pending, Assert.Single(
