@@ -61,8 +61,29 @@ Field, use the SDK and MAUI workload versions pinned in the Field repository.
 // In MauiProgram.cs
 using Honua.Mobile.Maui;
 using Honua.Mobile.Offline.GeoPackage;
-using Honua.Mobile.Offline.Sync;
 using Honua.Mobile.Sdk;
+using Honua.Sdk.Abstractions.Features;
+using Honua.Sdk.Offline.Abstractions;
+
+var manifest = new OfflinePackageManifest
+{
+    PackageId = "field-sites",
+    DisplayName = "Field sites",
+    Version = "1",
+    Sources =
+    [
+        new OfflineSourceDescriptor
+        {
+            SourceId = "mobile_offline_demo/FeatureServer/68910",
+            Source = new SourceDescriptor
+            {
+                Id = "field-sites",
+                Protocol = FeatureProtocolIds.GeoServicesFeatureService,
+                Locator = new SourceLocator { ServiceId = "mobile_offline_demo", LayerId = 68910 },
+            },
+        },
+    ],
+};
 
 builder.Services
     .AddHonuaMobilePlatformAuth()
@@ -73,21 +94,28 @@ builder.Services
         PreferGrpcForFeatureQueries = true,
     })
     .AddHonuaScenes()
-    .AddHonuaApiOfflineUploader()
     .AddHonuaMobileFieldCollection()
-    .AddHonuaGeoPackageOfflineSync(
+    .AddHonuaSdkGeoPackageOfflineSync(
         new GeoPackageSyncStoreOptions
         {
             DatabasePath = Path.Combine(FileSystem.Current.AppDataDirectory, "honua-offline.gpkg"),
         },
-        new OfflineSyncEngineOptions
+        manifest,
+        new Honua.Sdk.Offline.OfflineSyncEngineOptions
         {
-            ConflictStrategy = SyncConflictStrategy.ClientWins,
+            ConflictStrategy = OfflineConflictStrategy.ManualReview,
             BatchSize = 50,
         })
     .AddHonuaMapAreaDownload()
     .AddHonuaBackgroundSync();
 ```
+
+Set the service and layer IDs to a layer on your server. The public
+`Honua.Sdk.Offline` package supplies the sync engine. Mobile persists its
+journal, features and checkpoints in the device’s GeoPackage and schedules sync.
+The app must select one native SQLite provider. See the
+[provider setup](docs/getting-started/installation.md#select-one-sqlite-provider) and
+the [reference app](apps/Honua.Mobile.App/MauiProgram.cs) for a two-layer manifest.
 
 After sign-in or bootstrap, store the API key or bearer token with `IAuthTokenProvider.StoreTokenAsync(...)`;
 the platform auth registration persists it in iOS Keychain or Android secure storage.
@@ -194,8 +222,8 @@ platform-agnostic field-platform migrations (Fulcrum, Survey123, KoBo) see the
 | Embed DOM | ✅ | every PR | jsdom suites under `src/Honua.Embed/tests/` |
 | Live server (Docker image) | Required | every PR via the `Live Server Integration` workflow (hard gate) | `LiveHonuaServerInteractionTests` (incl. unary + server-streaming live gRPC); Testcontainers spins up `honuaio/honua-server:nightly` + PostGIS with the vendored seed at `tests/seed/mobile-offline-demo-v1.sql` |
 | Cloud acceptance (staging) | 🟡 | manual `workflow_dispatch` | `DisconnectedFieldWorkflowAcceptanceTests`; production promotion blocked on honua-server#965 |
-| Installed Android app | Passed on emulator | Field Android end-to-end workflow | Field captures an inspection photo offline, reopens the outbox after a restart, syncs with Honua Server, and compares the downloaded photo with the device copy. [Device test coverage](docs/guides/validation-strategy.md#installed-field-app) |
-| Physical device | Partial | Field acceptance runs | Field verified an in-place upgrade on a Pixel 8. Physical iPhone acceptance is pending. |
+| Installed Android app | Passed on emulator | Honua Field Android end-to-end workflow | Field captures an inspection photo offline, reopens the outbox after a restart, syncs with Honua Server, and compares the downloaded photo with the device copy. [Device test coverage](docs/guides/validation-strategy.md#installed-field-app) |
+| Physical device | Partial | Honua Field acceptance runs | Field verified an in-place upgrade on a Pixel 8. Physical iPhone acceptance remains pending for GA. |
 
 Exact test counts are intentionally not pinned here (they drift every PR); the
 authoritative numbers are the per-project totals reported by each CI run. See
@@ -227,17 +255,11 @@ docs/                         Getting started, guides, feature map, API referenc
 
 ## Building
 
-Fresh checkouts need access to the private Honua GitHub Packages feed for
-`Honua.Sdk.*` packages. Use a GitHub token that can read packages in the
-`honua-io` organization:
+Mobile restores the pinned `Honua.Sdk.*` packages from nuget.org. The
+`github-honua` feed is mapped to `Honua.Mobile.*` for consumers of private
+Mobile packages. See the [package source mapping](NuGet.config).
 
-```bash
-gh auth refresh -s read:packages
-export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
-export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
-```
-
-Then run the local validation baseline:
+Run the local validation baseline:
 
 ```bash
 scripts/validate-local.sh

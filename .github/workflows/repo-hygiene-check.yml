@@ -13,4 +13,4 @@ permissions:
 
 jobs:
   repo-hygiene:
-    uses: honua-io/.github/.github/workflows/repo-hygiene.yml@ad47af2702c4064695f6a1fd35aac5298b5b65fa # three-ticket bundle rule
+    uses: honua-io/.github/.github/workflows/repo-hygiene.yml@3818ed9f9287df73993caac150ea1bcf5259ad95 # three-ticket bundle rule
