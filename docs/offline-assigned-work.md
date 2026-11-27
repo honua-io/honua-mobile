@@ -33,8 +33,10 @@ adapter while that identity and its credentials remain active.
 - Use `QueueTransitionAsync` or `QueueCompletionAsync` with a fresh command
   ID and the cached task version for each new action. Queueing commits the
   request before any upload. A task has at most one pending local command.
-- Use `QueueAssetRequestAsync` to persist a title and the authorized
-  asset/profile IDs for a new request. Allocate one client task ID and one
+- Use `QueueAssetRequestAsync` to persist a title and caller-supplied
+  asset and profile IDs for a new request. The asset can come from a separately
+  authorized map. The server authorizes the create at replay time. A denied
+  request remains in that account’s journal for review. Allocate one client task ID and one
   command ID and retain both when retrying the same request. The typed request
   accepts only the canonical service ID, asset and profile IDs, title, and
   the two client IDs. An accepted create stays in the command journal.
@@ -53,7 +55,9 @@ Use a .NET 11 SDK from a directory outside this repository's .NET 10
 `global.json`. Configure a temporary NuGet source for the versioned
 `Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
 package sources. Set `WORK_TASKS_SDK_VERSION` to the exact candidate package
-version that includes the typed asset request API.
+version that includes the typed asset request API. This adapter is opt-in and
+requires a candidate until the shared SDK publishes that API. The default Mobile
+solution builds independently of the adapter and its prerelease dependency.
 
 ```sh
 suite="$MOBILE_REPO/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"

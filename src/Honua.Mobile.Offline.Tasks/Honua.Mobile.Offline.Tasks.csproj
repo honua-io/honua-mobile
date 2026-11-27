@@ -10,6 +10,6 @@
   </ItemGroup>
   <Target Name="RequireWorkTasksPackageVersion" BeforeTargets="CollectPackageReferences"
           Condition="'$(HonuaWorkTasksSdkVersion)' == ''">
-    <Error Text="Set HonuaWorkTasksSdkVersion to a version of Honua.Sdk.Field that includes WorkTaskClient." />
+    <Error Text="Set HonuaWorkTasksSdkVersion to a version of Honua.Sdk.Field that includes WorkTaskClient.CreateAssetRequestAsync." />
   </Target>
 </Project>
