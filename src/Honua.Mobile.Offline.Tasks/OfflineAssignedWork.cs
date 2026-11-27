@@ -88,6 +88,10 @@ public sealed class OfflineAssignedWork
                 }, ct).ConfigureAwait(false);
                 foreach (var task in page.Items)
                 {
+                    if (!string.Equals(task.ServiceId, _scope.ServiceId, StringComparison.Ordinal) ||
+                        !string.Equals(task.Assignee, _scope.Assignee, StringComparison.Ordinal))
+                        throw new InvalidDataException("The server returned a task outside the assigned-work scope.");
+
                     if (!tasks.TryGetValue(task.TaskId, out var prior) || task.Version >= prior.Version)
                         tasks[task.TaskId] = task;
                 }
@@ -188,7 +192,7 @@ public sealed class OfflineAssignedWork
         };
         // A receipt may represent an older assignment after a refresh or duplicate replay.
         var cached = state.Tasks.FirstOrDefault(task => task.TaskId == outcome.TaskId);
-        if (outcome.HttpStatus == (int)HttpStatusCode.NotFound ||
+        if (outcome.HttpStatus is (int)HttpStatusCode.Forbidden or (int)HttpStatusCode.NotFound ||
             (outcome.Status == AssignedCommandStatus.Conflict &&
              (outcome.CurrentVersion is null || cached?.Version < outcome.CurrentVersion)))
         {

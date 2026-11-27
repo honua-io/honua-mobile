@@ -144,6 +144,7 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         stillAssigned = false;
         await adapter.ReplayAsync();
         adapter = await OpenAsync(http, Scope);
+        Assert.Empty((await adapter.ReadAsync()).Tasks);
         await adapter.RefreshAsync();
         await adapter.ReplayAsync();
 
@@ -154,6 +155,26 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         Assert.Equal(AssignedCommandStatus.Rejected, command.Status);
         Assert.Equal(403, command.HttpStatus);
         Assert.Equal(1, posts);
+    }
+
+    [Theory]
+    [InlineData("other-service", "worker")]
+    [InlineData("assets", "other-worker")]
+    public async Task RefreshRejectsTasksFromAnotherScope(string service, string assignee)
+    {
+        var cached = MakeTask(Guid.NewGuid());
+        var outside = MakeTask(Guid.NewGuid()) with { ServiceId = service, Assignee = assignee };
+        var invalid = false;
+        using var http = CreateClient(_ => Task.FromResult(Ok(new WorkTaskPage
+        {
+            Items = invalid ? [outside] : [cached]
+        })));
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshAsync();
+
+        invalid = true;
+        await Assert.ThrowsAsync<InvalidDataException>(() => adapter.RefreshAsync());
+        Assert.Equal(cached.TaskId, Assert.Single((await adapter.ReadAsync()).Tasks).TaskId);
     }
 
     private async Task<OfflineAssignedWork> OpenAsync(HttpClient http, AssignedWorkScope scope)
