@@ -101,6 +101,27 @@ public sealed class GeoPackageSdkOfflineStoreAdapter :
     public Task MarkSucceededAsync(string operationId, CancellationToken ct = default)
         => _store.MarkSucceededAsync(operationId, ct);
 
+    /// <summary>
+    /// Stores provider-assigned feature identifiers before clearing a successful upload from the queue.
+    /// </summary>
+    public Task MarkUploadedAsync(string operationId, FeatureEditResponse response, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        if (!response.Succeeded)
+        {
+            throw new ArgumentException("An upload acknowledgement requires a successful edit response.", nameof(response));
+        }
+
+        var serverFeatureIds = response.AddResults.Concat(response.UpdateResults)
+            .Concat(response.PatchResults).Concat(response.DeleteResults)
+            .Select(result => string.IsNullOrWhiteSpace(result.Id)
+                ? result.ObjectId?.ToString(CultureInfo.InvariantCulture)
+                : result.Id)
+            .OfType<string>()
+            .ToArray();
+        return _store.MarkUploadedAsync(operationId, serverFeatureIds, ct);
+    }
+
     /// <inheritdoc />
     public Task MarkPendingAsync(string operationId, CancellationToken ct = default)
         => _store.MarkPendingAsync(operationId, ct);

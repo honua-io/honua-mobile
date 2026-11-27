@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Package version to build"
+        description: "Dry-run candidate version (defaults to a unique CI prerelease)"
         required: false
-        default: "0.1.0-alpha.1"
+        default: ""
         type: string
       dry_run:
         description: "Run validation only (skip publish)"
@@ -67,16 +67,18 @@ jobs:
       - name: Resolve package version
         id: version
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             package_version="${GITHUB_REF_NAME#mobile-dotnet-v}"
           else
-            package_version="${{ github.event.inputs.version }}"
+            package_version="${REQUESTED_VERSION:-0.1.0-ci.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}}"
           fi
 
-          if [[ -z "${package_version}" ]]; then
-            echo "Package version is required."
+          if [[ ! "${package_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Package version must be a NuGet major.minor.patch version with an optional prerelease suffix."
             exit 1
           fi
 
@@ -84,6 +86,7 @@ jobs:
           echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Require checked-in package versions to match the release
+        if: ${{ github.event_name == 'push' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -205,6 +208,10 @@ jobs:
             sha256sum *.nupkg > SHA256SUMS
           )
 
+      - name: Exercise packed offline storage with stock SQLite and SQLCipher
+        shell: bash
+        run: scripts/check-offline-package-consumers.sh nupkgs "${PACKAGE_VERSION}"
+
       - name: Package install smoke
         shell: bash
         run: |
@@ -235,9 +242,18 @@ jobs:
           EOF
 
           dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.7
-          dotnet add package Honua.Mobile.Sdk --version "${PACKAGE_VERSION}"
-          dotnet add package Honua.Mobile.Offline --version "${PACKAGE_VERSION}"
-          dotnet add package Honua.Mobile.Maui --version "${PACKAGE_VERSION}"
+          dotnet add package Honua.Mobile.Maui --version "[${PACKAGE_VERSION}]"
+          # Maui must bring both lower-level packages at the candidate version.
+          python3 - "${PACKAGE_VERSION}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          assets = json.loads(Path("obj/project.assets.json").read_text())
+          for package in ("Honua.Mobile.Sdk", "Honua.Mobile.Offline", "Honua.Mobile.Maui"):
+              if f"{package}/{sys.argv[1]}" not in assets["libraries"]:
+                  raise SystemExit(f"{package} did not resolve at the exact candidate version")
+          PY
 
           cat > Program.cs <<'EOF'
           using Honua.Sdk.Field.Forms;
@@ -321,6 +337,9 @@ jobs:
           dotnet build --configuration Release /p:TreatWarningsAsErrors=true
 
           popd >/dev/null
+
+      - name: Run offline storage package consumers
+        run: scripts/check-offline-package-consumers.sh nupkgs "${PACKAGE_VERSION}"
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
