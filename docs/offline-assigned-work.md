@@ -110,7 +110,29 @@ pending review and process termination require separate checks.
 
 ### Asset request receipt retry
 
-Use a disposable PostGIS database with a real asset, an active profile for
+Run `scripts/run-offline-asset-request-live.sh` to provision a disposable
+PostGIS database and use a real, loopback TLS Honua Server. Set these inputs
+before running the script:
+
+| Environment variable | Input |
+| --- | --- |
+| `HONUA_ASSET_E2E_SERVER_CHECKOUT` | Server source checkout matching the published build |
+| `HONUA_ASSET_E2E_SERVER_PUBLISH` | Directory containing the published `Honua.Server` executable |
+| `HONUA_ASSET_E2E_FIELD_CHECKOUT` | Field checkout with the published workbook fixture under `scripts/e2e/fixtures` |
+| `HONUA_ASSET_E2E_NUGET_CONFIG` | Absolute path to the NuGet config resolving the verified typed SDK candidate |
+| `HONUA_ASSET_E2E_TASK_SDK_VERSION` | Exact candidate NuGet version |
+| `HONUA_ASSET_E2E_REPORT_DIR` | Optional report directory, defaults to `TestResults/asset-request` |
+| `HONUA_ASSET_E2E_PORT` | Optional unused loopback TLS port, defaults to 5196 |
+
+The runner needs Bash, Docker, Python 3, OpenSSL, curl, jq and .NET 11.
+The report includes the three source commits, the test result and a PostGIS
+readback. The SQL asserts one unassigned request with the canonical service,
+asset and title, the asset geometry in SRID 4326, and one create receipt.
+The profile setup produces the only other receipt. The runner generates fresh
+fixture credentials and removes its private files and database at exit.
+
+To run the test against an existing disposable fixture instead, use a
+PostGIS database with a real asset, an active profile for
 its layer, and a worker authorized to create asset-linked requests. Use a
 fresh task ID and a fresh command ID for each run. Save this configuration
 to a private file and set `HONUA_MOBILE_ASSET_REQUEST_LIVE_CONFIG` to its path.
