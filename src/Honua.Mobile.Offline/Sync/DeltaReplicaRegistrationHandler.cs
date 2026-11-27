@@ -20,12 +20,15 @@ public sealed class DeltaReplicaRegistrationHandler : DelegatingHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (request.Method == HttpMethod.Post &&
-            request.RequestUri?.AbsolutePath.EndsWith("/FeatureServer/createReplica", StringComparison.OrdinalIgnoreCase) == true &&
+            request.RequestUri is { IsAbsoluteUri: true, Query.Length: 0 } uri &&
+            uri.Segments is [.., "rest/", "services/", var service, "FeatureServer/", "createReplica"] &&
+            service.Length > 1 &&
             request.Content is FormUrlEncodedContent originalContent)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var fields = (await originalContent.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)).Split('&');
             var modelIndex = Array.IndexOf(fields, "syncModel=perLayer");
-            if (modelIndex >= 0)
+            if (modelIndex >= 0 && fields.Count(IsSyncModelField) == 1)
             {
                 fields[modelIndex] = "syncModel=perReplica";
                 using var content = new StringContent(string.Join('&', fields), Encoding.UTF8, "application/x-www-form-urlencoded");
@@ -42,5 +45,12 @@ public sealed class DeltaReplicaRegistrationHandler : DelegatingHandler
         }
 
         return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool IsSyncModelField(string field)
+    {
+        var equalsIndex = field.IndexOf('=');
+        var key = equalsIndex < 0 ? field : field[..equalsIndex];
+        return string.Equals(Uri.UnescapeDataString(key), "syncModel", StringComparison.OrdinalIgnoreCase);
     }
 }

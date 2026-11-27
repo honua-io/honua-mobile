@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Honua.Mobile.Maui;
 using Honua.Mobile.Maui.Diagnostics;
 using Honua.Mobile.Offline.GeoPackage;
 using Honua.Mobile.Offline.MapAreas;
@@ -13,9 +14,9 @@ using Honua.Sdk.Abstractions.Features;
 using Honua.Sdk.Abstractions.Scenes;
 using Honua.Sdk.OgcFeatures.Models;
 using Honua.Sdk.Offline.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using SdkFeatureClient = Honua.Mobile.Sdk.Features.HonuaMobileSdkFeatureClient;
 using BoundingBox = Honua.Sdk.Geometry.GeographicBoundingBox;
-using ReplicaSyncClient = Honua.Sdk.Offline.ReplicaSyncClient;
 using OfflineSyncEngine = Honua.Mobile.Offline.Sync.OfflineSyncEngine;
 using OfflineSyncEngineOptions = Honua.Mobile.Offline.Sync.OfflineSyncEngineOptions;
 
@@ -511,9 +512,11 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
     {
         Skip.IfNot(_server.Enabled, "HONUA_MOBILE_LIVE_SERVER_TESTS not set or fixture sql missing");
 
-        using var http = CreateHttpClient(new DeltaReplicaRegistrationHandler { InnerHandler = new HttpClientHandler() });
+        var services = new ServiceCollection();
+        services.AddHttpClient("live-delta-replica", ConfigureHttpClient).AddHonuaDeltaReplicaClient();
+        using var provider = services.BuildServiceProvider();
+        var replicaClient = provider.GetRequiredService<IReplicaSyncClient>();
         using var client = CreateMobileClient(preferGrpc: false);
-        var replicaClient = new ReplicaSyncClient(http);
         var serviceId = _server.Options.ServiceId;
         var storeOptions = new GeoPackageSyncStoreOptions
         {
@@ -535,7 +538,8 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Assert.True(initial.ServerGen >= 0);
             Assert.Equal(initial.ServerGen.ToString(CultureInfo.InvariantCulture), await replicaStore.GetSyncCursorAsync($"servergen:{serviceId}"));
 
-            addedObjectId = await AddFeatureServerFeatureAsync(client, "offline-delta");
+            var marker = $"offline-delta-{Guid.NewGuid():N}";
+            addedObjectId = await AddFeatureServerFeatureAsync(client, marker);
             var resumedStore = new GeoPackageSyncStore(storeOptions);
             var resumed = await new DeltaDownloadEngine(resumedStore, replicaClient, options).DownloadAsync(serviceId);
 
@@ -543,7 +547,9 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
             Assert.True(resumed.ServerGen > initial.ServerGen);
             Assert.Equal(resumed.ServerGen.ToString(CultureInfo.InvariantCulture), await resumedStore.GetSyncCursorAsync($"servergen:{serviceId}"));
             var cachedFeatures = await resumedStore.GetFeaturesAsync(_server.Options.LayerId.ToString(CultureInfo.InvariantCulture));
-            Assert.Contains(cachedFeatures, feature => feature.Contains("offline-delta", StringComparison.Ordinal));
+            Assert.Single(cachedFeatures, feature => feature.Contains(marker, StringComparison.Ordinal));
+            var sync = await replicaClient.SynchronizeReplicaAsync(serviceId, replicaId!);
+            Assert.True(sync.ServerGen >= resumed.ServerGen);
         }
         finally
         {
@@ -769,15 +775,20 @@ public sealed class LiveHonuaServerInteractionTests : IClassFixture<LiveHonuaSer
         return JsonSerializer.SerializeToElement(envelope, JsonOptions);
     }
 
-    private HttpClient CreateHttpClient(HttpMessageHandler? handler = null)
+    private HttpClient CreateHttpClient()
     {
-        var http = handler is null ? new HttpClient() : new HttpClient(handler);
+        var http = new HttpClient();
+        ConfigureHttpClient(http);
+        return http;
+    }
+
+    private void ConfigureHttpClient(HttpClient http)
+    {
         http.BaseAddress = _server.BaseUri;
         http.Timeout = TimeSpan.FromSeconds(30);
         http.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", _server.Options.ApiKey);
         http.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _server.Options.BearerToken);
-        return http;
     }
 
     private HttpClient CreateUnauthenticatedHttpClient()

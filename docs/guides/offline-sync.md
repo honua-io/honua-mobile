@@ -356,20 +356,19 @@ await orchestrator.StartAsync();
 
 ## GeoServices replica downloads
 
-For apps using `DeltaDownloadEngine`, configure the SDK replica client with
-`DeltaReplicaRegistrationHandler` on its dedicated HTTP client. The engine stores
-one replica generation per service, so new replicas must use the server's
-replica-wide generation. Register the client and its handler with the app's
-existing authentication and HTTP lifetime configuration.
+For apps using `DeltaDownloadEngine`, register its SDK replica client on a dedicated
+named HTTP client. The engine stores one generation per service, so new replicas
+use a replica-wide generation. Keep the app's authentication, policies, and
+lifetime configuration on the HTTP client builder.
 
 ```csharp
-var replicaHttp = new HttpClient(new DeltaReplicaRegistrationHandler
-{
-    InnerHandler = new HttpClientHandler(),
-}) { BaseAddress = serverBaseUri };
-var replicaClient = new Honua.Sdk.Offline.ReplicaSyncClient(replicaHttp);
-var delta = new DeltaDownloadEngine(store, replicaClient);
+services.AddHttpClient("HonuaDeltaReplica", client => client.BaseAddress = serverBaseUri)
+    .AddHonuaDeltaReplicaClient();
 ```
+
+Resolve `IReplicaSyncClient` from DI when constructing the engine. Apps that
+construct their own HTTP pipeline can add `DeltaReplicaRegistrationHandler` to
+the dedicated client passed to the SDK replica client.
 
 This configuration applies when creating replicas and leaves persisted replica
 IDs and generations intact.
