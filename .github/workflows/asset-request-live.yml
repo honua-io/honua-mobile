@@ -76,15 +76,6 @@ jobs:
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json"/>
               <add key="task-sdk" value="$RUNNER_TEMP/task-sdk"/>
             </packageSources>
-            <packageSourceMapping>
-              <packageSource key="task-sdk">
-                <package pattern="Honua.Sdk.Field"/>
-                <package pattern="Honua.Sdk.Abstractions"/>
-              </packageSource>
-              <packageSource key="nuget.org">
-                <package pattern="*"/>
-              </packageSource>
-            </packageSourceMapping>
           </configuration>
           CONFIG
           dotnet test "$GITHUB_WORKSPACE/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj" \
@@ -93,6 +84,13 @@ jobs:
             -p:HonuaWorkTasksSdkVersion="$HONUA_TASK_SDK_VERSION" \
             --logger 'trx;LogFileName=offline-tasks.trx' \
             --results-directory "$RUNNER_TEMP/asset-request-report"
+          # Both the older net10 dependency and the net11 candidate use the Abstractions ID.
+          # Verify the actual restored candidate bytes with this run's isolated NuGet cache.
+          for package in Honua.Sdk.Field Honua.Sdk.Abstractions; do
+            lower="${package,,}"
+            cmp "$RUNNER_TEMP/task-sdk/$package.$HONUA_TASK_SDK_VERSION.nupkg" \
+              "$NUGET_PACKAGES/$lower/$HONUA_TASK_SDK_VERSION/$lower.$HONUA_TASK_SDK_VERSION.nupkg"
+          done
       - name: Replay queued create after a lost TLS response
         env:
           HONUA_ASSET_E2E_SERVER_CHECKOUT: ${{ github.workspace }}/server-candidate
