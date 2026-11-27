@@ -95,8 +95,8 @@
     "rxjs": "^7.8.2",
     "typescript": "~6.0.3",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0",
-    "vue": "^3.5.45",
+    "vitest": "^5.1.1",
+    "vue": "^3.5.46",
     "zone.js": "^0.16.3"
   },
   "dependencies": {
@@ -104,6 +104,6 @@
     "@deck.gl/layers": "^9.4.1",
     "@deck.gl/mapbox": "^9.4.1",
     "cesium": "^1.147.0",
-    "maplibre-gl": "^6.18.0"
+    "maplibre-gl": "^6.19.0"
   }
 }
