@@ -15,6 +15,106 @@ public sealed class OfflineAssignedWorkTests : IDisposable
     private static readonly AssignedWorkScope Scope = new("https://honua.test", "subject-1", "assets", "worker");
 
     [Fact]
+    public async Task AssetRequestReplaysBothIdsAfterReceiptLossAndReopen()
+    {
+        var request = MakeAssetRequest();
+        var requests = new List<string>();
+        using var http = CreateClient(async message =>
+        {
+            requests.Add(await message.Content!.ReadAsStringAsync());
+            if (requests.Count == 1)
+                throw new HttpRequestException("Connection closed after commit.");
+            return Ok(new WorkTaskReceipt
+            {
+                CommandId = request.CommandId,
+                Outcome = "duplicate",
+                Task = MakeTask(request.TaskId) with
+                {
+                    Assignee = null, Status = "unassigned", Type = "request", Version = 1,
+                    ProfileId = request.ProfileId, AssetId = request.AssetId, Title = request.Title
+                }
+            });
+        });
+
+        var adapter = await OpenAsync(http, Scope);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            adapter.QueueAssetRequestAsync(request with { ServiceId = "other" }));
+        await adapter.QueueAssetRequestAsync(request);
+        await adapter.QueueAssetRequestAsync(request);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            adapter.QueueAssetRequestAsync(request with { CommandId = Guid.NewGuid() }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            adapter.QueueAssetRequestAsync(request with { Title = "Changed" }));
+        Assert.Empty(requests);
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
+
+        var other = await OpenAsync(http, Scope with { AccountSubject = "other" });
+        Assert.Empty((await other.ReadAsync()).Commands);
+        await other.ReplayAsync();
+        Assert.Single(requests);
+
+        adapter = await OpenAsync(http, Scope);
+        var pending = Assert.Single((await adapter.ReadAsync()).Commands);
+        Assert.Equal(request, pending.AssetRequest);
+        Assert.Equal(AssignedCommandStatus.Pending, pending.Status);
+        await adapter.ReplayAsync();
+
+        var final = await (await OpenAsync(http, Scope)).ReadAsync();
+        Assert.Empty(final.Tasks);
+        var confirmed = Assert.Single(final.Commands);
+        Assert.Equal(AssignedCommandStatus.Confirmed, confirmed.Status);
+        Assert.Equal(request, confirmed.AssetRequest);
+        Assert.Equal(request.CommandId, confirmed.Receipt?.CommandId);
+        Assert.Equal(request.TaskId, confirmed.Receipt?.Task.TaskId);
+        Assert.Equal("duplicate", confirmed.Receipt?.Outcome);
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(requests[0], requests[1]);
+        var body = JsonSerializer.Deserialize<JsonElement>(requests[1]);
+        Assert.False(body.TryGetProperty("notes", out _));
+        Assert.False(body.TryGetProperty("attachments", out _));
+        Assert.False((await File.ReadAllBytesAsync(_path)).AsSpan().StartsWith("SQLite format 3"u8));
+    }
+
+    [Fact]
+    public async Task MalformedAssetReceiptStaysPendingAndDenialPreservesTheRequest()
+    {
+        var request = MakeAssetRequest();
+        var replayCount = 0;
+        using var http = CreateClient(_ => Task.FromResult(++replayCount == 1
+            ? Ok(new WorkTaskReceipt
+            {
+                CommandId = request.CommandId, Outcome = "accepted",
+                Task = MakeTask(Guid.NewGuid()) with
+                {
+                    ProfileId = request.ProfileId, AssetId = request.AssetId, Type = "request"
+                }
+            })
+            : new HttpResponseMessage(HttpStatusCode.Forbidden)));
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.QueueAssetRequestAsync(request);
+
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.ReplayAsync());
+        adapter = await OpenAsync(http, Scope);
+        Assert.Equal(AssignedCommandStatus.Pending, Assert.Single((await adapter.ReadAsync()).Commands).Status);
+        await adapter.ReplayAsync();
+
+        adapter = await OpenAsync(http, Scope);
+        var command = Assert.Single((await adapter.ReadAsync()).Commands);
+        Assert.Equal(AssignedCommandStatus.Rejected, command.Status);
+        Assert.Equal((int)HttpStatusCode.Forbidden, command.HttpStatus);
+        Assert.Equal(request, command.AssetRequest);
+        Assert.Null(command.Receipt);
+        await adapter.ReplayAsync();
+        Assert.Equal(2, replayCount);
+    }
+
+    private static WorkTaskAssetRequest MakeAssetRequest() => new()
+    {
+        CommandId = Guid.NewGuid(), TaskId = Guid.NewGuid(), ServiceId = Scope.ServiceId,
+        ProfileId = Guid.NewGuid(), AssetId = "hydrant-123", Title = "Request service"
+    };
+
+    [Fact]
     public async Task CompletionSurvivesReceiptLossAndEncryptedReopen()
     {
         var task = MakeTask(Guid.NewGuid());
