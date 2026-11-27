@@ -344,7 +344,13 @@ jobs:
       - name: Install MAUI workload
         run: |
           dotnet workload install maui-android --version 11.0.100.1
-          sdkmanager "platforms;android-37.0"
+
+      - name: Install Android SDK dependencies
+        run: |
+          dotnet build apps/Honua.Mobile.App/Honua.Mobile.App.csproj \
+            -f net11.0-android \
+            -t:InstallAndroidDependencies \
+            -p:AcceptAndroidSDKLicenses=True
 
       - name: Restore MAUI Components
         run: |

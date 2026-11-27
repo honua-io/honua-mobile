@@ -215,7 +215,6 @@ jobs:
         shell: bash
         run: |
           dotnet workload install maui-android --version 11.0.100.1
-          sdkmanager "platforms;android-37.0"
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -228,6 +227,16 @@ jobs:
       - name: Configure GitHub Packages
         shell: bash
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Install Android SDK dependencies
+        shell: bash
+        env:
+          APP_PROJECT: ${{ steps.app.outputs.app_project }}
+        run: |
+          dotnet build "$APP_PROJECT" \
+            -f "$TARGET_FRAMEWORK" \
+            -t:InstallAndroidDependencies \
+            -p:AcceptAndroidSDKLicenses=True
 
       - name: Validate Android package identity
         shell: bash
