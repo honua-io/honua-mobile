@@ -310,6 +310,84 @@ public sealed class OfflineAssignedWorkTests : IDisposable
         Assert.Equal(remaining.TaskId, Assert.Single(state.AssetSummaries).Key);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancellationAfterResponseCheckpointsOutcomeBeforeStoppingReplay(bool forbidden)
+    {
+        var first = MakeTask(Guid.NewGuid()) with { AssetId = "first-asset" };
+        var second = MakeTask(Guid.NewGuid());
+        var firstCommandId = Guid.NewGuid();
+        var secondCommandId = Guid.NewGuid();
+        using var cancellation = new CancellationTokenSource();
+        var posts = 0;
+        using var http = CreateClient(request =>
+        {
+            if (request.Method == HttpMethod.Get)
+                return Task.FromResult(Ok(new WorkTaskPage { Items = [first, second] }));
+
+            Assert.Contains(first.TaskId.ToString(), request.RequestUri!.AbsolutePath);
+            posts++;
+            HttpResponseMessage response = new CancelOnDisposeResponse(
+                forbidden ? HttpStatusCode.Forbidden : HttpStatusCode.OK, cancellation.Cancel);
+            if (!forbidden)
+            {
+                response.Content = JsonContent.Create(new WorkTaskReceipt
+                {
+                    CommandId = firstCommandId, Outcome = "accepted",
+                    Task = first with { Status = "in_progress", Version = 4 }
+                });
+            }
+
+            return Task.FromResult(response);
+        });
+
+        var adapter = await OpenAsync(http, Scope);
+        await adapter.RefreshWithAssetsAsync((_, task, _) => Task.FromResult<AssignedAssetSummary?>(
+            task.AssetId is { } assetId
+                ? new(assetId, null, JsonSerializer.SerializeToElement(new { name = assetId }))
+                : null));
+        await adapter.QueueTransitionAsync(first.TaskId, new WorkTaskTransitionRequest
+        {
+            CommandId = firstCommandId, ExpectedVersion = first.Version, Action = "start"
+        });
+        await adapter.QueueTransitionAsync(second.TaskId, new WorkTaskTransitionRequest
+        {
+            CommandId = secondCommandId, ExpectedVersion = second.Version, Action = "start"
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => adapter.ReplayAsync(cancellation.Token));
+
+        var reopened = await (await OpenAsync(http, Scope)).ReadAsync();
+        Assert.Equal(1, posts);
+        var outcome = Assert.Single(reopened.Commands, item => item.CommandId == firstCommandId);
+        Assert.Equal(forbidden ? AssignedCommandStatus.Rejected : AssignedCommandStatus.Confirmed, outcome.Status);
+        Assert.Equal(AssignedCommandStatus.Pending,
+            Assert.Single(reopened.Commands, item => item.CommandId == secondCommandId).Status);
+        if (forbidden)
+        {
+            Assert.Equal((int)HttpStatusCode.Forbidden, outcome.HttpStatus);
+            Assert.DoesNotContain(reopened.Tasks, item => item.TaskId == first.TaskId);
+            Assert.DoesNotContain(first.TaskId, reopened.AssetSummaries.Keys);
+        }
+        else
+        {
+            Assert.Equal(firstCommandId, outcome.Receipt?.CommandId);
+            Assert.Equal(4, Assert.Single(reopened.Tasks, item => item.TaskId == first.TaskId).Version);
+        }
+    }
+
+    private sealed class CancelOnDisposeResponse(HttpStatusCode statusCode, Action cancel)
+        : HttpResponseMessage(statusCode)
+    {
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                cancel();
+        }
+    }
+
     private async Task<OfflineAssignedWork> OpenAsync(HttpClient http, AssignedWorkScope scope)
     {
         var store = new GeoPackageSyncStore(new GeoPackageSyncStoreOptions
