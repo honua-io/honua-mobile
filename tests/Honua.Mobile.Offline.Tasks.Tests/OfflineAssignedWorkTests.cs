@@ -293,22 +293,59 @@ public sealed class OfflineAssignedWorkTests : IDisposable
     }
 
     [Fact]
-    public async Task ExplicitAssetDenialIsRetainedWhenAnotherAssetRefreshIsIncomplete()
+    public async Task ListDenialClearsAssignmentsWrittenByAConcurrentRefresh()
+    {
+        var task = MakeTask(Guid.NewGuid()) with { AssetId = "first" };
+        using var allowed = CreateClient(_ => Task.FromResult(Ok(new WorkTaskPage { Items = [task] })));
+        var concurrentlyRefreshing = await OpenAsync(allowed, Scope);
+        using var denied = CreateClient(async _ =>
+        {
+            await concurrentlyRefreshing.RefreshWithAssetsAsync(ReadAsset);
+            return new HttpResponseMessage(HttpStatusCode.Forbidden);
+        });
+        var adapter = await OpenAsync(denied, Scope);
+
+        await Assert.ThrowsAsync<WorkTaskApiException>(() => adapter.RefreshAsync());
+
+        var state = await (await OpenAsync(allowed, Scope)).ReadAsync();
+        Assert.Empty(state.Tasks);
+        Assert.Empty(state.AssetSummaries);
+    }
+
+    [Theory]
+    [InlineData("first")]
+    [InlineData("replacement")]
+    public async Task ExplicitAssetDenialIsRetainedWhenAnotherAssetRefreshIsIncomplete(string concurrentAsset)
     {
         var inaccessible = MakeTask(Guid.NewGuid()) with { AssetId = "first" };
         var remaining = MakeTask(Guid.NewGuid()) with { AssetId = "second" };
         using var http = CreateClient(_ => Task.FromResult(Ok(new WorkTaskPage { Items = [inaccessible, remaining] })));
         var adapter = await OpenAsync(http, Scope);
-        await adapter.RefreshWithAssetsAsync((_, task, _) => Task.FromResult<AssignedAssetSummary?>(
-            new(task.AssetId!, null, JsonSerializer.SerializeToElement(new { name = task.AssetId }))));
-        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshWithAssetsAsync((_, task, _) =>
-            throw new HttpRequestException(null, null, task.TaskId == inaccessible.TaskId
-                ? HttpStatusCode.Forbidden : HttpStatusCode.ServiceUnavailable)));
+        var replacement = inaccessible with { AssetId = concurrentAsset };
+        using var concurrentHttp = CreateClient(_ => Task.FromResult(Ok(new WorkTaskPage { Items = [replacement, remaining] })));
+        var concurrentlyRefreshing = await OpenAsync(concurrentHttp, Scope);
+        await adapter.RefreshWithAssetsAsync(ReadAsset);
+        await Assert.ThrowsAsync<HttpRequestException>(() => adapter.RefreshWithAssetsAsync(async (_, task, _) =>
+        {
+            if (task.TaskId == inaccessible.TaskId)
+                throw new HttpRequestException(null, null, HttpStatusCode.Forbidden);
+
+            await concurrentlyRefreshing.RefreshWithAssetsAsync(ReadAsset);
+            throw new HttpRequestException(null, null, HttpStatusCode.ServiceUnavailable);
+        }));
 
         var state = await (await OpenAsync(http, Scope)).ReadAsync();
         Assert.Equal(2, state.Tasks.Count);
-        Assert.Equal(remaining.TaskId, Assert.Single(state.AssetSummaries).Key);
+        Assert.Equal("second", state.AssetSummaries[remaining.TaskId].AssetId);
+        if (concurrentAsset == "first")
+            Assert.Single(state.AssetSummaries);
+        else
+            Assert.Equal(concurrentAsset, state.AssetSummaries[inaccessible.TaskId].AssetId);
     }
+
+    private static Task<AssignedAssetSummary?> ReadAsset(AssignedWorkScope _, WorkTask task, CancellationToken ct)
+        => Task.FromResult<AssignedAssetSummary?>(
+            new(task.AssetId!, null, JsonSerializer.SerializeToElement(new { name = task.AssetId })));
 
     private async Task<OfflineAssignedWork> OpenAsync(HttpClient http, AssignedWorkScope scope)
     {
