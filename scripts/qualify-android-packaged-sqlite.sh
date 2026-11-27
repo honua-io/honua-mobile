@@ -7,9 +7,15 @@ test -n "$apk"
 sha256sum "$apk"
 adb shell getprop ro.build.version.sdk
 adb install "$apk"
+adb shell pm path "$package"
+adb logcat -c
+trap 'adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" || true; adb shell pidof "$package" || true; adb logcat -d -b crash || true; adb logcat -d | grep -Ei "$package|AndroidRuntime|mono-rt|dotnet" || true' ERR
+adb shell input keyevent 82
 adb shell svc wifi disable
 adb shell svc data disable
-adb shell monkey -p "$package" -c android.intent.category.LAUNCHER 1
+activity=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$package" | tr -d '\r' | tail -n1)
+[[ "$activity" == "$package/"* ]]
+adb shell am start -W -n "$activity"
 
 read_ui() {
     local attempt
@@ -32,8 +38,7 @@ PY
         fi
         sleep 1
     done
-    cat /tmp/mobile-qualification-ui.xml >&2
-    adb logcat -d -t 400 >&2
+    cat /tmp/mobile-qualification-ui.xml >&2 || true
     return 1
 }
 
