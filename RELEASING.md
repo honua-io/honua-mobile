@@ -3,7 +3,8 @@
 Honua Mobile has two independent, immutable public release lanes:
 
 - `mobile-dotnet-vX.Y.Z[-prerelease]` publishes `Honua.Mobile.Sdk`,
-  `Honua.Mobile.Offline`, and `Honua.Mobile.Maui` to nuget.org.
+  `Honua.Mobile.Offline` and `Honua.Mobile.Maui` to nuget.org. When the Field SDK
+  pin is set, the same release also publishes `Honua.Mobile.Offline.Tasks`.
 - `mobile-embed-vX.Y.Z[-prerelease]` publishes `@honua-io/embed` to npmjs.com.
 
 Both lanes build once, retain the exact package bytes as workflow artifacts,
@@ -22,9 +23,9 @@ outside GitHub:
 1. On nuget.org, signed in as the Honua owner account (`makanikai`), add a
    Trusted Publishing policy for repository owner `honua-io`, repository
    `honua-mobile`, workflow file `publish-dotnet-mobile.yml`, environment
-   `public-nuget`. Ensure that account can create the `Honua.Mobile.Sdk`,
-   `Honua.Mobile.Offline`, and `Honua.Mobile.Maui` IDs (reserve the
-   `Honua.Mobile.*` prefix if desired).
+   `public-nuget`. Grant the policy permission to publish new packages for the first
+   release of each ID, including `Honua.Mobile.Offline.Tasks`. The account must
+   control the selected IDs (reserve the `Honua.Mobile.*` prefix if desired).
 2. Create a protected GitHub environment named `public-nuget` in this
    repository and require the desired human reviewers. It needs no secrets.
 3. Ensure an npm organization or user controls the `@honua-io` scope (Honua's
@@ -54,9 +55,18 @@ nuget.org, so a missing private-only dependency fails before publication.
 
 For the 2026.1 cut, that SDK train is `1.10.0`, which is public on nuget.org.
 
+The optional `Honua.Mobile.Offline.Tasks` adapter targets .NET 11. After a
+version of `Honua.Sdk.Field` with asset-request support appears on nuget.org, set
+`HonuaWorkTasksSdkVersion` in `Directory.Build.props` to that exact version.
+An empty pin selects the three core packages. To validate a public Field SDK
+version before adopting it, supply `work_tasks_sdk_version` on a manual dry run.
+Signed tags use the checked-in pin. The smoke job restores the adapter as the
+only Mobile reference in its test project, checks the installed package bytes
+and dependency versions, and exercises its offline queue and retry behavior.
+
 ## Cut the .NET package set
 
-1. Set the same `<PackageVersion>` in all three package projects.
+1. Set the same `<PackageVersion>` in every package project selected for this release.
 2. Let required CI and release dry-run checks pass.
 3. Create a signed annotated tag whose version matches those files exactly:
 
@@ -65,14 +75,14 @@ For the 2026.1 cut, that SDK train is `1.10.0`, which is public on nuget.org.
    git push origin mobile-dotnet-v0.1.0-alpha.1
    ```
 
-4. Approve the single `public-nuget` environment job. It proves all three
+4. Approve the single `public-nuget` environment job. It proves all selected
    versions are absent before pushing any member of the package set.
 5. Require the anonymous nuget.org restore and GitHub Release jobs to pass.
 
 NuGet package versions cannot be replaced. Any content correction requires a
 new version and tag. Publication is not atomic: if nuget.org accepts only part
 of the set before a later push fails, do not rerun the tag workflow. Advance
-all three package versions and cut a new signed tag so the workflow never
+all selected package versions and cut a new signed tag so the workflow never
 treats a pre-existing public package as the artifact built by a different run.
 
 ## Cut the embed package

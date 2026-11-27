@@ -7,6 +7,9 @@
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v5.1.0</HonuaSdkDotNetTrainReleaseUrl>
     <HonuaSdkDotNetTrainReleaseCommit>592822fe8cdf61afe2c196ec86451ea44685e16a</HonuaSdkDotNetTrainReleaseCommit>
     <HonuaSdkDotNetTrainReleasePublishedAt>2026-11-24T18:50:38Z</HonuaSdkDotNetTrainReleasePublishedAt>
+    <!-- Set to the published Honua.Sdk.Field version with asset-request support
+         to include the .NET 11 assigned-work adapter in signed Mobile releases. -->
+    <HonuaWorkTasksSdkVersion Condition="'$(HonuaWorkTasksSdkVersion)' == ''"></HonuaWorkTasksSdkVersion>
     <MauiVersion>11.0.10</MauiVersion>
 
     <!--

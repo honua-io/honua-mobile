@@ -8,6 +8,10 @@ on:
         required: false
         default: ""
         type: string
+      work_tasks_sdk_version:
+        description: "Optional public Honua.Sdk.Field version to exercise the .NET 11 tasks adapter in a dry run"
+        required: false
+        type: string
       dry_run:
         description: "Run validation only (skip publish)"
         required: false
@@ -35,6 +39,8 @@ jobs:
       attestations: write
     outputs:
       package-version: ${{ steps.version.outputs.package_version }}
+      package-ids: ${{ steps.selection.outputs.package_ids }}
+      tasks-sdk: ${{ steps.selection.outputs.tasks_sdk }}
       tag-object: ${{ steps.verify-tag.outputs.tag_object }}
     steps:
       - name: Checkout
@@ -85,22 +91,44 @@ jobs:
           echo "PACKAGE_VERSION=${package_version}" >> "${GITHUB_ENV}"
           echo "package_version=${package_version}" >> "${GITHUB_OUTPUT}"
 
+      - name: Select the packages for this release
+        id: selection
+        env:
+          DRY_RUN_TASKS_SDK: ${{ inputs.work_tasks_sdk_version }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          pin = ET.parse("Directory.Build.props").findtext(".//HonuaWorkTasksSdkVersion", "").strip()
+          if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
+              pin = os.environ["DRY_RUN_TASKS_SDK"] or pin
+          ids = ["Honua.Mobile.Sdk", "Honua.Mobile.Offline", "Honua.Mobile.Maui"]
+          if pin:
+              if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?", pin):
+                  raise SystemExit("Expected an exact Honua.Sdk.Field version")
+              ids.append("Honua.Mobile.Offline.Tasks")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"package_ids={' '.join(ids)}", file=output)
+              print(f"tasks_sdk={pin}", file=output)
+          PYTHON
+
       - name: Require checked-in package versions to match the release
         if: ${{ github.event_name == 'push' }}
         shell: bash
+        env:
+          PACKAGE_IDS: ${{ steps.selection.outputs.package_ids }}
         run: |
           set -euo pipefail
           python - "${PACKAGE_VERSION}" <<'PY'
+          import os
           import sys
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
           expected = sys.argv[1]
-          projects = (
-              Path("src/Honua.Mobile.Sdk/Honua.Mobile.Sdk.csproj"),
-              Path("src/Honua.Mobile.Offline/Honua.Mobile.Offline.csproj"),
-              Path("src/Honua.Mobile.Maui/Honua.Mobile.Maui.csproj"),
-          )
+          projects = [Path("src", name, f"{name}.csproj") for name in os.environ["PACKAGE_IDS"].split()]
           failures = []
           for project in projects:
               version = ET.parse(project).findtext(".//PackageVersion", default="").strip()
@@ -203,10 +231,15 @@ jobs:
               -p:Version="${PACKAGE_VERSION}"
           done
 
-          (
-            cd nupkgs
-            sha256sum *.nupkg > SHA256SUMS
-          )
+      - name: Pack and test the .NET 11 tasks adapter as a NuGet consumer
+        if: steps.selection.outputs.tasks_sdk != ''
+        env:
+          TASKS_SDK: ${{ steps.selection.outputs.tasks_sdk }}
+        run: scripts/check-offline-tasks-package.sh nupkgs "${PACKAGE_VERSION}" "${TASKS_SDK}" "${PUBLIC_NUGET_CONFIG}"
+
+      - name: Checksum the package set
+        working-directory: nupkgs
+        run: sha256sum *.nupkg > SHA256SUMS
 
       - name: Exercise packed offline storage with stock SQLite and SQLCipher
         shell: bash
@@ -338,9 +371,6 @@ jobs:
 
           popd >/dev/null
 
-      - name: Run offline storage package consumers
-        run: scripts/check-offline-package-consumers.sh nupkgs "${PACKAGE_VERSION}"
-
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -380,6 +410,8 @@ jobs:
       # nuget.org Trusted Publishing exchanges this job's OIDC identity for a
       # short-lived API key; no long-lived NUGET_API_KEY secret exists.
       id-token: write
+    env:
+      PACKAGE_IDS: ${{ needs.package-smoke.outputs.package-ids }}
     environment: public-nuget
     steps:
       - name: Download package artifacts
@@ -398,7 +430,7 @@ jobs:
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
         run: |
           set -euo pipefail
-          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          read -ra package_ids <<< "${PACKAGE_IDS}"
           lower_version="$(printf '%s' "${PACKAGE_VERSION}" | tr '[:upper:]' '[:lower:]')"
           for package_id in "${package_ids[@]}"; do
             lower_id="$(printf '%s' "${package_id}" | tr '[:upper:]' '[:lower:]')"
@@ -430,7 +462,7 @@ jobs:
             echo "::error::Trusted Publishing exchange produced no nuget.org key; refusing a partial release."
             exit 1
           fi
-          package_ids=(Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui)
+          read -ra package_ids <<< "${PACKAGE_IDS}"
           for package_id in "${package_ids[@]}"; do
             package="$(find nupkgs -maxdepth 1 -type f -iname "${package_id}.${PACKAGE_VERSION}.nupkg" -print -quit)"
             if [[ -z "${package}" ]]; then
@@ -456,6 +488,8 @@ jobs:
 
       - name: Restore all packages without credentials
         env:
+          PACKAGE_IDS: ${{ needs.package-smoke.outputs.package-ids }}
+          TASKS_SDK: ${{ needs.package-smoke.outputs.tasks-sdk }}
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
         run: |
           set -euo pipefail
@@ -474,14 +508,15 @@ jobs:
           # Restore each package as the only top-level reference so the
           # dependency/version binding encoded in each nuspec is exercised
           # (a consumer of Honua.Mobile.Maui gets Sdk/Offline transitively).
-          for package_id in Honua.Mobile.Sdk Honua.Mobile.Offline Honua.Mobile.Maui; do
+          read -ra package_ids <<< "${PACKAGE_IDS}"
+          for package_id in "${package_ids[@]}"; do
             project_dir="${smoke_dir}/${package_id}"
             mkdir -p "${project_dir}"
             cat > "${project_dir}/PublicRestore.csproj" <<EOF
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
             <ItemGroup>
-              <PackageReference Include="${package_id}" Version="${PACKAGE_VERSION}" />
+              <PackageReference Include="${package_id}" Version="[${PACKAGE_VERSION}]" />
             </ItemGroup>
           </Project>
           EOF
@@ -500,6 +535,7 @@ jobs:
             fi
             python3 - "${project_dir}/obj/project.assets.json" "${package_id}" "${PACKAGE_VERSION}" <<'PY'
           import json
+          import os
           import sys
 
           assets_path, top_level, expected = sys.argv[1:4]
@@ -512,6 +548,12 @@ jobs:
               name, version = key.split("/", 1)
               if name.lower().startswith("honua.mobile."):
                   mobile[name] = version
+          if top_level == "Honua.Mobile.Offline.Tasks":
+              for name in ("Honua.Mobile.Offline", "Honua.Mobile.Sdk"):
+                  if name not in mobile:
+                      raise SystemExit(f"{top_level} is missing {name}")
+              if f"Honua.Sdk.Field/{os.environ['TASKS_SDK']}" not in libraries:
+                  raise SystemExit("Unexpected shared Field SDK version")
           if top_level not in mobile:
               raise SystemExit(f"{top_level} was not restored")
           mixed = {name: version for name, version in mobile.items() if version.lower() != expected.lower()}
@@ -561,4 +603,4 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
             --title "Honua Mobile .NET ${PACKAGE_VERSION}" \
-            --notes "The three Honua Mobile packages were restored anonymously from nuget.org before this release was created. SHA-256 values are attached in SHA256SUMS."
+            --notes "All selected Honua Mobile packages were restored anonymously from nuget.org before this release was created. SHA-256 values are attached in SHA256SUMS."
