@@ -49,7 +49,7 @@ and most reliable inward to most expensive and most operationally gated:
   merge. When run locally without the env var, the suite reports as
   *Skipped* (Xunit.SkippableFact), not falsely Passed.
 
-  The live replica test registers through the [Mobile replica client configuration](offline-sync.md#delta-replica-client-registration),
+  The live replica test registers through the [Mobile replica client configuration](offline-sync.md#geoservices-replica-downloads),
   synchronizes the replica, and checks that the queued edit and updated generation
   survive reopening the offline store. The configured client adapts new registrations
   to the scalar generation contract supported by the pinned SDK.
