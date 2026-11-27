@@ -1,0 +1,113 @@
+name: Mobile offline asset request quality gate
+
+on:
+  push:
+    branches: [validation/mobile-asset-request-live]
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      MSBuildEnableWorkloadResolver: 'false'
+      NUGET_PACKAGES: ${{ runner.temp }}/asset-request-nuget-cache
+      HONUA_TASK_SDK_VERSION: 5.1.1-fieldasset.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: honua-io/honua-field
+          ref: c6551c28995ed4f15cd9db92ec5df95938ae0da4
+          path: field-fixture
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: honua-io/honua-server
+          ref: ea127fc0916f2bce70596deb7e4f11784ce9f7d1
+          path: server-candidate
+          persist-credentials: false
+      - name: Check fixture source revisions
+        run: |
+          test "$(git -C field-fixture rev-parse HEAD)" = c6551c28995ed4f15cd9db92ec5df95938ae0da4
+          test "$(git -C server-candidate rev-parse HEAD)" = ea127fc0916f2bce70596deb7e4f11784ce9f7d1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/server-dotnet
+        with:
+          global-json-file: server-candidate/global.json
+      - name: Publish isolated assignment server
+        working-directory: server-candidate
+        env:
+          NuGetPackageSourceCredentials_github-honua: Username=${{ github.actor }};Password=${{ github.token }}
+          MSBuildEnableWorkloadResolver: 'true'
+        run: |
+          "$RUNNER_TEMP/server-dotnet/dotnet" publish src/Honua.Server/Honua.Server.csproj \
+            --runtime linux-x64 --self-contained true --configuration Debug \
+            -p:PublishAot=false -p:PublishTrimmed=false -p:PublishSingleFile=false \
+            --output "$RUNNER_TEMP/published"
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.100
+      - name: Verify SDK validation packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/asset-request-report"
+          bash .github/scripts/download-asset-request-sdk-candidate.sh "$RUNNER_TEMP/task-sdk" |
+            tee "$RUNNER_TEMP/asset-request-report/sdk-provenance.txt"
+      - name: Run offline task adapter tests
+        working-directory: ${{ runner.temp }}
+        run: |
+          cat > "$RUNNER_TEMP/asset-request-nuget.config" <<CONFIG
+          <configuration>
+            <packageSources>
+              <clear/>
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json"/>
+              <add key="task-sdk" value="$RUNNER_TEMP/task-sdk"/>
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="task-sdk">
+                <package pattern="Honua.Sdk.Field"/>
+                <package pattern="Honua.Sdk.Abstractions"/>
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*"/>
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          CONFIG
+          dotnet test "$GITHUB_WORKSPACE/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj" \
+            --filter 'FullyQualifiedName!~LiveTests' \
+            -p:RestoreConfigFile="$RUNNER_TEMP/asset-request-nuget.config" \
+            -p:HonuaWorkTasksSdkVersion="$HONUA_TASK_SDK_VERSION" \
+            --logger 'trx;LogFileName=offline-tasks.trx' \
+            --results-directory "$RUNNER_TEMP/asset-request-report"
+      - name: Replay queued create after a lost TLS response
+        env:
+          HONUA_ASSET_E2E_SERVER_CHECKOUT: ${{ github.workspace }}/server-candidate
+          HONUA_ASSET_E2E_SERVER_PUBLISH: ${{ runner.temp }}/published
+          HONUA_ASSET_E2E_FIELD_CHECKOUT: ${{ github.workspace }}/field-fixture
+          HONUA_ASSET_E2E_NUGET_CONFIG: ${{ runner.temp }}/asset-request-nuget.config
+          HONUA_ASSET_E2E_REPORT_DIR: ${{ runner.temp }}/asset-request-report
+          HONUA_ASSET_E2E_TASK_SDK_VERSION: ${{ env.HONUA_TASK_SDK_VERSION }}
+          HONUA_ASSET_E2E_POSTGIS_IMAGE: postgis/postgis:18-3.6@sha256:4a43e3c3e5d55b9208240fc71db543b79c638766280c625a425bd0a2390989c4
+        run: bash scripts/run-offline-asset-request-live.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: asset-request-quality-results
+          path: |
+            ${{ runner.temp }}/asset-request-report/*.txt
+            ${{ runner.temp }}/asset-request-report/*.trx
+            ${{ runner.temp }}/asset-request-report/readback.json
+          if-no-files-found: ignore
