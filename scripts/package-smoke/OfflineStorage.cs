@@ -10,6 +10,8 @@ var databasePath = args[1];
 var encrypted = mode == "sqlcipher";
 var key = encrypted ? "package-smoke-disposable-key" : null;
 const string feature = """{"attributes":{"OBJECTID":42,"name":"package smoke feature"}}""";
+const string documentCollection = "inspection-records";
+var draft = new OfflineDocument("draft-uuid", """{"state":"draft","name":"package smoke draft"}""");
 
 GeoPackageSyncStore Open(string? password) => new(new GeoPackageSyncStoreOptions
 {
@@ -29,6 +31,19 @@ await using (var connection = new SqliteConnection("Data Source=:memory:"))
 
 var store = Open(key);
 await store.InitializeAsync();
+Require(!await store.IsDocumentCollectionImportedAsync(documentCollection), "Import marker already exists.");
+try
+{
+    await store.ImportDocumentCollectionAsync(documentCollection, [draft, new OfflineDocument("", "{}")]);
+    throw new InvalidOperationException("Import accepted an empty document ID.");
+}
+catch (ArgumentException)
+{
+    Require(!await store.IsDocumentCollectionImportedAsync(documentCollection), "Failed import left a marker.");
+    Require((await store.LoadDocumentsAsync(documentCollection)).Count == 0, "Failed import left a document.");
+}
+
+await store.ImportDocumentCollectionAsync(documentCollection, [draft]);
 await store.UpsertFeatureAndEnqueueAsync(new OfflineEditOperation
 {
     OperationId = "package-smoke-42",
@@ -46,6 +61,8 @@ if (encrypted)
 {
     Require(bytes.AsSpan().IndexOf("package smoke feature"u8) < 0,
         "The encrypted database contains the plaintext feature.");
+    Require(bytes.AsSpan().IndexOf("package smoke draft"u8) < 0,
+        "The encrypted database contains the plaintext document.");
     try
     {
         await Open("invalid-package-smoke-key").InitializeAsync();
@@ -59,6 +76,20 @@ if (encrypted)
 
 var reopened = Open(key);
 await reopened.InitializeAsync();
+Require(await reopened.IsDocumentCollectionImportedAsync(documentCollection), "Import marker did not survive reopening.");
+Require((await reopened.LoadDocumentsAsync(documentCollection)).Single() == draft,
+    "The imported document did not survive reopening.");
+await reopened.DeleteDocumentAsync(documentCollection, draft.Id);
+await reopened.ImportDocumentCollectionAsync(documentCollection, [draft]);
+Require((await reopened.LoadDocumentsAsync(documentCollection)).Count == 0, "Repeated import restored deleted data.");
+await reopened.SaveDocumentAsync(documentCollection, draft);
+await reopened.SaveDocumentAsync("another-collection", draft);
+var submitted = draft with { Json = """{"state":"queued"}""" };
+await reopened.SaveDocumentAsync(documentCollection, submitted);
+Require((await reopened.LoadDocumentsAsync(documentCollection)).Single() == submitted,
+    "Saving the queued record did not replace its draft.");
+Require((await reopened.LoadDocumentsAsync("another-collection")).Single() == draft,
+    "Saving the queued record overwrote a document in another collection.");
 Require((await reopened.GetFeaturesAsync("assets")).Single() == feature,
     "The cached feature did not survive reopening.");
 var pending = (await reopened.GetPendingAsync(10)).Single();
