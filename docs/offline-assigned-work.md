@@ -128,7 +128,9 @@ before running the script:
 | `HONUA_ASSET_E2E_REPORT_DIR` | Optional report directory, defaults to `TestResults/asset-request` |
 | `HONUA_ASSET_E2E_PORT` | Optional unused loopback TLS port, defaults to 5196 |
 
-The runner needs Bash, Docker, Python 3, OpenSSL, curl, jq and .NET 11.
+Run the script with Bash and the .NET 11 SDK. Before provisioning the
+fixture, the runner checks for the commands it needs on PATH and reports
+the exact name of any missing command.
 The report includes the three source commits, the test result and a PostGIS
 readback. The SQL asserts one unassigned request with the canonical service,
 asset and title, the asset geometry in SRID 4326, and one create receipt.
