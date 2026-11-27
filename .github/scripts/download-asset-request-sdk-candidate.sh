@@ -3,10 +3,10 @@ set -euo pipefail
 
 feed="${1:?Provide an empty feed directory}"
 repo=honua-io/honua-sdk-dotnet
-run=45977902720
-artifact=15188481738
-revision=45fc2d434123be84202bc86d5a3b8d26ea2edf17
-digest=e8198bd30155295f0ecb1b50d59ee60620823885443e4414171a4d245cc55989
+run=46060511147
+artifact=15229062590
+revision=01542f39ebbd164a8f904a4eaf1a3987169a5c74
+digest=0c12abb42c10c005d3af805cbc90dc18e1ddb539f163b9f12a881066bbba17dc
 
 test "$(gh api "repos/$repo/actions/runs/$run" --jq '.head_sha + ":" + .conclusion')" = "$revision:success"
 test "$(gh api "repos/$repo/actions/artifacts/$artifact" --jq '(.workflow_run.id | tostring) + ":" + .digest')" = "$run:sha256:$digest"
@@ -24,8 +24,8 @@ unzip -q "$archive" -d "$feed"
   cd "$feed"
   sha256sum --check SHA256SUMS
   sha256sum --check <<'CHECKSUMS'
-fc424d3858ac19d515675469375a14b27d3ddfaa762f66c4df0c7343679d0707  Honua.Sdk.Field.5.1.1-fieldasset.2.nupkg
-04c015a748948a68131867f9be2cd41a1c04d5cbb43cdb15d0c5277c3dc5162b  Honua.Sdk.Abstractions.5.1.1-fieldasset.2.nupkg
+15f300d1a31a2caa8f13b591fd004bf62deb36363b65b1d08d364967b8b0add2  Honua.Sdk.Field.5.1.1-fieldasset.3.nupkg
+7546404ede4505c58ad8e4dd542de49b43b12827499ee30fa6f4da6e2e978995  Honua.Sdk.Abstractions.5.1.1-fieldasset.3.nupkg
 CHECKSUMS
 )
 printf 'sdk-source=%s\nworkflow-run=%s\nartifact-id=%s\narchive-sha256=%s\n' \
