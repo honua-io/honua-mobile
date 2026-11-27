@@ -188,7 +188,7 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
         Assert.Equal(0, await reopenedStore.CountPendingAsync());
     }
 
-    [Fact(Skip = "Enable after pinning the published SDK containing the upload acknowledgement contract.")]
+    [Fact]
     public async Task OfflineSyncEngine_PersistsProviderIdentifierThroughTheChangeJournal()
     {
         var adapter = new GeoPackageSdkOfflineStoreAdapter(CreateStore());
@@ -204,8 +204,17 @@ public sealed class GeoPackageSdkOfflineStoreAdapterTests : IDisposable
         Assert.Equal(1, sync.Succeeded);
         var reopenedStore = CreateStore();
         var acknowledgement = await reopenedStore.GetUploadAcknowledgementAsync("op-1");
-        Assert.NotNull(acknowledgement);
-        Assert.Equal(["provider-42"], acknowledgement.ServerFeatureIds);
+        var sdkSupportsUploadReceipts = typeof(IOfflineChangeJournal).GetMethod(nameof(adapter.MarkUploadedAsync)) is not null;
+        var requireUploadReceipt = Environment.GetEnvironmentVariable("HONUA_MOBILE_REQUIRE_SDK_UPLOAD_RECEIPTS") == "1";
+        if (sdkSupportsUploadReceipts || requireUploadReceipt)
+        {
+            Assert.NotNull(acknowledgement);
+            Assert.Equal(["provider-42"], acknowledgement.ServerFeatureIds);
+        }
+        else
+        {
+            Assert.Null(acknowledgement);
+        }
         Assert.Equal(0, await reopenedStore.CountPendingAsync());
     }
 
