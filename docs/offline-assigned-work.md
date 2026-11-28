@@ -1,9 +1,9 @@
 # Offline assigned work
 
 `Honua.Mobile.Offline.Tasks` is a .NET 11 adapter for the shared task client in
-`Honua.Sdk.Field`. It is an opt-in project while the task client awaits a
-published package. The default .NET 11 Mobile packages build independently
-with the released Honua SDK.
+`Honua.Sdk.Field`. It uses the public `Honua.Sdk.Field` version pinned in
+`Directory.Build.props`. Add the adapter package when your app consumes
+assigned work.
 
 Initialize a SQLCipher-backed `GeoPackageSyncStore` with the app's durable
 encryption key. Construct `OfflineAssignedWork` with that store, a
@@ -57,20 +57,15 @@ or 404 for the command also removes that task and its cached asset summary.
 The command and its local attachment references remain available for review
 under the original account.
 
-## Verify with a candidate SDK package
+## Verify with the pinned SDK package
 
-Use the .NET 11 SDK pinned in this repository's `global.json`. Configure a
-temporary NuGet source for the versioned
-`Honua.Sdk.Field` candidate and its dependencies, in addition to the usual
-package sources. Set `WORK_TASKS_SDK_VERSION` to the exact candidate package
-version that includes the typed asset request API. This adapter is opt-in and
-requires a candidate until the shared SDK publishes that API. The default Mobile
-solution builds independently of the adapter and its prerelease dependency.
+Use the .NET 11 SDK pinned in this repository's `global.json`. The test suite
+restores the pinned `Honua.Sdk.Field` version from nuget.org.
 
 ```sh
 suite="$MOBILE_REPO/tests/Honua.Mobile.Offline.Tasks.Tests/Honua.Mobile.Offline.Tasks.Tests.csproj"
-dotnet restore "$suite" --configfile "$CANDIDATE_NUGET_CONFIG" -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION"
-dotnet test "$suite" --no-restore -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION"
+dotnet restore "$suite"
+dotnet test "$suite" --no-restore
 ```
 
 The test project exercises the packaged shared HTTP client with controlled
@@ -109,7 +104,7 @@ path. The default test run skips it when this variable is unset.
 
 ```sh
 HONUA_MOBILE_ASSIGNED_WORK_LIVE_CONFIG="$LIVE_CONFIG" dotnet test "$suite" \
-  --no-restore -p:HonuaWorkTasksSdkVersion="$WORK_TASKS_SDK_VERSION" \
+  --no-restore \
   --filter FullyQualifiedName~OfflineAssignedWorkLiveTests
 ```
 
@@ -131,8 +126,8 @@ before running the script:
 | `HONUA_ASSET_E2E_SERVER_CHECKOUT` | Server source checkout matching the published build |
 | `HONUA_ASSET_E2E_SERVER_PUBLISH` | Directory containing the published `Honua.Server` executable |
 | `HONUA_ASSET_E2E_FIELD_CHECKOUT` | Field checkout with the published workbook fixture under `scripts/e2e/fixtures` |
-| `HONUA_ASSET_E2E_NUGET_CONFIG` | Absolute path to the NuGet config resolving the verified typed SDK candidate |
-| `HONUA_ASSET_E2E_TASK_SDK_VERSION` | Exact candidate NuGet version |
+| `HONUA_ASSET_E2E_NUGET_CONFIG` | Absolute path to a NuGet config resolving the pinned `Honua.Sdk.Field` package |
+| `HONUA_ASSET_E2E_TASK_SDK_VERSION` | Exact `Honua.Sdk.Field` NuGet version (use `5.2.0` for this release) |
 | `HONUA_ASSET_E2E_REPORT_DIR` | Optional report directory, defaults to `TestResults/asset-request` |
 | `HONUA_ASSET_E2E_PORT` | Optional unused loopback TLS port, defaults to 5196 |
 

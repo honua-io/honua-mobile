@@ -27,7 +27,8 @@ outside GitHub:
    release of each ID, including `Honua.Mobile.Offline.Tasks`. The account must
    control the selected IDs (reserve the `Honua.Mobile.*` prefix if desired).
 2. Create a protected GitHub environment named `public-nuget` in this
-   repository and require the desired human reviewers. It needs no secrets.
+   repository and require the desired human reviewers. In its deployment rules,
+   allow the tag pattern `mobile-dotnet-v*`. It needs no secrets.
 3. Ensure an npm organization or user controls the `@honua-io` scope (Honua's
    existing public npm packages live under `@honua`, owned by `makanikai`;
    `@honua-io` does not exist on npmjs.com yet).
@@ -53,11 +54,10 @@ package for that exact version must already be on nuget.org. The package-smoke
 job installs the locally packed mobile packages using only a local source and
 nuget.org, so a missing private-only dependency fails before publication.
 
-For the 2026.1 cut, that SDK train is `1.10.0`, which is public on nuget.org.
-
-The optional `Honua.Mobile.Offline.Tasks` adapter targets .NET 11. After a
-version of `Honua.Sdk.Field` with asset-request support appears on nuget.org, set
-`HonuaWorkTasksSdkVersion` in `Directory.Build.props` to that exact version.
+The four-package `0.1.0-alpha.1` release uses the public Honua .NET SDK
+`5.2.0` train. The optional `Honua.Mobile.Offline.Tasks` adapter targets .NET 11
+and uses the typed asset-request API in `Honua.Sdk.Field` `5.2.0`, pinned by
+`HonuaWorkTasksSdkVersion` in `Directory.Build.props`.
 An empty pin selects the three core packages. To validate a public Field SDK
 version before adopting it, supply `work_tasks_sdk_version` on a manual dry run.
 Signed tags use the checked-in pin. The smoke job restores the adapter as the

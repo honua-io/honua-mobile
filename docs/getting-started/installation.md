@@ -53,14 +53,12 @@ migration, and physical-device validation before adopting it in a field app.
 
 ### Method 1: Project Templates (Recommended)
 
-The fastest way to get started is using our project templates:
+From the root of a `honua-mobile` checkout, install the field collector template:
 
 ```bash
-# Install Honua project templates
-dotnet new install Honua.Mobile.Templates
+dotnet new install ./templates/honua-fieldcollector
 
-# Verify installation
-dotnet new list | grep honua
+dotnet new list honua-fieldcollector
 ```
 
 Available templates:
@@ -110,6 +108,15 @@ dotnet add package Honua.Mobile.Sdk --version 0.1.0-alpha.1
 # Restore packages
 dotnet restore
 ```
+
+For offline assigned work, also install the adapter from nuget.org:
+
+```bash
+dotnet add package Honua.Mobile.Offline.Tasks --version 0.1.0-alpha.1
+```
+
+The adapter uses the asset-request client in `Honua.Sdk.Field` 5.2.0.
+See [offline assigned work](../offline-assigned-work.md) for queue and replay behavior.
 
 ### Method 4: Package Manager Console
 

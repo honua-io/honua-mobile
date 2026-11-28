@@ -28,9 +28,9 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 ## Setup
 
-The core solution restores the shared SDK from nuget.org. Consumers of
-private `Honua.Mobile.*` packages need read access to the `github-honua` source
-listed in `NuGet.config`.
+The shared SDK and four public Mobile package IDs restore from nuget.org.
+Consumers of legacy private Mobile package IDs need read access to the
+`github-honua` source listed in `NuGet.config`.
 
 ## Commands
 
@@ -104,7 +104,7 @@ templates/  examples/    Field collector template and sample apps
 scripts/    quality/      Validation/release scripts, store-prereq validators, release checklists
 docs/       contracts/    Guides (validation-strategy, offline-sync, sdk-contract-stability), proto/contracts
 Directory.Build.props    SDK train version + MauiVersion pins (shared MSBuild props)
-NuGet.config             Package sources + source mapping (Honua.Sdk.* from nuget.org, Honua.Mobile.* from github-honua)
+NuGet.config             Package sources (SDK and public Mobile IDs from nuget.org, legacy private Mobile IDs from github-honua)
 .github/workflows/       CI (ci.yml, pr-validation.yml), live-server-integration, publish, store dist
 ```
 
