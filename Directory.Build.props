@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Released Honua .NET SDK train with net11.0 assets. -->
     <HonuaSdkDotNetTrainVersion>5.2.0</HonuaSdkDotNetTrainVersion>
-    <HonuaSdkDotNetTrainTag>trunk</HonuaSdkDotNetTrainTag>
+    <HonuaSdkDotNetTrainTag>dotnet-sdk-v5.2.0</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
     <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v5.2.0</HonuaSdkDotNetTrainReleaseUrl>
     <HonuaSdkDotNetTrainReleaseCommit>ec72c3752cb329a15f1dedec9754ccd22a342bcb</HonuaSdkDotNetTrainReleaseCommit>
