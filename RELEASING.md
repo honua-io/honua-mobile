@@ -3,12 +3,12 @@
 Honua Mobile has two independent, immutable public release lanes:
 
 - `mobile-dotnet-vX.Y.Z[-prerelease]` publishes `Honua.Mobile.Sdk`,
-  `Honua.Mobile.Offline` and `Honua.Mobile.Maui` to nuget.org. When the Field SDK
-  pin is set, the same release also publishes `Honua.Mobile.Offline.Tasks`.
+  `Honua.Mobile.Offline`, `Honua.Mobile.Maui`, and
+  `Honua.Mobile.Offline.Tasks` to nuget.org.
 - `mobile-embed-vX.Y.Z[-prerelease]` publishes `@honua-io/embed` to npmjs.com.
 
 Both lanes build once, retain the exact package bytes as workflow artifacts,
-publish only from a GitHub-verified signed annotated tag, verify an anonymous
+publish only from a verified signed annotated tag, verify an anonymous
 consumer install from the public registry, and only then create a GitHub
 Release with checksums. A failed public-consumer job is a failed release even
 when the registry accepted the upload.
@@ -58,25 +58,40 @@ The four-package `0.1.0-alpha.1` release uses the public Honua .NET SDK
 `5.2.0` train. The optional `Honua.Mobile.Offline.Tasks` adapter targets .NET 11
 and uses the typed asset-request API in `Honua.Sdk.Field` `5.2.0`, pinned by
 `HonuaWorkTasksSdkVersion` in `Directory.Build.props`.
-An empty pin selects the three core packages. To validate a public Field SDK
-version before adopting it, supply `work_tasks_sdk_version` on a manual dry run.
-Signed tags use the checked-in pin. The smoke job restores the adapter as the
+To validate a public Field SDK version before adopting it, supply
+`work_tasks_sdk_version` on a manual dry run. Signed releases require the
+checked-in pin. The smoke job restores the adapter as the
 only Mobile reference in its test project, checks the installed package bytes
 and dependency versions, and exercises its offline queue and retry behavior.
 
 ## Cut the .NET package set
 
-1. Set the same `<PackageVersion>` in every package project selected for this release.
-2. Let required CI and release dry-run checks pass.
-3. Create a signed annotated tag whose version matches those files exactly:
+1. Set the same `<PackageVersion>` in all four package projects. Merge to
+   protected `trunk` and let required CI pass.
+2. Run the release candidate dry run on that commit. Use the checked-in version.
 
    ```bash
-   git tag -s mobile-dotnet-v0.1.0-alpha.1 -m "Honua Mobile .NET 0.1.0-alpha.1"
-   git push origin mobile-dotnet-v0.1.0-alpha.1
+   gh workflow run publish-dotnet-mobile.yml --ref trunk \
+     -f version=0.1.0-alpha.1 -f dry_run=true -f release_candidate=true
    ```
 
-4. Approve the single `public-nuget` environment job. It proves all selected
-   versions are absent before pushing any member of the package set.
+3. Record the successful run ID and dispatch the signing workflow while the
+   validated commit is still the head of protected `trunk`. Substitute that run
+   ID for `RUN_ID`.
+
+   ```bash
+   gh workflow run sign-dotnet-mobile.yml --ref trunk \
+     -f version=0.1.0-alpha.1 -f candidate_run_id=RUN_ID
+   ```
+
+   The signer checks the dry-run receipt and package versions, verifies the
+   Sigstore signature locally, and pushes the tag with the Honua GitHub App. A
+   retry validates any existing remote tag against the signer and source commit.
+
+4. Approve the `public-nuget` job after Package Smoke verifies the tag and its
+   target against the pinned release policy. The workflow also accepts
+   GitHub-verified OpenPGP or SSH signatures. The publish job checks that all
+   four package versions are absent before pushing any member of the set.
 5. Require the anonymous nuget.org restore and GitHub Release jobs to pass.
 
 NuGet package versions cannot be replaced. Any content correction requires a
