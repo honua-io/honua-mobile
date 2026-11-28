@@ -3,7 +3,7 @@ using Microsoft.Maui.Controls;
 
 namespace Honua.Mobile.PlatformSmoke;
 
-public sealed class App : Application
+internal sealed class App : Application
 {
     private readonly PlatformSmokeRunner _runner;
     private Label? _statusLabel;
@@ -15,7 +15,7 @@ public sealed class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        _statusLabel = new Label
+        var statusLabel = new Label
         {
             Text = "Running Honua platform smoke...",
             FontSize = 16,
@@ -24,17 +24,34 @@ public sealed class App : Application
             VerticalOptions = LayoutOptions.Center,
         };
 
+        _statusLabel = statusLabel;
+
         var page = new ContentPage
         {
             Content = new Grid
             {
                 Padding = 24,
-                Children = { _statusLabel },
+                Children = { statusLabel },
             },
         };
 
-        _ = RunSmokeAsync();
-        return new Window(page);
+        var window = new Window(page);
+        if (Environment.GetEnvironmentVariable("HONUA_MOBILE_IOS_SCENE_STARTUP_ONLY") == "1")
+        {
+            window.Activated += (_, _) =>
+            {
+                statusLabel.Text = "Honua iOS window activated.";
+                File.WriteAllText(
+                    Path.Combine(PlatformSmokeConfiguration.DefaultResultDirectory, "honua-mobile-ios-scene-activated"),
+                    "activated");
+            };
+        }
+        else
+        {
+            _ = RunSmokeAsync();
+        }
+
+        return window;
     }
 
     private async Task RunSmokeAsync()

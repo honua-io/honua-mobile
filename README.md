@@ -42,9 +42,9 @@ that exact version installs anonymously, and then create a checksum-bearing
 GitHub Release. See [RELEASING.md](RELEASING.md) for the gates and one-time
 credential setup.
 
-The Sdk, Offline and Maui libraries target `net10.0`. The optional Offline.Tasks
-adapter targets `net11.0`. All four libraries build without the MAUI workload. The reference apps and templates are .NET MAUI (`net10.0-android`,
-plus `net10.0-ios`/`net10.0-maccatalyst` on macOS and `net10.0-windows` on
+The library packages target `net11.0` and build on any platform without the MAUI
+workload. The reference apps and templates are .NET MAUI (`net11.0-android`,
+plus `net11.0-ios`/`net11.0-maccatalyst` on macOS and `net11.0-windows` on
 Windows). Platform-neutral client logic comes from the
 [honua-sdk-dotnet](https://github.com/honua-io/honua-sdk-dotnet) `Honua.Sdk.*`
 packages. The core SDK train and the optional adapter dependency are pinned in
@@ -266,10 +266,9 @@ scripts/validate-local.sh
 ```
 
 The script restores, builds, runs .NET tests and smoke tests, verifies format
-for the core source projects, and runs the `@honua-io/embed` npm build/tests. It
-uses a temporary NuGet config for `HONUA_GITHUB_PACKAGES_TOKEN` and removes it
-on exit. Without those environment variables it falls back to any existing
-NuGet credentials already configured for the `github-honua` source.
+for the core source projects, and runs the `@honua-io/embed` npm build/tests.
+The solution includes the platform smoke app. Install the matching MAUI
+workloads and platform SDKs for your host before running it.
 
 Equivalent manual commands:
 
@@ -284,7 +283,7 @@ npm test --prefix src/Honua.Embed
 ```
 
 Building Android targets requires a configured Android SDK; iOS/Mac Catalyst
-targets require macOS with Xcode. The library projects target `net10.0` and
+targets require macOS with Xcode. The library projects target `net11.0` and
 build on any platform without the MAUI workload.
 
 The server integration project starts a real ASP.NET Core loopback server and

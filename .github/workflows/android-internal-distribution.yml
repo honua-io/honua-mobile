@@ -60,10 +60,10 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "11.0.100"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
-  TARGET_FRAMEWORK: net10.0-android
+  TARGET_FRAMEWORK: net11.0-android
 
 jobs:
   distribute:
@@ -205,9 +205,16 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Setup Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: microsoft
+          java-version: '21'
+
       - name: Install Android MAUI workload
         shell: bash
-        run: dotnet workload install maui-android
+        run: |
+          dotnet workload install maui-android --version 11.0.100.1
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -220,6 +227,16 @@ jobs:
       - name: Configure GitHub Packages
         shell: bash
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - name: Install Android SDK dependencies
+        shell: bash
+        env:
+          APP_PROJECT: ${{ steps.app.outputs.app_project }}
+        run: |
+          dotnet build "$APP_PROJECT" \
+            -f "$TARGET_FRAMEWORK" \
+            -t:InstallAndroidDependencies \
+            -p:AcceptAndroidSDKLicenses=True
 
       - name: Validate Android package identity
         shell: bash
@@ -239,7 +256,7 @@ jobs:
 
       - name: Restore app project
         shell: bash
-        run: dotnet restore "${{ steps.app.outputs.app_project }}" -f "${TARGET_FRAMEWORK}"
+        run: dotnet restore "${{ steps.app.outputs.app_project }}" -p:Configuration=Release -p:TargetFramework="${TARGET_FRAMEWORK}"
 
       - name: Decode Android signing keystore
         id: signing

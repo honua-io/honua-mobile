@@ -6,21 +6,22 @@ This guide will help you install and configure the Honua Mobile SDK for .NET dev
 
 ### Development Environment
 - **Visual Studio** or a current IDE with the .NET MAUI workload
-- **.NET 10.0** SDK or later
+- **.NET 11.0.1xx** SDK for builds from this checkout (see `global.json` for the SDK pin)
+- **MAUI workload set 11.0.100.1** for platform builds, for example `dotnet workload install maui-android --version 11.0.100.1`
 - **Git** for version control
 
 ### Platform Requirements
 
 #### For iOS Development
 - **macOS** (required for iOS development)
-- **Xcode 15.0** or later
+- **Xcode 27.2** or later
 - **iOS Simulator** or physical iOS device
 - **Apple Developer Account** (for device testing and App Store)
 
 #### For Android Development
-- **Android SDK** with API Level 24 (Android 7.0) or higher
+- **Android SDK** with platform API 37 for builds. Devices require API 24 (Android 7.0) or later.
 - **Android Emulator** or physical Android device
-- **Java Development Kit (JDK)** 11 or later
+- **Java Development Kit (JDK)** 21
 
 #### For Windows Development
 - **Windows 10** version 1809 or later
@@ -385,9 +386,9 @@ public partial class TestPage : ContentPage
 dotnet build
 
 # Run on specific platform
-dotnet build -t:Run -f net10.0-android     # Android
-dotnet build -t:Run -f net10.0-ios         # iOS (macOS only)
-dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
+dotnet build -t:Run -f net11.0-android     # Android
+dotnet build -t:Run -f net11.0-ios         # iOS (macOS only)
+dotnet build -t:Run -f net11.0-windows10.0.19041.0 # Windows
 ```
 
 ## Troubleshooting

@@ -16,9 +16,9 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 ## Tech Stack
 
-- **.NET 10** (`net10.0`) — library projects (`Sdk`, `Offline`, `Maui`)
-  target `net10.0` and build on any platform without the MAUI workload.
-- **.NET MAUI** `10.0.70` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
+- **.NET 11** (`net11.0`) — library projects (`Sdk`, `Offline`, `Maui`)
+  target `net11.0` and build on any platform without the MAUI workload.
+- **.NET MAUI** `11.0.10` — app/platform project (`apps/Honua.Mobile.App`). Android targets need a configured
   Android SDK; iOS targets need macOS + Xcode.
 - **Honua .NET SDK** (`Honua.Sdk.*`) uses the version pinned in
   `Directory.Build.props` and restores from nuget.org.
@@ -28,24 +28,15 @@ consumes reusable platform-neutral logic from the `honua-sdk-dotnet` SDK
 
 ## Setup
 
-The core solution restores the shared SDK from nuget.org. To restore a
-consumer of private `Honua.Mobile.*` packages, configure the `github-honua`
-source in `NuGet.config` with read access:
-
-```bash
-gh auth refresh -s read:packages
-export HONUA_GITHUB_PACKAGES_USER="$(gh api user --jq .login)"
-export HONUA_GITHUB_PACKAGES_TOKEN="$(gh auth token)"
-```
-
-`scripts/validate-local.sh` uses a temporary NuGet config built from those
-vars and removes it on exit; without them it falls back to existing credentials
-configured for the `github-honua` source.
+The core solution restores the shared SDK from nuget.org. Consumers of
+private `Honua.Mobile.*` packages need read access to the `github-honua` source
+listed in `NuGet.config`.
 
 ## Commands
 
 Full local validation baseline (restore, build, test, smoke, format, embed
-build/tests):
+build/tests). The solution includes the platform smoke app. Install the
+matching MAUI workloads and platform SDKs for your host before running it:
 
 ```bash
 scripts/validate-local.sh

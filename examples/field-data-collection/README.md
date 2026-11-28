@@ -75,7 +75,7 @@ Transform how field workers, inspectors, and data collectors interact with real-
 ## 📦 Installation & Quick Start
 
 ### **Prerequisites**
-- **Development**: Visual Studio 2022, .NET 10.0, MAUI workload
+- **Development**: Visual Studio 2022, .NET 11.0, MAUI workload
 - **iOS**: Xcode 15+, iOS 14.2+ device with ARKit support
 - **Android**: Android SDK 21+, device with ARCore support
 - **Windows**: Windows 10/11 for desktop development
@@ -93,9 +93,9 @@ dotnet restore
 dotnet build
 
 # Run on specific platforms
-dotnet build -t:Run -f net10.0-android     # Android
-dotnet build -t:Run -f net10.0-ios         # iOS
-dotnet build -t:Run -f net10.0-maccatalyst # macOS (Mac Catalyst)
+dotnet build -t:Run -f net11.0-android     # Android
+dotnet build -t:Run -f net11.0-ios         # iOS
+dotnet build -t:Run -f net11.0-maccatalyst # macOS (Mac Catalyst)
 ```
 
 ### **Configuration**

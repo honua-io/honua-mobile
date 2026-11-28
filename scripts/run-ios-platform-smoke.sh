@@ -6,18 +6,15 @@ PROJECT_PATH="${ROOT_DIR}/tests/Honua.Mobile.PlatformSmoke/Honua.Mobile.Platform
 PROJECT_DIR="$(dirname "${PROJECT_PATH}")"
 BUNDLE_ID="${HONUA_MOBILE_PLATFORM_SMOKE_BUNDLE_ID:-io.honua.mobile.platformsmoke}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
-TARGET_FRAMEWORK="net10.0-ios"
-RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-x64}"
+TARGET_FRAMEWORK="net11.0-ios"
+if [[ "$(uname -m)" == "arm64" ]]; then
+  RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-arm64}"
+else
+  RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-iossimulator-x64}"
+fi
 CONFIG_FILE="honua-mobile-platform-smoke-config.json"
 RESULT_FILE="honua-mobile-platform-smoke-result.json"
-
-require_env() {
-  local name="$1"
-  if [[ -z "${!name:-}" ]]; then
-    echo "::error::${name} is required for iOS platform smoke."
-    exit 1
-  fi
-}
+STARTUP_FILE="honua-mobile-ios-scene-activated"
 
 has_live_smoke_config() {
   [[ -n "${HONUA_MOBILE_SMOKE_BASE_URL:-}" ]] &&
@@ -25,14 +22,10 @@ has_live_smoke_config() {
     [[ -n "${HONUA_MOBILE_SMOKE_LAYER_ID:-}" ]]
 }
 
-if ! has_live_smoke_config; then
-  echo "::notice::Skipping iOS live Honua platform smoke because HONUA_MOBILE_SMOKE_BASE_URL, HONUA_MOBILE_SMOKE_SERVICE_ID, or HONUA_MOBILE_SMOKE_LAYER_ID is not configured."
+if [[ "${1:-}" != "--verify-startup" ]] && ! has_live_smoke_config; then
+  echo "::notice::Skipping iOS live Honua platform smoke because its endpoint variables are unset."
   exit 0
 fi
-
-require_env HONUA_MOBILE_SMOKE_BASE_URL
-require_env HONUA_MOBILE_SMOKE_SERVICE_ID
-require_env HONUA_MOBILE_SMOKE_LAYER_ID
 
 resolve_simulator_udid() {
   if [[ -n "${IOS_SIMULATOR_UDID:-}" ]]; then
@@ -40,62 +33,51 @@ resolve_simulator_udid() {
     return
   fi
 
-  local booted_udid
-  booted_udid="$(xcrun simctl list -j devices booted | python3 -c '
-import json
-import sys
-
-devices = json.load(sys.stdin).get("devices", {})
-for runtime_id, runtime_devices in devices.items():
-    if ".iOS-" not in runtime_id and "SimRuntime.iOS" not in runtime_id:
-        continue
-    for device in runtime_devices:
-        if device.get("state") == "Booted":
-            print(device["udid"])
-            raise SystemExit
-')"
-
-  if [[ -n "${booted_udid}" ]]; then
-    printf '%s\n' "${booted_udid}"
-    return
-  fi
-
   local runtime_id
   runtime_id="$(xcrun simctl list -j runtimes available | python3 -c '
 import json
+import re
 import sys
 
 runtimes = [
     runtime for runtime in json.load(sys.stdin).get("runtimes", [])
     if runtime.get("isAvailable")
-    and (runtime.get("platform") == "iOS" or ".iOS-" in runtime.get("identifier", ""))
+    and re.fullmatch(r"com\.apple\.CoreSimulator\.SimRuntime\.iOS-\d+(?:-\d+)*", runtime["identifier"])
+    and int(runtime["version"].split(".")[0]) >= 27
 ]
 if not runtimes:
-    raise SystemExit("No available iOS simulator runtime found.")
-runtimes.sort(key=lambda runtime: runtime.get("version", ""), reverse=True)
-print(runtimes[0]["identifier"])
+    raise SystemExit("No available iOS 27 or newer simulator runtime found.")
+runtime = max(runtimes, key=lambda entry: tuple(map(int, entry["version"].split("."))))
+print(runtime["identifier"])
 ')"
 
-  local device_type
-  device_type="$(xcrun simctl list -j devicetypes | python3 -c '
+  local device
+  device="$(xcrun simctl list -j devices available | python3 -c '
 import json
 import sys
 
-device_types = json.load(sys.stdin).get("devicetypes", [])
-preferred = ("iPhone 16", "iPhone 15", "iPhone 14", "iPhone 13")
-for name in preferred:
-    for device_type in device_types:
-        if device_type.get("name") == name:
-            print(device_type["identifier"])
-            raise SystemExit
-for device_type in device_types:
-    if device_type.get("name", "").startswith("iPhone"):
-        print(device_type["identifier"])
-        raise SystemExit
-raise SystemExit("No iPhone simulator device type found.")
-')"
+devices = [
+    device for device in json.load(sys.stdin).get("devices", {}).get(sys.argv[1], [])
+    if device.get("name", "").startswith("iPhone")
+]
+if not devices:
+    raise SystemExit("No available iPhone simulator device found for " + sys.argv[1])
+for device in devices:
+    if device.get("state") == "Booted":
+        print("booted", device["udid"])
+        break
+else:
+    print("create", devices[0]["deviceTypeIdentifier"])
+' "${runtime_id}")"
 
-  xcrun simctl create "Honua Platform Smoke" "${device_type}" "${runtime_id}"
+  local action device_id
+  read -r action device_id <<< "${device}"
+  if [[ "${action}" == "booted" ]]; then
+    printf '%s\n' "${device_id}"
+    return
+  fi
+
+  xcrun simctl create "Honua Platform Smoke" "${device_id}" "${runtime_id}"
 }
 
 simulator_udid="$(resolve_simulator_udid)"
@@ -121,6 +103,25 @@ xcrun simctl install "${simulator_udid}" "${app_path}"
 data_container="$(xcrun simctl get_app_container "${simulator_udid}" "${BUNDLE_ID}" data)"
 documents_dir="${data_container}/Documents"
 mkdir -p "${documents_dir}"
+
+if ! has_live_smoke_config; then
+  rm -f "${documents_dir}/${STARTUP_FILE}"
+  SIMCTL_CHILD_HONUA_MOBILE_IOS_SCENE_STARTUP_ONLY=1 \
+    xcrun simctl launch --terminate-running-process "${simulator_udid}" "${BUNDLE_ID}"
+  deadline=$((SECONDS + 45))
+  while (( SECONDS < deadline )); do
+    if [[ -s "${documents_dir}/${STARTUP_FILE}" ]]; then
+      echo "The iOS simulator activated the MAUI window through the UIKit scene lifecycle."
+      echo "::notice::Skipping the optional iOS live Honua query because its endpoint variables are unset."
+      exit 0
+    fi
+    sleep 1
+  done
+
+  echo "::error::iOS platform smoke did not activate its MAUI window before timeout."
+  xcrun simctl spawn "${simulator_udid}" log show --last 2m --style compact --predicate 'eventMessage CONTAINS "Honua"' || true
+  exit 1
+fi
 
 config_json="$(python3 - <<'PY'
 import json

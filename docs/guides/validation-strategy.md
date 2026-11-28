@@ -190,7 +190,8 @@ The relevant workflows under `.github/workflows/`:
     Android emulator and iOS simulator platform smoke
     (`scripts/run-android-platform-smoke.sh`,
     `scripts/run-ios-platform-smoke.sh`); skipped when no source
-    changes.
+    changes. The iOS simulator also checks MAUI window activation without
+    a live endpoint. The live query runs when endpoint variables are set.
   - `grpc-validation` -- proto sanity check and an SDK build
     integration step.
   - `security` -- Trivy filesystem scan plus CodeQL on the three core

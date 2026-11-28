@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "11.0.100"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
 
@@ -113,12 +113,6 @@ jobs:
               print(f"package_ids={' '.join(ids)}", file=output)
               print(f"tasks_sdk={pin}", file=output)
           PYTHON
-
-      - name: Setup .NET 11 for the tasks adapter
-        if: steps.selection.outputs.tasks_sdk != ''
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: 11.0.x
 
       - name: Require checked-in package versions to match the release
         if: ${{ github.event_name == 'push' }}
@@ -257,7 +251,7 @@ jobs:
           smoke_dir="$(mktemp -d)"
           trap 'rm -rf "${smoke_dir}"' EXIT
 
-          dotnet new console --framework net10.0 --output "${smoke_dir}"
+          dotnet new console --framework net11.0 --output "${smoke_dir}"
 
           pushd "${smoke_dir}" >/dev/null
 
@@ -492,12 +486,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Setup .NET 11 for the public tasks consumer
-        if: needs.package-smoke.outputs.tasks-sdk != ''
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: 11.0.x
-
       - name: Restore all packages without credentials
         env:
           PACKAGE_IDS: ${{ needs.package-smoke.outputs.package-ids }}
@@ -522,15 +510,11 @@ jobs:
           # (a consumer of Honua.Mobile.Maui gets Sdk/Offline transitively).
           read -ra package_ids <<< "${PACKAGE_IDS}"
           for package_id in "${package_ids[@]}"; do
-            framework=net10.0
-            if [[ "${package_id}" == Honua.Mobile.Offline.Tasks ]]; then
-              framework=net11.0
-            fi
             project_dir="${smoke_dir}/${package_id}"
             mkdir -p "${project_dir}"
             cat > "${project_dir}/PublicRestore.csproj" <<EOF
           <Project Sdk="Microsoft.NET.Sdk">
-            <PropertyGroup><TargetFramework>${framework}</TargetFramework></PropertyGroup>
+            <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
             <ItemGroup>
               <PackageReference Include="${package_id}" Version="[${PACKAGE_VERSION}]" />
             </ItemGroup>

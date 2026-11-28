@@ -208,9 +208,9 @@ public partial class MainPage : ContentPage
 dotnet build
 
 # Run on your preferred platform
-dotnet build -t:Run -f net10.0-android     # Android
-dotnet build -t:Run -f net10.0-ios         # iOS (Mac only)
-dotnet build -t:Run -f net10.0-windows10.0.19041.0 # Windows
+dotnet build -t:Run -f net11.0-android     # Android
+dotnet build -t:Run -f net11.0-ios         # iOS (Mac only)
+dotnet build -t:Run -f net11.0-windows10.0.19041.0 # Windows
 ```
 
 **🎉 Congratulations!** You now have a professional field data collection app!

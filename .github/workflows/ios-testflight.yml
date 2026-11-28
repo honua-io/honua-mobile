@@ -39,19 +39,19 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOTNET_VERSION: "10.0.100"
+  DOTNET_VERSION: "11.0.100"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
-  TARGET_FRAMEWORK: net10.0-ios
+  TARGET_FRAMEWORK: net11.0-ios
   RUNTIME_IDENTIFIER: ios-arm64
   CONFIGURATION: Release
   ARTIFACT_OUTPUT_DIR: artifacts/ios-testflight
-  REQUIRED_XCODE_VERSION: "26.0"
+  REQUIRED_XCODE_VERSION: "27.2"
 
 jobs:
   build-sign-upload:
     name: Build, Sign, and Upload iOS IPA
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 90
     environment:
       name: ${{ inputs.target_environment }}
@@ -89,7 +89,7 @@ jobs:
       - name: Configure GitHub Packages
         run: dotnet nuget update source github-honua --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
 
-      - name: Select Xcode 26.0
+      - name: Select Xcode 27.2
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +105,7 @@ jobs:
           xcodebuild -version
 
       - name: Install MAUI iOS workload
-        run: dotnet workload install maui-ios --skip-manifest-update
+        run: dotnet workload install maui-ios --version 11.0.100.1
 
       - name: Verify iOS asset compiler
         shell: bash

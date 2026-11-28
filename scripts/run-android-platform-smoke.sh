@@ -6,7 +6,7 @@ PROJECT_PATH="${ROOT_DIR}/tests/Honua.Mobile.PlatformSmoke/Honua.Mobile.Platform
 PROJECT_DIR="$(dirname "${PROJECT_PATH}")"
 PACKAGE_ID="${HONUA_MOBILE_PLATFORM_SMOKE_PACKAGE_ID:-io.honua.mobile.platformsmoke}"
 CONFIGURATION="${CONFIGURATION:-Debug}"
-TARGET_FRAMEWORK="net10.0-android"
+TARGET_FRAMEWORK="net11.0-android"
 RUNTIME_IDENTIFIER="${RUNTIME_IDENTIFIER:-android-x64}"
 CONFIG_FILE="honua-mobile-platform-smoke-config.json"
 RESULT_FILE="honua-mobile-platform-smoke-result.json"
@@ -40,13 +40,16 @@ until [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; do
 done
 
 dotnet restore "${PROJECT_PATH}" \
-  --framework "${TARGET_FRAMEWORK}" \
+  /p:Configuration="${CONFIGURATION}" \
+  /p:TargetFramework="${TARGET_FRAMEWORK}" \
+  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
   /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}"
 
 dotnet build "${PROJECT_PATH}" \
   --configuration "${CONFIGURATION}" \
   --framework "${TARGET_FRAMEWORK}" \
   --no-restore \
+  /p:RuntimeIdentifier="${RUNTIME_IDENTIFIER}" \
   /p:RuntimeIdentifiers="${RUNTIME_IDENTIFIER}" \
   /p:AndroidPackageFormat=apk \
   /p:TreatWarningsAsErrors=true
