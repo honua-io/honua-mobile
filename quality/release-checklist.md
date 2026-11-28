@@ -35,7 +35,7 @@ comment, etc.) in the Notes column.
       SHA, SDK train, run URL, and waiver state
 - [ ] Migration notes documented for breaking API changes (if any)
 - [ ] NuGet package metadata reviewed (description, tags, license)
-- [ ] NuGet publish release tag is signed and matches `mobile-dotnet-v*`
+- [ ] NuGet candidate validation and signing completed. [Mobile NuGet release workflow](../RELEASING.md#cut-the-net-package-set)
 - [ ] Mobile store prerequisites reviewed for app-store builds
       (`docs/guides/mobile-store-prereqs.md`)
 - [ ] Android store prerequisite mapping validation passes

@@ -17,6 +17,11 @@ on:
         required: false
         default: true
         type: boolean
+      release_candidate:
+        description: "Record signing evidence for the exact checked-in versions on protected trunk"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "mobile-dotnet-v*"
@@ -45,6 +50,81 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Inspect release tag and bind it to the checkout
+        id: tag-ref
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          PUSHED_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REPOSITORY}" == "honua-io/honua-mobile" ]]
+          [[ "${GITHUB_REF}" == "refs/tags/mobile-dotnet-v"* ]]
+          git fetch --no-tags origin "+${GITHUB_REF}:${GITHUB_REF}" refs/heads/trunk:refs/remotes/origin/trunk
+          tag_object="$(git rev-parse "${GITHUB_REF}")"
+          target="$(git rev-parse HEAD)"
+          [[ "${GITHUB_SHA}" == "${target}" || "${GITHUB_SHA}" == "${tag_object}" ]]
+          [[ "${PUSHED_SHA}" == "${target}" || "${PUSHED_SHA}" == "${tag_object}" ]]
+          git merge-base --is-ancestor "${target}" refs/remotes/origin/trunk
+          tag_file="${RUNNER_TEMP}/mobile-release-tag"
+          git cat-file tag "${tag_object}" > "${tag_file}"
+          [[ "$(sed -n '1p' "${tag_file}")" == "object ${target}" ]]
+          [[ "$(sed -n '2p' "${tag_file}")" == "type commit" ]]
+          [[ "$(sed -n '3p' "${tag_file}")" == "tag ${GITHUB_REF_NAME}" ]]
+          signature="$(sed -n '/^-----BEGIN \(SIGNED MESSAGE\|SSH SIGNATURE\|PGP SIGNATURE\)-----$/p' "${tag_file}")"
+          case "${signature}" in
+            '-----BEGIN SIGNED MESSAGE-----') echo "format=gitsign" >> "${GITHUB_OUTPUT}" ;;
+            '-----BEGIN SSH SIGNATURE-----'|'-----BEGIN PGP SIGNATURE-----')
+              echo "format=github" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::error::Release tag requires a single supported signature."; exit 1 ;;
+          esac
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout release signing policy for keyless verification
+        if: steps.tag-ref.outputs.format == 'gitsign'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: honua-io/honua-release
+          ref: b51b6443b061bda433ef3360fffd737a8c2d718c
+          path: .release-trust
+          persist-credentials: false
+
+      - name: Install checksum-verified gitsign
+        if: steps.tag-ref.outputs.format == 'gitsign'
+        run: bash .release-trust/tools/install_gitsign.sh "${RUNNER_TEMP}/gitsign-bin"
+
+      - name: Verify signed release tag
+        id: verify-tag
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_FORMAT: ${{ steps.tag-ref.outputs.format }}
+          TAG_OBJECT: ${{ steps.tag-ref.outputs.tag_object }}
+          TAG_TARGET: ${{ steps.tag-ref.outputs.target }}
+        run: |
+          set -euo pipefail
+          case "${TAG_FORMAT}" in
+            gitsign)
+              receipt="${RUNNER_TEMP}/mobile-release-tag-receipt.json"
+              python3 .release-trust/tools/tag_signing.py verify-remote honua-mobile "${GITHUB_REF_NAME}" \
+                --remote https://github.com/honua-io/honua-mobile.git --target "${TAG_TARGET}" --output "${receipt}"
+              jq -e --arg object "${TAG_OBJECT}" '.tagObject == $object' "${receipt}" > /dev/null
+              ;;
+            github)
+              # Preserve the existing GitHub-verified OpenPGP and SSH release path.
+              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${TAG_OBJECT}" --jq '.verification.verified' |
+                grep -Fxq true
+              ;;
+            *) exit 1 ;;
+          esac
+          echo "tag_object=${TAG_OBJECT}" >> "${GITHUB_OUTPUT}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -104,6 +184,8 @@ jobs:
           pin = ET.parse("Directory.Build.props").findtext(".//HonuaWorkTasksSdkVersion", "").strip()
           if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
               pin = os.environ["DRY_RUN_TASKS_SDK"] or pin
+          elif not pin:
+              raise SystemExit("A public release requires the checked-in Honua.Sdk.Field pin")
           ids = ["Honua.Mobile.Sdk", "Honua.Mobile.Offline", "Honua.Mobile.Maui"]
           if pin:
               if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?", pin):
@@ -114,57 +196,26 @@ jobs:
               print(f"tasks_sdk={pin}", file=output)
           PYTHON
 
-      - name: Require checked-in package versions to match the release
-        if: ${{ github.event_name == 'push' }}
+      - name: Require protected trunk and explicit inputs for a release candidate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
         shell: bash
         env:
-          PACKAGE_IDS: ${{ steps.selection.outputs.package_ids }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          DRY_RUN_TASKS_SDK: ${{ inputs.work_tasks_sdk_version }}
+          REF_PROTECTED: ${{ github.ref_protected }}
         run: |
           set -euo pipefail
-          python - "${PACKAGE_VERSION}" <<'PY'
-          import os
-          import sys
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
+          if [[ "${GITHUB_REPOSITORY}" != "honua-io/honua-mobile" || "${GITHUB_REF}" != "refs/heads/trunk" ||
+                "${REF_PROTECTED}" != "true" || "${DRY_RUN}" != "true" ||
+                -z "${REQUESTED_VERSION}" || -n "${DRY_RUN_TASKS_SDK}" ]]; then
+            echo "::error::A release candidate requires a dry run on protected trunk, an explicit version and the checked-in Field pin."
+            exit 1
+          fi
 
-          expected = sys.argv[1]
-          projects = [Path("src", name, f"{name}.csproj") for name in os.environ["PACKAGE_IDS"].split()]
-          failures = []
-          for project in projects:
-              version = ET.parse(project).findtext(".//PackageVersion", default="").strip()
-              if version != expected:
-                  failures.append(f"{project}: {version!r} != {expected!r}")
-          if failures:
-              raise SystemExit("Release version mismatch:\n" + "\n".join(failures))
-          PY
-
-      - name: Verify signed release tag
-        id: verify-tag
-        if: ${{ github.event_name == 'push' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          tag_object="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}")"
-          if [[ "$(git cat-file -t "${tag_object}")" != "tag" ]]; then
-            echo "::error::Release tag ${GITHUB_REF_NAME} must be annotated and signed."
-            exit 1
-          fi
-          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" --jq '.verification.verified')" != "true" ]]; then
-            echo "::error::GitHub did not verify the signature on ${GITHUB_REF_NAME}."
-            exit 1
-          fi
-          # Bind the verified tag to the commit this run checked out and built:
-          # a tag moved after the push event must not lend its signature to
-          # artifacts built from a different commit.
-          tag_commit="$(git rev-parse "refs/tags/${GITHUB_REF_NAME}^{commit}")"
-          if [[ "${tag_commit}" != "${GITHUB_SHA}" ]]; then
-            echo "::error::Verified tag ${GITHUB_REF_NAME} points at ${tag_commit}, but this run built ${GITHUB_SHA}."
-            exit 1
-          fi
-          echo "tag_object=${tag_object}" >> "${GITHUB_OUTPUT}"
+      - name: Require the four checked-in packages to match the release
+        if: ${{ github.event_name == 'push' || inputs.release_candidate }}
+        run: python3 scripts/mobile-nuget-candidate.py "${PACKAGE_VERSION}" "$(git rev-parse HEAD)"
 
       - name: Block manual publishing outside signed releases
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
@@ -371,6 +422,14 @@ jobs:
 
           popd >/dev/null
 
+      - name: Verify the exact four public package artifacts
+        if: ${{ github.event_name == 'push' }}
+        env:
+          TASKS_SDK: ${{ steps.selection.outputs.tasks_sdk }}
+        run: |
+          python3 scripts/mobile-nuget-candidate.py "${PACKAGE_VERSION}" "$(git rev-parse HEAD)" \
+            --packages nupkgs --tasks-sdk "${TASKS_SDK}"
+
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -399,6 +458,28 @@ jobs:
         run: |
           echo "Dry run complete. Built packages:" >> "${GITHUB_STEP_SUMMARY}"
           ls -1 nupkgs/*.nupkg >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Record the exact dry-run release candidate
+        id: candidate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_candidate }}
+        shell: bash
+        env:
+          TASKS_SDK: ${{ steps.selection.outputs.tasks_sdk }}
+        run: |
+          set -euo pipefail
+          candidate="${RUNNER_TEMP}/mobile-nuget-candidate"
+          mkdir -p "${candidate}"
+          python3 scripts/mobile-nuget-candidate.py "${PACKAGE_VERSION}" "$(git rev-parse HEAD)" \
+            --packages nupkgs --tasks-sdk "${TASKS_SDK}" > "${candidate}/candidate.json"
+
+      - name: Upload dry-run release candidate
+        if: steps.candidate.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-nuget-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mobile-nuget-candidate/candidate.json
+          if-no-files-found: error
+          retention-days: 90
 
   publish:
     name: Publish package set to nuget.org
@@ -454,10 +535,17 @@ jobs:
 
       - name: Publish immutable packages to nuget.org
         env:
+          GH_TOKEN: ${{ github.token }}
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           PACKAGE_VERSION: ${{ needs.package-smoke.outputs.package-version }}
+          TAG_OBJECT: ${{ needs.package-smoke.outputs.tag-object }}
         run: |
           set -euo pipefail
+          current_tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}" --jq '.object.sha')"
+          if [[ -z "${TAG_OBJECT}" || "${current_tag_object}" != "${TAG_OBJECT}" ]]; then
+            echo "::error::Release tag changed after signature verification."
+            exit 1
+          fi
           if [[ -z "${NUGET_API_KEY}" ]]; then
             echo "::error::Trusted Publishing exchange produced no nuget.org key; refusing a partial release."
             exit 1

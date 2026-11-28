@@ -93,3 +93,6 @@ gh workflow run publish-dotnet-mobile.yml -f version=0.1.0-alpha.1 -f dry_run=tr
 
 Publishing remains blocked for manual runs. Actual package publish happens only
 when a signed `mobile-dotnet-v*` release tag is pushed.
+
+For the protected trunk dry run, signing dispatch, and publish approval, see
+[Cut the .NET package set](../../RELEASING.md#cut-the-net-package-set).

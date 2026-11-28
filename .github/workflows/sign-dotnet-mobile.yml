@@ -1,0 +1,131 @@
+name: Sign Mobile .NET Release Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact checked-in Mobile NuGet version"
+        required: true
+        type: string
+      candidate_run_id:
+        description: "Successful Publish Mobile .NET Packages dry-run ID for this trunk commit and version"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sign-dotnet-mobile
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    name: Sign and push immutable Mobile .NET release tag
+    if: ${{ github.repository == 'honua-io/honua-mobile' && github.ref == 'refs/heads/trunk' && github.ref_protected && github.event.repository.default_branch == 'trunk' }}
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_VERSION: ${{ inputs.version }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      RELEASE_REMOTE: https://github.com/honua-io/honua-mobile.git
+    steps:
+      - name: Checkout immutable dispatch commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check branch and candidate evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          [[ "${CANDIDATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]]
+          candidate_dir="$(mktemp -d)"
+          python3 scripts/mobile-nuget-candidate.py "${PACKAGE_VERSION}" "${GITHUB_SHA}" > "${candidate_dir}/expected.json"
+          gh api "repos/${GITHUB_REPOSITORY}/branches/trunk" | jq -e --arg sha "${GITHUB_SHA}" \
+            '.protected and .commit.sha == $sha' > /dev/null
+          attempt="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" | jq -er \
+            --arg sha "${GITHUB_SHA}" --arg repo "${GITHUB_REPOSITORY}" '
+              select(.path == ".github/workflows/publish-dotnet-mobile.yml"
+                and .event == "workflow_dispatch" and .head_branch == "trunk"
+                and .head_repository.full_name == $repo and .head_sha == $sha
+                and .status == "completed" and .conclusion == "success") | .run_attempt')"
+          gh run download "${CANDIDATE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "mobile-nuget-candidate-${CANDIDATE_RUN_ID}-${attempt}" --dir "${candidate_dir}/run"
+          cmp "${candidate_dir}/expected.json" "${candidate_dir}/run/candidate.json"
+          echo "RELEASE_TAG=mobile-dotnet-v${PACKAGE_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Checkout release signing policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: honua-io/honua-release
+          ref: b51b6443b061bda433ef3360fffd737a8c2d718c
+          path: .release-trust
+          persist-credentials: false
+
+      - name: Install checksum-verified gitsign
+        run: bash .release-trust/tools/install_gitsign.sh "${RUNNER_TEMP}/gitsign-bin"
+
+      - name: Verify an existing release tag or sign locally
+        id: signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="refs/tags/${RELEASE_TAG}"
+          tag_object="$(git ls-remote --refs "${RELEASE_REMOTE}" "${ref}")"
+          if [[ -n "${tag_object}" ]]; then
+            python3 .release-trust/tools/tag_signing.py verify-remote honua-mobile "${RELEASE_TAG}" \
+              --remote "${RELEASE_REMOTE}" --target "${GITHUB_SHA}"
+            echo "already_pushed=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          python3 scripts/mobile-nuget-candidate.py "${PACKAGE_VERSION}" "${GITHUB_SHA}" --require-unpublished
+
+          git config user.name "honua-io-bot[bot]"
+          git config user.email "honua-io-bot[bot]@users.noreply.github.com"
+          receipt="${RUNNER_TEMP}/mobile-tag-signing.json"
+          python3 .release-trust/tools/tag_signing.py sign honua-mobile "${RELEASE_TAG}" \
+            --git-dir . --target "${GITHUB_SHA}" \
+            --message "Honua Mobile .NET ${PACKAGE_VERSION} (candidate run ${CANDIDATE_RUN_ID})" \
+            --output "${receipt}"
+          jq -e --arg sha "${GITHUB_SHA}" --arg object "$(git rev-parse "${ref}")" \
+            '.target == $sha and .targetType == "commit" and .tagObject == $object' "${receipt}" > /dev/null
+
+      - name: Create tag push token
+        if: steps.signing.outputs.already_pushed != 'true'
+        id: bot-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Push signed tag using the GitHub App
+        if: steps.signing.outputs.already_pushed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          APP_SLUG: ${{ steps.bot-token.outputs.app-slug }}
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          [[ "${APP_SLUG}" == "honua-io-bot" ]]
+          gh api "repos/${GITHUB_REPOSITORY}/branches/trunk" | jq -e --arg sha "${GITHUB_SHA}" \
+            '.protected and .commit.sha == $sha' > /dev/null
+          ref="refs/tags/${RELEASE_TAG}"
+          # An App token triggers the tag push workflow. A normal push cannot replace an existing tag.
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+            push "${RELEASE_REMOTE}" "${ref}:${ref}"
+
+      - name: Verify published release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .release-trust/tools/tag_signing.py verify-remote honua-mobile "${RELEASE_TAG}" \
+            --remote "${RELEASE_REMOTE}" --target "${GITHUB_SHA}"

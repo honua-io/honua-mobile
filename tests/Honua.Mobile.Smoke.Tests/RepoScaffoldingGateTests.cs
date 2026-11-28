@@ -20,6 +20,10 @@ public sealed class RepoScaffoldingGateTests
 
         Assert.Contains("- \"mobile-dotnet-v*\"", workflow);
         Assert.Contains(".verification.verified", workflow);
+        Assert.Contains("verify-remote honua-mobile", workflow);
+        Assert.Contains("--target \"${TAG_TARGET}\"", workflow);
+        Assert.Contains("Release tag changed after signature verification.", workflow);
+        Assert.Contains("Require the four checked-in packages to match the release", workflow);
         Assert.Contains("Block manual publishing outside signed releases", workflow);
         Assert.Contains("github.event.inputs.dry_run != 'true'", workflow);
         Assert.Contains("Mobile .NET packages publish only from signed mobile-dotnet-v* release tags", workflow);
@@ -43,6 +47,30 @@ public sealed class RepoScaffoldingGateTests
         {
             Assert.Contains(projectPath, workflow);
         }
+    }
+
+    [Fact]
+    public void DotNetSigningWorkflow_UsesProtectedTrunkAndCandidateEvidence()
+    {
+        var root = FindRepositoryRoot();
+        var workflows = Path.Combine(root, ".github", "workflows");
+        var signing = File.ReadAllText(Path.Combine(workflows, "sign-dotnet-mobile.yml"));
+        var publish = File.ReadAllText(Path.Combine(workflows, "publish-dotnet-mobile.yml"));
+
+        Assert.Contains("github.ref == 'refs/heads/trunk' && github.ref_protected", signing);
+        Assert.Contains(".head_sha == $sha", signing);
+        Assert.Contains("mobile-nuget-candidate-${CANDIDATE_RUN_ID}-${attempt}", signing);
+        Assert.Contains("mobile-nuget-candidate-${{ github.run_id }}-${{ github.run_attempt }}", publish);
+        Assert.Contains("permission-contents: write", signing);
+        Assert.Contains("GH_TOKEN: ${{ steps.bot-token.outputs.token }}", signing);
+        Assert.DoesNotContain("git push --force", signing);
+        AssertActionsArePinned(signing);
+
+        const string policyPin = @"repository: honua-io/honua-release\s+ref: ([0-9a-f]{40})";
+        var signingPolicy = Regex.Match(signing, policyPin);
+        var publishPolicy = Regex.Match(publish, policyPin);
+        Assert.True(signingPolicy.Success && publishPolicy.Success);
+        Assert.Equal(signingPolicy.Groups[1].Value, publishPolicy.Groups[1].Value);
     }
 
     [Fact]
