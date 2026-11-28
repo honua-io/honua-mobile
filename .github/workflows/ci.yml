@@ -484,8 +484,8 @@ jobs:
       - name: Install MAUI workload
         run: dotnet workload install maui --version 11.0.100.1
 
-      - name: Verify iOS 17+ simulator runtime
-        run: xcrun simctl list runtimes | grep -E "iOS (1[7-9]|2[0-9])"
+      - name: Verify iOS 27+ simulator runtime
+        run: xcrun simctl list runtimes | grep -E "iOS (2[7-9]|[3-9][0-9])"
 
       - name: Check iOS asset compiler availability
         id: ios_tools
@@ -537,6 +537,16 @@ jobs:
             /p:RuntimeIdentifier=iossimulator-arm64 \
             /p:TreatWarningsAsErrors=true
 
+      - name: iOS simulator platform smoke
+        if: steps.ios_tools.outputs.actool_available == 'true'
+        env:
+          HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
+          HONUA_MOBILE_SMOKE_SERVICE_ID: ${{ vars.HONUA_MOBILE_SMOKE_SERVICE_ID }}
+          HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
+          HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
+        run: |
+          scripts/run-ios-platform-smoke.sh
+
       - name: iOS trim and NativeAOT smoke
         if: steps.ios_tools.outputs.actool_available == 'true'
         run: |
@@ -554,16 +564,6 @@ jobs:
             /p:ArchiveOnBuild=false \
             /p:TreatWarningsAsErrors=true \
             /p:WarningsNotAsErrors=IL2104%3BIL3053
-
-      - name: iOS simulator platform smoke
-        if: steps.ios_tools.outputs.actool_available == 'true'
-        env:
-          HONUA_MOBILE_SMOKE_BASE_URL: ${{ vars.HONUA_MOBILE_SMOKE_BASE_URL }}
-          HONUA_MOBILE_SMOKE_SERVICE_ID: ${{ vars.HONUA_MOBILE_SMOKE_SERVICE_ID }}
-          HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
-          HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
-        run: |
-          scripts/run-ios-platform-smoke.sh
 
   maui-windows:
     name: MAUI Windows Build
