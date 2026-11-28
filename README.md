@@ -33,7 +33,7 @@ implemented vs. planned) is in [docs/features/README.md](docs/features/README.md
 | **Honua.Mobile.Sdk** | Transport, auth, gRPC-first client, REST fallback and SDK scene metadata adapter | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Sdk), from signed `mobile-dotnet-v*` tags |
 | **Honua.Mobile.Offline** | GeoPackage storage, sync queue, map area download, conflict resolution | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline) |
 | **Honua.Mobile.Maui** | MAUI service registration, DI extensions, native display boundaries and device location orchestration | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Maui) |
-| **Honua.Mobile.Offline.Tasks** | Offline assigned work, durable commands and asset-linked request replay | Release candidate. Requires the .NET 11 Field SDK with asset-request support. |
+| **Honua.Mobile.Offline.Tasks** | Offline assigned work, durable commands and asset-linked request replay | Public release target: [nuget.org](https://www.nuget.org/packages/Honua.Mobile.Offline.Tasks). Requires the .NET 11 Field SDK with asset-request support. |
 | **@honua-io/embed** | Framework-agnostic `<honua-map>` and `<honua-scene>` web components (plus React/Vue/Angular wrappers) for ISV embeds | Public release target: [npmjs.com](https://www.npmjs.com/package/@honua-io/embed), from signed `mobile-embed-v*` tags |
 
 Registry links are release evidence, not promises: use a version only when it
@@ -51,7 +51,7 @@ packages. The core SDK train and the optional adapter dependency are pinned in
 [`Directory.Build.props`](Directory.Build.props).
 
 Honua Field, the separately shipped collection app, uses .NET 11. To build
-the SDK or its reference apps, use this repository’s .NET 10 pin. To build
+the SDK or its reference apps, use this repository’s .NET 11 pin. To build
 Field, use the SDK and MAUI workload versions pinned in the Field repository.
 [Mobile SDK build pin](global.json) · [Field build pin](https://github.com/honua-io/honua-field/blob/trunk/global.json)
 
@@ -255,9 +255,10 @@ docs/                         Getting started, guides, feature map, API referenc
 
 ## Building
 
-Mobile restores the pinned `Honua.Sdk.*` packages from nuget.org. The
-`github-honua` feed is mapped to `Honua.Mobile.*` for consumers of private
-Mobile packages. See the [package source mapping](NuGet.config).
+The pinned `Honua.Sdk.*` dependencies and the four public `Honua.Mobile.*`
+packages listed above restore from nuget.org, including when building the
+field collector template. Legacy private Mobile package IDs use
+`github-honua`. See the [package source mapping](NuGet.config).
 
 Run the local validation baseline:
 

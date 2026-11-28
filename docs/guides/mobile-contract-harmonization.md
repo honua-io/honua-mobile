@@ -64,9 +64,9 @@ published shared SDK package versions above. When mobile packages gain
 - Mobile-only APIs may keep device, MAUI, GeoPackage, background execution,
   camera/location, display, and offline file-system
   concerns.
-- Sibling repos consume `Honua.Sdk.*` through published NuGet packages from
-  GitHub Packages. Do not copy SDK source and do not add long-lived project
-  references.
+- Sibling repositories consume versioned `Honua.Sdk.*` packages from nuget.org.
+  Pin the SDK release in the consuming repository so its package graph can be
+  restored independently of the SDK source checkout.
 - Canonical `.proto` definitions stay in `geospatial-grpc`; SDK and mobile
   consume generated or published protocol bindings instead of redefining them.
 - Any migrated SDK contract that requires backend behavior must link the

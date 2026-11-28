@@ -1,15 +1,14 @@
 <Project>
   <PropertyGroup>
     <!-- Released Honua .NET SDK train with net11.0 assets. -->
-    <HonuaSdkDotNetTrainVersion>5.1.0</HonuaSdkDotNetTrainVersion>
-    <HonuaSdkDotNetTrainTag>trunk</HonuaSdkDotNetTrainTag>
+    <HonuaSdkDotNetTrainVersion>5.2.0</HonuaSdkDotNetTrainVersion>
+    <HonuaSdkDotNetTrainTag>dotnet-sdk-v5.2.0</HonuaSdkDotNetTrainTag>
     <HonuaSdkDotNetTrainRepository>honua-io/honua-sdk-dotnet</HonuaSdkDotNetTrainRepository>
-    <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v5.1.0</HonuaSdkDotNetTrainReleaseUrl>
-    <HonuaSdkDotNetTrainReleaseCommit>592822fe8cdf61afe2c196ec86451ea44685e16a</HonuaSdkDotNetTrainReleaseCommit>
-    <HonuaSdkDotNetTrainReleasePublishedAt>2026-11-24T18:50:38Z</HonuaSdkDotNetTrainReleasePublishedAt>
-    <!-- Set to the published Honua.Sdk.Field version with asset-request support
-         to include the .NET 11 assigned-work adapter in signed Mobile releases. -->
-    <HonuaWorkTasksSdkVersion Condition="'$(HonuaWorkTasksSdkVersion)' == ''"></HonuaWorkTasksSdkVersion>
+    <HonuaSdkDotNetTrainReleaseUrl>https://github.com/honua-io/honua-sdk-dotnet/releases/tag/dotnet-sdk-v5.2.0</HonuaSdkDotNetTrainReleaseUrl>
+    <HonuaSdkDotNetTrainReleaseCommit>ec72c3752cb329a15f1dedec9754ccd22a342bcb</HonuaSdkDotNetTrainReleaseCommit>
+    <HonuaSdkDotNetTrainReleasePublishedAt>2026-11-28T02:22:51Z</HonuaSdkDotNetTrainReleasePublishedAt>
+    <!-- Exact public Honua.Sdk.Field version used by the assigned-work adapter. -->
+    <HonuaWorkTasksSdkVersion Condition="'$(HonuaWorkTasksSdkVersion)' == ''">5.2.0</HonuaWorkTasksSdkVersion>
     <MauiVersion>11.0.10</MauiVersion>
 
     <!--

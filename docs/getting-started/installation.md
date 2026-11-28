@@ -39,7 +39,8 @@ from nuget.org; use a source checkout until that public cut completes.
 
 `Honua.Mobile.Offline` uses `Microsoft.Data.Sqlite.Core` and leaves native SQLite
 selection to the application. Install exactly one provider in the application
-project before opening an offline store. The examples below select
+project before opening an offline store. The field collector template includes
+stock SQLite. The examples for adding Honua to a new MAUI app use
 `SQLitePCLRaw.bundle_e_sqlcipher` **2.1.11**, the version used by the encrypted-store
 tests. Do not combine it with `Microsoft.Data.Sqlite` (the non-Core package),
 `SQLitePCLRaw.bundle_e_sqlite3`, or another native SQLite bundle. Check transitive
@@ -53,25 +54,22 @@ migration, and physical-device validation before adopting it in a field app.
 
 ### Method 1: Project Templates (Recommended)
 
-The fastest way to get started is using our project templates:
+From the root of a `honua-mobile` checkout, install the field collector template:
 
 ```bash
-# Install Honua project templates
-dotnet new install Honua.Mobile.Templates
+dotnet new install ./templates/honua-fieldcollector
 
-# Verify installation
-dotnet new list | grep honua
+dotnet new list honua-fieldcollector
 ```
 
 Available templates:
 - `honua-fieldcollector` - Complete field data collection app
 
-Create a new project:
+Create and build a project with the template's stock SQLite provider.
+
 ```bash
 dotnet new honua-fieldcollector -n MyFieldApp
 cd MyFieldApp
-# Check the generated references and keep exactly one native SQLite bundle
-dotnet add package SQLitePCLRaw.bundle_e_sqlcipher --version 2.1.11
 dotnet build
 ```
 
@@ -110,6 +108,15 @@ dotnet add package Honua.Mobile.Sdk --version 0.1.0-alpha.1
 # Restore packages
 dotnet restore
 ```
+
+For offline assigned work, also install the adapter from nuget.org:
+
+```bash
+dotnet add package Honua.Mobile.Offline.Tasks --version 0.1.0-alpha.1
+```
+
+The adapter uses the asset-request client in `Honua.Sdk.Field` 5.2.0.
+See [offline assigned work](../offline-assigned-work.md) for queue and replay behavior.
 
 ### Method 4: Package Manager Console
 

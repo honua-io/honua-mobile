@@ -33,8 +33,8 @@ Welcome to Honua Mobile SDK development! This checklist ensures you have everyth
 ### ✅ Step 2: Install Honua Templates
 
 ```bash
-# Install project templates
-dotnet new install Honua.Mobile.Templates
+# Set the path to your local honua-mobile checkout
+dotnet new install /path/to/honua-mobile/templates/honua-fieldcollector
 
 # Verify installation
 dotnet new list | grep honua

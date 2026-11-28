@@ -15,7 +15,8 @@ Mobile pins its `Honua.Sdk.*` dependencies together through
 `HonuaSdkDotNetTrainVersion` in [Directory.Build.props](../../Directory.Build.props).
 [NuGet.config](../../NuGet.config) resolves them from nuget.org, including
 [Honua.Sdk.Offline](https://www.nuget.org/packages/Honua.Sdk.Offline).
-The separately named `Honua.Mobile.*` packages use the Mobile feed mapping.
+The four public Mobile package IDs also restore from nuget.org. The Mobile
+feed mapping sends legacy private Mobile package IDs to GitHub Packages.
 The release provenance properties record a manually refreshed release and may
 lag the package version used for restore.
 

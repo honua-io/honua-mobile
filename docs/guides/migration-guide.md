@@ -43,8 +43,8 @@ export or an approved Fulcrum SDK until that adapter is available.
 #### 2. **Create Honua App** (5 minutes)
 
 ```bash
-# Install Honua templates
-dotnet new install Honua.Mobile.Templates
+# Set the path to your local honua-mobile checkout
+dotnet new install /path/to/honua-mobile/templates/honua-fieldcollector
 
 # Create field collection app
 dotnet new honua-fieldcollector -n "MyFieldApp"

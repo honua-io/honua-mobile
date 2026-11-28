@@ -29,8 +29,9 @@ Options:
   -h, --help             Show this help.
 
 GitHub Packages:
-  The Honua.Sdk.* dependencies restore from NuGet.org. For private
-  Honua.Mobile.* packages, set HONUA_GITHUB_PACKAGES_USER and
+  The Honua.Sdk.* dependencies and the four public Honua.Mobile packages
+  restore from nuget.org. For legacy private Mobile package IDs, set
+  HONUA_GITHUB_PACKAGES_USER and
   HONUA_GITHUB_PACKAGES_TOKEN with read:packages access.
   The script writes credentials only to a temporary NuGet.config and removes it
   on exit.
@@ -105,6 +106,10 @@ make_nuget_config() {
   </packageSourceCredentials>
   <packageSourceMapping>
     <packageSource key="nuget.org">
+      <package pattern="Honua.Mobile.Sdk" />
+      <package pattern="Honua.Mobile.Offline" />
+      <package pattern="Honua.Mobile.Maui" />
+      <package pattern="Honua.Mobile.Offline.Tasks" />
       <package pattern="*" />
     </packageSource>
     <packageSource key="github-honua">
