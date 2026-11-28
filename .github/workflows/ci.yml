@@ -545,7 +545,7 @@ jobs:
           HONUA_MOBILE_SMOKE_LAYER_ID: ${{ vars.HONUA_MOBILE_SMOKE_LAYER_ID }}
           HONUA_MOBILE_SMOKE_API_KEY: ${{ secrets.HONUA_MOBILE_SMOKE_API_KEY }}
         run: |
-          scripts/run-ios-platform-smoke.sh
+          scripts/run-ios-platform-smoke.sh --verify-startup
 
       - name: iOS trim and NativeAOT smoke
         if: steps.ios_tools.outputs.actool_available == 'true'

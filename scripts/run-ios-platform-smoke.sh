@@ -22,6 +22,11 @@ has_live_smoke_config() {
     [[ -n "${HONUA_MOBILE_SMOKE_LAYER_ID:-}" ]]
 }
 
+if [[ "${1:-}" != "--verify-startup" ]] && ! has_live_smoke_config; then
+  echo "::notice::Skipping iOS live Honua platform smoke because its endpoint variables are unset."
+  exit 0
+fi
+
 resolve_simulator_udid() {
   if [[ -n "${IOS_SIMULATOR_UDID:-}" ]]; then
     printf '%s\n' "${IOS_SIMULATOR_UDID}"
