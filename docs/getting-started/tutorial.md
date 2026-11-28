@@ -18,8 +18,8 @@ validate for your own workflow.
 ## Step 1: Create Project (30 seconds)
 
 ```bash
-# Install templates (one-time setup)
-dotnet new install Honua.Mobile.Templates
+# Set the path to your local honua-mobile checkout
+dotnet new install /path/to/honua-mobile/templates/honua-fieldcollector
 
 # Create your field collection app
 dotnet new honua-fieldcollector -n MyFieldApp
