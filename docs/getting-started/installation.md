@@ -39,7 +39,8 @@ from nuget.org; use a source checkout until that public cut completes.
 
 `Honua.Mobile.Offline` uses `Microsoft.Data.Sqlite.Core` and leaves native SQLite
 selection to the application. Install exactly one provider in the application
-project before opening an offline store. The examples below select
+project before opening an offline store. The field collector template includes
+stock SQLite. The examples for adding Honua to a new MAUI app use
 `SQLitePCLRaw.bundle_e_sqlcipher` **2.1.11**, the version used by the encrypted-store
 tests. Do not combine it with `Microsoft.Data.Sqlite` (the non-Core package),
 `SQLitePCLRaw.bundle_e_sqlite3`, or another native SQLite bundle. Check transitive
@@ -64,12 +65,11 @@ dotnet new list honua-fieldcollector
 Available templates:
 - `honua-fieldcollector` - Complete field data collection app
 
-Create a new project:
+Create and build a project with the template's stock SQLite provider.
+
 ```bash
 dotnet new honua-fieldcollector -n MyFieldApp
 cd MyFieldApp
-# Check the generated references and keep exactly one native SQLite bundle
-dotnet add package SQLitePCLRaw.bundle_e_sqlcipher --version 2.1.11
 dotnet build
 ```
 
